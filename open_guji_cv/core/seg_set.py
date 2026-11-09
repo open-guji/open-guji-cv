@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SEG_SETS: tuple[str, ...] = ("siku_zongmu", "shiji_wyg", "zengguang_youxue", "beixing", "quantangwen")
+#: cv 自带的套书＝三条版式的缺省实现。史記 shiji_wyg、全唐文 quantangwen 的代码 2026-11-09 搬去各自书仓 code/
+#: （`core/book_code.py`）：工作区没有 code/ 时写这两个名字直接报错，不会悄悄走殿本的。
+SEG_SETS: tuple[str, ...] = ("siku_zongmu", "zengguang_youxue", "beixing")
 
 PIPELINE_SEG_SET: dict[str, str] = {
     "keben_body_v2": "siku_zongmu",
@@ -28,8 +30,6 @@ PIPELINE_SEG_SET: dict[str, str] = {
 #: 2026-11-03 管线重组方案 B 第一期：选管线以套书为准，`pipeline:` 只为兼容旧册 yaml 留着。
 SEG_SET_PIPELINE: dict[str, str] = {
     "siku_zongmu": "keben_body_v2",
-    "shiji_wyg": "keben_body_v2",
-    "quantangwen": "keben_body_v2",
     "zengguang_youxue": "keben_free",
     "beixing": "modern_body",
 }
@@ -37,31 +37,45 @@ SEG_SET_PIPELINE: dict[str, str] = {
 #: 各套书自己的缺省参数文件：`books/<套书>/defaults.yaml` 的 `params:`（形状同册配置 `params:`）。
 #: 只读数据文件、不 import books（守卫 `tests/test_architecture.py`）。
 BOOKS_DIR = Path(__file__).resolve().parent.parent / "books"
+IMPL_DIR = Path(__file__).resolve().parent.parent / "impl"
+#: 缺省实现的三套书（2026-11-09 由 books/<套书> 改名为 impl/<版式>，套书名在册配置里照旧写）。
+IMPL_OF: dict[str, str] = {"siku_zongmu": "keben", "beixing": "modern", "zengguang_youxue": "free"}
 
-_SIKU = "open_guji_cv.books.siku_zongmu."
-_SJ = "open_guji_cv.books.shiji_wyg."
-_QTW = "open_guji_cv.books.quantangwen."
 
-#: 套书 → {缺省实现模块: 这套书自己的模块}。史記是从殿本分叉出来的写本：先只分叉职名页（臣行拆分等写本专用逻辑），
-#: 别的步骤仍走缺省实现；以后哪一步要为写本改，就把那个模块复制进 books/shiji_wyg/ 再登记在这里。
-OVERRIDES: dict[str, dict[str, str]] = {
-    "shiji_wyg": {
-        _SIKU + "roster_segment": _SJ + "roster_segment",
-        _SIKU + "roster_glyph": _SJ + "roster_glyph",
-        _SIKU + "jiazhu_step": _SJ + "jiazhu_step",
-    },
-    # 全唐文（嘉慶內府本）：2026-11-04 从殿本分叉 Step3 行切分（row_boundaries＋jiazhu_split），
-    # 放全唐文专用的「一行就完的雙行小注」等；别的步骤仍走殿本的。册配置写 `seg_set: quantangwen`。
-    "quantangwen": {
-        _SIKU + "row_boundaries": _QTW + "row_boundaries",
-        _SIKU + "jiazhu_split": _QTW + "jiazhu_split",
-    },
-}
+def set_dir(name: str, books_dir: Path | None = None) -> Path:
+    """套书 `name` 的代码目录：缺省实现在 impl/<版式>，别的在 books/<套书>。"""
+    if books_dir is not None:
+        return books_dir / name
+    return IMPL_DIR / IMPL_OF[name] if name in IMPL_OF else BOOKS_DIR / name
+
+_SIKU = "open_guji_cv.impl.keben."
+
+#: 套书 → {缺省实现模块: 这套书自己的模块}。2026-11-09 起各书的覆盖写在书仓 `code/code.yaml`（`core/book_code.py`），
+#: 这张表留空只为兼容；新书别再往这里加。
+OVERRIDES: dict[str, dict[str, str]] = {}
+
+
+def _book_code():
+    """当前工作区的书级代码（`core/book_code.py`，书仓 `code/`）；没有 → None。"""
+    from .book_code import load
+    return load()
+
+
+def _book_code_for(name: str | None):
+    """套书名 `name` 对应的书级代码：当前工作区有 `code/` 且名字相同（或册没写 seg_set）才算。"""
+    bc = _book_code()
+    if bc is None:
+        return None
+    return bc if (name is None or name == bc.name) else None
 
 
 def validate_seg_set(name: str | None) -> str | None:
     if name is not None and name not in SEG_SETS:
-        raise ValueError(f"seg_set {name!r} 不在登记表里，可选 {list(SEG_SETS)}（core/seg_set.py）")
+        bc = _book_code()
+        if bc is not None and bc.name == name:
+            return name                 # 书仓 code/ 自带的套书（2026-11-09 书级代码）
+        raise ValueError(f"seg_set {name!r} 不在登记表里，可选 {list(SEG_SETS)}（core/seg_set.py），"
+                         f"也不是本工作区 code/code.yaml 的 name")
     return name
 
 
@@ -70,6 +84,9 @@ def seg_set_of(book) -> str:
     explicit = getattr(book, "seg_set", None)
     if explicit:
         return explicit
+    bc = _book_code()
+    if bc is not None:
+        return bc.name                  # 册没写 seg_set、工作区有书级代码：归书级代码
     pid = getattr(book, "pipeline", None)
     if not pid:
         f = getattr(book, "default_pipeline_id", None)
@@ -83,6 +100,9 @@ def seg_set_for_run(book, pipeline_id: str | None) -> str:
     explicit = getattr(book, "seg_set", None)
     if explicit:
         return explicit
+    bc = _book_code()
+    if bc is not None and (not pipeline_id or pipeline_id == bc.pipeline):
+        return bc.name
     if pipeline_id and pipeline_id in PIPELINE_SEG_SET:
         return PIPELINE_SEG_SET[pipeline_id]
     return seg_set_of(book)
@@ -95,7 +115,14 @@ def seg_set_params(name: str | None, books_dir: Path | None = None) -> dict[str,
     （`core/pipeline.base_param_layers`、`Engine.__init__`）。"""
     if not name:
         return {}
-    path = (books_dir or BOOKS_DIR) / name / "defaults.yaml"
+    bc = _book_code_for(name) if books_dir is None else None
+    if bc is not None:
+        # 书级代码：参数缺省跟代码走，读书仓 code/defaults.yaml；没有就退回 cv 里同名套书的（迁移过渡），再没有就空
+        path = bc.root / "defaults.yaml"
+        if not path.is_file():
+            path = set_dir(name) / "defaults.yaml"
+    else:
+        path = set_dir(name, books_dir) / "defaults.yaml"
     if not path.is_file():
         return {}
     from .yaml_cache import load_yaml_cached
@@ -108,12 +135,14 @@ def seg_set_params(name: str | None, books_dir: Path | None = None) -> dict[str,
 
 def resolve(book, default_module: str) -> str:
     """这册书在 `default_module` 这个位置该用哪个模块：套书有覆盖用覆盖，否则用缺省。"""
-    ov = OVERRIDES.get(seg_set_of(book))
+    ss = seg_set_of(book)
+    bc = _book_code_for(ss)
+    if bc is not None and default_module in bc.overrides:
+        return bc.overrides[default_module]          # 书仓 code/ 的覆盖优先
+    ov = OVERRIDES.get(ss)
     return ov.get(default_module, default_module) if ov else default_module
 
 
 def replace_deps(book, mods: list[str]) -> list[str]:
     """指纹用：把 Step 的模块表里被这册套书覆盖的模块换成套书自己的（顺序不变）。"""
-    if not OVERRIDES:
-        return mods
     return [resolve(book, m) for m in mods]

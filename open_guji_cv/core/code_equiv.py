@@ -269,6 +269,11 @@ _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_
                  "scripts/code_equiv.py check，2026-11-09（A22）")
 
 
+_MV_IMPL = ("书级代码第 2 步（2026-11-09，cv v0.7.0）：三条版式的缺省实现由 books/ 改名——books/siku_zongmu → impl/keben、"
+            "books/beixing → impl/modern、books/zengguang_youxue → impl/free，文件原样 git mv；引用它们的 Step 壳、闸、feedback.lookup "
+            "只改 import 路径与 code_deps 里的模块名（逐文件核过：改动行全是改名）。改名前后 5 套书 × 23 步 code_hash 逐位相同"
+            "（对 origin/dev dc16d35 逐步比对）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1285,6 +1290,78 @@ ENTRIES: tuple[Equiv, ...] = (
           new="8c31a0d7e3c8a4d224daccf2f32063af6c98a9dd0e47583d26a25fa01503061c",
           old="4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
           evidence=_GRID_END_FIT),
+    Equiv("open_guji_cv.gates.border_detect_gate",
+          new="b6e8458642a906ee9b05b78b0e6d150b683cc7adead6137e06a0acf208999b68",
+          old="803fcffb9dfc915e1ba80512694639857ebd6fb9c7ef6610f5143e4c30d800a8",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.gates.column_gate",
+          new="222cf212e17eac8a7601aa7d1c51c880cb71356169c9b38df9f41d682eb2d3b0",
+          old="bc4749f1f07753e004d84b5006ec4cfbdf1af23383c457f085475acc05063b22",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.impl.free.free_cells",
+          new="27f2942643b95ad4da9d0d1630821a0deda75dc69e4480988b5c639097f2f916",
+          old="761eaa8e09be2cb1c1736bf1aaf528a2c62e6e63aee8ffb001f32e0ca47559c6",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.impl.keben.border",
+          new="8b09db3368f2cddfa499f3e55e38aade131ed4dc2509148182d6ba6ceb80e606",
+          old="fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.impl.keben.column",
+          new="deb342fb1677da3da4b7cb49d1f2075dc2dcd3963d55c5b3f208788a9bcba35f",
+          old="57eac44b46c0ce8126d45774bcf309f6a628aec75259f3692568ff7456a8e54b",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.impl.keben.column_triage",
+          new="73ff9002ed6ab67e0b617a0a459d68dbb69e18cea5c8d1d43cc9be3508f6a23d",
+          old="9b98ee76d1a45032e014e3d385297dac192f3a07e2b0e0de7b96f226e716580b",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.impl.keben.row_boundaries",
+          new="8c31a0d7e3c8a4d224daccf2f32063af6c98a9dd0e47583d26a25fa01503061c",
+          old="4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.impl.modern.line_layout",
+          new="3b932525eb96c42c3ac8323d3a316cb526f2f42e28ad01dd6fcbaa72870ee627",
+          old="33f17f6be1f6f2f54345bc970f61c2772b41dc670bb602d006e478c1b6259d24",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.steps.block_detect",
+          new="a86611ff6377f6731adf8fa4c62536476ba6c24e327ac0dfea903790a7a644a8",
+          old="c4e3f4c3ced328953f14599c97fbd171fb17bf8e755da4bf942168fc8f7802c2",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.steps.border_detect",
+          new="3b0deb2fc5e4c337fc75bab8dabbd314804b23002d763d8f337e1407f7e92318",
+          old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.steps.cell_cut",
+          new="a77e55914c45a35f40800976accf9329ab049aeea6a951d6c3cafd181331687d",
+          old="ee41ec3a4b2ec3f7fb57fe0d5803cbc629524b68c428ad491450534cfa8e695a",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.steps.column_crop",
+          new="09e6c46b9b530b3a329476dc44d8580c0080569892bcf30e3c7b803d16fdf758",
+          old="3dcc21da5a93afe0af339c2356c874ec591090fbc1930a1ee1e0af0f22c664e8",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.steps.column_trace",
+          new="086eeda1a547f2b57354bb23cc3d97efa09441688cf70781d25c5ed7d2a5564d",
+          old="e18bbbe1054d2f13dd4b6547018046c544a68dd6a745bb9648942337384bc901",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.steps.column_warp",
+          new="d5c46a816760e0737924eb6fb0f11722b5a71b4d079dbf6e81e70ce4f89e772f",
+          old="991a42b0a7af0825750f929e9892e1a397b56a224e709b858dbbec2716724c65",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.steps.line_detect",
+          new="ba2e5afb7d76a274f9b9b737fe2f5e3ed03c2fb5bba25a5ae22c3963812727ee",
+          old="a90fc471a3e806a2b3655b663295bc66957e68d651e2a1372dbdbad195de2d1c",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.steps.line_ocr",
+          new="d2e4e5d2b8200bd5a1eedbeb99f997999923933b8423cd651c43c79bb900e16f",
+          old="3c460388cd9a000f4195e41137f347ec9d553cd0a0857ffec73a7f5ac75afd85",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.steps.row_segment",
+          new="160eba594e84d23cf4ef1af93a906e6e011fdaeef95ca4634c1631cca3be171f",
+          old="b8a5d95090c07068019d77e5a37b727c15c0be13f46fcb001fd14d60464c41b9",
+          evidence=_MV_IMPL),
+    Equiv("open_guji_cv.steps.row_segment_runs",
+          new="47cde846ac5378eef452e9734fb179698ab7c960af78ac738dc1bbcbbca7cabd",
+          old="2d6aa09866629ba270df420a4ad7ca0a15aae9b23730f3ca354fc74b54925da1",
+          evidence=_MV_IMPL),
 )
 
 
@@ -1312,6 +1389,27 @@ MOVED: dict[str, tuple[str, str]] = {
     "open_guji_cv.books.zengguang_youxue.free_cells": ("open_guji_cv.utils.free_cells", "761eaa8e09be2cb1c1736bf1aaf528a2c62e6e63aee8ffb001f32e0ca47559c6"),
     "open_guji_cv.books.zengguang_youxue.free_rectify": ("open_guji_cv.utils.free_rectify", "9f39c373de06349d1d040ff488b152f36820f11c2b20e9b2a43a8563c7093ab0"),
     "open_guji_cv.books.zengguang_youxue.free_ocr": ("open_guji_cv.utils.free_ocr", "d913668cfa50b267394c24ae0193d1d9ae859d5510179f74e40499dd477ebf41"),
+    # 书级代码第 2 步：缺省实现改名（_MV_IMPL）
+    "open_guji_cv.impl.free.free_blocks": ("open_guji_cv.books.zengguang_youxue.free_blocks", "eef4c4c127d5f5acb5f5b143a276d613f76fc2d78239be2cb298b5a5050e8d5f"),
+    "open_guji_cv.impl.free.free_cells": ("open_guji_cv.books.zengguang_youxue.free_cells", "761eaa8e09be2cb1c1736bf1aaf528a2c62e6e63aee8ffb001f32e0ca47559c6"),
+    "open_guji_cv.impl.free.free_columns": ("open_guji_cv.books.zengguang_youxue.free_columns", "277550471a0881db4e62e7192e6c6fb25f785fe545f9eb9912f447ab35a06a6f"),
+    "open_guji_cv.impl.free.free_ocr": ("open_guji_cv.books.zengguang_youxue.free_ocr", "d913668cfa50b267394c24ae0193d1d9ae859d5510179f74e40499dd477ebf41"),
+    "open_guji_cv.impl.free.free_rectify": ("open_guji_cv.books.zengguang_youxue.free_rectify", "9f39c373de06349d1d040ff488b152f36820f11c2b20e9b2a43a8563c7093ab0"),
+    "open_guji_cv.impl.keben.border": ("open_guji_cv.books.siku_zongmu.border", "fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e"),
+    "open_guji_cv.impl.keben.column": ("open_guji_cv.books.siku_zongmu.column", "57eac44b46c0ce8126d45774bcf309f6a628aec75259f3692568ff7456a8e54b"),
+    "open_guji_cv.impl.keben.column_pair_merge": ("open_guji_cv.books.siku_zongmu.column_pair_merge", "1b943e53a2d01db37949866b3b8f43c25f64e787096c6b0ce14a456441a7ecfd"),
+    "open_guji_cv.impl.keben.column_triage": ("open_guji_cv.books.siku_zongmu.column_triage", "9b98ee76d1a45032e014e3d385297dac192f3a07e2b0e0de7b96f226e716580b"),
+    "open_guji_cv.impl.keben.column_types": ("open_guji_cv.books.siku_zongmu.column_types", "85b6a36a684c2236c43f60a3826357e4785f17abbe2dcb4ad97dc4f7bfa6a41a"),
+    "open_guji_cv.impl.keben.jiazhu_split": ("open_guji_cv.books.siku_zongmu.jiazhu_split", "e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b"),
+    "open_guji_cv.impl.keben.jiazhu_step": ("open_guji_cv.books.siku_zongmu.jiazhu_step", "095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67"),
+    "open_guji_cv.impl.keben.pitch_rescue": ("open_guji_cv.books.siku_zongmu.pitch_rescue", "c007e49e89d7adc65bac5b96e4305f23e0c759b7d640b66122a92a1d84040fdc"),
+    "open_guji_cv.impl.keben.roster_glyph": ("open_guji_cv.books.siku_zongmu.roster_glyph", "84f0636a76c93b4c74dbe25919b99100ae8dce8db18e7e41561db839d5f3ab68"),
+    "open_guji_cv.impl.keben.roster_segment": ("open_guji_cv.books.siku_zongmu.roster_segment", "30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc"),
+    "open_guji_cv.impl.keben.row_boundaries": ("open_guji_cv.books.siku_zongmu.row_boundaries", "4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c"),
+    "open_guji_cv.impl.keben.row_grid": ("open_guji_cv.books.siku_zongmu.row_grid", "283f1e2564615d55bf27c6f5638ee10d949c05d3953c74eb5398d6c2a38d2a0e"),
+    "open_guji_cv.impl.keben.yolo_tool_infer": ("open_guji_cv.books.siku_zongmu.yolo_tool_infer", "33de2955e1c3eb8871f723c7929a8f62bd8baf37074777f20362918fdc33ba95"),
+    "open_guji_cv.impl.modern.line_layout": ("open_guji_cv.books.beixing.line_layout", "33f17f6be1f6f2f54345bc970f61c2772b41dc670bb602d006e478c1b6259d24"),
+    "open_guji_cv.impl.modern.run_segment": ("open_guji_cv.books.beixing.run_segment", "e770b30c24de8dfa927e615547d66e109b8f6a97ae6e6a0726bbdf66473a6a17"),
 }
 
 
@@ -1332,7 +1430,7 @@ FORKED: dict[str, tuple[str, str]] = {
 #: 两块都还是登记时那一版就合回原来一项，指纹不变（row_segment＋jiazhu_step 空实现，cv#1011）。这种项不是错登，别删。
 SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.utils.border_geometry": ("20c5f6fde41a30ad2e22200be0a97a793ceef3492e283b0fff92cb657bb896fb", (
-        ("open_guji_cv.books.siku_zongmu.border", "f4989571d81cbb4d988c77cf5e4622dd57634df0ad8dbe31ee9ec432c563d0c1"),
+        ("open_guji_cv.impl.keben.border", "f4989571d81cbb4d988c77cf5e4622dd57634df0ad8dbe31ee9ec432c563d0c1"),
         ("open_guji_cv.seg.polyline", "bf94b777e8bd227b12a64916ee3a2bf7bc457163047bdc9126a3f164e52825d4"),
         ("open_guji_cv.seg.frame_types", "910317f58be2061fbe06468ba3abf2de685e6250440b1008b8308fd37561fa4b"))),
     "open_guji_cv.utils.peak_line_search": ("90afd63cf2eec6ace053c4d470d1568c3c39582a532c99d2a929cec5bf016890", (
@@ -1341,11 +1439,11 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.utils.column_projection": ("614cc9b0f4ffcb6f151c15c8bd56824df81d5e01edb4fb3bd8df3176e3c645ef", (
         ("open_guji_cv.seg.warp", "5e750f4a8781a7ca6ea8a6916d330d7a27719a91fafb4814aa2e62a8bc5af353"),
         ("open_guji_cv.seg.profile", "508270c9484b07c734e3c671f123093ecdd2405c0851340e5d0deb3437cd6609"),
-        ("open_guji_cv.books.siku_zongmu.column", "4465ac6dfe85c0eaba56e06d75c260285f7fd5a02cef69cc5787ba8e0caae3dd"))),
+        ("open_guji_cv.impl.keben.column", "4465ac6dfe85c0eaba56e06d75c260285f7fd5a02cef69cc5787ba8e0caae3dd"))),
     # 不是拆分、是 row_segment 新加了一个 code_dep（jiazhu_step 空实现）：两块都还是这一版时合回 row_segment 一项
     "open_guji_cv.steps.row_segment": ("427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28", (
         ("open_guji_cv.steps.row_segment", "427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28"),
-        ("open_guji_cv.books.siku_zongmu.jiazhu_step", "095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67"))),
+        ("open_guji_cv.impl.keben.jiazhu_step", "095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67"))),
     # 不是拆分、是 glyph_match 新加了一个 code_dep（判决规则表 glyph_rules）：两块都还是这一版时合回 glyph_match 一项
     "open_guji_cv.steps.glyph_match": ("fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32", (
         ("open_guji_cv.steps.glyph_match", "fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32"),
@@ -1382,3 +1480,17 @@ def canonical(module: str, h: str) -> str:
         seen.add(h)
         h = m[h]
     return h
+
+
+def book_tables() -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str]]]:
+    """(MOVED, FORKED) 并上当前工作区书仓 `code/equiv.yaml` 的登记（`core/book_code.py`，2026-11-09）。
+    书仓里登记的只许是本书模块（`guji_book.<name>.…`）的键，不能改写 cv 模块的等价。"""
+    from .book_code import load
+    bc = load()
+    if bc is None or not (bc.moved or bc.forked):
+        return MOVED, FORKED
+    pre = bc.pkg + "."
+    mv = {**MOVED, **{k: v for k, v in bc.moved.items() if k.startswith(pre)}}
+    fk = {**FORKED, **{k: v for k, v in bc.forked.items() if k.startswith(pre)}}
+    return mv, fk
+

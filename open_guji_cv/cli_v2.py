@@ -679,12 +679,12 @@ def cmd_witness_align_stream(args) -> None:
 def cmd_calibrate(args) -> None:
     """册级先验复核：把 `measure_*` 跑一遍，和 `books/<id>.yaml` 里的现值对照。
 
-    **只印表，不改 yaml**（理由见 `books/siku_zongmu/calibrate.py` 模块头：自动回写会让一次
+    **只印表，不改 yaml**（理由见 `impl/keben/calibrate.py` 模块头：自动回写会让一次
     坏标定悄悄固化，还容易冲掉人写的 note）。
     """
     from .core.book import load_book
     from .products.store import ProductStore
-    from .books.siku_zongmu.calibrate import calibrate, format_table
+    from .impl.keben.calibrate import calibrate, format_table
 
     book = load_book(args.book)
     pages = book.resolve_pages(args.pages) if args.pages else None
@@ -1379,6 +1379,7 @@ MOVED_TO_MANAGER: dict[str, str] = {
     "corpus": "拆分 P2 第四批，2026-11-04",
     "glyph-db": "拆分 P2 第四批，2026-11-04",
     "model": "拆分 P2 第四批，2026-11-04",
+    "code": "书级代码，2026-11-09（cv v0.7.0）",
     "font": "拆分 P2 第四批，2026-11-04",
     "job": "拆分 P3 jobs，2026-11-04",
     "rerun": "拆分 P4 第六批，2026-11-04",
@@ -1423,6 +1424,7 @@ MIN_MANAGER_VERSION: dict[str, str] = {
     "corpus": "0.3.1",
     "glyph-db": "0.3.1",
     "model": "0.3.1",
+    "code": "0.4.30",
     "font": "0.3.1",
     "job": "0.3.2",
     "rerun": "0.3.3",

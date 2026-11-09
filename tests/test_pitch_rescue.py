@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""列宽均匀拟合（Step1 后处理，`books/siku_zongmu/pitch_rescue` 2.0＝`seg/columns.fit_columns`）：列网里多挑一条假竖线、
+"""列宽均匀拟合（Step1 后处理，`impl/keben/pitch_rescue` 2.0＝`seg/columns.fit_columns`）：列网里多挑一条假竖线、
 外侧整列落到网外、外框挑进字心时，在候选线里一次挑出一串列宽全在带里的线。各测试是 1.x 时代各路救援当年救的页型。
 
 纯内存构造：竖线位置取殿本 vol14 p186、vol20 p68 的真页形态（数是形态，不是 fixture 文件）。"""
@@ -8,8 +8,8 @@ from __future__ import annotations
 import numpy as np
 
 from open_guji_cv.seg.frame_types import BorderDetectionResult, HLine, VLine
-from open_guji_cv.books.siku_zongmu.column_pair_merge import line_xs
-from open_guji_cv.books.siku_zongmu import pitch_rescue as pr
+from open_guji_cv.impl.keben.column_pair_merge import line_xs
+from open_guji_cv.impl.keben import pitch_rescue as pr
 
 W, H = 2325, 3000
 #: vol14 p186：c3 被劈成 83＋100，最右（规范空间 x 小）那列「春秋四傳三十八卷」落在网外

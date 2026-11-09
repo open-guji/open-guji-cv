@@ -113,7 +113,7 @@ def mask_outside(patch: np.ndarray, seam_top: np.ndarray | None, seam_bottom: np
 # ── 一行字自己的格线（2026-11-03）────────────────────────────────────
 # 给定一段的上下端和格数，在这一行的墨投影上挑 n−1 条横切线。用途：史記文淵閣本写本雙行小注左右两行
 # 各写各的、字距不同、会错开半格，两行共用一套格线时总有一行被拦腰切（02:12:6「州上洛縣」、08:11:8「邑侯」），
-# 两行各在自己的墨投影上挑切线就分开了（books/siku_zongmu/row_boundaries `jiazhu_rows`）。殿本刻本两行逐字对齐，用不上。
+# 两行各在自己的墨投影上挑切线就分开了（impl/keben/row_boundaries `jiazhu_rows`）。殿本刻本两行逐字对齐，用不上。
 # 挑法是一次 DP：切线落在墨少的行，格高贴近段均高；`anchor` 给了时再轻轻拉向原来的格线（没墨的地方不乱挪）。
 def fit_row_cuts(ink_rows: np.ndarray, top: int, bottom: int, n: int, *,
                  anchor: Sequence[float] | None = None,

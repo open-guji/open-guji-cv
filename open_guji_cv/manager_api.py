@@ -107,6 +107,8 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "semantic_disagreements": ("clustering.glyph_ledger", "semantic_disagreements"),
     "library_summary": ("clustering.glyph_ledger", "library_summary"),
     "core_model_pack": ("core.model_pack", None),
+    "core_book_code": ("core.book_code", None),     # 书级代码 guji code（2026-11-09）
+    "core_lib_pins": ("core.lib_pins", None),
     "core_font_files": ("core.font_files", None),
     "groups_registry": ("groups.registry", None),
     "GROUPS": ("groups", "GROUPS"),
@@ -230,7 +232,7 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "load_current": ("clustering.emb_pack", "load_current"),
     "RunContext": ("core.step", "RunContext"),
     "ImageMissing": ("errors", "ImageMissing"),
-    "strip_column_rules": ("books.siku_zongmu.column", "strip_column_rules"),
+    "strip_column_rules": ("impl.keben.column", "strip_column_rules"),
     "column_row_profile": ("seg.profile", "column_row_profile"),
     "column_text_band": ("seg.profile", "column_text_band"),
     "denoise_column": ("seg.profile", "denoise_column"),

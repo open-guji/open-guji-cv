@@ -1,5 +1,5 @@
 # 殿本四庫總目的切分样页单（切分模块化第 4 步，2026-10-30）。
-# 改 books/siku_zongmu/ 或共用原语 seg/ 的 PR，用 `python scripts/seg_samples.py submit --set siku_zongmu …` 在这些页上比改前改后。
+# 改 impl/keben/ 或共用原语 seg/ 的 PR，用 `python scripts/seg_samples.py submit --set siku_zongmu …` 在这些页上比改前改后。
 # 页都是以前修过的问题页（理由里写着修在哪一版），挑得够杂：抬头框、职名页、大印、双边框、新旧两种图源、网格模式。
 # **册换图源（页号重编，见 GUJI-748）后要跟着改页号**，不然比的是另一页。
 # 北行日錄古本 bxgb 走的也是这条管线（没写 seg_set，按 keben_body_v2 归殿本这套），所以也列在这里。

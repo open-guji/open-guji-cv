@@ -1,7 +1,7 @@
-"""books/siku_zongmu/row_grid：等距格网的相位与整数格（自造列图）。"""
+"""impl/keben/row_grid：等距格网的相位与整数格（自造列图）。"""
 import numpy as np
 
-from open_guji_cv.books.siku_zongmu.row_grid import fit_page_grids
+from open_guji_cv.impl.keben.row_grid import fit_page_grids
 
 
 def _column(h=2500, w=120, top=40.0, pitch=115.0, n=21, blank=(), offset=0.0, bar=None):
@@ -53,7 +53,7 @@ def test_pitch_is_searched_around_period():
 
 def test_snap_moves_each_line_into_nearest_gap():
     """等距格线各自在 ±0.2 格内挪进字缝；缝不在范围内就留在行墨最少处，格数不变。"""
-    from open_guji_cv.books.siku_zongmu.row_boundaries import snap_to_gaps
+    from open_guji_cv.impl.keben.row_boundaries import snap_to_gaps
     proj = np.full(400, 50.0)
     for gap in (95, 212, 300):
         proj[gap - 3:gap + 4] = 0.0
@@ -64,7 +64,7 @@ def test_snap_moves_each_line_into_nearest_gap():
 
 def test_segment_column_with_grid_bounds_skips_dp():
     """给了 grid_bounds 就按它切（落缝后），格数、格号照常，空格照常判空。"""
-    from open_guji_cv.books.siku_zongmu.row_boundaries import segment_column
+    from open_guji_cv.impl.keben.row_boundaries import segment_column
     img = _column(blank={20, 21})
     bounds = [40.0 + i * 115.0 for i in range(22)]
     r = segment_column(img, period=115.0, n_body_slots=21, border_top=40.0, border_bottom=40.0 + 21 * 115.0,
@@ -84,21 +84,21 @@ def _proj(h, spans, width=100):
 
 
 def test_end_fit_walks_to_frame_line_when_char_sits_on_it():
-    from open_guji_cv.books.siku_zongmu.row_boundaries import fit_grid_end
+    from open_guji_cv.impl.keben.row_boundaries import fit_grid_end
     # 末字墨 300–371，紧贴 372–378 的框线（行墨满宽），末线在 340：推到线上沿 372
     p = _proj(400, [(300, 372, 30), (372, 379, 95)])
     assert fit_grid_end(p, [0.0, 340.0], 110.0, hi=390.0, width=100)[-1] == 372.0
 
 
 def test_end_fit_stops_at_white_gap_and_skips_short_inner_gap():
-    from open_guji_cv.books.siku_zongmu.row_boundaries import fit_grid_end
+    from open_guji_cv.impl.keben.row_boundaries import fit_grid_end
     # 末字 300–360，字内 345–347 两行白缝（短于 0.03 格≈3 行），字下 360 起白
     p = _proj(400, [(300, 345, 30), (347, 360, 30)])
     assert fit_grid_end(p, [0.0, 340.0], 110.0, hi=390.0, width=100)[-1] == 360.0
 
 
 def test_end_fit_keeps_line_when_char_inside_or_no_white_within_reach():
-    from open_guji_cv.books.siku_zongmu.row_boundaries import fit_grid_end
+    from open_guji_cv.impl.keben.row_boundaries import fit_grid_end
     # 末线下就是白（字没出格）：不动
     p = _proj(400, [(250, 330, 30)])
     assert fit_grid_end(p, [0.0, 340.0], 110.0, hi=390.0, width=100)[-1] == 340.0
@@ -111,7 +111,7 @@ def test_end_fit_keeps_line_when_char_inside_or_no_white_within_reach():
 
 
 def test_end_fit_ignores_frame_junk_below_blank_last_cell():
-    from open_guji_cv.books.siku_zongmu.row_boundaries import fit_grid_end
+    from open_guji_cv.impl.keben.row_boundaries import fit_grid_end
     # 末格空（末线上方白），末线下是断续斜框线渣（不到满宽）：不动，免得把框线收成字
     p = _proj(450, [(200, 300, 30), (345, 380, 40)])
     assert fit_grid_end(p, [0.0, 340.0], 110.0, hi=420.0, width=100)[-1] == 340.0

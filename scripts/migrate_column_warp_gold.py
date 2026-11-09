@@ -50,7 +50,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from open_guji_cv.books.siku_zongmu.column import strip_column_rules
+from open_guji_cv.impl.keben.column import strip_column_rules
 from open_guji_cv.seg.profile import column_profile, column_text_band, denoise_column
 
 KEEP_EPS = 0.01      # 人标点处的墨占比 <= 这个就算"还在零区"（实测人标处均值 0.0010）

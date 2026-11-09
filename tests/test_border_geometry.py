@@ -1,7 +1,7 @@
 """border_geometry 单测：新坐标系(右上角原点/从右到左/从1开始)转换 + 整页探测。"""
 import numpy as np
 
-from open_guji_cv.books.siku_zongmu.border import (
+from open_guji_cv.impl.keben.border import (
     _hline_to_new,
     _vline_to_new,
     detect_borders,
@@ -320,7 +320,7 @@ def test_detect_head_raise_scale_keeps_plain_page_clean():
 
 def test_hr_geom_scale_one_is_module_constants():
     """scale=1.0 时取的就是模块常数原值（int，不经乘法），旧图产物逐位不变。"""
-    from open_guji_cv.books.siku_zongmu import border as bg
+    from open_guji_cv.impl.keben import border as bg
     g = bg._HRGeom(1.0)
     for name in bg.HR_SCALE_LENGTHS:
         v = getattr(g, name[3:])
