@@ -417,6 +417,22 @@ class SeedAdmitParams(BaseModel):
     遮挡、人裁、排除名单照旧不动；证据 lane 记 `via=gap`。缺省关（不进 dump）。"""
     symbol_ref_gap_cov: float = 0.97
     symbol_ref_gap_min_col: int = 3
+    textlayer_ref_gap: str = ""
+    """R02「参校本没字」的第二见证：图源自带文本层（`groups.textlayer_ref`，数据目录布局见该模块头；相对路径找
+    `$GUJI_DATA_HOME/config/textlayer/`）。整理本这一位没字（`coord.get(id) is None`）、格未放行、非人裁，且文本层取到的字过下列各门 →
+    放行文本层字，通道 `textlayer_ref`，provenance `align`。文本层字就是文意读法（刻形「雨」、文意「兩」录「兩」，sheldon 11-09 口径）。
+    护栏：重叠面积≥`textlayer_ref_area_min`、文本层页与本页字串相似度≥`textlayer_ref_page_min`、仿射拟合配对≥`textlayer_ref_min_pairs`；
+    私用码一律弃权（`textlayer_ref_allow_pua` 才放，r6 实测放了错 6 格）；形近护栏：库候选里有与文本层字成人裁形近对
+    （`config/confusable_human.json`）的字 → 留审（`textlayer_ref_near_guard`）；遮挡、排除名单、人裁格不动。
+    空＝关（缺省，不进参数 dump，行为不变）。殿本 r6 benchmark：人裁无对位格 40 放 0 错（9 册）。设计与 benchmark：
+    guji-manager doc/01-粗校/待审原因/ref_gap/README.md。"""
+    textlayer_ref_area_min: float = 0.8
+    textlayer_ref_page_min: float = 0.8
+    textlayer_ref_min_pairs: int = 20
+    textlayer_ref_near_guard: bool = True
+    textlayer_ref_allow_pua: bool = False
+    textlayer_ref_gap_fingerprint: str = ""
+    """文本层数据目录指纹，由校验器填，进 params_hash（数据变了产物判过期）。"""
     ruling_override_groups: tuple[str, ...] | None = None
     """越过参校本的白名单（书级；A20 对照表第 4 条，A24 第 5 轮）：`ctx-m1` 终审裁定的字≠整理本对位字时，管线再核一遍——
     这个字与整理本字须同属白名单里的某个字组（`groups.registry.FLOW_GROUPS` 成员），否则不放行、留审。
@@ -1425,6 +1441,10 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.symbol_ref_blank:
             d.pop("symbol_ref_blank", None)
             d.pop("symbol_ref_blank_cov", None)
+        if isinstance(d, dict) and not self.textlayer_ref_gap:
+            for k in ("textlayer_ref_gap", "textlayer_ref_area_min", "textlayer_ref_page_min", "textlayer_ref_min_pairs",
+                      "textlayer_ref_near_guard", "textlayer_ref_allow_pua", "textlayer_ref_gap_fingerprint"):
+                d.pop(k, None)
         if isinstance(d, dict) and not (self.symbol_ref_blank and self.symbol_ref_gap):
             for k in ("symbol_ref_gap", "symbol_ref_gap_cov", "symbol_ref_gap_min_col"):
                 d.pop(k, None)
@@ -1766,6 +1786,9 @@ class SeedAdmitParams(BaseModel):
                 if _ids_fp(self.group_flow):        # IDS 模板库＋判法（方案 S7）；没有在线 IDS 的组不加，旧指纹不变
                     parts.append(_ids_fp(self.group_flow))
                 object.__setattr__(self, "group_flow_fingerprint", ":".join(parts))
+        if self.textlayer_ref_gap and not self.textlayer_ref_gap_fingerprint:
+            from ..groups.textlayer_ref import fingerprint as _tl_fp
+            object.__setattr__(self, "textlayer_ref_gap_fingerprint", _tl_fp(self.textlayer_ref_gap))
         if not self.iron_config_fingerprint:
             from ..clustering.iron_evidence import _CONFIG as _IRON_CONFIG
             object.__setattr__(self, "iron_config_fingerprint",
@@ -2669,6 +2692,11 @@ class SeedAdmitStep(Step):
             d_srb = _symbol_ref_blank_pass(p, out, mmap, _coord_refs(ctx, page, coord_cache))
             n_auto += d_srb
             n_review -= d_srb
+        if p.textlayer_ref_gap:
+            # 5d textlayer_ref（升）：整理本没字的待审格，取图源文本层的字（缺省关；放在符号遍之后，只收前面各通道都没放的格）
+            d_tl = _textlayer_ref_gap_pass(p, out, mmap, _coord_refs(ctx, page, coord_cache), ctx, page)
+            n_auto += d_tl
+            n_review -= d_tl
         if p.near_knn_gap and p.group_flow and p.group_flow_near_knn:
             # near_knn 入口放宽：排在各补放通道之后，只收它们都没放的格（见 `_near_knn_pass` 的 stage）
             d_ng = _near_knn_pass(p, out, amap, mmap, ctx, page, patch_missing, stage="gap")
@@ -3772,6 +3800,65 @@ def _symbol_ref_blank_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: d
             n += 1
     return n
 
+
+
+_TL_PUA = lambda ch: bool(ch) and (0xE000 <= ord(ch[0]) <= 0xF8FF or ord(ch[0]) >= 0xF0000)
+
+
+def _tl_human_pairs() -> frozenset:
+    import json as _j
+    from ..clustering.confusable import HUMAN_TABLE
+    return frozenset(frozenset(k) for k in _j.loads(HUMAN_TABLE.read_text(encoding="utf-8")).get("pairs", []) if len(k) == 2)
+
+
+def _textlayer_ref_gap_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: dict, ctx: RunContext, page: int) -> int:
+    """整理本没字的待审格取图源文本层字（`textlayer_ref_gap`，R02 第二见证）。→ 新放行格数。"""
+    from ..groups import textlayer_ref as tl
+
+    def todo(rec):
+        if rec.admit or rec.provenance == "human" or rec.channel == "human" or coord.get(rec.id) is not None:
+            return False
+        ds = {d for d in (rec.doubts or []) if isinstance(d, str)}
+        return not ({"occluded", "excluded", "glyph_timeout"} & ds or (rec.evidence or {}).get("occluded")
+                    or (rec.evidence or {}).get("excluded"))
+    targets = [r.id for col in out for r in (col.chars or []) if todo(r)]
+    if not targets:
+        return 0
+    ci = _opt(ctx, "char_index", page)
+    box = {c.id: c.bbox_page for col in (ci.columns if ci else []) for c in col.chars if getattr(c, "bbox_page", None)}
+    for col in (getattr(ci, "alt_columns", None) or []):
+        for c in col.chars:
+            if getattr(c, "bbox_page", None):
+                box.setdefault(c.id, c.bbox_page)
+    allr = [r for col in out for r in (col.chars or []) if "excluded" not in (r.doubts or [])]
+    ours = "".join((r.char or "□") for r in allr)
+    try:
+        got = tl.lookup(p.textlayer_ref_gap, ctx.book.id, page, ours, [r.id for r in allr], box, targets,
+                        min_pairs=p.textlayer_ref_min_pairs)
+    except Exception:                                  # noqa: BLE001  数据缺了就弃权，不炸整页
+        return 0
+    pairs = _tl_human_pairs() if p.textlayer_ref_near_guard else frozenset()
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            g = got.get(rec.id)
+            if not g or not todo(rec) or g["area"] < p.textlayer_ref_area_min or g["ratio"] < p.textlayer_ref_page_min:
+                continue
+            ch = g["char"]
+            if not ch or (_TL_PUA(ch) and not p.textlayer_ref_allow_pua) or ch == "□":
+                continue
+            m = mmap.get(rec.id)
+            cands = [c for c, _ in (getattr(m, "candidates", None) or [])]
+            if pairs and any(frozenset((ch, c)) in pairs for c in cands if c != ch):
+                continue
+            ev = dict(rec.evidence or {})
+            ev["lane"] = {"lane": "textlayer_ref", "tl": ch, "area": g["area"], "page_ratio": g["ratio"],
+                          "pairs": g["pairs"], "resid": g["resid"], "prev_doubts": list(rec.doubts or [])}
+            rec.evidence = ev
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "textlayer_ref", "align", ch
+            rec.doubts = ["lane_textlayer_ref"]
+            n += 1
+    return n
 
 
 def _symbol_review_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, mmap: dict,
