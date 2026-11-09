@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +46,39 @@ def tile_of(im: Image.Image, box: list[int], pad: float) -> Image.Image:
     return t
 
 
+def _slot_no(a: str) -> int | None:
+    m = re.match(r"\d+", a.split(":")[2]) if a.count(":") == 2 else None
+    return int(m.group()) if m else None
+
+
+def estimate_box(page: dict, a: str) -> list[int] | None:
+    """cord 里没有框的排除名单格（pending 里 why 含 excluded，如 gate:crop_defect，该格没切图）：按同列已有格的框估一个。
+    x、w 取同列相邻格均值；y 按格序在上下邻格之间线性内插（只一侧有邻格时按同列中位格距外推），h 取邻格均值。
+    只在本页本列有至少一个有框格时给；估的框只用来裁图定位，网页卡片和整页图上画的就是它。"""
+    pg, col, slot = a.split(":")[0], a.split(":")[1], _slot_no(a)
+    if slot is None:
+        return None
+    same = sorted(((_slot_no(c["a"]), c["box"]) for c in page.get("cells", [])
+                   if c["a"].split(":")[1] == col and c.get("box") and _slot_no(c["a"]) is not None), key=lambda t: t[0])
+    if not same:
+        return None
+    prev = max((t for t in same if t[0] < slot), key=lambda t: t[0], default=None)
+    nxt = min((t for t in same if t[0] > slot), key=lambda t: t[0], default=None)
+    near = [t for t in (prev, nxt) if t]
+    x = round(sum(t[1][0] for t in near) / len(near))
+    w = round(sum(t[1][2] for t in near) / len(near))
+    h = round(sum(t[1][3] for t in near) / len(near))
+    cy = lambda t: t[1][1] + t[1][3] / 2
+    if prev and nxt:
+        c = cy(prev) + (slot - prev[0]) * (cy(nxt) - cy(prev)) / (nxt[0] - prev[0])
+    else:
+        pitches = sorted((cy(b) - cy(a2)) / (b[0] - a2[0]) for a2, b in zip(same, same[1:]))
+        pitch = pitches[len(pitches) // 2] if pitches else float(h)
+        ref = prev or nxt
+        c = cy(ref) + (slot - ref[0]) * pitch
+    return [x, max(0, round(c - h / 2)), w, h]
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cord", required=True, type=Path)
@@ -64,8 +98,16 @@ def main(argv: list[str] | None = None) -> int:
             boxes[c["a"]] = (pg["page"], c["box"], pg["image"])
     by_page: dict[int, list[dict]] = {}
     skipped = []
+    est: dict[str, list[int]] = {}
+    pages = {pg["page"]: pg for pg in cord["pages"]}
     for c in pend["cells"]:
         b = boxes.get(c["cell"])
+        pgn = int(c["cell"].split(":")[0])
+        if (not b or not b[1]) and pgn in pages and "excluded" in (c.get("why") or []):
+            eb = estimate_box(pages[pgn], c["cell"])
+            if eb:
+                est[c["cell"]] = eb
+                b = boxes[c["cell"]] = (pgn, eb, pages[pgn]["image"])
         if not b or not b[1]:
             skipped.append({"cell": c["cell"], "why": "cord 无框"})
             continue
@@ -101,7 +143,15 @@ def main(argv: list[str] | None = None) -> int:
     (a.out / "assets.json").write_text(json.dumps(man, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     if skipped:
         print("跳过：", json.dumps(skipped, ensure_ascii=False), file=sys.stderr)
-    out = dict(pend, cells=[dict(c, img=imgs[c["cell"]]) if c["cell"] in imgs else c for c in pend["cells"]])
+    def _fill(c: dict) -> dict:
+        if c["cell"] in imgs:
+            c = dict(c, img=imgs[c["cell"]])
+        if c["cell"] in est:                       # 估的框写进单子：网页 resolveCrop 优先用 pending 的 box，整页图上也能框出
+            c = dict(c, box=est[c["cell"]], box_est=True)
+        return c
+    out = dict(pend, cells=[_fill(c) for c in pend["cells"]])
+    if est:
+        print(f"估框 {len(est)} 格（cord 无框）：{sorted(est)}", file=sys.stderr)
     (a.out / "pending.with-img.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"页 {len(files)}，格 {len(imgs)}/{len(pend['cells'])}，字节 {sum(f['bytes'] for f in files)}，跳过 {len(skipped)}", file=sys.stderr)
     return 0
