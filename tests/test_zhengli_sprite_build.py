@@ -70,3 +70,28 @@ def test_tile_of_is_tile_sized_and_pads_within_image():
     t = sb.tile_of(im, [0, 0, 50, 20], 0.5)          # 外扩出界也只裁到图边
     assert t.size == (sb.TILE, sb.TILE) and t.mode == "L"
     assert sb.COLS == 2048 // sb.TILE
+
+
+def test_excluded_cell_without_cord_box_gets_estimated_box(tmp_path):
+    """排除名单上的格 cord 没框：按同列邻格估框（y 线性内插）、照样裁图并把 box／box_est 写进单子；非排除格仍跳过。"""
+    page = {"page": 1, "image": {"width": 200, "height": 300},
+            "cells": [{"a": "1:1:1", "box": [10, 10, 40, 40]}, {"a": "1:1:4", "box": [10, 130, 40, 40]}]}
+    assert sb.estimate_box(page, "1:1:2") == [10, 50, 40, 40]
+    assert sb.estimate_box(page, "1:1:3") == [10, 90, 40, 40]
+    assert sb.estimate_box(page, "1:1:6") == [10, 210, 40, 40]      # 单侧外推：格距 40
+    assert sb.estimate_box(page, "1:2:1") is None                    # 本列没有有框格
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    Image.new("L", (200, 300), 255).save(raw / "1.png")
+    cord = tmp_path / "cord.json"
+    cord.write_text(json.dumps({"pages": [page]}), encoding="utf-8")
+    pend = tmp_path / "pending.json"
+    pend.write_text(json.dumps({"rev": "001-r1", "cells": [
+        {"cell": "1:1:2", "review": "pending", "why": ["excluded"]},
+        {"cell": "1:1:3", "review": "pending"}]}), encoding="utf-8")
+    out = tmp_path / "out"
+    assert sb.main(["--cord", str(cord), "--pending", str(pend), "--raw-dir", str(raw), "--book", "b", "--vol", "01",
+                    "--out", str(out)]) == 0
+    cells = {c["cell"]: c for c in json.loads((out / "pending.with-img.json").read_text(encoding="utf-8"))["cells"]}
+    assert cells["1:1:2"]["box"] == [10, 50, 40, 40] and cells["1:1:2"]["box_est"] and "img" in cells["1:1:2"]
+    assert "box" not in cells["1:1:3"] and "img" not in cells["1:1:3"]

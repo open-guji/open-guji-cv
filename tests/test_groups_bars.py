@@ -140,3 +140,16 @@ def test_upper_broken_bar_abstains():
     for i in range(0, 90, 12):                      # 上面一串断开的短笔，像一条碎横
         g[8:15, 10 + i:14 + i] = 0
     assert count_bars(g)[0] is None
+
+
+def test_ss_one_bar_with_worn_lower_bar_is_shi4():
+    """殿本 r8：一横一竖，横下面竖画两侧有一排磨残的下横碎墨（進士、學士的士被磨掉下横）→ 当士；真十不动。"""
+    g = _cross((30, 7, 4, 96))
+    assert ss_count(g) == ("十", "one")
+    g = _cross((30, 7, 4, 96))
+    for x0 in (6, 22, 62, 80):                       # 下横残成几段短笔，在竖画两侧
+        g[88:93, x0:x0 + 8] = 0
+    assert ss_count(g) == ("士", "two_frag")
+    g = _cross((30, 7, 4, 96))
+    g[90:93, 6:12] = 0                               # 只有一点污点：仍是十
+    assert ss_count(g) == ("十", "one")

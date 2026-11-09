@@ -5,6 +5,12 @@
 
 ## [未发版]
 
+## [0.6.28] - 2026-11-09
+
+- 发版说明（ZM 11-09）：从 dev 449bbbc 切。多 #1315（`ss_count` 一横之下竖画两侧磨残碎墨当士，two_frag，殿本 r8 Z04 十士 12 格；`groups/bars.py` 变，ss_bars 产物过期）、#1311（待审单上排除名单无人看过的格）、#1318（`edge_pair_to`）。**v0.6.27 tag 误打在 dev 提交 3d179a8 上（没走 rc→main，不含 #1311、#1318），不用，本版取代它**；tag 不改不删，按规矩发新 PATCH。
+
+- seed_admit `edge_pair_to`（缺省 `freq`＝旧行为、不进 dump，版本号不升，code_equiv 登记；A24 V01 定案 11-09，sheldon 经 ZM GUJI-756）：`edge_pair` 放哪一形按书定。`lib` 放库首位（刻形，殿本按刻形转写，「同字」只表示这格可以不人审、不写暂归一，evidence `decision: keben`）；`ref` 放整理本字（史記、全唐文按整理本录，`decision: ref`）；`freq` 照旧放字频高的一形（`provisional`）。
+
 ## [0.6.26] - 2026-11-08
 
 - 发版：从 dev 6f58b53 切，多 #1309（eval_sim_bench）、#1310、#1312；产物、指纹都不变（L0）。殿本第9轮用（ZM GUJI-758）。

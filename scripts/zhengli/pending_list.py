@@ -6,7 +6,7 @@
 用途：从 products 快照的 seed_admit 列出待审格，写成 book-text 要的 `<章>.pending.json`（可并入 guji-proof 0.2 字段）。
 
 只读 products 快照里的 seed_admit 产物，列出待审格；不改 cv 导出器，不写 products。
-待审格 = seed_admit 里 admit=false 且 doubts 不含 'excluded' 的格
+待审格 = seed_admit 里 admit=false、且不是「排除名单上人已定过」的格（排除名单上没人看过的 gate:crop_defect 照样待审）
 （与产物页头 n_review 一致；排除名单命中的格不出审查卡）。
 
 审卡队列口径（Eliot，GUJI-364 13220）：close-check 的审卡队列（cards(only=review, skip_decided)）
@@ -70,8 +70,19 @@ def products_source_rev(products: Path, book: str) -> int | None:
         return None
 
 
+def _human_settled_excluded(ch: dict) -> bool:
+    """排除名单上的格：人已定过（给字／判残／非字／图）的不上单；管线 gate:crop_defect 等没人看过的照样待审。
+    口径同 guji-manager `pack_stats.is_pending`（2026-11-09 A31）。"""
+    if "excluded" not in (ch.get("doubts") or []):
+        return False
+    ev = ch.get("evidence") or {}
+    why = str(ev.get("excluded") or "")
+    return bool(ev.get("human_char") or ev.get("damaged") or why.startswith("human:"))
+
+
 def pending_cells(seed_dir: Path, book: str) -> tuple[list[dict], int]:
-    """返回 (待审格列表, 产物页头 n_review 之和)。格号 a = 页:列:格序[sub]。"""
+    """返回 (待审格列表, 应有格数)。应有格数 = 产物页头 n_review 之和 + 排除名单上没人定过而照样上单的格
+    （gate:crop_defect 等，页头 n_review 不计它们）。格号 a = 页:列:格序[sub]。"""
     cells: list[dict] = []
     n_review = 0
     for f in sorted(seed_dir.glob("p*.json")):
@@ -79,8 +90,10 @@ def pending_cells(seed_dir: Path, book: str) -> tuple[list[dict], int]:
         n_review += s.get("n_review", 0)
         for col in s["columns"]:
             for ch in col["chars"]:
-                if ch["admit"] or "excluded" in ch.get("doubts", []):
+                if ch["admit"] or _human_settled_excluded(ch):
                     continue
+                if "excluded" in (ch.get("doubts") or []):
+                    n_review += 1
                 prefix = f"{book}:"
                 cid = ch["id"]
                 if not cid.startswith(prefix):

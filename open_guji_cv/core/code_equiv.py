@@ -1245,6 +1245,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new='97a08fd32f28a643df087154a2fb506b3f286479217c7206f145782b4c15027d',
           old='894c946b329304625f8db915124b62a2308affe244fbb9b301506d43d008496f',
           evidence=_ROSTER_LR_1108),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='fcdd74d43a28b827782dc9994e5d98b2f2bb8d4f3342d1414776cf33bd14f260',
+          old='4ebd6999371f4c921c34212cb4235e32e97bcc2b96d9ce24f06e72e952465ba6',
+          evidence='seed_admit 在 vol62 11 页（--pages 5,20,35,50,65,80,95,110,125,140,148）上与 origin/dev 产物逐字节相同（edge_pair_to 缺省 freq＝旧行为、不进 dump，版本号不升；A24 V01 定案 11-09，GUJI_CORPUS_DRIFT=warn）'),
 )
 
 
