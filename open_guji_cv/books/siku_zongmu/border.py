@@ -1155,8 +1155,13 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     bottom_weak_ratio: float = 0.0,
                     bend_w80_med: float | None = None,
                     bottom_lock_reslope: bool = False,
-                    top_edge_reslope: bool = False) -> BorderDetectionResult:
+                    top_edge_reslope: bool = False,
+                    top_hint: float | None = None,
+                    bottom_hint: float | None = None) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
+
+    `top_hint` / `bottom_hint`：人给的上／下版框大致 y（页面横向中点处的行号），只在附近重找那条线，
+    见 `seg/lines.find_horizontal_border` 的 `hint`。下游（折线、抬头框、外框）都在改后的线上算。缺省 None 不传。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
     一 + N-1 条内部界行），跟 `peak_line_search.find_vertical_lines` 的
@@ -1224,6 +1229,10 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     bot_kw = {} if bottom_band_frac is None else {"band_frac": float(bottom_band_frac)}
     if top_edge_reslope:           # 缺省关不传，与加参数前的调用一模一样
         top_kw["top_edge_reslope"] = True
+    if top_hint is not None:       # 人给位置（页级覆盖），缺省不传
+        top_kw["hint"] = float(top_hint)
+    if bottom_hint is not None:
+        bot_kw["hint"] = float(bottom_hint)
     top_old = find_horizontal_border(mask, "top", weak_top_ratio=top_weak_ratio,
                                      weak_top_floor=top_weak_floor, **top_kw)
     if bottom_weak_ratio > 0:      # 缺省关时不传，与加参数前的调用一模一样
@@ -1246,7 +1255,10 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     binm_new = (mask > 0).astype(np.uint8)
     # 下版框塌到最后一行字底边、真框条在下面十几到几十 px 的页：推到条上（见 BPUSH_*）。
     # 要在折线拟合之前——折点 y 取自线跟上下版框的交点。
-    bottom, bottom_pushed = push_bottom_to_bar(binm_new, bottom, verticals, w, h)
+    if bottom_hint is None:        # 人给了下框就不再推
+        bottom, bottom_pushed = push_bottom_to_bar(binm_new, bottom, verticals, w, h)
+    else:
+        bottom_pushed = 0.0
     verticals_straight = list(verticals)
     verticals, vseg, w80_med, w80_max, vlines_snapped = _bend_verticals(
         mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline, bend_w80_med)

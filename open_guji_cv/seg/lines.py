@@ -657,6 +657,13 @@ def _best_off_edge(mask: np.ndarray, lo: int, hi: int, slope: float, edges: tupl
     return best
 
 
+HINT_RADIUS_FRAC = 0.02
+"""`find_horizontal_border(hint=…)` 量倾角的搜索半宽（占页高）：殿本页高约 2650，±53px，罩得住内沿细线上方的粗框条
+（殿本二者相距约 25–35px），倾角由框条定。"""
+HINT_SLOPES = tuple(float(x) for x in np.linspace(-0.02, 0.02, 81))
+"""`hint` 量倾角的各档（±0.02，步长 0.0005）：殿本上框倾角绝对值 99% 在 0.015 以内。"""
+
+
 def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST,
                             secondary_window: int = 60, secondary_dead_zone: int = 15,
@@ -668,8 +675,14 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             weak_top_floor: float | None = None,
                             weak_bottom_ratio: float = 0.0,
                             lock_reslope: bool = False,
-                            top_edge_reslope: bool = False) -> LineMatch:
+                            top_edge_reslope: bool = False,
+                            hint: float | None = None) -> LineMatch:
     """找页面顶部或底部的边框线（side='top'/'bottom'）。
+
+    **人给位置（`hint`，2026-11-09，GUJI-758）**：线就放在 `hint`（页面横向中点处的 y，左上原点行号，与 `LineMatch.position`
+    同一空间），倾角取 `hint` ±`HINT_RADIUS_FRAC`×页高 里横墨投影峰最高的一档（`HINT_SLOPES`，带里没墨取 0），直接返回；下面的贴边、放宽、
+    次选更靠页心、弱线护栏、下框救援一概不走。试过「只在附近重找位置」：殿本内沿细线是淡虚线，窄带里要么被框条抢走、
+    要么停在字顶上，结果随人点的位置跳，不如位置直接听人。缺省 None，与加参数前逐位相同。
 
     只在页面顶/底 `band_frac` 比例的窄带内搜——上下边框不像竖直界行那样有
     "相邻线"的概念，直接限定在页边margin区域内找最强峰即可。
@@ -701,6 +714,18 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
     `detect_head_raise` 那条专门链路处理，不在这里碰。
     """
     h, w = mask.shape
+    if hint is not None:
+        # 位置就用人给的；倾角取附近横墨投影峰最高的一档（粗框条最长最黑，内沿细线与它平行）。
+        # 不用半高宽评分：它偏爱细短的横墨，抬头框断开的框条段上会搜出 0.04 的斜角（vol23 p116）。
+        r = max(5, int(round(h * HINT_RADIUS_FRAC)))
+        wlo, whi = max(0, int(round(hint)) - r), min(h - 1, int(round(hint)) + r)
+        best_pk, best_sl = 0.0, 0.0
+        for sl in HINT_SLOPES:
+            _, c = sample_line_curve(mask, "h", wlo, whi, float(sl))
+            pk = float(c.max()) if len(c) else 0.0
+            if pk > best_pk * (1 + 1e-9):
+                best_pk, best_sl = pk, float(sl)
+        return LineMatch(position=float(hint), slope=best_sl, score=0.0, width=0.0, proj=best_pk)
     band = max(10, int(h * band_frac))
     if side == "top":
         lo, hi = 0, band
