@@ -7,6 +7,8 @@
 
 ## [未发版]
 
+- PATCH 撤库重审闸 `seed_admit.evict_review`（缺省开，A23，Sheldon 11-09）：库内刻例审阅卡上「撤库」的格（带 `review` 的 `glyph_audit evict` 事件，guji-manager 审阅页出）机器放行一律退回待审（doubt `evict_review`，待审原因 seg_defect）；`feedback/lookup.evict_review_cells`。seed_admit 指纹变；没有这类事件的书产物不变。
+
 ## [0.6.31] - 2026-11-09
 
 - 发版说明（A31 11-09，SJ 要）：从 dev 43af102 切，含 #1326–#1328（书级代码 v0.7.0 系列第 1–3 步，L0，各书 code_hash 不变）。史記 r20 切分层钉本版。

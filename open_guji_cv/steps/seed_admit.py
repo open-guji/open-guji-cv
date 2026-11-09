@@ -131,6 +131,11 @@ class SeedAdmitParams(BaseModel):
     （`doubts` 记 `human_unbound`，`evidence.human_unbound = {char, status, event}`，日志 warning）；
     放行的字与人裁一致的照常放行，只在 evidence 上挂标记。只降级、不改字、不放行。放在所有遍之后。
     格是不是还是当年那一格不知道（正因为绑不上），所以交给人看图，不拿旧字直接顶上。"""
+    evict_review: bool = True
+    """撤库重审闸（Sheldon 2026-11-09）：人在库内刻例审阅卡上「撤库」（带 `review` 的 `glyph_audit evict` 事件，
+    见 `feedback/lookup.evict_review_cells`）的格，多半切坏、看不出是哪个字，**文本撤下来、重新人审**：
+    这一格机器放行的一律退回待审（`doubts` 记 `evict_review`，待审原因归 seg_defect），之后人再裁的照常采信。
+    只降级、不改字、不放行，放在所有遍之后。没有这类事件的书产物不变。"""
     human_unbound_shift_ok: bool = False
     """人裁绑丢闸的顺移豁免（缺省关；史記 2026-11-01 实测）。
 
@@ -1954,6 +1959,10 @@ class SeedAdmitStep(Step):
             for k in [k for k in human_lost if k in human_shapes or k in human_texts]:
                 del human_lost[k]
 
+        evict_rv: dict = {}
+        if p.evict_review and p.use_human_verdicts:
+            from ..feedback.lookup import evict_review_cells
+            evict_rv = evict_review_cells(ctx.book.id)
         _ex_cache: dict = {}
 
         def _ex_records() -> dict:
@@ -2709,6 +2718,10 @@ class SeedAdmitStep(Step):
                                         if p.human_unbound_shift_ok else None))
             n_auto -= d_hu
             n_review += d_hu
+        if evict_rv:
+            d_ev = _evict_review_pass(ctx, page, out, evict_rv)
+            n_auto -= d_ev
+            n_review += d_ev
         d_ju = _jiazhu_uneven_pass(ctx, page, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
         n_auto -= d_ju
         n_review += d_ju
@@ -3759,6 +3772,28 @@ def _human_unbound_pass(ctx: RunContext, page: int, out: list, lost: dict,
                      page, len(hits), "；".join(hits))
         ctx.log(f"⚠ seed_admit p{page}: 人裁绑丢 {len(hits)} 格，机器放行的字与人裁不同，已退回待审"
                 f"（doubt human_unbound）：{'；'.join(hits)}")
+    return n
+
+
+def _evict_review_pass(ctx: RunContext, page: int, out: list, cells: dict) -> int:
+    """撤库重审闸（只降级）。→ 降级格数。见 `SeedAdmitParams.evict_review`。人裁过的格（channel/provenance=human）不拦。"""
+    n = 0
+    hits: list[str] = []
+    for col in out:
+        for rec in col.chars or []:
+            h = cells.get(rec.id)
+            if h is None or rec.provenance == "human" or rec.channel == "human":
+                continue
+            rec.evidence = {**(rec.evidence or {}), "evict_review": {k: h.get(k) for k in ("char", "event")},
+                            "seg_kind": "evict_review"}
+            rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["evict_review"]))
+            if rec.admit:
+                _demote(rec, "evict_review")
+                hits.append(f"{rec.id}「{rec.char}」")
+                rec.admit, rec.channel, rec.provenance = False, None, ""
+                n += 1
+    if hits:
+        ctx.log(f"seed_admit p{page}: 撤库重审 {len(hits)} 格退回待审（doubt evict_review）：{'；'.join(hits)}")
     return n
 
 
