@@ -47,6 +47,18 @@ ws_rebuild() {
   rm -rf "$d"; [ -e "$bak" ] && mv "$bak" "$d"
   return 1
 }
+# 清理被中断的重建留下的 <书仓>.bak.<pid>：只在书仓本身已在位（有 .git）且那个 pid 已不在时删，不删唯一一份
+ws_clean_bak() {
+  local d=$1 b pid
+  [ -d "$d/.git" ] || return 0
+  for b in "$d".bak.*; do
+    [ -d "$b" ] || continue
+    pid=${b##*.bak.}
+    if [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null; then
+      rm -rf "$b" && echo "清掉被中断重建的残留 $b" >&2
+    fi
+  done
+}
 # 书级代码 code/code.yaml：HEAD 里有、检出里没有（稀疏检出或旧克隆）＝seg_set 不认，直接停（2026-11-09 史記 #1736）
 ws_code_check() {
   local p; p=$(git -C "$1" rev-parse --show-prefix 2>/dev/null) || return 0
@@ -79,6 +91,7 @@ if [ -n "$WSREPO" ]; then
       WSREPO=
     fi
   fi
+  ws_clean_bak "$GW1"
   if [ -n "$WSREPO" ]; then GW=$GW1; WS=$GW; export GUJI_WORKSPACE=$WS; fi
 fi
 if [ -z "$WSREPO" ]; then
