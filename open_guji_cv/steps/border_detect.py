@@ -191,6 +191,14 @@ class BorderDetectParams(BaseModel):
     写法 `params: {border_detect: {vline_overrides: {63: [0, 167, 363, 562, 775, 1055, 1274, 1484, 1735]}}}`。
     缺省空，空时本字段不进参数 dump，产物与加字段前逐字节相同。"""
 
+    hline_hints: dict[int, dict[str, float]] = {}
+    """页级人给上／下版框位置（2026-11-09，GUJI-758，殿本第 9 轮上版框认错 10 页）：抬头框顶贴图顶的页，自动探测把抬头框顶
+    当成上版框，整页抬头认不出、列窗整体上移。点名的页给那条框线在**页面横向中点处的 y**（左上原点行号）：线就放在这个 y，
+    倾角取附近 ±`seg/lines.HINT_RADIUS_FRAC`×页高（殿本 ±53px）里最强横线（粗框条）的；折线、抬头框、外框都在这条线上算。
+    殿本按「框条内沿约定」给粗框条下面那道细线的 y（自动探到的页也取它）。给了 `bottom` 时不再「推到下框条」。写法
+    `params: {border_detect: {hline_hints: {156: {top: 187}, 27: {top: 210, bottom: 2580}}}}`。
+    缺省空，空时不进参数 dump，产物与加字段前逐字节相同；只有写了的页结果变。"""
+
     bend_w80_med: float | None = None
     """弯页门槛（页级界行 w80 中位，px；`seg/polyline.fit_vlines_polyline` 的 `w80_med_min`）：中位不到它、任一条也不到
     `BEND_W80_MAX` 的页按直线页走，否则整页三段折线。None＝代码常数 `BEND_W80_MED`（7）。写 0＝量得出 w80 的页一律三段折线
@@ -224,6 +232,8 @@ class BorderDetectParams(BaseModel):
             d.pop("top_edge_reslope", None)
         if isinstance(d, dict) and not self.vline_overrides:
             d.pop("vline_overrides", None)
+        if isinstance(d, dict) and not self.hline_hints:
+            d.pop("hline_hints", None)
         if isinstance(d, dict) and self.bend_w80_med is None:
             d.pop("bend_w80_med", None)
         return d
@@ -269,6 +279,12 @@ class BorderDetectStep(Step):
         lattice_kw = {"grid_lattice_fallback": True} if (grid_page and p.grid_lattice_fallback) else {}
         # 弯页门槛：给了才传（缺省＝代码常数，与加字段前的调用一模一样）
         bend_kw = {"bend_w80_med": p.bend_w80_med} if p.bend_w80_med is not None else {}
+        # 页级人给版框位置：本页写了才传
+        hint = p.hline_hints.get(page) or {}
+        bad = set(hint) - {"top", "bottom"}
+        if bad:
+            raise ValueError(f"border_detect.hline_hints.{page} 只认 top／bottom，多了 {sorted(bad)}")
+        hint_kw = {f"{k}_hint": float(v) for k, v in hint.items() if v is not None}
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
         def _detect(n_cols: int, grid: bool = grid, col_pitch=col_pitch):
@@ -288,7 +304,7 @@ class BorderDetectStep(Step):
                                   **({"bottom_weak_ratio": p.bottom_weak_ratio} if p.bottom_weak_ratio else {}),
                                   **({"bottom_lock_reslope": True} if p.bottom_lock_reslope else {}),
                                   **({"top_edge_reslope": True} if p.top_edge_reslope else {}),
-                                  **lattice_kw, **bend_kw)
+                                  **hint_kw, **lattice_kw, **bend_kw)
 
         res = _detect(cols)
         if grid_page:
