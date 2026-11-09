@@ -1271,6 +1271,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='fcdd74d43a28b827782dc9994e5d98b2f2bb8d4f3342d1414776cf33bd14f260',
           old='4ebd6999371f4c921c34212cb4235e32e97bcc2b96d9ce24f06e72e952465ba6',
           evidence='seed_admit 在 vol62 11 页（--pages 5,20,35,50,65,80,95,110,125,140,148）上与 origin/dev 产物逐字节相同（edge_pair_to 缺省 freq＝旧行为、不进 dump，版本号不升；A24 V01 定案 11-09，GUJI_CORPUS_DRIFT=warn）'),
+    # solo_cal_allow／lead_5b 书级开关（缺省关，2026-11-09，形近字线 全唐文 001–003 front9）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='a79811a45e4cb8c7a9068d7f5df0e1b8af8b8d8711d196fead426184bd9eec4c',
+          old='4ebd6999371f4c921c34212cb4235e32e97bcc2b96d9ce24f06e72e952465ba6',
+          evidence='seed_admit 在 001 3 页（--pages 76,100,150）上与 origin/dev 产物逐字节相同；solo_cal_allow／lead_5b 缺省关'),
     # grid_end_fit 书级开关（缺省关，2026-11-09，殿本 vol28 列尾下溢）
     Equiv(module="open_guji_cv.steps.row_segment",
           new="6a3617931b93c706e43d43ccd2e1b9f5d63e1307343c424637cb0ecb77b32258",

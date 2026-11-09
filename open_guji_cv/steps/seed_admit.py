@@ -895,6 +895,21 @@ class SeedAdmitParams(BaseModel):
     """`solo_cal` 开着时另一档：库首位＝5-b 首位、cov ≥ 这个值就放，不看 gap（其余排除照 `solo_cal`）。
     依据：004 校准，库首位与 5-b 首位一致时 cov ≥0.98 错 0.06%、0.95–0.98 错 0.44%（多为 歳歲、場埸 异体）。
     `None`＝不开这一档（不进 dump）；开时才读 rare_candidates。"""
+    solo_cal_allow: str = ""
+    """`solo_cal` 的字组／形近表白名单（2026-11-09 形近字线，全唐文 001–003 册级；空＝不开、不进 dump）。
+    列在这里的字即使在字组、形近表或 `solo_cal_skip` 里也可放，但只走 5-b 档（库首位＝5-b 首位、cov ≥ `solo_cal_5b_cov`），
+    并多认一条 near_form 疑问。依据：front9 待审里「字组成员」「形近字」两类库首位＝5-b 首位的 737 格逐格看图，
+    按字分组，整组 0 错的字才进白名单（一／入／木／王／匕／聞／又 有错不进；說 刻作説、交码位线）。"""
+    lead_5b: bool = False
+    """无参照格「库与 5-b 不一致时听 5-b」（2026-11-09 形近字线，全唐文 001–003 册级；缺省关、关时 `lead_5b*` 都不进 dump）。
+    仍待审、没有整理本对位、匹配器护栏为空、疑问只有「库 unsure」「上下文 margin 不足」、不是拆分子格（格号不带字母）的格，
+    5-b 首位与库首位不同且不是异体、5-b 首位领先 5-b 其余候选（含库首位）≥ 门槛 → 放 5-b 首位，通道 `match_lead_5b`，不入字形库：
+    5-b 首位不在库候选里 → 门槛 `lead_5b_gap_out`；5-b 首位＝库第二名 → 门槛 `lead_5b_gap_in`，且库给它的分 ≥ `lead_5b_lib_min`。
+    5-b 首位或库首位在 `solo_cal_skip` 里的不放。依据：front9 待审「库与 5b 不一致」1,009 格，按领先量分段逐格看图
+    （库外 288 格领先 ≥0.023 除拆分碎块与异体外 0 错，<0.018 起错；库第二名 218 格见 PR）。"""
+    lead_5b_gap_out: float = 0.023
+    lead_5b_gap_in: float = 0.015
+    lead_5b_lib_min: float = 0.935
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -1457,6 +1472,11 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and self.solo_cal_5b_cov is None:
             d.pop("solo_cal_5b_cov", None)
+        if isinstance(d, dict) and not self.solo_cal_allow:
+            d.pop("solo_cal_allow", None)
+        if isinstance(d, dict) and not self.lead_5b:
+            for k in ("lead_5b", "lead_5b_gap_out", "lead_5b_gap_in", "lead_5b_lib_min"):
+                d.pop(k, None)
         if isinstance(d, dict) and self.num_run_cov_5b is None:
             d.pop("num_run_cov_5b", None)
             d.pop("num_run_gap_5b", None)
@@ -1760,7 +1780,8 @@ class SeedAdmitStep(Step):
         optional_consumes=("rare_candidates", "seals"),
         optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review"), ("rare_candidates", "rare_ref_sparse"),
                                 ("rare_candidates", "solo_5b_cov"), ("rare_candidates", "solo_adapt_pct"),
-                                ("rare_candidates", "num_run_cov_5b"), ("rare_candidates", "solo_cal_5b_cov")),
+                                ("rare_candidates", "num_run_cov_5b"), ("rare_candidates", "solo_cal_5b_cov"),
+                                ("rare_candidates", "lead_5b")),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -2618,6 +2639,12 @@ class SeedAdmitStep(Step):
                                   _coord_refs(ctx, page, coord_cache))
             n_auto += d_sc
             n_review -= d_sc
+        if p.lead_5b:
+            # 5b-l lead_5b（升）：无参照格库与 5-b 不一致、5-b 首位领先明显 → 放 5-b 首位（缺省关）
+            d_l5 = _lead_5b_pass(p, out, mmap, amap, _opt(ctx, "rare_candidates", page),
+                                 _coord_refs(ctx, page, coord_cache))
+            n_auto += d_l5
+            n_review -= d_l5
         n_code_fix = n_code_mismatch = 0
         if p.pua_code_table:
             # 5b' code_table（改字，不降审）：格的私用码在码表里、非人裁放行字≠码表字 → 改放码表字；族外字降审。放在 vis_ruling 之前
@@ -3340,7 +3367,7 @@ def _parse_cal_tiers(spec: str) -> list[tuple[float, float]]:
 
 def solo_cal_decide(*, cands: list, guard, doubts, tiers: list, skip: str, group_chars, near_form_chars,
                     rare_top: str | None = None, cov_5b: float | None = None,
-                    ok_doubts: tuple = _SOLO_CAL_OK_DOUBTS) -> tuple[str, float, float, str] | None:
+                    ok_doubts: tuple = _SOLO_CAL_OK_DOUBTS, allow: str = "") -> tuple[str, float, float, str] | None:
     """`SeedAdmitParams.solo_cal` 的判据，纯函数。`cands`：库候选 [(字, cov)]。→ (放行字, cov, gap, 档) 或 None；
     档＝"tier"（cov／gap 档）或 "5b"（库首位＝5-b 首位且 cov ≥ cov_5b）。"""
     if guard not in (None, "never_match") or not cands:
@@ -3348,7 +3375,21 @@ def solo_cal_decide(*, cands: list, guard, doubts, tiers: list, skip: str, group
     ranked = sorted(cands, key=lambda t: -t[1])
     c, v = ranked[0]
     v = float(v)
-    if (not c or c == "〓" or not _is_hanzi(c) or c in skip or c in group_chars or c in near_form_chars):
+    if not c or c == "〓" or not _is_hanzi(c):
+        return None
+    got = _solo_cal_plain(c, v, ranked, doubts=doubts, tiers=tiers, skip=skip, group_chars=group_chars,
+                          near_form_chars=near_form_chars, rare_top=rare_top, cov_5b=cov_5b, ok_doubts=ok_doubts)
+    if got is None and c in allow and cov_5b is not None and rare_top == c and v >= cov_5b:
+        # 白名单字（`solo_cal_allow`）：照常的档没放时，5-b 档不看 skip／字组／形近表，多认 near_form
+        okd = ok_doubts + ("near_form",)
+        if all(isinstance(d, str) and d.startswith(okd) for d in (doubts or [])):
+            rival = next((float(w) for d, w in ranked[1:] if d and d != c), None)
+            got = c, v, round(v - rival if rival is not None else v, 4), "allow"
+    return got
+
+
+def _solo_cal_plain(c, v, ranked, *, doubts, tiers, skip, group_chars, near_form_chars, rare_top, cov_5b, ok_doubts):
+    if c in skip or c in group_chars or c in near_form_chars:
         return None
     if any(not (isinstance(d, str) and d.startswith(ok_doubts)) for d in (doubts or [])):
         return None
@@ -3383,7 +3424,7 @@ def _solo_cal_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare
                 continue
             got = solo_cal_decide(cands=list(m.candidates), guard=m.guard, doubts=rec.doubts, tiers=tiers,
                                   skip=p.solo_cal_skip, group_chars=group_chars, near_form_chars=NEAR_FORM_CHARS,
-                                  rare_top=rmap.get(rec.id), cov_5b=p.solo_cal_5b_cov)
+                                  rare_top=rmap.get(rec.id), cov_5b=p.solo_cal_5b_cov, allow=p.solo_cal_allow)
             if got is None:
                 continue
             ch, cov1, gap, how = got
@@ -3391,6 +3432,69 @@ def _solo_cal_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare
             rec.doubts = []
             rec.evidence = {**rec.evidence, "no_glyph_lib": True,
                             "solo_cal": {"lib": ch, "cov": round(cov1, 4), "gap": gap, "by": how, "rare": rmap.get(rec.id)}}
+            n += 1
+    return n
+
+
+#: `lead_5b` 允许的疑问（前缀）
+_LEAD_5B_OK_DOUBTS = ("库 unsure", "上下文 margin 不足")
+
+
+def lead_5b_decide(*, cands: list, rare: list, guard, doubts, cell_id: str, skip: str, are_variants,
+                   gap_out: float, gap_in: float, lib_min: float,
+                   ok_doubts: tuple = _LEAD_5B_OK_DOUBTS) -> tuple[str, float, str] | None:
+    """`SeedAdmitParams.lead_5b` 的判据，纯函数。`cands`：库候选 [(字, cov)]；`rare`：5-b 候选 [(字, 分)]（按 5-b 原序，
+    首位＝5-b 首选）。→ (放行字, 5-b 领先量, 档 "out"／"in") 或 None。"""
+    if guard is not None or not cands or not rare:
+        return None
+    if cell_id and cell_id[-1].isalpha():
+        return None                       # 拆分子格（001:162:2:17b）多是半字碎块
+    if any(not (isinstance(d, str) and d.startswith(ok_doubts)) for d in (doubts or [])):
+        return None
+    ranked = sorted(cands, key=lambda t: -t[1])
+    c = ranked[0][0]
+    r0, s0 = rare[0][0], float(rare[0][1])
+    if (not r0 or r0 == "〓" or not _is_hanzi(r0) or not c or r0 == c
+            or r0 in skip or c in skip or are_variants(r0, c)):
+        return None
+    lead = s0 - max((float(s) for d, s in rare[1:] if d != r0), default=0.0)
+    lib = [d for d, _ in ranked]
+    if r0 not in lib:
+        return (r0, round(lead, 4), "out") if lead >= gap_out else None
+    second = next((d for d in lib[1:] if d and d != c), None)
+    if r0 == second and lead >= gap_in and float(dict(ranked)[r0]) >= lib_min:
+        return r0, round(lead, 4), "in"
+    return None
+
+
+def _lead_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare, coord: dict[str, str]) -> int:
+    """无参照格库与 5-b 不一致时听 5-b。→ 升级格数。见 `SeedAdmitParams.lead_5b`。"""
+    if rare is None:
+        return 0
+    from ..variants import are_variants
+    rlist = {r.id: [(x.char, x.score) for x in r.candidates] for cc in rare.columns for r in cc.chars if r.candidates}
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if rec.admit or rec.provenance == "human" or rec.channel == "human":
+                continue
+            if rec.id in amap or (coord.get(rec.id) or "") not in ("", "〓"):
+                continue
+            m = mmap.get(rec.id)
+            if m is None or not m.candidates or rec.id not in rlist:
+                continue
+            got = lead_5b_decide(cands=list(m.candidates), rare=rlist[rec.id], guard=m.guard, doubts=rec.doubts,
+                                 cell_id=rec.id, skip=p.solo_cal_skip, are_variants=are_variants,
+                                 gap_out=p.lead_5b_gap_out, gap_in=p.lead_5b_gap_in, lib_min=p.lead_5b_lib_min)
+            if got is None:
+                continue
+            ch, lead, how = got
+            lib_top = sorted(m.candidates, key=lambda t: -t[1])[0]
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "match_lead_5b", "match_lead_5b", ch
+            rec.doubts = []
+            rec.evidence = {**rec.evidence, "no_glyph_lib": True,
+                            "lead_5b": {"rare": ch, "lead": lead, "by": how, "lib": lib_top[0],
+                                        "lib_cov": round(float(lib_top[1]), 4)}}
             n += 1
     return n
 
@@ -5630,7 +5734,7 @@ ALT_REQUIRE_BACKED = True
 #: 首格切坏守卫（只拦、不放）：备选那份首个正文整字格墨高 > 本列其余正文整字格墨高中位数 × 这个，就不换（03:65:7 一类）
 ALT_FIRST_CELL_MAX = 1.6
 #: 有字形背书的放行通道（只凭整理本＋证人的 witnesses_coord、follow_ref 不算）
-_BACKED = frozenset({"match_ref", "match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run", "match_solo_adapt", "match_solo_cal", "iron", "seal", "group_flow", "ref_lib_coord"})
+_BACKED = frozenset({"match_ref", "match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run", "match_solo_adapt", "match_solo_cal", "match_lead_5b", "iron", "seal", "group_flow", "ref_lib_coord"})
 #: 选列那两遍准入不跑 `p_ref`（换列不让整理本当主证据）：p_ref 在后面几条跟整理本的通道之前把待审格取整理本字，
 #: 两遍放得不对称，选列就跟着变（史記 r19 离线开 p_ref：06:26:1 主切法一格两字「陳索」、备选格网切对，开 p_ref 后不换；
 #: 1.77 把 p_ref 格按待审算又多换了几列，因为这些格不开 p_ref 时由后面的通道放）。SJ 11-08。
@@ -5961,7 +6065,7 @@ def _iron_ctx_dissent(iron_char: str, dec, cands, vmap, prob: float, gap: float)
 
 #: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_ctx_veto` 等用；`solo_confusable_guard` 已于 W2 删）
 _SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run", "match_solo_adapt",
-                            "match_solo_cal"})
+                            "match_solo_cal", "match_lead_5b"})
 
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
                     # 整理本参与的通道（match_ref 2026-09-05 补、note_lexicon 2026-09-06 补）：
