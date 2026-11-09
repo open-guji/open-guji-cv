@@ -488,6 +488,23 @@ def add_causes(pending: Path, products: Path, book: str, glyph_db: Path | None =
     pending.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
 
+def add_anchor_reasons(pending: Path, export: Path, text_vdir: Path | None, chapter: str) -> None:
+    """标 main 后收尾（方案 8.9，A32 11-09）：对不上的标点／专名锚点按当前 book-text 现算成待审格原因
+    A01 anchor_miss／A02 add_del（deferred，不出字卡、不算人审率），写进待审单；一格多因主因不变，其余进
+    `pending_reason_also`。manager 没有 `closeout.plan`（<0.4.28）或没给 book-text 就跳过，不拦出单。"""
+    if text_vdir is None or not pending.exists():
+        return
+    try:
+        from guji_manager.closeout.plan import stamp_pending
+    except ImportError:
+        print("  （guji-manager 没有 closeout.plan，跳过锚点类待审原因 A01/A02）")
+        return
+    n = stamp_pending(pending, export / f"{chapter}.char.json", text_vdir, chapter)
+    if n:
+        print(f"  锚点类待审原因（{pending.name}）：现算 {n['items']} 条，新增待审格 {n['new']}，并进已有格 {n['appended']}"
+              f"（anchor_miss {n['anchor_miss']}、add_del {n['add_del']}）")
+
+
 def run(cmd, **kw) -> subprocess.CompletedProcess:
     cmd = [str(c) for c in cmd]
     print("$ " + " ".join(cmd), flush=True)
@@ -702,6 +719,9 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     gdb = ws / "output" / "glyph.db"
     add_causes(public, products, book, gdb)
     add_causes(routed / f"{chapter}.team.pending.json", products, book, gdb)
+    tvd = book_text_dir(Path(a.book_text), text_id) if getattr(a, "book_text", None) else None
+    add_anchor_reasons(public, export, tvd, chapter)
+    add_anchor_reasons(routed / f"{chapter}.team.pending.json", export, tvd, chapter)
     final = public
     rd = raw_dir(ws, book)
     if rd and not a.no_sprite:
