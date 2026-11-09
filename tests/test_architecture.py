@@ -34,6 +34,8 @@ LAYER: dict[str, int] = {
     "strokes": 1,
     # 切分共用原语（seg）与每套书自管的切分代码（books）；books 只许用 seg，套书之间不互相 import（见下面两条守卫）
     "seg": 1, "books": 2,
+    # 书级代码（书仓 code/）能用的公开面（2026-11-09）
+    "book_api": 1,
     # L2 算法与产出：聚类/匹配、金标、报告、渲染
     "clustering": 2, "gold": 2, "report": 2, "pagetype_model": 2, "groups": 2,
     # L3 管线：Step、门、影子模型、反馈事件

@@ -107,6 +107,8 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "semantic_disagreements": ("clustering.glyph_ledger", "semantic_disagreements"),
     "library_summary": ("clustering.glyph_ledger", "library_summary"),
     "core_model_pack": ("core.model_pack", None),
+    "core_book_code": ("core.book_code", None),     # 书级代码 guji code（2026-11-09）
+    "core_lib_pins": ("core.lib_pins", None),
     "core_font_files": ("core.font_files", None),
     "groups_registry": ("groups.registry", None),
     "GROUPS": ("groups", "GROUPS"),

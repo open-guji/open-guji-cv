@@ -59,9 +59,27 @@ OVERRIDES: dict[str, dict[str, str]] = {
 }
 
 
+def _book_code():
+    """当前工作区的书级代码（`core/book_code.py`，书仓 `code/`）；没有 → None。"""
+    from .book_code import load
+    return load()
+
+
+def _book_code_for(name: str | None):
+    """套书名 `name` 对应的书级代码：当前工作区有 `code/` 且名字相同（或册没写 seg_set）才算。"""
+    bc = _book_code()
+    if bc is None:
+        return None
+    return bc if (name is None or name == bc.name) else None
+
+
 def validate_seg_set(name: str | None) -> str | None:
     if name is not None and name not in SEG_SETS:
-        raise ValueError(f"seg_set {name!r} 不在登记表里，可选 {list(SEG_SETS)}（core/seg_set.py）")
+        bc = _book_code()
+        if bc is not None and bc.name == name:
+            return name                 # 书仓 code/ 自带的套书（2026-11-09 书级代码）
+        raise ValueError(f"seg_set {name!r} 不在登记表里，可选 {list(SEG_SETS)}（core/seg_set.py），"
+                         f"也不是本工作区 code/code.yaml 的 name")
     return name
 
 
@@ -70,6 +88,9 @@ def seg_set_of(book) -> str:
     explicit = getattr(book, "seg_set", None)
     if explicit:
         return explicit
+    bc = _book_code()
+    if bc is not None:
+        return bc.name                  # 册没写 seg_set、工作区有书级代码：归书级代码
     pid = getattr(book, "pipeline", None)
     if not pid:
         f = getattr(book, "default_pipeline_id", None)
@@ -83,6 +104,9 @@ def seg_set_for_run(book, pipeline_id: str | None) -> str:
     explicit = getattr(book, "seg_set", None)
     if explicit:
         return explicit
+    bc = _book_code()
+    if bc is not None and (not pipeline_id or pipeline_id == bc.pipeline):
+        return bc.name
     if pipeline_id and pipeline_id in PIPELINE_SEG_SET:
         return PIPELINE_SEG_SET[pipeline_id]
     return seg_set_of(book)
@@ -95,7 +119,14 @@ def seg_set_params(name: str | None, books_dir: Path | None = None) -> dict[str,
     （`core/pipeline.base_param_layers`、`Engine.__init__`）。"""
     if not name:
         return {}
-    path = (books_dir or BOOKS_DIR) / name / "defaults.yaml"
+    bc = _book_code_for(name) if books_dir is None else None
+    if bc is not None:
+        # 书级代码：参数缺省跟代码走，读书仓 code/defaults.yaml；没有就退回 cv 里同名套书的（迁移过渡），再没有就空
+        path = bc.root / "defaults.yaml"
+        if not path.is_file():
+            path = BOOKS_DIR / name / "defaults.yaml"
+    else:
+        path = (books_dir or BOOKS_DIR) / name / "defaults.yaml"
     if not path.is_file():
         return {}
     from .yaml_cache import load_yaml_cached
@@ -108,12 +139,14 @@ def seg_set_params(name: str | None, books_dir: Path | None = None) -> dict[str,
 
 def resolve(book, default_module: str) -> str:
     """这册书在 `default_module` 这个位置该用哪个模块：套书有覆盖用覆盖，否则用缺省。"""
-    ov = OVERRIDES.get(seg_set_of(book))
+    ss = seg_set_of(book)
+    bc = _book_code_for(ss)
+    if bc is not None and default_module in bc.overrides:
+        return bc.overrides[default_module]          # 书仓 code/ 的覆盖优先
+    ov = OVERRIDES.get(ss)
     return ov.get(default_module, default_module) if ov else default_module
 
 
 def replace_deps(book, mods: list[str]) -> list[str]:
     """指纹用：把 Step 的模块表里被这册套书覆盖的模块换成套书自己的（顺序不变）。"""
-    if not OVERRIDES:
-        return mods
     return [resolve(book, m) for m in mods]

@@ -262,10 +262,13 @@ def default_pipeline_id(book, pipelines_dir: Path | None = None) -> str:
     explicit = getattr(book, "pipeline", None)
     if explicit:
         return explicit
-    from .seg_set import SEG_SET_PIPELINE
+    from .seg_set import SEG_SET_PIPELINE, _book_code
     ss = getattr(book, "seg_set", None)
     if ss and ss in SEG_SET_PIPELINE:
         return SEG_SET_PIPELINE[ss]
+    bc = _book_code()
+    if bc is not None and ss in (None, bc.name):
+        return bc.pipeline              # 书仓 code/code.yaml 的 base（2026-11-09 书级代码）
     edition = getattr(book, "edition", None)
     hits = []
     for pid in list_pipelines(pipelines_dir):

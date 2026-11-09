@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- PATCH（v0.7.0 系列第 1 步）书级代码：各书工作区仓 `code/` 挂成 `guji_book.<name>`（`core/book_code.py`），`seg_set.resolve` 先查书仓覆盖；册配置新键 `code: N`（`k3`）钉书级代码、简写 `pin: c31-g19-m2-k3`（`core/lib_pins.py`）；起跑前钉了 `code:` 的册校验 `code/releases/k<N>.json`；`book_api` 公开面；`guji code` 搬在 guji-manager ≥0.4.30。没有 `code/` 的工作区行为不变：5 套书 × 23 步 `code_hash` 逐位相同（L0）。设计 `doc/design/书级代码.md`。
+
 ## [0.6.30] - 2026-11-09
 
 - 发版说明（A31 11-09，QTW 要）：从 dev 11ec58c 切，多 #1322（row_segment `grid_end_fit`）、#1323（seed_admit `solo_cal_allow`／`lead_5b`），都缺省关、关时逐字节不变（code_equiv 已登记），版本号不升。全唐文 001–003 front10 钉本版。
