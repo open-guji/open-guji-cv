@@ -5,7 +5,7 @@
 
 ## [未发版]
 
-## [0.6.30] - 测试中
+## [0.6.30] - 2026-11-09
 
 - 发版说明（A31 11-09，QTW 要）：从 dev 11ec58c 切，多 #1322（row_segment `grid_end_fit`）、#1323（seed_admit `solo_cal_allow`／`lead_5b`），都缺省关、关时逐字节不变（code_equiv 已登记），版本号不升。全唐文 001–003 front10 钉本版。
 
