@@ -72,3 +72,46 @@ def test_segment_column_with_grid_bounds_skips_dp():
     assert len(r.boundaries) == 22 and all(abs(a - b) <= 23 for a, b in zip(r.boundaries, bounds))
     kinds = {c.slot: c.kind for c in r.cells}
     assert kinds[1] == "char" and kinds[19] == "char" and kinds[20] == "blank" and kinds[21] == "blank"
+
+
+# ── grid_end_fit：末线外推到末字墨外沿（2026-11-09，殿本 vol28 列尾下溢）──────────────
+
+def _proj(h, spans, width=100):
+    p = np.zeros(h)
+    for a, b, v in spans:
+        p[a:b] = v
+    return p
+
+
+def test_end_fit_walks_to_frame_line_when_char_sits_on_it():
+    from open_guji_cv.books.siku_zongmu.row_boundaries import fit_grid_end
+    # 末字墨 300–371，紧贴 372–378 的框线（行墨满宽），末线在 340：推到线上沿 372
+    p = _proj(400, [(300, 372, 30), (372, 379, 95)])
+    assert fit_grid_end(p, [0.0, 340.0], 110.0, hi=390.0, width=100)[-1] == 372.0
+
+
+def test_end_fit_stops_at_white_gap_and_skips_short_inner_gap():
+    from open_guji_cv.books.siku_zongmu.row_boundaries import fit_grid_end
+    # 末字 300–360，字内 345–347 两行白缝（短于 0.03 格≈3 行），字下 360 起白
+    p = _proj(400, [(300, 345, 30), (347, 360, 30)])
+    assert fit_grid_end(p, [0.0, 340.0], 110.0, hi=390.0, width=100)[-1] == 360.0
+
+
+def test_end_fit_keeps_line_when_char_inside_or_no_white_within_reach():
+    from open_guji_cv.books.siku_zongmu.row_boundaries import fit_grid_end
+    # 末线下就是白（字没出格）：不动
+    p = _proj(400, [(250, 330, 30)])
+    assert fit_grid_end(p, [0.0, 340.0], 110.0, hi=390.0, width=100)[-1] == 340.0
+    # 墨一路连到版框外、0.35 格内找不到白行也没碰到框线：不动
+    p = _proj(500, [(300, 500, 30)])
+    assert fit_grid_end(p, [0.0, 340.0], 110.0, hi=480.0, width=100)[-1] == 340.0
+    # 只动末线
+    p = _proj(400, [(0, 20, 30), (300, 372, 30), (372, 379, 95)])
+    assert fit_grid_end(p, [10.0, 200.0, 340.0], 110.0, hi=390.0, width=100)[:2] == [10.0, 200.0]
+
+
+def test_end_fit_ignores_frame_junk_below_blank_last_cell():
+    from open_guji_cv.books.siku_zongmu.row_boundaries import fit_grid_end
+    # 末格空（末线上方白），末线下是断续斜框线渣（不到满宽）：不动，免得把框线收成字
+    p = _proj(450, [(200, 300, 30), (345, 380, 40)])
+    assert fit_grid_end(p, [0.0, 340.0], 110.0, hi=420.0, width=100)[-1] == 340.0
