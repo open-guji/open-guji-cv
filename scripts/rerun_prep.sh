@@ -28,6 +28,23 @@ EM="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/ensure_manager.sh"   # guji-
 if [ -f "$EM" ]; then . "$EM"; else ensure_manager() { :; }; fi
 t() { local s=$SECONDS n=$1; shift; echo "== $n"; "$@"; SUM+=("$(printf '%-14s %4ss' "$n" $((SECONDS-s)))"); }
 
+# 书仓检出同步：拉 origin main（网络抖动重试 5 次），拉不动就返回失败
+sync_ws() {
+  local d=$1 i
+  git -C "$d" sparse-checkout disable >/dev/null 2>&1 || true   # 稀疏检出会缺书级代码目录
+  for i in 1 2 3 4 5; do
+    git -C "$d" pull -q --ff-only origin main 2>/dev/null && return 0
+    echo "拉工作区重试 $i" >&2; sleep $((i * 2))
+  done
+  return 1
+}
+# 书级代码 code/code.yaml：HEAD 里有、检出里没有（稀疏检出或旧克隆）＝seg_set 不认，直接停（2026-11-09 史記 #1736）
+ws_code_check() {
+  local p; p=$(git -C "$1" rev-parse --show-prefix 2>/dev/null) || return 0
+  if git -C "$1" cat-file -e "HEAD:${p}code/code.yaml" 2>/dev/null && [ ! -f "$1/code/code.yaml" ]; then
+    echo "⚠️ 工作区 $1 缺 code/code.yaml（HEAD 有；稀疏检出或旧克隆），请删掉本机那份重跑准备" >&2; return 1
+  fi
+}
 if [ -n "$CV" ]; then
   t cv git -C $SEED fetch -q --tags origin "$CV"
   git -C $SEED checkout -q "$CV" 2>/dev/null || git -C $SEED checkout -q FETCH_HEAD
@@ -39,7 +56,8 @@ if [ -n "$WSREPO" ]; then
   # 不能用 t 包：t 末尾记耗时的赋值总返回 0，克隆失败也当成功，退不回旧仓（10-31 #1203 起的验收单就这样失败）
   if [ -d $GW1/.git ] || { echo "== 克隆工作区"; git clone -q --depth 1 https://github.com/$WSREPO $GW1; }; then
     GW=$GW1
-    git -C $GW pull -q --ff-only origin main || true
+    # 拉不到最新就失败，不许拿旧检出凑数（2026-11-09：旧克隆拉取静默失败 → 没有 code/ → 史記 r20 #1736 seg_set 不认）
+    sync_ws "$GW" || { echo "⚠️ 工作区 $GW 拉不到 origin main（网络或历史分叉）；不用旧检出，请重跑准备" >&2; exit 1; }
     WS=$GW; export GUJI_WORKSPACE=$WS
   else   # 会话没挂这个仓（迁仓过渡期）：退回旧总仓里同一本书的目录（内容相同）
     echo "⚠️ 读不了 $WSREPO（会话里 add_repo $WSREPO 就走新仓），退回 open-guji/guji-workspace" >&2
@@ -52,6 +70,8 @@ if [ -z "$WSREPO" ]; then
   ls -d $GW/$WSGLOB >/dev/null 2>&1 || t 更新工作区 git -C $GW pull -q --ff-only origin main
   WS=$(ls -d $GW/$WSGLOB | head -n 1); export GUJI_WORKSPACE=$WS;
 fi
+[ -n "${WS:-}" ] && [ -d "$WS" ] || { echo "⚠️ 没找到册 $VOL 的工作区（ws_glob=$WSGLOB）" >&2; exit 1; }
+ws_code_check "$WS" || exit 1
 echo "WS=$WS"
 # --reset 也要重建 glyph.db：上一次准备若在拉库前就失败（如克隆工作区失败），本机 glyph.db 还没建过，
 # --no-rebuild 会留下空库，建钉版库时报 no such table: sources（10-25 #3–#6）
@@ -113,6 +133,8 @@ print("字形库", n); sys.exit(0 if n["exemplars"] and n["glyphs"] else "字形
 PY
 fi
 t 取原图 $G source pull "$VOL" -w "$WS"
+# 预热字块图缓存（2026-11-09 Ops：人裁所在格的字块图 cache/ 里没有、原图也切不出 → 整页失败）：原图取到后先预渲，人裁格才认得出
+t 预热字块 $G cache warm --book "$VOL" -w "$WS" --jobs 4
 # 钉了页表版（source_rev，换图源后）的册：原图目录归页表管，页表外的 <页号>.png 是旧图源残留，删掉（GUJI-748：vol04 新页表 218 页，
 # worker 目录里留着旧的 219–221.png，被当正文跑了）。新版 cv 的 source pull 自己会删，这里兼顾旧 tag。
 GUJI_WORKSPACE="$WS" /opt/guji-venv/bin/python - "$VOL" <<'PY'

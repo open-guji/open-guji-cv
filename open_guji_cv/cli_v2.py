@@ -274,6 +274,8 @@ def cmd_pipeline(args) -> None:
     if getattr(args, "json", False):
         print(json.dumps(rep.to_dict(), ensure_ascii=False))
     else:
+        if n_failed:    # 页级失败不能静默算成功：跑批方（guji_manager 任务库）据这行判单子失败
+            print(f"  ⚠ {n_failed} 页失败，没自动存包；见上面各步的「失败」行", file=sys.stderr)
         hooks.call("finished", args, eng, steps, not n_failed)
     sys.exit(1 if n_failed and args.stop_on_error else 0)
 
