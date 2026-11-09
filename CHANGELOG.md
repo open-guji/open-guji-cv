@@ -7,6 +7,10 @@
 
 ## [未发版]
 
+## [0.6.32] - 测试中
+
+- 发版说明（A31 11-09，A24 要）：从 dev 56f6227 切，含 #1332（seed_admit `textlayer_ref_gap`，缺省关）、#1334（rerun_prep 工作区完整检出）、#1335（#1332 的 code_equiv 登记，殿本 vol04 38 页逐字节相同，seed_admit 指纹不变）。
+
 - PATCH 登记 #1332（seed_admit `textlayer_ref_gap`，缺省关）的代码等价：殿本 vol04 新图 38 页与改前逐字节相同，seed_admit 指纹不变（L0）。
 
 ## [0.6.31] - 2026-11-09
