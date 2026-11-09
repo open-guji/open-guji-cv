@@ -172,3 +172,10 @@ def test_pin_shorthand_in_book_yaml(tmp_path, monkeypatch):
     (books / "v1.yaml").write_text("id: v1\nraw_dir: /tmp\npin: c31-g19-m2-k3\n", encoding="utf-8")
     b = load_book("v1", books)
     assert (b.corpus, b.glyph_pin, b.model, b.code) == (31, 19, 2, 3)
+
+
+def test_check_cv_range():
+    bc = BC.BookCode(root=Path("."), name="x", base="keben", cv=">=0.6.31")
+    assert BC.check_cv(bc, "0.6.31") is None and BC.check_cv(bc, "0.7.0") is None
+    assert "要求" in BC.check_cv(bc, "0.6.30")
+    assert BC.check_cv(bc, "0.6.31.dev3+g931422e.dirty") is None      # 开发检出不拦
