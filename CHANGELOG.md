@@ -7,7 +7,7 @@
 
 - border_detect 页级人给上／下版框位置 `hline_hints`（PATCH，A22 11-09，GUJI-758）：册 yaml 写 `params.border_detect.hline_hints: {页: {top: y}}`，线放在人给的 y、倾角按附近粗框条量；殿本第 9 轮上版框认错 10 页（抬头框贴图顶）用。缺省空不进 dump，code_equiv 已登记，没写的页产物不变。
 
-## [0.6.28] - 测试中
+## [0.6.28] - 2026-11-09
 
 - 发版说明（ZM 11-09）：从 dev 449bbbc 切。多 #1315（`ss_count` 一横之下竖画两侧磨残碎墨当士，two_frag，殿本 r8 Z04 十士 12 格；`groups/bars.py` 变，ss_bars 产物过期）、#1311（待审单上排除名单无人看过的格）、#1318（`edge_pair_to`）。**v0.6.27 tag 误打在 dev 提交 3d179a8 上（没走 rc→main，不含 #1311、#1318），不用，本版取代它**；tag 不改不删，按规矩发新 PATCH。
 
