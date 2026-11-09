@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.6.26] - 测试中
+
+- 发版：从 dev 6f58b53 切，多 #1309（eval_sim_bench）、#1310、#1312；产物、指纹都不变（L0）。殿本第9轮用（ZM GUJI-758）。
+- `republish.py push` 文本推进 book-text dev 后现算锚点类待审原因 A01–A03（PATCH，A31 11-09，方案 8.9，#1312）：写线上单之前调 `guji closeout derive`，以推前的 dev 为 A03 漂移基准，先清后算、幂等，盖掉出单时算的 A01/A02；本章没有标点／专名或没推文本就不跑，失败只警告、不拦推单。`issue`（换单）经 push 一并生效。不动产物、指纹（L0）。
 - `republish.py` 出单时现算锚点类待审原因（PATCH，A32 11-09，方案「标 main 后自动收尾」8.9）：新增 `add_anchor_reasons`，给了 `--book-text` 就调 guji-manager `closeout.plan.stamp_pending`，把标点／专名锚点对不上的格写成待审原因 A01 `anchor_miss`／A02 `add_del`（deferred，不出字卡、不算人审率；一格多因主因不变、其余进 `pending_reason_also`）；manager 没有该模块或没给 book-text 就跳过。不动产物、指纹（L0）。
 
 ## [0.6.25] - 2026-11-08
