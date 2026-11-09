@@ -2,7 +2,7 @@
 """双线版框：剥第二道 / 按 Step1 内框位置剥贴字的内框线（column_projection，2026-09-26）。"""
 import numpy as np
 
-from open_guji_cv.books.siku_zongmu.column import clean_column, column_border_trim
+from open_guji_cv.impl.keben.column import clean_column, column_border_trim
 
 
 def _col(h=400, w=120):

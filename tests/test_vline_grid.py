@@ -6,7 +6,7 @@
 import numpy as np
 import pytest
 
-from open_guji_cv.books.siku_zongmu.border import detect_borders
+from open_guji_cv.impl.keben.border import detect_borders
 from open_guji_cv.seg.lines import LineMatch, find_vertical_lines, _vline_pool
 from open_guji_cv.seg.grid import (
     find_vertical_lines_grid,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.books.siku_zongmu.border import detect_borders
+from open_guji_cv.impl.keben.border import detect_borders
 from open_guji_cv.seg.frame_types import HLine, VLine
 from open_guji_cv.seg.polyline import fit_vlines_polyline
 from open_guji_cv.steps.border_detect import BorderDetectParams

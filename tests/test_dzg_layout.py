@@ -440,7 +440,7 @@ def test_shift_occ_moves_body_slots_and_refuses_out_of_range():
 def test_snap_to_gaps_prefers_staying_near_grid_line():
     """等距格线擦着一两笔就不挪；不会被拉进 0.2 格外字内部的空当（vol98 p100 c3「字」的点与横之间）。"""
     import numpy as np
-    from open_guji_cv.books.siku_zongmu.row_boundaries import snap_to_gaps
+    from open_guji_cv.impl.keben.row_boundaries import snap_to_gaps
     proj = np.full(300, 60.0)
     proj[95:106] = 6.0          # 格线处只擦着一笔
     proj[80:86] = 0.0           # 0.18 格外字内部的白缝

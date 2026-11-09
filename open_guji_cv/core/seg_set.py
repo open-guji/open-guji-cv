@@ -37,8 +37,18 @@ SEG_SET_PIPELINE: dict[str, str] = {
 #: 各套书自己的缺省参数文件：`books/<套书>/defaults.yaml` 的 `params:`（形状同册配置 `params:`）。
 #: 只读数据文件、不 import books（守卫 `tests/test_architecture.py`）。
 BOOKS_DIR = Path(__file__).resolve().parent.parent / "books"
+IMPL_DIR = Path(__file__).resolve().parent.parent / "impl"
+#: 缺省实现的三套书（2026-11-09 由 books/<套书> 改名为 impl/<版式>，套书名在册配置里照旧写）。
+IMPL_OF: dict[str, str] = {"siku_zongmu": "keben", "beixing": "modern", "zengguang_youxue": "free"}
 
-_SIKU = "open_guji_cv.books.siku_zongmu."
+
+def set_dir(name: str, books_dir: Path | None = None) -> Path:
+    """套书 `name` 的代码目录：缺省实现在 impl/<版式>，别的在 books/<套书>。"""
+    if books_dir is not None:
+        return books_dir / name
+    return IMPL_DIR / IMPL_OF[name] if name in IMPL_OF else BOOKS_DIR / name
+
+_SIKU = "open_guji_cv.impl.keben."
 _SJ = "open_guji_cv.books.shiji_wyg."
 _QTW = "open_guji_cv.books.quantangwen."
 
@@ -124,9 +134,9 @@ def seg_set_params(name: str | None, books_dir: Path | None = None) -> dict[str,
         # 书级代码：参数缺省跟代码走，读书仓 code/defaults.yaml；没有就退回 cv 里同名套书的（迁移过渡），再没有就空
         path = bc.root / "defaults.yaml"
         if not path.is_file():
-            path = BOOKS_DIR / name / "defaults.yaml"
+            path = set_dir(name) / "defaults.yaml"
     else:
-        path = (books_dir or BOOKS_DIR) / name / "defaults.yaml"
+        path = set_dir(name, books_dir) / "defaults.yaml"
     if not path.is_file():
         return {}
     from .yaml_cache import load_yaml_cached

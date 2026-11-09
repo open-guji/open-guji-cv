@@ -1,6 +1,6 @@
 """切分样页对比（切分模块化第 4 步，2026-10-30）：改了哪套书的切分，就在那套书的样页上跑改前、改后两版，逐页比产物。
 
-每套书一份样页单 `open_guji_cv/books/<套书>/samples.yaml`（哪几册、哪几页、每页为什么在单上）。
+每套书一份样页单 `open_guji_cv/books/<套书>/samples.yaml`（缺省实现三套在 `open_guji_cv/impl/<版式>/`）（哪几册、哪几页、每页为什么在单上）。
 改 `books/<套书>/` 只比那一套；改共用原语 `seg/`、Step 壳这些各套书都用的代码，就比全部套书。
 
     # 这次改动（相对 origin/dev）牵动哪几套书：按各套书切分步的指纹模块及其 import 闭包算
@@ -44,7 +44,8 @@ BOOKS = ROOT / PKG / "books"
 # ── 样页单 ──────────────────────────────────────────────
 
 def sample_path(seg_set: str) -> Path:
-    return BOOKS / seg_set / "samples.yaml"
+    from open_guji_cv.core.seg_set import set_dir
+    return set_dir(seg_set) / "samples.yaml"     # 缺省实现三套在 impl/<版式>（2026-11-09），其余 books/<套书>
 
 
 def load_samples(seg_set: str) -> dict:
@@ -116,7 +117,7 @@ def _imports(mod: str) -> set[str]:
 
 
 #: 只顺着 import 追进这两处：切分代码都在这里。全包闭包没有意义——Step 壳经 core／steps 包能间接 import 到几乎所有模块。
-_FOLLOW = (f"{PKG}.seg", f"{PKG}.books")
+_FOLLOW = (f"{PKG}.seg", f"{PKG}.books", f"{PKG}.impl")
 
 
 def set_modules(seg_set: str) -> set[str]:
@@ -158,7 +159,7 @@ def affected_sets(base: str) -> dict[str, list[str]]:
     ch = changed_modules(base)
     out = {}
     for s in all_sets():
-        hit = sorted(ch & set_modules(s)) + sorted(m for m in ch if m == f"{PKG}.books.{s}.__samples__")
+        hit = sorted(ch & set_modules(s)) + sorted(m for m in ch if m == ".".join(sample_path(s).relative_to(ROOT).parts[:-1]) + ".__samples__")
         if hit:
             out[s] = hit
     return out

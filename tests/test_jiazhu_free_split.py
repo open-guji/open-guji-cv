@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.books.siku_zongmu.row_boundaries import _free_split
+from open_guji_cv.impl.keben.row_boundaries import _free_split
 from open_guji_cv.steps.row_segment import RowSegmentParams
 
 H, W, CX = 300, 40, 20

@@ -34,6 +34,8 @@ LAYER: dict[str, int] = {
     "strokes": 1,
     # 切分共用原语（seg）与每套书自管的切分代码（books）；books 只许用 seg，套书之间不互相 import（见下面两条守卫）
     "seg": 1, "books": 2,
+    # 三条版式（刻本/现代/自由）的缺省实现（2026-11-09 由 books/<殿本|北行|幼學> 改名；书仓 code/ 可覆盖）
+    "impl": 2,
     # 书级代码（书仓 code/）能用的公开面（2026-11-09）
     "book_api": 1,
     # L2 算法与产出：聚类/匹配、金标、报告、渲染
@@ -73,7 +75,7 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "products.fp_migrate -> clustering.cnn_candidates",
     "products.fp_migrate -> clustering.font_candidates",
     "utils.binarized -> clustering.normalize",
-    "books.siku_zongmu.calibrate -> steps",
+    "impl.keben.calibrate -> steps",
     "utils.font_calibrate -> clustering.canonical",
     "utils.font_calibrate -> clustering.normalize",
     "utils.font_calibrate_direct -> clustering.canonical",
@@ -93,7 +95,7 @@ SIDE_PIPELINE = "pipeline"
 SIDE_MANAGER = "manager"
 PIPELINE_PKGS: frozenset[str] = frozenset({
     "errors", "variants", "variant_ledger", "gloss", "detectors", "ocr", "hanzi",
-    "core", "products", "utils", "seg", "strokes", "books", "clustering", "pagetype_model", "groups",
+    "core", "products", "utils", "seg", "strokes", "books", "impl", "clustering", "pagetype_model", "groups",
     "gates", "steps", "shadow", "api", "__main__", "preflight",
     # 拆分 P6（2026-11-04）：manager 一侧已全部搬去 guji-manager，下面这些包里留下的都是 pipeline——
     # 命令行入口 cli_v2、给 manager 的名字表 manager_api、Step 读人裁（feedback 的 lookup/bindings…、
@@ -290,8 +292,8 @@ def _book_imports(src_dir: Path) -> list[tuple[str, str]]:
 def test_seg_does_not_import_books():
     """共用原语不认识任何一套书。"""
     bad = [f"{f} -> {n}" for f, n in _book_imports(PKG_ROOT / "seg")
-           if n == f"{PKG}.books" or n.startswith(f"{PKG}.books.")]
-    assert not bad, "seg 不许 import books：\n  " + "\n  ".join(bad)
+           if any(n == f"{PKG}.{t}" or n.startswith(f"{PKG}.{t}.") for t in ("books", "impl"))]
+    assert not bad, "seg 不许 import books/impl：\n  " + "\n  ".join(bad)
 
 
 def test_book_sets_do_not_import_each_other():
@@ -312,4 +314,4 @@ def test_seg_set_registry_sane():
     for ss, ov in S.OVERRIDES.items():
         assert ss in S.SEG_SETS
         for default, mine in ov.items():
-            assert default.startswith(f"{PKG}.books.siku_zongmu.") and mine.startswith(f"{PKG}.books.{ss}."), (ss, default, mine)
+            assert default.startswith(f"{PKG}.impl.keben.") and mine.startswith(f"{PKG}.books.{ss}."), (ss, default, mine)

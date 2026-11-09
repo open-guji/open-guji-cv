@@ -18,7 +18,7 @@ slots:
   columns: [column_crop]         # Step2 裁列 + 去噪：→ column_windows / 列图；出口闸 column_gate
   cells: [row_segment_runs]      # Step3 墨段切分：→ cells（char / punct / blank）
 # 本链各 Step 的缺省参数（column_gate、cell_shrink、glyph_match 等）2026-11-03 起写在套书
-# `books/beixing/defaults.yaml`（管线重组方案 B 第一期）：参数跟套书走，不跟管线走。
+# `impl/modern/defaults.yaml`（管线重组方案 B 第一期）：参数跟套书走，不跟管线走。
 notes: |
   坐标：与刻本链相同——Step1 产物在规范空间 raw_page_px@top-right，Step2–4 列内坐标
   column_px 另带 quad_page / bbox_page。分页（一张扫描页两栏）在 Step0 `guji split` 做，

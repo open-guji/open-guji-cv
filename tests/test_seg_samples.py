@@ -28,10 +28,10 @@ def test_every_seg_set_has_a_sample_list(seg_set):
 
 def test_modules_are_split_by_seg_set():
     siku, shiji, free = (S.set_modules(s) for s in ("siku_zongmu", "shiji_wyg", "zengguang_youxue"))
-    assert {P + "books.siku_zongmu.border", P + "seg.lines", P + "seg.grid"} <= siku
-    assert P + "books.siku_zongmu.roster_segment" in siku and P + "books.shiji_wyg.roster_segment" not in siku
-    assert P + "books.shiji_wyg.roster_segment" in shiji and P + "books.siku_zongmu.roster_segment" not in shiji
-    assert not any(m.startswith(P + "books.siku_zongmu") for m in free)
-    assert not any(m.startswith(P + "books.zengguang_youxue") for m in siku | shiji)
+    assert {P + "impl.keben.border", P + "seg.lines", P + "seg.grid"} <= siku
+    assert P + "impl.keben.roster_segment" in siku and P + "books.shiji_wyg.roster_segment" not in siku
+    assert P + "books.shiji_wyg.roster_segment" in shiji and P + "impl.keben.roster_segment" not in shiji
+    assert not any(m.startswith(P + "impl.keben") for m in free)
+    assert not any(m.startswith(P + "impl.free") for m in siku | shiji)
 
 

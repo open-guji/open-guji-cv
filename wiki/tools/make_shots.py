@@ -156,7 +156,7 @@ def yolo_chars(bk, page):
     if key not in _YOLO:
         if not YOLO_MODEL:
             raise SystemExit("yolo 图层要 --yolo <yolo_tool 的 model/ 目录>")
-        from open_guji_cv.books.siku_zongmu.yolo_tool_infer import YoloTool
+        from open_guji_cv.impl.keben.yolo_tool_infer import YoloTool
         if "tool" not in _YOLO:
             _YOLO["tool"] = YoloTool(YOLO_MODEL)
         _, chars = _YOLO["tool"].infer(bk.raw(page))
@@ -314,7 +314,7 @@ def page_view(bk, page, layers, crop=None, th=3):
     img = bk.raw(page)
     if FREE_LAYERS & set(layers):
         # 自由版式的产物坐标在「按框线拉正后」的图上（block_detect 的 warp），先拉正再画
-        from open_guji_cv.books.zengguang_youxue.free_rectify import rectify_gray
+        from open_guji_cv.impl.free.free_rectify import rectify_gray
         img = np.ascontiguousarray(rectify_gray(img, bk.prod("block_detect", page)["layout_blocks"].get("warp")))
     for name in layers:
         LAYERS[name](bk, page, img, th)

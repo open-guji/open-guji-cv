@@ -36,7 +36,7 @@ def test_every_seg_set_has_a_pipeline():
 
 def test_seg_set_defaults_replace_pipeline_params():
     pl = load_pipeline("modern_body")
-    assert pl.params == {}                          # 搬到 books/beixing/defaults.yaml
+    assert pl.params == {}                          # 搬到 impl/modern/defaults.yaml
     bp = base_params(pl, make_book(edition="modern"))
     assert bp["column_gate"] == {"count_mode": "detected", "width_tol": 0.5}
     assert bp["cell_shrink"] == {"frame_guard": False, "inner_frame_cut": False, "inner_frame_profile": False}

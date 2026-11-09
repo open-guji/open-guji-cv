@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- PATCH（v0.7.0 系列第 2 步）刻本/现代/自由三条版式的缺省实现改名：`books/siku_zongmu` → `impl/keben`、`books/beixing` → `impl/modern`、`books/zengguang_youxue` → `impl/free`（样页单、defaults.yaml 随走；seg_set 名不变，`seg_set.IMPL_OF`/`set_dir` 对照）。搬家登 `code_equiv.MOVED`、只改 import 的登 ENTRIES（`_MV_IMPL`）：5 套书 × 23 步 `code_hash` 逐位相同（L0）。外部 `from open_guji_cv.books.siku_zongmu…` 要改成 `impl.keben`。
 - PATCH（v0.7.0 系列第 1 步）书级代码：各书工作区仓 `code/` 挂成 `guji_book.<name>`（`core/book_code.py`），`seg_set.resolve` 先查书仓覆盖；册配置新键 `code: N`（`k3`）钉书级代码、简写 `pin: c31-g19-m2-k3`（`core/lib_pins.py`）；起跑前钉了 `code:` 的册校验 `code/releases/k<N>.json`；`book_api` 公开面；`guji code` 搬在 guji-manager ≥0.4.30。没有 `code/` 的工作区行为不变：5 套书 × 23 步 `code_hash` 逐位相同（L0）。设计 `doc/design/书级代码.md`。
 
 ## [0.6.30] - 2026-11-09

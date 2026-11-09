@@ -1,4 +1,4 @@
-# 全唐文（嘉慶內府本）套书自己的一份：2026-11-04 从 books/siku_zongmu/jiazhu_split.py 原样复制（含 #1025 jiazhu_single_head），
+# 全唐文（嘉慶內府本）套书自己的一份：2026-11-04 从 impl/keben/jiazhu_split.py 原样复制（含 #1025 jiazhu_single_head），
 # 以后全唐文的 Step3 行切分改这里，殿本那份不再动。登记见 core/seg_set.OVERRIDES["quantangwen"]、core/code_equiv.FORKED。
 """Step 3 附属：双行小注（夹注）的检出与 a/b 子列拆分。
 

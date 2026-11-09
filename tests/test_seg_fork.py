@@ -16,11 +16,22 @@ class _Book:
         self.seg_set = ss
 
 
+def _now(mod: str) -> str:
+    """原模块之后又搬过家（如 2026-11-09 books/siku_zongmu → impl/keben）：沿 MOVED 反查现在的名字。"""
+    back = {o: n for n, (o, _) in code_equiv.MOVED.items()}
+    seen = set()
+    while mod in back and mod not in seen:
+        seen.add(mod)
+        mod = back[mod]
+    return mod
+
+
 def test_forked_copies_exist_next_to_original_and_are_overrides():
     pairs = {(d, m) for ov in seg_set.OVERRIDES.values() for d, m in ov.items()}
     for new, (old, h) in code_equiv.FORKED.items():
         assert new.startswith("open_guji_cv.books."), new
         assert importlib.util.find_spec(new) is not None, f"{new} 不存在"
+        old = _now(old)
         assert importlib.util.find_spec(old) is not None, f"{old} 是分叉的原模块，应当还在"
         assert (old, new) in pairs, f"{new} 没在 seg_set.OVERRIDES 里登记覆盖 {old}"
         assert len(h) == 64
@@ -29,7 +40,7 @@ def test_forked_copies_exist_next_to_original_and_are_overrides():
 def test_forked_copy_fingerprints_under_original_name_while_unchanged():
     for new, (old, h) in code_equiv.FORKED.items():
         if _module_source_hash(new) == h:
-            assert _fingerprint_name(new) == _fingerprint_name(old)
+            assert _fingerprint_name(new) == _fingerprint_name(_now(old))
         else:
             assert _fingerprint_name(new) == new
 
@@ -44,11 +55,11 @@ def test_quantangwen_steps_fingerprint_like_siku_while_copies_unchanged():
 
 def test_single_head_only_in_quantangwen():
     from open_guji_cv.books.quantangwen import row_boundaries as qtw
-    from open_guji_cv.books.siku_zongmu import row_boundaries as siku
+    from open_guji_cv.impl.keben import row_boundaries as siku
     assert "jiazhu_single_head" in inspect.signature(qtw.segment_column).parameters
     assert "jiazhu_single_head" not in inspect.signature(siku.segment_column).parameters
-    assert seg_set.resolve(_Book("quantangwen"), "open_guji_cv.books.siku_zongmu.row_boundaries") == qtw.__name__
-    assert seg_set.resolve(_Book(None), "open_guji_cv.books.siku_zongmu.row_boundaries") == siku.__name__
+    assert seg_set.resolve(_Book("quantangwen"), "open_guji_cv.impl.keben.row_boundaries") == qtw.__name__
+    assert seg_set.resolve(_Book(None), "open_guji_cv.impl.keben.row_boundaries") == siku.__name__
 
 
 def test_editing_quantangwen_copy_expires_only_quantangwen(monkeypatch):

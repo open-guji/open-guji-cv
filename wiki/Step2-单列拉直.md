@@ -20,4 +20,4 @@
 
 挂在这一步上：每列判 ok／疑似／拒，拒的列（比如列宽和本页周期差太多、两列粘在一起）不进 Step3，交人看。闸的判据和分档见 [doc/segmentation_v2_pipeline.md](https://github.com/open-guji/open-guji-cv/blob/dev/doc/segmentation_v2_pipeline.md) Step 2 一节。
 
-代码：`seg/warp.py`（单列射影、列窗口）、`seg/profile.py`（去噪、投影）、殿本的界行残墨剥法在 `books/siku_zongmu/column.py`、`column_triage.py`。
+代码：`seg/warp.py`（单列射影、列窗口）、`seg/profile.py`（去噪、投影）、殿本的界行残墨剥法在 `impl/keben/column.py`、`column_triage.py`。

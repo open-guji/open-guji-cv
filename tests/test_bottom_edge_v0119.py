@@ -1,7 +1,7 @@
 """vol01–19 换新图：下版框贴图底不崩、下框贴搜索带边界／上框贴图顶时重找倾角（A22，2026-11-08）。"""
 import numpy as np
 
-from open_guji_cv.books.siku_zongmu.row_boundaries import trim_content_span
+from open_guji_cv.impl.keben.row_boundaries import trim_content_span
 from open_guji_cv.seg import lines as L
 
 

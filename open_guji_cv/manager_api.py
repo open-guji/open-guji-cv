@@ -232,7 +232,7 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "load_current": ("clustering.emb_pack", "load_current"),
     "RunContext": ("core.step", "RunContext"),
     "ImageMissing": ("errors", "ImageMissing"),
-    "strip_column_rules": ("books.siku_zongmu.column", "strip_column_rules"),
+    "strip_column_rules": ("impl.keben.column", "strip_column_rules"),
     "column_row_profile": ("seg.profile", "column_row_profile"),
     "column_text_band": ("seg.profile", "column_text_band"),
     "denoise_column": ("seg.profile", "denoise_column"),

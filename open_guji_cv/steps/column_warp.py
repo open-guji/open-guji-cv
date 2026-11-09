@@ -15,8 +15,8 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.borders import Borders, VLineRec
 from ..products.kinds.columns import BorderTrim, ColumnTriage, ColumnWindowRec, PageWindows
-from ..books.siku_zongmu.column_triage import triage_column
-from ..books.siku_zongmu.column import clean_column, refine_top_by_frame
+from ..impl.keben.column_triage import triage_column
+from ..impl.keben.column import clean_column, refine_top_by_frame
 from ..seg.profile import column_profile, denoise_column, stamp_noise_density
 from ..seg.warp import ColumnWindow, page_column_windows, warp_column
 
@@ -130,8 +130,8 @@ class ColumnWarpStep(Step):
         consumes=("raw_page", "borders", "border_detect_gate_manifest"),
         produces=("column_windows", "column_raw", "column_image"),
         params=ColumnWarpParams,
-        code_deps=("open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.books.siku_zongmu.column", "open_guji_cv.books.siku_zongmu.border", "open_guji_cv.seg.polyline", "open_guji_cv.seg.frame_types",
-                   "open_guji_cv.books.siku_zongmu.column_triage"),
+        code_deps=("open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.impl.keben.column", "open_guji_cv.impl.keben.border", "open_guji_cv.seg.polyline", "open_guji_cv.seg.frame_types",
+                   "open_guji_cv.impl.keben.column_triage"),
         # 双线版框剥第二道读册配置（2026-09-26）——改 yaml 要让列图过期
         book_deps=("frame_layers", "outer_gap"),
     )
