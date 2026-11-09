@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- row_segment 书级开关 `grid_end_fit`（PATCH，A22 11-09，ZM 派单 vol28 列尾下溢）：等距格网末线顺末字墨推到白段或下版框线上沿（`books/siku_zongmu/row_boundaries.fit_grid_end`），缺省关、关时逐字节不变（code_equiv 已登记）；vol28/89 列尾下溢 8.4%/4.3% → 0.2%。
+
 ## [0.6.29] - 2026-11-09
 
 - 发版说明（ZM 11-09）：从 dev 3b1e330 之后切。含 #1317（border_detect 页级覆盖 hline_hints）；0.6.28 的 rc 切在 #1317 之前，不含它，本版补上。0.6.27 误打在 dev 上、0.6.28 缺 #1317，殿本第 9 轮钉 0.6.29。
