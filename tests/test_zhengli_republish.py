@@ -391,3 +391,20 @@ def test_copy_cord_for_site_keeps_export(tmp_path, monkeypatch):
     src.write_text(json.dumps(bad), encoding="utf-8")
     with pytest.raises(SystemExit):
         rp.copy_cord_for_site(src, dst)
+
+
+def test_add_anchor_reasons(tmp_path):
+    """标 main 后收尾（方案 8.9）：出单时把 A01/A02 现算写进待审单；manager 没有 closeout.plan 或没给 book-text 就跳过。"""
+    pytest.importorskip("guji_manager.closeout.plan")
+    char = {"pages": [{"columns": [{"cells": [{"a": f"1:1:{i}", "c": c} for i, c in enumerate("甲乙丙", 1)]}]}]}
+    (tmp_path / "001.char.json").write_text(json.dumps(char), encoding="utf-8")
+    (tmp_path / "001.punct.json").write_text(json.dumps({"punctuations": [
+        {"mark": "，", "pre_char": "乙", "anchor": "1:1:2"}, {"mark": "。", "pre_char": "丁", "anchor": "1:1:9"}]}), encoding="utf-8")
+    pend = tmp_path / "001.pending.json"
+    pend.write_text(json.dumps({"cells": [{"cell": "1:1:1", "pending_reason": "group_abstain"}]}), encoding="utf-8")
+    rp.add_anchor_reasons(pend, tmp_path, None, "001")                                    # 没给 book-text：不动
+    assert len(json.loads(pend.read_text(encoding="utf-8"))["cells"]) == 1
+    rp.add_anchor_reasons(pend, tmp_path, tmp_path, "001")
+    cells = {c["cell"]: c for c in json.loads(pend.read_text(encoding="utf-8"))["cells"]}
+    assert cells["1:1:3"]["pending_reason"] == "anchor_miss" and cells["1:1:3"]["src"] == "closeout_anchor"
+    assert cells["1:1:1"]["pending_reason"] == "group_abstain"

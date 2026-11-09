@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `republish.py` 出单时现算锚点类待审原因（PATCH，A32 11-09，方案「标 main 后自动收尾」8.9）：新增 `add_anchor_reasons`，给了 `--book-text` 就调 guji-manager `closeout.plan.stamp_pending`，把标点／专名锚点对不上的格写成待审原因 A01 `anchor_miss`／A02 `add_del`（deferred，不出字卡、不算人审率；一格多因主因不变、其余进 `pending_reason_also`）；manager 没有该模块或没给 book-text 就跳过。不动产物、指纹（L0）。
+
 ## [0.6.25] - 2026-11-08
 
 - 发版：从 dev f24811b 切，多 #1303（auto_cycle 失败还原工作区）、#1306（solo_cal）；seed_admit 仍 1.82、row_segment 1.47。全唐文 front9 用。
