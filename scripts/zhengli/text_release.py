@@ -12,7 +12,7 @@
                共享   语料、参照本、格位表、字组配置被别处更新——冻结时记一笔即可，不算失败（close-check 1a 同理）。
              退出码：0 没变；2 只有共享输入变；1 本册输入变。
   run        1.0 检查按标准顺序一次跑完（只读，不写中心库、不打 tag），全过就停在「请用户点头」：
-               1 输入锁（check-pin）  2 G0 票账（线上单）  3 G1 待审与「看不出」≤2%（decision_build）
+               1 输入锁（check-pin）  2 G0 票账（线上单）  3 G1 线上单待审清零
                4 G3 close-check（终校档，用钉住的引擎跑）  5 G3b/G3c 读者侧冒烟（线上单与图）
                6 出口动作里冻结前就能核的项（exit-check E3 E4 E10 E11）
              报告写 `<工作区>/reports/<册>/_release/<时刻>/1.0检查.md` 与 `result.json`。用户点头之后：
@@ -170,21 +170,12 @@ def cmd_run(a) -> int:
                                                                     Path(a.held).read_text(encoding="utf-8").splitlines()[1:] if ln.strip()])
     gates.append(gate("G0", "票账", not led["counts"]["未落"], rp.ledger_md(led) + f"（{src}）"))
 
-    # 3 G1 待审与看不出
+    # 3 G1 待审清零（book-text 只录首选字，decision.json 已废弃，待审信息在 KV）
     pend = [c for c in sheet.get("cells") or [] if c.get("review") != "human"]
-    dec = out / f"{chapter}.decision.json"
-    p = _run([sys.executable, HERE / "decision_build.py", "--char", text_dir / f"{chapter}.char.json", "--pending", online,
-              "--events-dir", rp.data_dir(ws) / "feedback" / "events", "--book", book, "--out", dec], env=env)
-    items = json.loads(dec.read_text(encoding="utf-8")).get("items", []) if dec.exists() else []
-    unclear = [i for i in items if not i.get("reason")]
     n_cells = sum(len(col.get("cells") or []) for pg in json.loads((text_dir / f"{chapter}.char.json").read_text(encoding="utf-8"))["pages"]
                   for col in pg.get("columns") or [])
-    open_cells = [c["cell"] for c in pend if c["cell"] not in {i.get("a") or i.get("cell") for i in items}]
-    share = len(unclear) / max(1, len(pend)) if pend else 0.0
-    ok1 = p.returncode in (0, 2) and not open_cells and share <= 0.02
-    gates.append(gate("G1", "待审清零、看不出 ≤ 待审格 2%", ok1,
-                      f"线上单 {rev} {len(pend)} 格；decision.json {len(items)} 条（看不出 {len(unclear)}，占 {share:.1%}）；"
-                      f"既没定字也没进 decision 的 {len(open_cells)} 格" + (f"（{'、'.join(open_cells[:10])}）" if open_cells else "")
+    gates.append(gate("G1", "线上单待审清零", not pend,
+                      f"线上单 {rev} 待审（未人审）{len(pend)} 格" + (f"（{'、'.join(c['cell'] for c in pend[:10])}）" if pend else "")
                       + f"；全册 {n_cells} 格"))
 
     # 4 G3 close-check（钉住的引擎）

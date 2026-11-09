@@ -5,6 +5,12 @@
 
 ## [未发版]
 
+## [0.6.33] - 2026-11-09
+
+- 发版说明（A31 11-09）：从 dev 93e03bc 切，含 #1338、#1339（rerun_prep 修复）、#1340（删 decision_build，book-text 只录首选字）。
+
+- PATCH（A31 11-09，用户定 book-text 只录首选字）删 `scripts/zhengli/decision_build.py` 与其测试；`text_release.py run` 的 G1 改为「线上单待审清零」（不再生成 decision.json、不再算「看不出」占比）；`export_guji_format.py --pending` 提示改为写首选字、不写 pending_reason；runbook E3 注明废弃。待审信息、候选、人裁事件都在 KV。L0（不影响切分／识别产物）。
+
 ## [0.6.32] - 2026-11-09
 
 - 发版说明（A31 11-09，A24 要）：从 dev 56f6227 切，含 #1332（seed_admit `textlayer_ref_gap`，缺省关）、#1334（rerun_prep 工作区完整检出）、#1335（#1332 的 code_equiv 登记，殿本 vol04 38 页逐字节相同，seed_admit 指纹不变）。

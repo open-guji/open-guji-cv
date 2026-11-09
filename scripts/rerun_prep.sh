@@ -28,15 +28,36 @@ EM="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/ensure_manager.sh"   # guji-
 if [ -f "$EM" ]; then . "$EM"; else ensure_manager() { :; }; fi
 t() { local s=$SECONDS n=$1; shift; echo "== $n"; "$@"; SUM+=("$(printf '%-14s %4ss' "$n" $((SECONDS-s)))"); }
 
-# 书仓检出同步：拉 origin main（网络抖动重试 5 次），拉不动就返回失败
-sync_ws() {
-  local d=$1 i
+# 书仓 fetch origin main（网络抖动重试 3 次）。失败就保留旧检出、不动它：里面有可再生的 cache/、products/（殿本十几 GB）。
+# git 的真实报错原样打进日志（2026-11-09：#1746 两台机都报「拉不到 origin main」，看不出原因）。
+ws_fetch() {
+  local d=$1 i err
   git -C "$d" sparse-checkout disable >/dev/null 2>&1 || true   # 稀疏检出会缺书级代码目录
-  for i in 1 2 3 4 5; do
-    git -C "$d" pull -q --ff-only origin main 2>/dev/null && return 0
-    echo "拉工作区重试 $i" >&2; sleep $((i * 2))
+  for i in 1 2 3; do
+    if err=$(git -C "$d" fetch -q origin main 2>&1); then return 0; fi
+    echo "fetch 工作区 $d 第 $i 次失败：$err" >&2; sleep $((i * 2))
   done
   return 1
+}
+# 重建书仓：旧目录先改名 .bak，克隆成功才删；克隆失败就改回去，旧目录原样保留
+ws_rebuild() {
+  local d=$1 bak="$1.bak.$$"
+  [ -e "$d" ] && mv "$d" "$bak"
+  if git clone -q --depth 1 "https://github.com/$WSREPO" "$d"; then rm -rf "$bak"; return 0; fi
+  rm -rf "$d"; [ -e "$bak" ] && mv "$bak" "$d"
+  return 1
+}
+# 清理被中断的重建留下的 <书仓>.bak.<pid>：只在书仓本身已在位（有 .git）且那个 pid 已不在时删，不删唯一一份
+ws_clean_bak() {
+  local d=$1 b pid
+  [ -d "$d/.git" ] || return 0
+  for b in "$d".bak.*; do
+    [ -d "$b" ] || continue
+    pid=${b##*.bak.}
+    if [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null; then
+      rm -rf "$b" && echo "清掉被中断重建的残留 $b" >&2
+    fi
+  done
 }
 # 书级代码 code/code.yaml：HEAD 里有、检出里没有（稀疏检出或旧克隆）＝seg_set 不认，直接停（2026-11-09 史記 #1736）
 ws_code_check() {
@@ -52,17 +73,26 @@ fi
 ensure_manager
 echo "cv $(git -C $SEED rev-parse --short HEAD) $(git -C $SEED describe --tags 2>/dev/null || true)"
 if [ -n "$WSREPO" ]; then
-  GW1=$HOME/${WSREPO##*/}
-  # 不能用 t 包：t 末尾记耗时的赋值总返回 0，克隆失败也当成功，退不回旧仓（10-31 #1203 起的验收单就这样失败）
-  if [ -d $GW1/.git ] || { echo "== 克隆工作区"; git clone -q --depth 1 https://github.com/$WSREPO $GW1; }; then
-    GW=$GW1
-    # 拉不到最新就失败，不许拿旧检出凑数（2026-11-09：旧克隆拉取静默失败 → 没有 code/ → 史記 r20 #1736 seg_set 不认）
-    sync_ws "$GW" || { echo "⚠️ 工作区 $GW 拉不到 origin main（网络或历史分叉）；不用旧检出，请重跑准备" >&2; exit 1; }
-    WS=$GW; export GUJI_WORKSPACE=$WS
-  else   # 会话没挂这个仓（迁仓过渡期）：退回旧总仓里同一本书的目录（内容相同）
-    echo "⚠️ 读不了 $WSREPO（会话里 add_repo $WSREPO 就走新仓），退回 open-guji/guji-workspace" >&2
-    rm -rf "$GW1"; WSREPO=
+  case "${WSREPO##*/}" in ""|.|..|*[!A-Za-z0-9._-]*) echo "⚠️ 工作区仓名不合规：$WSREPO" >&2; exit 1;; esac
+  GW1="$HOME/${WSREPO##*/}"
+  # fetch 不通（网络／凭据）：保留旧检出，直接停，不重克隆
+  if [ -d "$GW1/.git" ]; then
+    ws_fetch "$GW1" || { echo "⚠️ 拉不到 $WSREPO（网络或凭据），保留旧检出 $GW1，请看上方 git 报错" >&2; exit 1; }
+    # fetch 成功但 reset 失败（检出损坏）：改名重建
+    if ! err=$(git -C "$GW1" reset -q --hard origin/main 2>&1); then
+      echo "⚠️ 旧检出 $GW1 reset 失败（$err），改名重克隆" >&2
+      ws_rebuild "$GW1" || { echo "⚠️ 重克隆 $WSREPO 也失败，请看上方 git 报错" >&2; exit 1; }
+    fi
+  else
+    # 不能用 t 包：t 末尾记耗时的赋值总返回 0，克隆失败也当成功（10-31 #1203）
+    echo "== 克隆工作区"
+    if ! ws_rebuild "$GW1"; then   # 会话没挂这个仓（迁仓过渡期）：退回旧总仓里同一本书的目录（内容相同）
+      echo "⚠️ 读不了 $WSREPO（会话里 add_repo $WSREPO 就走新仓），退回 open-guji/guji-workspace" >&2
+      WSREPO=
+    fi
   fi
+  ws_clean_bak "$GW1"
+  if [ -n "$WSREPO" ]; then GW=$GW1; WS=$GW; export GUJI_WORKSPACE=$WS; fi
 fi
 if [ -z "$WSREPO" ]; then
   [ -d $GW/.git ] || t 克隆工作区 git clone -q --depth 1 https://github.com/open-guji/guji-workspace $GW
