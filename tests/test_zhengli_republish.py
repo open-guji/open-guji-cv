@@ -391,3 +391,44 @@ def test_copy_cord_for_site_keeps_export(tmp_path, monkeypatch):
     src.write_text(json.dumps(bad), encoding="utf-8")
     with pytest.raises(SystemExit):
         rp.copy_cord_for_site(src, dst)
+
+
+def test_add_anchor_reasons(tmp_path):
+    """标 main 后收尾（方案 8.9）：出单时把 A01/A02 现算写进待审单；manager 没有 closeout.plan 或没给 book-text 就跳过。"""
+    pytest.importorskip("guji_manager.closeout.plan")
+    char = {"pages": [{"columns": [{"cells": [{"a": f"1:1:{i}", "c": c} for i, c in enumerate("甲乙丙", 1)]}]}]}
+    (tmp_path / "001.char.json").write_text(json.dumps(char), encoding="utf-8")
+    (tmp_path / "001.punct.json").write_text(json.dumps({"punctuations": [
+        {"mark": "，", "pre_char": "乙", "anchor": "1:1:2"}, {"mark": "。", "pre_char": "丁", "anchor": "1:1:9"}]}), encoding="utf-8")
+    pend = tmp_path / "001.pending.json"
+    pend.write_text(json.dumps({"cells": [{"cell": "1:1:1", "pending_reason": "group_abstain"}]}), encoding="utf-8")
+    rp.add_anchor_reasons(pend, tmp_path, None, "001")                                    # 没给 book-text：不动
+    assert len(json.loads(pend.read_text(encoding="utf-8"))["cells"]) == 1
+    rp.add_anchor_reasons(pend, tmp_path, tmp_path, "001")
+    cells = {c["cell"]: c for c in json.loads(pend.read_text(encoding="utf-8"))["cells"]}
+    assert cells["1:1:3"]["pending_reason"] == "anchor_miss" and cells["1:1:3"]["src"] == "closeout_anchor"
+    assert cells["1:1:1"]["pending_reason"] == "group_abstain"
+
+
+def test_closeout_derive_after_text_push(tmp_path, monkeypatch, capsys):
+    """文本推进 book-text dev 之后现算 A01–A03（方案 8.9）：以推前的 dev 为漂移基准；本章没有标点／专名就不跑；
+    算失败只警告、不拦推单。"""
+    vdir = tmp_path / "bt" / "Book" / "x" / "y" / "z" / "abc123" / "default"
+    vdir.mkdir(parents=True)
+    monkeypatch.setattr(rp, "book_text_dir", lambda repo, tid: vdir)
+    calls, rc = [], [0]
+    monkeypatch.setattr(rp, "run", lambda cmd, **kw: calls.append([str(c) for c in cmd]) or type("P", (), {"returncode": rc[0]})())
+    plan = {"chapter": "006", "text_id": "abc123", "pending": str(tmp_path / "006.pending.json")}
+    rp.closeout_derive(tmp_path / "bt", plan, "base123")
+    assert calls == []                                       # 没有标点／专名：没有锚点可算
+    (vdir / "006.punct.json").write_text("{}", encoding="utf-8")
+    rp.closeout_derive(tmp_path / "bt", plan, None)
+    assert calls == []                                       # 没推文本（没有基准）就不算
+    rp.closeout_derive(tmp_path / "bt", plan, "base123")
+    cmd = calls[-1]
+    assert cmd[1:5] == ["-m", "open_guji_cv.cli_v2", "closeout", "derive"] and cmd[5] == plan["pending"]
+    assert cmd[cmd.index("--chapter") + 1] == "006" and cmd[cmd.index("--drift-base") + 1] == "base123"
+    assert cmd[cmd.index("--vdir") + 1] == str(vdir)
+    rc[0] = 1
+    rp.closeout_derive(tmp_path / "bt", plan, "base123")     # 失败不抛
+    assert "没跑通" in capsys.readouterr().out
