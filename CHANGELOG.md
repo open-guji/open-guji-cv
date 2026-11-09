@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+## [0.6.29] - 测试中
+
 - border_detect 页级人给上／下版框位置 `hline_hints`（PATCH，A22 11-09，GUJI-758）：册 yaml 写 `params.border_detect.hline_hints: {页: {top: y}}`，线放在人给的 y、倾角按附近粗框条量；殿本第 9 轮上版框认错 10 页（抬头框贴图顶）用。缺省空不进 dump，code_equiv 已登记，没写的页产物不变。
 
 ## [0.6.28] - 2026-11-09
