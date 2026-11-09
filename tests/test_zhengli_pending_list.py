@@ -22,7 +22,8 @@ def make_products(tmp_path: Path, n_review: int = 2) -> Path:
         {"chars": [
             {"id": "vol01:1:1:1", "admit": True},
             {"id": "vol01:1:1:2", "admit": False, "doubts": ["lib_miss"]},
-            {"id": "vol01:1:1:3", "admit": False, "doubts": ["excluded"]},
+            {"id": "vol01:1:1:3", "admit": False, "doubts": ["excluded"],
+             "evidence": {"excluded": "human:seg_defect"}},
         ]},
         {"chars": [{"id": "vol01:1:2:1a", "admit": False}]},
     ]}}
@@ -223,3 +224,19 @@ def test_seg_flags_keep_existing_seg_kind_detail(tmp_path):
     c["why"] = ["jiazhu_uneven"]                       # 原来就是夹注两行分法不均
     res = reasons_for_pending(doc, tmp_path / "noprod", "vol01", are_variants=lambda a, b: False)
     assert res["1:1:2"] == (R.SEG_DEFECT, "jiazhu_uneven")
+
+
+def test_gate_excluded_unseen_cell_is_pending(tmp_path):
+    """排除名单上没人看过的格（gate:crop_defect）上单；有人给字的 gate 格、human:* 的格不上。页头 n_review 不计它们。"""
+    seed = tmp_path / "products" / "vol01" / "seed_admit"
+    seed.mkdir(parents=True)
+    ex = lambda cid, why, **ev: {"id": cid, "admit": False, "doubts": ["excluded"], "evidence": {"excluded": why, **ev}}
+    doc = {"seed_admit": {"n_review": 0, "columns": [{"chars": [
+        ex("vol01:1:1:1", "gate:crop_defect"),
+        ex("vol01:1:1:2", "gate:crop_defect", human_char="字"),
+        ex("vol01:1:1:3", "human:crop_defect"),
+        ex("vol01:1:1:4", "human:damaged", damaged=True),
+    ]}]}}
+    (seed / "p0001.json").write_text(json.dumps(doc), encoding="utf-8")
+    cells, n = pl.pending_cells(seed, "vol01")
+    assert [c["cell"] for c in cells] == ["1:1:1"] and n == 1
