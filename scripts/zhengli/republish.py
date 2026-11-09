@@ -782,7 +782,8 @@ def cmd_push(a) -> int:
     votes_gate(ws, book, plan.get("text_id") or text_id_of(ws), old_rev, a.rev, a, old_doc=old_doc, out=out)
     if a.book_text:
         d = json.loads((out / "diff.json").read_text(encoding="utf-8"))
-        bump_book_text(Path(a.book_text), plan, a.note or f"{book} 换最新产物：待审 {d['old']}→{d['new']}，待审单 {a.rev}")
+        base = bump_book_text(Path(a.book_text), plan, a.note or f"{book} 换最新产物：待审 {d['old']}→{d['new']}，待审单 {a.rev}")
+        closeout_derive(Path(a.book_text), plan, base)
     if doc_new.get("sprites"):                                   # 图先进 R2，单子再写：单上线时图一定取得到
         stats = sprite_pub.upload(doc_new["sprites"], Path(plan["sprites"]) / "pub")
         print(f"雪碧图 {len(doc_new['sprites'])} 张 → R2：{stats}")
@@ -1255,12 +1256,32 @@ def copy_cord_for_site(src: Path, dst: Path) -> int:
     return n
 
 
-def bump_book_text(repo: Path, plan: dict, note: str) -> None:
+def closeout_derive(repo: Path, plan: dict, base: str | None) -> None:
+    """文本推进 book-text dev 之后、单子写进中心库之前，按当前 book-text 现算锚点类待审原因 A01–A03（方案 8.9），
+    就地写进要上线的单子。prep 时的 `add_anchor_reasons` 只能算 A01/A02（新 char 还没进 book-text）；这里新 char 已在
+    book-text，`guji closeout derive` 先清掉上次写的再重算，A03 漂移以本次提交前的 dev（`base`）为基准。
+    manager 没有 `closeout` 命令或算失败只警告、不拦推单（单子上留着 prep 时的 A01/A02）。"""
+    if not base:
+        return
+    ch = plan["chapter"]
+    vdir = book_text_dir(repo, plan["text_id"])
+    if not ((vdir / f"{ch}.punct.json").exists() or (vdir / f"{ch}.entity.json").exists()):
+        return                                   # 本章还没有标点／专名，没有锚点可算
+    p = run([sys.executable, "-m", "open_guji_cv.cli_v2", "closeout", "derive", plan["pending"], "--repo", repo,
+             "--vdir", vdir, "--chapter", ch, "--drift-base", base], cwd=CV)
+    if p.returncode:
+        print("⚠ guji closeout derive 没跑通（见上）：单子照推，锚点类待审原因只有出单时算的 A01/A02；"
+              f"事后补算：guji closeout derive <线上单> --repo {repo} --vdir {vdir} --chapter {ch} --drift-base {base}")
+
+
+def bump_book_text(repo: Path, plan: dict, note: str) -> str:
     """同一次导出的 char／cord／norm 拷进 book-text 的 dev、文本线升 minor、本地校验（--dev），提交并推 dev。
+    返回改动前 dev 的提交号（锚点漂移 A03 以它为基准）。
 
     2026-10-24 用户定：流程化小改直接提交 dev，不开 PR；`index/texts` 不在 dev 上提交，CHANGES 的 PR 列写 #TBD，
     每日合并（book-text `scripts/daily_merge.py`）时重建索引、换成当天合并 PR 的号。"""
     book_text_to_dev(repo)
+    base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
     d = book_text_dir(repo, plan["text_id"])
     ch = plan["chapter"]
     # 待重标清单：本章有标点时，单字替换登记进 NNN.punct-stale.json（A33 批量重标后删），不碰 punct／entity 本身
@@ -1318,6 +1339,7 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
     if not push_book_text_dev(repo):
         sys.exit("✗ book-text 推 dev 失败（rebase 冲突或网络）：提交在本地 dev 上，处理后 git push origin HEAD:dev")
     print("book-text 已提交并推到 dev：每日合并（洛杉矶 03:30）进 main，CHANGES 的 #TBD 届时换成 PR 号")
+    return base
 
 
 def _img_key(img):
