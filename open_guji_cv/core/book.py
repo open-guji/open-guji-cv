@@ -359,6 +359,10 @@ class BookSpec:
     #: 起跑前校验清单；同时钉了 `corpus:` 的册，`group_flow_fingerprint` 并上模型内容（补缺口）。
     #: 不写 = 行为与加这个字段之前逐位相同。
     model: int | None = None
+    #: 本册钉住的书级代码版本（yaml 的 `code: 3` 或 `k3`；书仓 `code/`，见 `core/book_code.py`，2026-11-09）。
+    #: 钉了之后起跑前拿工作副本比 `code/releases/k<N>.json`，不符拒跑。不进指纹（指纹按代码内容算）；
+    #: 不写 = 用工作副本，行为与加这个字段之前相同。
+    code: int | None = None
     #: 冻结基线（yaml 的 `freeze:`；ai-team `domain/CV/规范/冻结基线与重跑分级.md`，GUJI-601）。
     #: 到 0.1.0／1.0.0 的册登记：`{at: "0.1.0", cv_version: "0.2.0", snapshot: <ws 里快照分支>}`
     #: 或 `manifest: <快照 manifest.json 路径，相对工作区>`。登记后 `close-check` 1a 改比快照
@@ -747,6 +751,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         corpus_dev=bool(d.get("corpus_dev", False)),
         glyph_pin=_parse_glyph_pin(d.get("glyph_pin")),
         model=_parse_model_pin(d.get("model")),
+        code=_parse_code_pin(d.get("code")),
         freeze=_load_freeze(d.get("freeze"), book_id),
     )
 
@@ -780,6 +785,11 @@ def _ws_codepoints(book_yaml: Path) -> dict[str, str]:
     if not isinstance(m, dict):
         raise ValueError(f"{p} 的 codepoints: 应是映射（另一码位: 指定码位），现在是 {type(m).__name__}")
     return {str(k): str(v) for k, v in m.items()}
+
+
+def _parse_code_pin(v) -> int | None:
+    from .book_code import parse_pin
+    return parse_pin(v)
 
 
 def _parse_model_pin(v) -> int | None:

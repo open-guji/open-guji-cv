@@ -125,8 +125,11 @@ def effective_book_dict(book_yaml: Path, *, apply_override: bool = True) -> dict
     for n, ly in raw_ls:
         if n != "运行覆盖":
             warn_old_syntax(Path(book_yaml).stem, n, ly)
+    from .lib_pins import expand_layer
     try:      # 参校本属性：各层先把标量归一成 {default: x} 再合并（否则标量盖映射丢另一半）；基础配置不许写 segments
-        ls = [(n, fold_ref_profile(n, fold_layer(n, ly), allow_segments=(n != "基础配置"))) for n, ly in raw_ls]
+        # 四库版本简写 `pin: c31-g19-m2-k3` 逐层展开成分开的键（core/lib_pins.py），上层照常压下层
+        ls = [(n, fold_ref_profile(n, fold_layer(n, expand_layer(ly, f"{n}：")), allow_segments=(n != "基础配置")))
+              for n, ly in raw_ls]
     except ValueError as e:
         raise BookConfigError(str(e)) from None
     if len(ls) == 1:

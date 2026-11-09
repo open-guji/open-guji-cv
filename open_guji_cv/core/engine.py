@@ -51,6 +51,15 @@ def _module_source_hash(mod_name: str) -> str:
     # 产物逐字节不变的提速改动登记过等价的，换回旧哈希（core/code_equiv.py）
     from .code_equiv import canonical
     h = canonical(mod_name, _module_raw_hash(mod_name))
+    if mod_name.startswith("guji_book."):
+        from .book_code import load
+        bc = load()
+        if bc is not None:
+            m = {new: old for mod, new, old in bc.entries if mod == mod_name}
+            seen = set()
+            while h in m and h not in seen:      # 书仓 code/equiv.yaml 的等价登记，链式同 code_equiv.canonical
+                seen.add(h)
+                h = m[h]
     _code_hash_cache[mod_name] = h
     return h
 
@@ -72,14 +81,23 @@ def _fingerprint_name(mod_name: str) -> str:
     """进指纹的模块名。搬过家的模块（`code_equiv.MOVED`）、代码仍等价于搬家时登记的那一版时，
     用搬家前的名字，产物不过期；之后真改了代码，等价不再成立，用新名字，照常判过期。
     套书分叉出来的复制（`code_equiv.FORKED`，原模块还在）同理：复制还没改过时用原模块的名字。"""
-    from .code_equiv import FORKED, MOVED
+    from .code_equiv import book_tables
+    moved, forked = book_tables()
     h = _module_source_hash(mod_name)
-    fk = FORKED.get(mod_name)
-    if fk and h == fk[1]:
-        mod_name = fk[0]            # 分叉复制没改过：按原模块记，原模块自己搬过家的再往下换（同哈希）
-    mv = MOVED.get(mod_name)
-    if mv and h == mv[1]:
-        return mv[0]
+    # 搬家与分叉可以接成链（书级代码：书仓模块 →搬自→ cv 里的套书副本 →分叉自→ 殿本模块），沿链走到头；
+    # 每一跳都要求现在的代码仍等于登记的那一版。
+    seen: set[str] = set()
+    while mod_name not in seen:
+        seen.add(mod_name)
+        fk = forked.get(mod_name)
+        if fk and h == fk[1]:
+            mod_name = fk[0]        # 分叉复制没改过：按原模块记
+            continue
+        mv = moved.get(mod_name)
+        if mv and h == mv[1]:
+            mod_name = mv[0]        # 搬过家、代码没改过：按搬家前的名字记
+            continue
+        break
     return mod_name
 
 
@@ -710,6 +728,10 @@ class Engine:
             if step.spec.id in MODEL_STEPS:
                 from .workspace import workspace_root
                 require_model_clean(workspace_root(), self.book.model)
+        # 书级代码（书仓 code/）：钉了 code: N 的册工作副本要与 k<N> 一致、cv 在 code.yaml 的段内（core/book_code.py）
+        from .book_code import code_root, require_clean
+        if getattr(self.book, "code", None) or code_root() is not None:
+            require_clean(self.book)
         if getattr(self.book, "glyph_pin", None):
             # 册钉了有快照的字形库、这步读它：库文件必须是那一版建的（guji pipeline 起跑前会自动建）
             from .glyph_pin import reads_pinned_db, require_pinned_db

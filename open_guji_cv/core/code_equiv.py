@@ -1382,3 +1382,17 @@ def canonical(module: str, h: str) -> str:
         seen.add(h)
         h = m[h]
     return h
+
+
+def book_tables() -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str]]]:
+    """(MOVED, FORKED) 并上当前工作区书仓 `code/equiv.yaml` 的登记（`core/book_code.py`，2026-11-09）。
+    书仓里登记的只许是本书模块（`guji_book.<name>.…`）的键，不能改写 cv 模块的等价。"""
+    from .book_code import load
+    bc = load()
+    if bc is None or not (bc.moved or bc.forked):
+        return MOVED, FORKED
+    pre = bc.pkg + "."
+    mv = {**MOVED, **{k: v for k, v in bc.moved.items() if k.startswith(pre)}}
+    fk = {**FORKED, **{k: v for k, v in bc.forked.items() if k.startswith(pre)}}
+    return mv, fk
+
