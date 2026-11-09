@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.6.33] - 测试中
+
+- 发版说明（A31 11-09）：从 dev 93e03bc 切，含 #1338、#1339（rerun_prep 修复）、#1340（删 decision_build，book-text 只录首选字）。
+
 - PATCH（A31 11-09，用户定 book-text 只录首选字）删 `scripts/zhengli/decision_build.py` 与其测试；`text_release.py run` 的 G1 改为「线上单待审清零」（不再生成 decision.json、不再算「看不出」占比）；`export_guji_format.py --pending` 提示改为写首选字、不写 pending_reason；runbook E3 注明废弃。待审信息、候选、人裁事件都在 KV。L0（不影响切分／识别产物）。
 
 ## [0.6.32] - 2026-11-09
