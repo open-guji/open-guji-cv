@@ -5,7 +5,9 @@
 
 ## [未发版]
 
-## [0.6.29] - 测试中
+## [0.6.29] - 2026-11-09
+
+- 发版说明（ZM 11-09）：从 dev 3b1e330 之后切。含 #1317（border_detect 页级覆盖 hline_hints）；0.6.28 的 rc 切在 #1317 之前，不含它，本版补上。0.6.27 误打在 dev 上、0.6.28 缺 #1317，殿本第 9 轮钉 0.6.29。
 
 - border_detect 页级人给上／下版框位置 `hline_hints`（PATCH，A22 11-09，GUJI-758）：册 yaml 写 `params.border_detect.hline_hints: {页: {top: y}}`，线放在人给的 y、倾角按附近粗框条量；殿本第 9 轮上版框认错 10 页（抬头框贴图顶）用。缺省空不进 dump，code_equiv 已登记，没写的页产物不变。
 
