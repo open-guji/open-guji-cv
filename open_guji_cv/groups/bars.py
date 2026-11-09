@@ -226,8 +226,31 @@ SS_THICK_MAX = 0.25
 SS_GAP_MIN = 0.12
 
 
+# 十士：一横一竖的字块，横下面（竖画两侧）还有一大片碎墨，是被磨掉大半的士的下横（A24 Z04 第 8 轮，殿本 12 格
+# 整理本与文意都是士——進士、學士、王士禎——ss_bars 数成一横判十）。碎墨占全部墨 ≥ SS_RES_INK、横向铺开 ≥ SS_RES_EXT 倍字宽才算。
+# 量法：殿本已放行的十 201 格里 0 格命中；12 格错放里 10 格命中。
+SS_RES_INK = 0.08
+SS_RES_EXT = 0.5
+SS_RES_BELOW = 0.12
+
+
+def _low_residue(b: np.ndarray) -> bool:
+    """一条横带之下、竖画两侧的碎墨是否多而宽（`b` 是二值墨图，墨为 True）。"""
+    H, W = b.shape
+    L = np.array([_longest_run(r, _GAP) for r in b])
+    ys = np.flatnonzero(L > SS_FRAC * W)
+    if len(ys) == 0 or b.sum() == 0:
+        return False
+    vx = int(np.argmax(b.sum(0)))
+    z = b[min(H - 1, int(ys.max()) + int(SS_RES_BELOW * H)):, :].copy()
+    z[:, max(0, vx - int(0.08 * W)):vx + int(0.08 * W) + 1] = False
+    xs = np.flatnonzero(z.any(0))
+    ext = (xs.max() - xs.min() + 1) / W if len(xs) else 0.0
+    return z.sum() / b.sum() >= SS_RES_INK and ext >= SS_RES_EXT
+
+
 def ss_count(gray: np.ndarray) -> tuple[str | None, str]:
-    """十士数横 → (「十」|「士」|None, 理由)。理由：one／two，或弃权原因（nomain、one_odd、two_close、n<横数>）。"""
+    """十士数横 → (「十」|「士」|None, 理由)。理由：one／two／two_frag（一横之下有磨残的下横碎墨，当士），或弃权原因（nomain、one_odd、two_close、n<横数>）。"""
     cv2 = _cv2()
     g = np.asarray(gray)
     if g.ndim == 3:
@@ -253,6 +276,8 @@ def ss_count(gray: np.ndarray) -> tuple[str | None, str]:
     if len(bands) == 1:
         y0, y1 = bands[0]
         if (H - 1 - y1) / H >= SS_BELOW_MIN and (y1 - y0 + 1) < SS_THICK_MAX * H:
+            if _low_residue(b > 0):
+                return "士", "two_frag"
             return "十", "one"
         return None, "one_odd"
     if len(bands) == 2:
