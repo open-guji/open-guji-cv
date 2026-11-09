@@ -259,6 +259,10 @@ _ROSTER_LR_1108 = ('row_segment 职名页大字雙行整段分栏 roster_lr_run�
                    'row_segment 在殿本 vol01 新图 17 页（22,24,31,45,58,87,88,99,100,101,123,130,135,139,149,160,203：正文页、职名页含 87/88/99 切坏页、卷首門目大印页）'
                    '上与 dev b519fba 产物逐字节相同；scripts/code_equiv.py check，2026-11-08')
 
+_HINT_1109 = ('border_detect.hline_hints 页级人给上／下版框 y（缺省空、不进参数 dump；A22，GUJI-758 殿本上版框认错 10 页）：'
+              'border_detect、column_warp 在殿本 vol20 新图 12 页（1,5,20,41,60,77,100,120,147,156,180,254，含上框认错页 156、'
+              'vline_overrides 页 254）上与 origin/dev 5ed735d 产物逐字节相同；scripts/code_equiv.py check，2026-11-09')
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1237,6 +1241,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new='51f174fa9b9f26d2df85848ec2a8042b69bf77b6c08ba470c05598efdfa86cf5',
           old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
           evidence=_TOPEDGE_1108),
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='8d76b8f867f164aaa261d522f1d3f231c168d2d29186522f8556a5d411235f8e',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_HINT_1109),
+    Equiv(module='open_guji_cv.books.siku_zongmu.border',
+          new='8b09db3368f2cddfa499f3e55e38aade131ed4dc2509148182d6ba6ceb80e606',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_HINT_1109),
+    Equiv(module='open_guji_cv.seg.lines',
+          new='97407131a39ae521fcb4777bbe2fbefd56a8e978e73a4acdd579e13992bf703d',
+          old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
+          evidence=_HINT_1109),
     Equiv(module='open_guji_cv.steps.row_segment',
           new='788188c720a84f81fec062403eef27a1ad638701b3dc04812be935b55712b535',
           old='589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f',
