@@ -1826,7 +1826,7 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.groups.methods",
                    "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.book_knn", "open_guji_cv.groups.near_knn", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
                    "open_guji_cv.groups.prompt_template", "open_guji_cv.feedback.rulings",
-                   "open_guji_cv.groups.context",
+                   "open_guji_cv.groups.context", "open_guji_cv.groups.textlayer_ref",
                    "open_guji_cv.groups.bars", "open_guji_cv.groups.aspect", "open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.rr_clf",
                    # 其 `ids` 解法（方案 S7）：在线判别＋它用到的 IDS 路模块
                    "open_guji_cv.groups.ids_online", "open_guji_cv.groups.ids", "open_guji_cv.groups.ids_two",
