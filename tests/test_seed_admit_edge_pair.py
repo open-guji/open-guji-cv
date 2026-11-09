@@ -139,3 +139,21 @@ def test_group_seam_near_form_needs_bigger_lead():
 def test_group_seam_never_for_weak_or_non_variant_edges():
     assert edge_pairs.seam_pair("傳", "傅") is None         # 同组形近，不是异体
     assert edge_pairs.seam_pair("徃", "往") is None         # T2，归白名单
+
+
+@pytest.mark.parametrize("to,ref,lib,want,dec", [
+    ("lib", "婚", "㛰", "㛰", "keben"),     # 按刻形转写的书（殿本）：放库首位，不写暂归一
+    ("ref", "㛰", "婚", "㛰", "ref"),       # 按整理本录的书（史記、全唐文）：放整理本字
+    ("freq", "婚", "㛰", "婚", "provisional"),
+])
+def test_edge_pair_to(to, ref, lib, want, dec):
+    """`edge_pair_to`（A24 V01 定案 11-09）：同字只表示可以不人审，放哪一形按书定。"""
+    n, r = _run({1: {}}, {1: ([(lib, 0.96), ("昏", 0.90)],)}, {1: ref}, edge_pair_to=to)
+    assert n == 1 and r[1].char == want
+    assert r[1].evidence["edge_pair"]["decision"] == dec
+
+
+def test_edge_pair_to_default_not_dumped():
+    d = SeedAdmitParams(db_path="x").model_dump()
+    assert "edge_pair_to" not in d
+    assert SeedAdmitParams(db_path="x", edge_pair_to="lib").model_dump()["edge_pair_to"] == "lib"

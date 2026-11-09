@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit `edge_pair_to`（缺省 `freq`＝旧行为、不进 dump，版本号不升，code_equiv 登记；A24 V01 定案 11-09，sheldon 经 ZM GUJI-756）：`edge_pair` 放哪一形按书定。`lib` 放库首位（刻形，殿本按刻形转写，「同字」只表示这格可以不人审、不写暂归一，evidence `decision: keben`）；`ref` 放整理本字（史記、全唐文按整理本录，`decision: ref`）；`freq` 照旧放字频高的一形（`provisional`）。
+
 ## [0.6.26] - 2026-11-08
 
 - 发版：从 dev 6f58b53 切，多 #1309（eval_sim_bench）、#1310、#1312；产物、指纹都不变（L0）。殿本第9轮用（ZM GUJI-758）。

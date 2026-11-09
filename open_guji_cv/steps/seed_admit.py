@@ -1245,6 +1245,12 @@ class SeedAdmitParams(BaseModel):
     库首位 cov ≥ `edge_pair_cov`、领先对外最好候选 ≥ `edge_pair_gap`、库没判 diff、无护栏 → 放 `edge_pairs.pair_to`（两形里已放行字频
     较高的一形，都罕见放库首位）。同义异体暂归一（sheldon 10-25／10-27 只限同义）：证据 `edge_pair.decision=provisional`，将来按它筛出来再拆。
     只升不降、不改已放行格、不碰人裁。r5 回放（vol07–99 产物包）看图 94 格全对。False＝照旧留人审。"""
+    edge_pair_to: str = "freq"
+    """`edge_pair` 放哪一形（A24 V01 定案 11-09，sheldon 经 ZM GUJI-756）：
+    - `freq`（缺省，旧行为）：`edge_pairs.pair_to`，两形里已放行字频较高的一形（同义异体暂归一）；
+    - `lib`：放库首位（刻形证据）——按刻形转写的书（殿本）用，「同字」只表示这格可以不人审、不写暂归一；
+    - `ref`：放整理本字——按整理本录的书（史記、全唐文）用。
+    缺省 `freq` 逐字节不变、不进参数 dump。"""
     edge_pair_cov: float = 0.92
     """`edge_pair` 库首位 cov 下限（同 `follow_ref_cov`）。"""
     edge_pair_gap: float = 0.005
@@ -1597,6 +1603,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict):
             if self.edge_pair:
                 d.pop("edge_pair", None)        # 缺省值不进 dump（缺省开；关了才写 edge_pair: false）
+            if self.edge_pair_to == "freq" or not self.edge_pair:
+                d.pop("edge_pair_to", None)     # 缺省值不进 dump
             if self.edge_pair_cov == 0.92 or not self.edge_pair:
                 d.pop("edge_pair_cov", None)
             if self.edge_pair_gap == 0.005 or not self.edge_pair:
@@ -4229,12 +4237,13 @@ def _edge_pair_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coo
                                     allow_occluded=p.occluded_variant_first)
             if act != "admit":
                 continue
-            to = pair_to(ref, top, lib_top=top)
+            to = top if p.edge_pair_to == "lib" else ref if p.edge_pair_to == "ref" else pair_to(ref, top, lib_top=top)
             rec.admit, rec.channel, rec.provenance, rec.char = True, "edge_pair", "match", to
             rec.evidence = {**(rec.evidence or {}),
                             "lane": {"lane": "edge_pair", "lib": top, "cov": round(cov, 4), "ref": ref,
                                      "prev_doubts": list(rec.doubts or [])},
-                            "edge_pair": {"decision": "provisional", "pair": [ref, top], "to": to,
+                            "edge_pair": {"decision": {"lib": "keben", "ref": "ref"}.get(p.edge_pair_to, "provisional"),
+                                          "pair": [ref, top], "to": to,
                                           **({"seam": seam} if seam else {})}}
             rec.doubts = ["lane_edge_pair"]
             n += 1
