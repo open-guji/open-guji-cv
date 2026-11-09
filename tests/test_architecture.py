@@ -32,8 +32,8 @@ LAYER: dict[str, int] = {
     "core": 1, "products": 1, "utils": 1, "datastore": 1,
     # 笔画识别纯算法（模板配准、骨架法）；判法外壳在 groups，strokes 不许反过来 import groups（由「低层不许 import 高层」管）
     "strokes": 1,
-    # 切分共用原语（seg）与每套书自管的切分代码（books）；books 只许用 seg，套书之间不互相 import（见下面两条守卫）
-    "seg": 1, "books": 2,
+    # 切分共用原语（seg）。各书自管的切分代码 2026-11-09 起在各书仓 code/（core/book_code.py），书之间不互相 import 由 guji code check 查
+    "seg": 1,
     # 三条版式（刻本/现代/自由）的缺省实现（2026-11-09 由 books/<殿本|北行|幼學> 改名；书仓 code/ 可覆盖）
     "impl": 2,
     # 书级代码（书仓 code/）能用的公开面（2026-11-09）
@@ -95,7 +95,7 @@ SIDE_PIPELINE = "pipeline"
 SIDE_MANAGER = "manager"
 PIPELINE_PKGS: frozenset[str] = frozenset({
     "errors", "variants", "variant_ledger", "gloss", "detectors", "ocr", "hanzi",
-    "core", "products", "utils", "seg", "strokes", "books", "impl", "clustering", "pagetype_model", "groups",
+    "core", "products", "utils", "seg", "strokes", "impl", "clustering", "pagetype_model", "groups",
     "gates", "steps", "shadow", "api", "__main__", "preflight",
     # 拆分 P6（2026-11-04）：manager 一侧已全部搬去 guji-manager，下面这些包里留下的都是 pipeline——
     # 命令行入口 cli_v2、给 manager 的名字表 manager_api、Step 读人裁（feedback 的 lookup/bindings…、
@@ -294,18 +294,6 @@ def test_seg_does_not_import_books():
     bad = [f"{f} -> {n}" for f, n in _book_imports(PKG_ROOT / "seg")
            if any(n == f"{PKG}.{t}" or n.startswith(f"{PKG}.{t}.") for t in ("books", "impl"))]
     assert not bad, "seg 不许 import books/impl：\n  " + "\n  ".join(bad)
-
-
-def test_book_sets_do_not_import_each_other():
-    """套书之间不互相 import（修史記只动 books/shiji_wyg/，殿本的代码一行不碰）。"""
-    bad = []
-    books = PKG_ROOT / "books"
-    for d in sorted(x for x in books.iterdir() if x.is_dir() and not x.name.startswith("_")):
-        for f, n in _book_imports(d):
-            m = n[len(PKG) + 7:].split(".")[0] if n.startswith(f"{PKG}.books.") else None
-            if m and m != d.name:
-                bad.append(f"{f} -> {n}")
-    assert not bad, "套书之间不许互相 import：\n  " + "\n  ".join(bad)
 
 
 def test_seg_set_registry_sane():

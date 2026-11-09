@@ -20,6 +20,9 @@ def test_entries_are_well_formed():
     mods = {m for st in STEPS.values() for m in (type(st).__module__, *st.spec.code_deps)}
     mods |= {o for o, _ in code_equiv.MOVED.values()}   # 搬走了的旧名：搬家前的登记留着当历史
     mods |= {o for o, _ in code_equiv.FORKED.values()}
+    # 搬去书仓 code/ 的模块（2026-11-09：史記、全唐文）：cv 里的旧登记留作历史，书仓 equiv.yaml 接着链
+    mods |= {e.module for e in code_equiv.ENTRIES if e.module.startswith("open_guji_cv.books.")}
+    mods |= set(code_equiv.FORKED)
     mods |= set(code_equiv.SPLITS)   # 拆没了的旧模块：登记留着当历史（只增不删），指纹靠 SPLITS 里的旧哈希
     # 套书覆盖的模块（core/seg_set.OVERRIDES，如全唐文 books/quantangwen 的分叉）：不写在 code_deps 里，
     # 算这套书的册的指纹时由 replace_deps 换进去（engine.code_hash），所以也在指纹里

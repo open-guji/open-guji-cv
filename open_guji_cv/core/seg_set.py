@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SEG_SETS: tuple[str, ...] = ("siku_zongmu", "shiji_wyg", "zengguang_youxue", "beixing", "quantangwen")
+#: cv 自带的套书＝三条版式的缺省实现。史記 shiji_wyg、全唐文 quantangwen 的代码 2026-11-09 搬去各自书仓 code/
+#: （`core/book_code.py`）：工作区没有 code/ 时写这两个名字直接报错，不会悄悄走殿本的。
+SEG_SETS: tuple[str, ...] = ("siku_zongmu", "zengguang_youxue", "beixing")
 
 PIPELINE_SEG_SET: dict[str, str] = {
     "keben_body_v2": "siku_zongmu",
@@ -28,8 +30,6 @@ PIPELINE_SEG_SET: dict[str, str] = {
 #: 2026-11-03 管线重组方案 B 第一期：选管线以套书为准，`pipeline:` 只为兼容旧册 yaml 留着。
 SEG_SET_PIPELINE: dict[str, str] = {
     "siku_zongmu": "keben_body_v2",
-    "shiji_wyg": "keben_body_v2",
-    "quantangwen": "keben_body_v2",
     "zengguang_youxue": "keben_free",
     "beixing": "modern_body",
 }
@@ -49,24 +49,10 @@ def set_dir(name: str, books_dir: Path | None = None) -> Path:
     return IMPL_DIR / IMPL_OF[name] if name in IMPL_OF else BOOKS_DIR / name
 
 _SIKU = "open_guji_cv.impl.keben."
-_SJ = "open_guji_cv.books.shiji_wyg."
-_QTW = "open_guji_cv.books.quantangwen."
 
-#: 套书 → {缺省实现模块: 这套书自己的模块}。史記是从殿本分叉出来的写本：先只分叉职名页（臣行拆分等写本专用逻辑），
-#: 别的步骤仍走缺省实现；以后哪一步要为写本改，就把那个模块复制进 books/shiji_wyg/ 再登记在这里。
-OVERRIDES: dict[str, dict[str, str]] = {
-    "shiji_wyg": {
-        _SIKU + "roster_segment": _SJ + "roster_segment",
-        _SIKU + "roster_glyph": _SJ + "roster_glyph",
-        _SIKU + "jiazhu_step": _SJ + "jiazhu_step",
-    },
-    # 全唐文（嘉慶內府本）：2026-11-04 从殿本分叉 Step3 行切分（row_boundaries＋jiazhu_split），
-    # 放全唐文专用的「一行就完的雙行小注」等；别的步骤仍走殿本的。册配置写 `seg_set: quantangwen`。
-    "quantangwen": {
-        _SIKU + "row_boundaries": _QTW + "row_boundaries",
-        _SIKU + "jiazhu_split": _QTW + "jiazhu_split",
-    },
-}
+#: 套书 → {缺省实现模块: 这套书自己的模块}。2026-11-09 起各书的覆盖写在书仓 `code/code.yaml`（`core/book_code.py`），
+#: 这张表留空只为兼容；新书别再往这里加。
+OVERRIDES: dict[str, dict[str, str]] = {}
 
 
 def _book_code():

@@ -330,6 +330,8 @@ def check_cv(bc: BookCode, version: str) -> str | None:
         return None
     v = version.split("+")[0]
     try:
+        if Version(v).is_devrelease:
+            return None          # 开发检出（setuptools_scm 的 0.6.31.dev3+g…）：不拦
         ok = Version(v) in SpecifierSet(bc.cv, prereleases=True)
     except Exception:            # noqa: BLE001 —— 写错的段当不合
         return f"code.yaml 的 cv: {bc.cv!r} 写法不对"

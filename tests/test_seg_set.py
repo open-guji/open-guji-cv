@@ -31,21 +31,10 @@ def test_code_hash_unchanged_for_books_without_override():
         assert code_hash(step) == code_hash(step, book=make_book())
 
 
-def test_shiji_row_segment_fingerprint_is_its_own():
-    """史記覆盖了职名页实现：row_segment 的指纹换成史記自己的模块，不再受殿本同名模块影响；别的步不变。"""
-    import open_guji_cv.steps  # noqa: F401
-    sj, dian = make_book(seg_set="shiji_wyg"), make_book()
-    rs = STEPS["row_segment"]
-    assert code_hash(rs, book=sj) != code_hash(rs, book=dian)
-    assert S.replace_deps(sj, ["open_guji_cv.impl.keben.roster_segment", "open_guji_cv.seg.seam"]) == \
-        ["open_guji_cv.books.shiji_wyg.roster_segment", "open_guji_cv.seg.seam"]
-    for sid in ("border_detect", "cell_shrink", "column_warp"):
-        assert code_hash(STEPS[sid], book=sj) == code_hash(STEPS[sid])
-
-
-def test_resolve_picks_override_for_shiji_only():
-    d = "open_guji_cv.impl.keben.roster_segment"
-    assert S.resolve(make_book(), d) == d
-    assert S.resolve(make_book(seg_set="shiji_wyg"), "open_guji_cv.books.shiji_wyg.roster_segment") == \
-        "open_guji_cv.books.shiji_wyg.roster_segment"
-    assert S.resolve(make_book(seg_set="shiji_wyg"), d) == "open_guji_cv.books.shiji_wyg.roster_segment"
+def test_moved_seg_sets_need_book_code():
+    """史記、全唐文的代码 2026-11-09 搬去各自书仓 code/：工作区没有 code/ 时写这两个名字直接报错，不悄悄走殿本的。
+    书仓覆盖与指纹见 tests/test_book_code.py；两部书自己的测试在各自书仓 code/tests/。"""
+    for name in ("shiji_wyg", "quantangwen"):
+        with pytest.raises(ValueError, match="code.yaml"):
+            S.validate_seg_set(name)
+    assert S.OVERRIDES == {}

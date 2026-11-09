@@ -38,14 +38,22 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 PKG = "open_guji_cv"
-BOOKS = ROOT / PKG / "books"
+BOOK_PKG = "guji_book"      # 书级代码挂载的包（core/book_code.py）
 
 
 # ── 样页单 ──────────────────────────────────────────────
 
 def sample_path(seg_set: str) -> Path:
-    from open_guji_cv.core.seg_set import set_dir
-    return set_dir(seg_set) / "samples.yaml"     # 缺省实现三套在 impl/<版式>（2026-11-09），其余 books/<套书>
+    from open_guji_cv.core.seg_set import _book_code_for, set_dir
+    bc = _book_code_for(seg_set) if seg_set not in _cv_sets() else None
+    if bc is not None:
+        return bc.root / "samples.yaml"          # 书级代码（GUJI_WORKSPACE 指向书仓，2026-11-09）：书仓 code/samples.yaml
+    return set_dir(seg_set) / "samples.yaml"     # 缺省实现三套在 impl/<版式>（2026-11-09）
+
+
+def _cv_sets() -> tuple[str, ...]:
+    from open_guji_cv.core.seg_set import SEG_SETS
+    return SEG_SETS
 
 
 def load_samples(seg_set: str) -> dict:
@@ -75,8 +83,10 @@ def load_samples(seg_set: str) -> dict:
 
 
 def all_sets() -> tuple[str, ...]:
-    from open_guji_cv.core.seg_set import SEG_SETS
-    return SEG_SETS
+    """cv 自带的三套，加上当前工作区书仓 code/ 的那一套（有的话）。"""
+    from open_guji_cv.core.seg_set import _book_code
+    bc = _book_code()
+    return _cv_sets() + ((bc.name,) if bc is not None and bc.name not in _cv_sets() else ())
 
 
 def pages_arg(pages: dict[int, str]) -> str:
@@ -86,6 +96,14 @@ def pages_arg(pages: dict[int, str]) -> str:
 # ── 改动牵动哪几套书 ─────────────────────────────────────
 
 def _module_file(mod: str) -> Path | None:
+    if mod.startswith(BOOK_PKG + "."):           # 书级代码 guji_book.<name>.<模块> → 书仓 code/<模块>.py
+        from open_guji_cv.core.seg_set import _book_code
+        bc = _book_code()
+        parts = mod.split(".")
+        if bc is None or len(parts) < 3 or parts[1] != bc.name:
+            return None
+        p = bc.root / ("/".join(parts[2:]) + ".py")
+        return p if p.is_file() else None
     p = ROOT / (mod.replace(".", "/") + ".py")
     if p.is_file():
         return p
@@ -107,7 +125,7 @@ def _imports(mod: str) -> set[str]:
                 base = ".".join(base[:len(base) - (node.level - 1)] + ([node.module] if node.module else []))
             else:
                 base = node.module or ""
-            if not base.startswith(PKG):
+            if not base.startswith((PKG, BOOK_PKG)):
                 continue
             out.add(base)
             out.update(f"{base}.{a.name}" for a in node.names if _module_file(f"{base}.{a.name}"))
@@ -117,7 +135,7 @@ def _imports(mod: str) -> set[str]:
 
 
 #: 只顺着 import 追进这两处：切分代码都在这里。全包闭包没有意义——Step 壳经 core／steps 包能间接 import 到几乎所有模块。
-_FOLLOW = (f"{PKG}.seg", f"{PKG}.books", f"{PKG}.impl")
+_FOLLOW = (f"{PKG}.seg", f"{PKG}.impl", f"{BOOK_PKG}.")
 
 
 def set_modules(seg_set: str) -> set[str]:
@@ -159,7 +177,9 @@ def affected_sets(base: str) -> dict[str, list[str]]:
     ch = changed_modules(base)
     out = {}
     for s in all_sets():
-        hit = sorted(ch & set_modules(s)) + sorted(m for m in ch if m == ".".join(sample_path(s).relative_to(ROOT).parts[:-1]) + ".__samples__")
+        sp = sample_path(s)
+        own = ".".join(sp.relative_to(ROOT).parts[:-1]) + ".__samples__" if sp.is_relative_to(ROOT) else None
+        hit = sorted(ch & set_modules(s)) + sorted(m for m in ch if m == own)
         if hit:
             out[s] = hit
     return out
