@@ -1,4 +1,4 @@
-# 全唐文（嘉慶內府本）套书自己的一份：2026-11-04 从 books/siku_zongmu/row_boundaries.py 原样复制（含 #1025 jiazhu_single_head），
+# 全唐文（嘉慶內府本）套书自己的一份：2026-11-04 从 impl/keben/row_boundaries.py 原样复制（含 #1025 jiazhu_single_head），
 # 以后全唐文的 Step3 行切分改这里，殿本那份不再动。登记见 core/seg_set.OVERRIDES["quantangwen"]、core/code_equiv.FORKED。
 """列内字格纵向边界 — 给定一列的行投影，切出 N 个字格(含空白格)的边界。
 
@@ -1230,7 +1230,7 @@ SNAP_DIST_W = 1.0
 
 
 def snap_to_gaps(row_proj: np.ndarray, bounds: Sequence[float], period: float) -> list[float]:
-    """等距格网（`books/siku_zongmu/row_grid`）的格线各自就近挪进字缝，格数、格号不变。刻本字常伸出名义格，
+    """等距格网（`impl/keben/row_grid`）的格线各自就近挪进字缝，格数、格号不变。刻本字常伸出名义格，
     直线格线会擦掉字头字脚；挪的范围 ±0.2 格，相邻两条之间至少还隔 0.6 格，不会交叉。
     就近优先（1.44）：每行的代价＝行墨／满行墨＋SNAP_DIST_W×挪的距离／窗口半宽，殿本格高一致要强制（用户 2026-11-01）。"""
     h = len(row_proj)
@@ -1793,7 +1793,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       把 DP 的那条格线钉到人给的位置（2026-09-26）。缝照常在新位置附近找。
     - `detect_bottom_bar`：`border_bottom` 之上若还躺着一道下版框线（`find_bottom_frame_bar`），
       DP 的下界改用它的上沿，结果记在 `bottom_bar_y`（2026-09-28，overview#266）。
-    - `grid_bounds`：等距格网（`books/siku_zongmu/row_grid`）给的 n_slots+1 条格线。给了就不跑 DP，格线各自
+    - `grid_bounds`：等距格网（`impl/keben/row_grid`）给的 n_slots+1 条格线。给了就不跑 DP，格线各自
       就近挪进字缝（`snap_to_gaps`），也不找下版框线；之后的格类型、夹注、折线切分照旧。
     - `jiazhu_free_split`（要 `jiazhu_rows`，写本书级）：段尾一格表说只有一半有字（字数为奇数）时，多出的那个字
       归段尾格墨多的那行（图定，不照整理本 ⌈N/2⌉），短的那行在自己墨的范围里少切一格，格号照「本行第几字」

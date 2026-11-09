@@ -53,7 +53,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from open_guji_cv.books.siku_zongmu.border import detect_borders  # noqa: E402
+from open_guji_cv.impl.keben.border import detect_borders  # noqa: E402
 from open_guji_cv.seg.frame_types import HLine  # noqa: E402
 RAW = Path(os.environ.get("GUJI_RAW", "/home/user/rebuild_src"))
 GOLD = ROOT.parent / "open-guji-dataset" / "border-detection" / "samples"

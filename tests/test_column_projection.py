@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 
 from open_guji_cv.seg.frame_types import BorderDetectionResult, HeadRaiseBorder, HLine, VLine
-from open_guji_cv.books.siku_zongmu.column import (
+from open_guji_cv.impl.keben.column import (
     column_border_trim,
     strip_column_borders,
     strip_column_rules,

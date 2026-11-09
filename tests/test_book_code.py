@@ -15,14 +15,14 @@ from open_guji_cv.core.workspace import reset_workspace_override, set_workspace_
 from tests.helpers import make_book
 
 REPO = Path(__file__).resolve().parents[1]
-SIKU = "open_guji_cv.books.siku_zongmu"
+SIKU = "open_guji_cv.impl.keben"
 
 
 def _abs_src(rel: str) -> str:
     """cv 里的套书模块改成书仓写法：相对 import 换成绝对的（书级代码只许 import open_guji_cv.seg 等公开面）。"""
     src = (REPO / rel).read_text(encoding="utf-8")
     return (src.replace("from ...seg", "from open_guji_cv.seg").replace("from ...core", "from open_guji_cv.core")
-            .replace("from . import jiazhu_split", "from open_guji_cv.books.siku_zongmu import jiazhu_split"))
+            .replace("from . import jiazhu_split", "from open_guji_cv.impl.keben import jiazhu_split"))
 
 
 @pytest.fixture
@@ -70,7 +70,7 @@ def test_empty_code_runs_like_default(ws):
 
 def test_override_from_code_dir(ws):
     """书仓覆盖 row_boundaries：模块按 guji_book.<name>.<模块> 挂上、row_segment 指纹变成书自己的；别的步不变。"""
-    src = _abs_src("open_guji_cv/books/siku_zongmu/row_boundaries.py")
+    src = _abs_src("open_guji_cv/impl/keben/row_boundaries.py")
     _code(ws, "name: testbook\nbase: keben\noverrides:\n  keben.row_boundaries: row_boundaries\n",
           {"row_boundaries.py": src + "\nX_TEST = 1\n"})
     st = _steps()
@@ -86,7 +86,7 @@ def test_override_from_code_dir(ws):
 def test_equiv_yaml_forked_keeps_fingerprint(ws):
     """书仓 equiv.yaml 登记分叉：复制没改过就按原模块名、原哈希进指纹（L0）。"""
     import hashlib
-    src = _abs_src("open_guji_cv/books/siku_zongmu/row_boundaries.py")
+    src = _abs_src("open_guji_cv/impl/keben/row_boundaries.py")
     h = E._module_source_hash(f"{SIKU}.row_boundaries")
     new = hashlib.sha256(E.code_only_text(src).encode()).hexdigest()     # 只改了 import 路径：登 entries 换回原哈希
     _code(ws, "name: forkbook\nbase: keben\noverrides:\n  keben.row_boundaries: row_boundaries\n",

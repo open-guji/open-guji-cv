@@ -27,7 +27,7 @@
 
 ## 和 YOLO 模型对照
 
-切分有一个外部参照：[yolo-tool](https://github.com/open-guji/yolo_tool)。它用两段 YOLOv8 模型来切：先找版面框，再在框里找单字框，是另一套完全独立的做法。cv 在 `books/siku_zongmu/yolo_tool_infer.py` 里复刻了它的 ONNX 推理（只要 onnxruntime，装 `.[yolo]`），同一页图可以两边各切一遍，逐框比。
+切分有一个外部参照：[yolo-tool](https://github.com/open-guji/yolo_tool)。它用两段 YOLOv8 模型来切：先找版面框，再在框里找单字框，是另一套完全独立的做法。cv 在 `impl/keben/yolo_tool_infer.py` 里复刻了它的 ONNX 推理（只要 onnxruntime，装 `.[yolo]`），同一页图可以两边各切一遍，逐框比。
 
 **同一页上比一比。** 下面每组图，左边绿框是我们的 Step4 紧框，右边蓝框是 yolo-tool 原生输出（2026-11-03 用现行模型重跑）。
 

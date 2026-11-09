@@ -38,7 +38,7 @@ class ColumnCropStep(Step):
         consumes=("raw_page", "borders", "border_detect_gate_manifest", "line_index"),
         produces=("column_windows", "column_raw", "column_image"),
         params=ColumnCropParams,
-        code_deps=("open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.books.siku_zongmu.column",),
+        code_deps=("open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.impl.keben.column",),
     )
 
     def _windows(self, ctx: RunContext, page: int) -> tuple[np.ndarray, Borders, list[ColumnWindow]]:

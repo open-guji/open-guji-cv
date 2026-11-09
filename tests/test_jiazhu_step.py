@@ -2,7 +2,7 @@
 import numpy as np
 
 from open_guji_cv.books.shiji_wyg import jiazhu_step as J
-from open_guji_cv.books.siku_zongmu.row_boundaries import Cell, reading_order
+from open_guji_cv.impl.keben.row_boundaries import Cell, reading_order
 
 
 def _col():
@@ -81,7 +81,7 @@ def test_restep_falls_back_when_counts_disagree():
 
 
 def test_default_impl_is_noop():
-    from open_guji_cv.books.siku_zongmu import jiazhu_step as D
+    from open_guji_cv.impl.keben import jiazhu_step as D
     assert D.page_note_runs("x", "y", "b", 1) is None
     res = object()
     assert D.apply(res, None, (0, 1), 1.0, [(1, 1, 1)]) == (res, [])

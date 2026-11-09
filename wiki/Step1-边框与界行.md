@@ -52,6 +52,6 @@ vol20–99 共 13,320 页重筛，54 页下框下移约一格，逐页看图都�
 
 ## 代码与文档
 
-- 殿本这套的实现在 `open_guji_cv/books/siku_zongmu/border.py`；找线的共用原语在 `seg/lines.py`（投影、半高宽找峰、位置＋角度联合搜索）、`seg/polyline.py`（折线拟合）、`seg/grid.py`（网格模式：列数已知、列距均匀时逐槽验线，北行古本整书用它）。
+- 殿本这套的实现在 `open_guji_cv/impl/keben/border.py`；找线的共用原语在 `seg/lines.py`（投影、半高宽找峰、位置＋角度联合搜索）、`seg/polyline.py`（折线拟合）、`seg/grid.py`（网格模式：列数已知、列距均匀时逐槽验线，北行古本整书用它）。
 - 设计与失败案例：[doc/segmentation_v2_pipeline.md](https://github.com/open-guji/open-guji-cv/blob/dev/doc/segmentation_v2_pipeline.md) Step 1 一节、[doc/design/peak_line_search.md](https://github.com/open-guji/open-guji-cv/blob/dev/doc/design/peak_line_search.md)。
 - 看任一页的叠图：`guji product overlay <册> border_detect --page N --out x.png -w <工作区>`。

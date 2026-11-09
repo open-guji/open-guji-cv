@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.books.siku_zongmu.column import _ink_between
+from open_guji_cv.impl.keben.column import _ink_between
 from open_guji_cv.seg.lines import TOP_WEAK_RATIO, LineMatch, _weak_top_guard
 
 

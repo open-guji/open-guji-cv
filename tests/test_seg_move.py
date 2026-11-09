@@ -9,24 +9,40 @@ from open_guji_cv.core.engine import _fingerprint_name, _module_source_hash
 from open_guji_cv.core.step import STEPS
 
 
+def _exists(mod: str) -> bool:
+    try:
+        return importlib.util.find_spec(mod) is not None
+    except ModuleNotFoundError:          # 父包已不在（又搬过一次）
+        return False
+
+
+def _live():
+    """还在的搬家登记（又搬过一次的旧项留作历史：它的新名字是后一项的旧名字）。"""
+    return {n: v for n, v in code_equiv.MOVED.items() if _exists(n)}
+
+
 def test_moved_modules_are_gone_from_old_place_and_live_in_books():
+    olds = {o for o, _ in code_equiv.MOVED.values()}
     for new, (old, h) in code_equiv.MOVED.items():
-        assert new.startswith(("open_guji_cv.books.", "open_guji_cv.seg.")), new
-        assert importlib.util.find_spec(new) is not None, f"{new} 不存在"
-        assert importlib.util.find_spec(old) is None, f"{old} 搬走后旧位置还留着文件"
+        assert new.startswith(("open_guji_cv.books.", "open_guji_cv.seg.", "open_guji_cv.impl")), new
+        assert _exists(new) or new in olds, f"{new} 不存在，也不是后一次搬家的旧名"
+        assert not _exists(old), f"{old} 搬走后旧位置还留着文件"
         assert len(h) == 64
 
 
 def test_moved_modules_are_in_some_step_fingerprint():
     mods = {m for st in STEPS.values() for m in (type(st).__module__, *st.spec.code_deps)}
-    for new in code_equiv.MOVED:
+    for new in _live():
         assert new in mods, f"{new} 不在任何 Step 的指纹里，登记它没用"
 
 
 def test_fingerprint_name_follows_moved_code():
-    """代码仍是搬家时那一版 → 指纹里用旧名；之后改过 → 用新名（产物照常过期）。"""
-    for new, (old, h) in code_equiv.MOVED.items():
-        want = old if _module_source_hash(new) == h else new
+    """代码仍是搬家时那一版 → 指纹里用旧名（搬过几次就沿链走到头）；之后改过 → 用新名（产物照常过期）。"""
+    for new, (old, h) in _live().items():
+        cur = _module_source_hash(new)
+        want = new
+        while want in code_equiv.MOVED and code_equiv.MOVED[want][1] == cur:
+            want = code_equiv.MOVED[want][0]
         assert _fingerprint_name(new) == want
 
 

@@ -54,9 +54,9 @@ RELEASES = "releases"
 
 #: 三条版式的缺省实现（`code.yaml` 的 `base:` 与 overrides 键的前缀）。书仓里只写短名，cv 里搬家改名不牵动书仓。
 BASES: dict[str, str] = {
-    "keben": "open_guji_cv.books.siku_zongmu",
-    "modern": "open_guji_cv.books.beixing",
-    "free": "open_guji_cv.books.zengguang_youxue",
+    "keben": "open_guji_cv.impl.keben",
+    "modern": "open_guji_cv.impl.modern",
+    "free": "open_guji_cv.impl.free",
 }
 #: 版式 → 缺省走的管线（同 `seg_set.SEG_SET_PIPELINE` 里缺省实现那三行）。
 BASE_PIPELINE: dict[str, str] = {"keben": "keben_body_v2", "modern": "modern_body", "free": "keben_free"}
