@@ -90,7 +90,7 @@ def main(argv=None) -> int:
     ap.add_argument("--only", choices=("pages",), default=None, help="只对 legacy")
     ap.add_argument("--format", choices=("legacy", "char-cord"), default="legacy",
                     help="legacy = lines.md＋pages/proof/norm/zi.json；char-cord = char.json＋cord.json＋norm.json")
-    ap.add_argument("--pending", help="char-cord：同版待审单 pending.json；单上的格写 pending_reason、去 lacuna（char v0.4）")
+    ap.add_argument("--pending", help="char-cord：同版待审单 pending.json；单上的格写首选字、去 lacuna；不写 pending_reason（待审信息在 KV，book-text 只录首选字；需 guji-manager ≥ #429 的 apply_pending）")
     ap.add_argument("--keys", choices=cc.KEYS, default="cv", help="char-cord 的格位口径")
     ap.add_argument("--text-version", default=None,
                     help="char-cord 必填：char 的 version（首次 0.1.0；已有的册写 book-text 现行版本）")
