@@ -124,6 +124,8 @@ def test_release_and_drift(ws):
     with pytest.raises(BC.BookCodeError, match="完全相同"):
         BC.make_release(root, cv_version="0.7.0")
     assert BC.drift(root, 1) == []
+    (root / "README.md").write_text("说明\n")           # 说明文档不算改动
+    assert BC.drift(root, 1) == []
     (root / "a.py").write_text("A = 2\n")
     assert BC.drift(root, 1) == ["改了 a.py"]
     b = make_book()

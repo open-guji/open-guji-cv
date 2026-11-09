@@ -51,6 +51,8 @@ PKG = "guji_book"
 CODE_DIR = "code"
 CODE_YAML = "code.yaml"
 RELEASES = "releases"
+#: 不影响运行的说明文档：起跑前比对工作副本与 k<N> 时不算（`drift`）。
+DOC_SUFFIX = ".md"
 
 #: 三条版式的缺省实现（`code.yaml` 的 `base:` 与 overrides 键的前缀）。书仓里只写短名，cv 里搬家改名不牵动书仓。
 BASES: dict[str, str] = {
@@ -281,9 +283,10 @@ def load_release(root: Path, n: int) -> dict:
 
 
 def drift(root: Path, n: int) -> list[str]:
-    """工作副本与 k<N> 清单的差异（空 = 一致）。"""
-    want = load_release(root, n)["files"]
-    have = file_table(root)
+    """工作副本与 k<N> 清单的差异（空 = 一致）。说明文档（`*.md`）不算：改 README 不该让钉了 code: N 的册拒跑
+    （2026-11-09 实际踩到）。清单里照样记着它们。"""
+    want = {k: v for k, v in load_release(root, n)["files"].items() if not k.endswith(DOC_SUFFIX)}
+    have = {k: v for k, v in file_table(root).items() if not k.endswith(DOC_SUFFIX)}
     out = [f"改了 {k}" for k in sorted(want) if k in have and have[k] != want[k]]
     out += [f"少了 {k}" for k in sorted(want) if k not in have]
     out += [f"多了 {k}" for k in sorted(have) if k not in want]
