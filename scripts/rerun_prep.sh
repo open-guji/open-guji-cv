@@ -28,13 +28,16 @@ EM="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/ensure_manager.sh"   # guji-
 if [ -f "$EM" ]; then . "$EM"; else ensure_manager() { :; }; fi
 t() { local s=$SECONDS n=$1; shift; echo "== $n"; "$@"; SUM+=("$(printf '%-14s %4ss' "$n" $((SECONDS-s)))"); }
 
-# 书仓检出同步：拉 origin main（网络抖动重试 5 次），拉不动就返回失败
+# 书仓检出同步：fetch origin main 再 reset --hard 到它（历史分叉、本机改动都以远端为准；网络抖动重试 3 次）。
+# 真实的 git 报错原样打进日志（2026-11-09：#1746 在两台机上都报「拉不到 origin main」，看不出原因）。
 sync_ws() {
-  local d=$1 i
+  local d=$1 i err
   git -C "$d" sparse-checkout disable >/dev/null 2>&1 || true   # 稀疏检出会缺书级代码目录
-  for i in 1 2 3 4 5; do
-    git -C "$d" pull -q --ff-only origin main 2>/dev/null && return 0
-    echo "拉工作区重试 $i" >&2; sleep $((i * 2))
+  for i in 1 2 3; do
+    if err=$(git -C "$d" fetch -q origin main 2>&1) && err=$(git -C "$d" reset -q --hard origin/main 2>&1); then
+      return 0
+    fi
+    echo "同步工作区 $d 第 $i 次失败：$err" >&2; sleep $((i * 2))
   done
   return 1
 }
@@ -54,10 +57,12 @@ echo "cv $(git -C $SEED rev-parse --short HEAD) $(git -C $SEED describe --tags 2
 if [ -n "$WSREPO" ]; then
   GW1=$HOME/${WSREPO##*/}
   # 不能用 t 包：t 末尾记耗时的赋值总返回 0，克隆失败也当成功，退不回旧仓（10-31 #1203 起的验收单就这样失败）
+  # 旧检出同步不了（分叉、凭据、网络）：删掉重克隆；克隆也失败才退出（不拿旧检出凑数，2026-11-09 #1736/#1746）
+  if [ -d $GW1/.git ] && ! sync_ws "$GW1"; then
+    echo "⚠️ 旧检出 $GW1 同步失败，删掉重克隆" >&2; rm -rf "$GW1"
+  fi
   if [ -d $GW1/.git ] || { echo "== 克隆工作区"; git clone -q --depth 1 https://github.com/$WSREPO $GW1; }; then
     GW=$GW1
-    # 拉不到最新就失败，不许拿旧检出凑数（2026-11-09：旧克隆拉取静默失败 → 没有 code/ → 史記 r20 #1736 seg_set 不认）
-    sync_ws "$GW" || { echo "⚠️ 工作区 $GW 拉不到 origin main（网络或历史分叉）；不用旧检出，请重跑准备" >&2; exit 1; }
     WS=$GW; export GUJI_WORKSPACE=$WS
   else   # 会话没挂这个仓（迁仓过渡期）：退回旧总仓里同一本书的目录（内容相同）
     echo "⚠️ 读不了 $WSREPO（会话里 add_repo $WSREPO 就走新仓），退回 open-guji/guji-workspace" >&2
