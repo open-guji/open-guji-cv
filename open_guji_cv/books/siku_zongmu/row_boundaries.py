@@ -1247,6 +1247,76 @@ def snap_to_gaps(row_proj: np.ndarray, bounds: Sequence[float], period: float) -
     return out
 
 
+#: 列尾格线外推（`grid_end_fit`）：末线最多往下挪这么多格高
+END_FIT_MAX = 0.35
+#: 「白行」：行墨 ≤ 内容窗宽的这个比例（零星墨点、界行残段不算墨）
+END_FIT_WHITE = 0.03
+#: 末字到此为止：连着这么多格高的白行。宁短勿长：停在字内部的白缝只是少推一截（不比不推差），
+#: 停晚了会跨过白缝把断续的框线、墨渣收进末格（vol28 p92 c5）
+END_FIT_GAP = 0.03
+#: 框线行：行墨 ≥ 内容窗宽的这个比例（横贯整列的下版框细线）
+END_FIT_LINE = 0.75
+#: 框线的毛边：碰到框线后往回退过行墨 ≥ 内容窗宽这个比例的行（线上沿不齐、墨晕），末线落在毛边之上
+END_FIT_EDGE = 0.4
+
+
+def fit_grid_end(row_proj: np.ndarray, bounds: Sequence[float], period: float,
+                 hi: float, width: float) -> list[float]:
+    """等距格网的**末线外推到末字的墨外沿**（`grid_end_fit`，2026-11-09，殿本 vol28 列尾下溢）。
+
+    末线不是字缝、是列尾，不必守等距。vol28 版面两端字距被拉开：末字字心比中段直线外推偏下 0.09 格、
+    字高 1.06 倍（r6 旧图、r8 新图同样，与 Step2 矫正无关），而且末字多半直接坐在下版框内细线上、中间没有白行；
+    等距格网的末线（`snap_to_gaps` 只在 ±0.2 格里就近）切在末字下半截，字脚落在格外（列尾下溢 8%）。
+
+    做法：末线外 `END_FIT_GAP` 格高以内有墨（末字伸出了格），就顺着墨往下走，走到第一段连着
+    `END_FIT_GAP` 格高的白行（末线挪到白段起点；字内部的短白缝跨过去），或者碰到框线行（行墨 ≥
+    `END_FIT_LINE`×内容窗宽；末线挪到线上沿的毛边之上）。`END_FIT_MAX` 格高以内、`hi`（版框）以内两样都没碰到
+    就不动；末线所在行就是框线、末线上方紧挨着一段白（末格空，线下是斜的、断的框线渣：vol89 p62 c3、p163 c4
+    试过会把框线认成字），或末线下紧挨着一段白（字没出格）也不动。
+
+    只动末线：首线一侧（列首上溢、抬头框）往上推会把上版框、抬头框线收进首字（vol28 试过，看图变坏），不做。
+    中间格线、格数、格号都不变。"""
+    out = [float(y) for y in bounds]
+    h = len(row_proj)
+    if h == 0 or len(out) < 2:
+        return out
+    w = max(1.0, float(width))
+    ink = row_proj > END_FIT_WHITE * w
+    line = row_proj >= END_FIT_LINE * w
+    edge = row_proj >= END_FIT_EDGE * w
+    gap = max(3, int(round(END_FIT_GAP * period)))
+    yi = int(round(min(max(out[-1], 0.0), h - 1)))
+    lim = min(max(int(np.floor(min(hi, out[-1] + END_FIT_MAX * period))), 0), h - 1)
+    if line[yi] or not ink[max(0, yi - gap):yi + 1].any():
+        return out                                    # 末线压在框线上，或末线上方紧挨着是白（末格空、框线渣在下面）
+    j, run, start, seen = yi, 0, None, False
+    while j < lim:
+        j += 1
+        if line[j]:
+            if not seen:
+                return out
+            if start is not None:                     # 末字与线之间隔着不到 GAP 的白：落在白段起点
+                out[-1] = float(start)
+            else:                                     # 末字压着线：退过线上沿毛边
+                k = j
+                while k - 1 > yi and edge[k - 1]:
+                    k -= 1
+                out[-1] = float(k)
+            return out
+        if ink[j]:
+            seen, run, start = True, 0, None
+        else:
+            if not seen and j - yi >= gap:
+                return out                            # 末线下一段白：字没出格
+            run += 1
+            start = j if start is None else start
+            if run >= gap:
+                if seen:
+                    out[-1] = float(start)
+                return out
+    return out
+
+
 def row_ink_projection(col_gray: np.ndarray, x_lo: int = 0, x_hi: int | None = None,
                         ink_threshold: int = 128) -> np.ndarray:
     """列图的行投影：每一行在内容窗口内的墨像素个数（喂给弹性 DP 的曲线）。"""
@@ -1687,6 +1757,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     grid_bounds: "Sequence[float] | None" = None,
                     jiazhu_rows: bool = False,
                     jiazhu_free_split: bool = False,
+                    grid_end_fit: bool = False,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1770,6 +1841,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       DP 的下界改用它的上沿，结果记在 `bottom_bar_y`（2026-09-28，overview#266）。
     - `grid_bounds`：等距格网（`books/siku_zongmu/row_grid`）给的 n_slots+1 条格线。给了就不跑 DP，格线各自
       就近挪进字缝（`snap_to_gaps`），也不找下版框线；之后的格类型、夹注、折线切分照旧。
+    - `grid_end_fit`（书级，殿本 vol28 等列尾字距拉开的册）：等距格网的末线再外推到末字的墨外沿
+      （`fit_grid_end`，不出版框、最多 0.35 格），其余格线不动。只在给了 `grid_bounds` 时生效。
     - `jiazhu_free_split`（要 `jiazhu_rows`，写本书级）：段尾一格表说只有一半有字（字数为奇数）时，多出的那个字
       归段尾格墨多的那行（图定，不照整理本 ⌈N/2⌉），短的那行在自己墨的范围里少切一格，格号照「本行第几字」
       从段首数，段尾那格只发长的那行（设计稿方案 A，Sheldon 2026-11-03 定）。
@@ -1803,8 +1876,10 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     if grid_bounds is not None:
         if len(grid_bounds) != n_slots + 1:
             raise ValueError(f"grid_bounds 要 {n_slots + 1} 条格线，给了 {len(grid_bounds)}")
-        result = RowBoundaryResult(boundaries=snap_to_gaps(row_proj, grid_bounds, period),
-                                   blank_intervals=[], valleys=[], period=period)
+        snapped = snap_to_gaps(row_proj, grid_bounds, period)
+        if grid_end_fit:
+            snapped = fit_grid_end(row_proj, snapped, period, border_bottom, dst_w)
+        result = RowBoundaryResult(boundaries=snapped, blank_intervals=[], valleys=[], period=period)
     else:
         result = fit_row_boundaries(row_proj, dst_w, border_top, border_bottom, period,
                                     n_slots=n_slots, top_slack=top_slack, **dp_kwargs)

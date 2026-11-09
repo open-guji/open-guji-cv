@@ -1089,6 +1089,12 @@ class RowSegmentParams(BaseModel):
     #: 下一格的字块带着上字的笔画碎片（用户 2026-11-03 人审表）。大印下的列仍取等距格网（`_under_stain`，与本开关无关）。
     #: 书级；`uniform`＝缺省，不进参数哈希。
     row_pitch: Literal["uniform", "free"] = "uniform"
+    #: **等距格网末线外推到末字墨外沿**（2026-11-09，殿本 vol28 列尾下溢，`row_boundaries.fit_grid_end`）：末线是列尾、不是字缝，
+    #: 有的册版面两端字距被拉开、末字坐在下版框细线上（vol28 末字心偏下 0.09 格、字高 1.06 倍，r6 旧图、r8 新图都有），
+    #: 等距末线切进末字下半截。开着时中选格网定下后（只在最后重切那一遍，不影响挑格网）末线下有墨就顺墨往下走到第一段白行或
+    #: 框线上沿（版框内、≤0.35 格）。只动等距格网（含表挪一格的派生）的末线；首线、DP 格网、中间格线、格号不变。
+    #: 书级开关；False＝关（缺省，不进参数哈希）。
+    grid_end_fit: bool = False
     #: **大印下表中间的空格位记空**（2026-11-03，史記文淵閣本）：卷首叶题署行（「漢　　太　　史　　令司馬遷　撰」
     #: 「宋中郎外兵曹　參　軍裴　駰集解」）字距拉开，表里是跳着的格位；「文淵閣寶」大印压在这些空格位上，缺省只记空
     #: 列端的表空格，中间的空格位里的印泥被切成字，格数对不上整理本、整列对位落空（01–10 册 p2 约 97 格）。开着时
@@ -1210,6 +1216,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("alt_cut", None)
             if self.row_pitch == "uniform":
                 d.pop("row_pitch", None)
+            if not self.grid_end_fit:
+                d.pop("grid_end_fit", None)
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
@@ -1292,6 +1300,9 @@ class RowSegmentStep(Step):
                              f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
         if p.jiazhu_half_a and "jiazhu_half_a" not in inspect.signature(segment_column).parameters:
             raise ValueError("row_segment.jiazhu_half_a 是全唐文套书的开关：册配置要写 seg_set: quantangwen"
+                             f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
+        if p.grid_end_fit and "grid_end_fit" not in inspect.signature(segment_column).parameters:
+            raise ValueError("row_segment.grid_end_fit 是殿本套书（siku_zongmu）的开关"
                              f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
@@ -1487,6 +1498,7 @@ class RowSegmentStep(Step):
                     **({"jiazhu_free_split": True} if p.jiazhu_rows and p.jiazhu_free_split and final else {}),
                     **({"jiazhu_single_head": True} if p.jiazhu_single_head else {}),
                     **({"jiazhu_half_a": True} if p.jiazhu_half_a else {}),
+                    **({"grid_end_fit": True} if p.grid_end_fit and final else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:
