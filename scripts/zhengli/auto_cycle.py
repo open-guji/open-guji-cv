@@ -160,7 +160,6 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str) -> di
         subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
         subprocess.run(["git", "clean", "-fdq", "--", "Book"], cwd=book_text)      # 待重标清单 NNN.punct-stale.json 是未跟踪文件，不清会混进下一册的提交
         shutil.rmtree(sandbox, ignore_errors=True)
-        shutil.rmtree(sandbox, ignore_errors=True)
         return {"verdict": "need-A33", "why": "book-text 本地检查不过（锚点落空等），线上单未换；交 A33 走 punct_redo／分支 PR",
                 "log": str(log)}
     if ap.returncode:
