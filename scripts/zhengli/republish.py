@@ -1216,6 +1216,43 @@ def punct_stale_update(stale: dict | None, old: dict[str, str], new: dict[str, s
     return doc, others
 
 
+def hold_pending_current(new_char: Path, old_char: Path, plan: dict) -> int:
+    """待审格现行（book-text）已有字、导出的字不同：导出改回现行字，文本不动，等人裁定了再改（sheldon 11-10 定，少改 book-text 提交）。
+    要在比对改字（punct-stale 等）之前做。需要 guji-manager 的 `apply_pending(current=…)`；旧版 manager 不认就跳过并提示。"""
+    from guji_manager.formats import guji_char_cord as cc
+    if not (new_char.exists() and old_char.exists()):
+        return 0
+    cells = []
+    for k in ("pending", "team"):
+        f = plan.get(k)
+        if f and Path(f).exists():
+            cells += json.loads(Path(f).read_text(encoding="utf-8")).get("cells", [])
+    # 撤库重审格（cv#1333 `evict_review_cells`，sheldon 11-10）：现行有字则保持现字；现行是 □ 且没有候选也保持 □；人裁定了才改；
+    # 没有这个函数（cv#1333 未并入）、读不了事件，或这册没有这类格，都当没有
+    book = plan.get("book")
+    try:
+        from open_guji_cv.feedback.lookup import evict_review_cells, human_chars
+        ev = evict_review_cells(book) if book else {}
+        decided = human_chars(book) if ev else {}
+        have = {c["cell"] for c in cells}
+        for k in ev:
+            cell = k.removeprefix(f"{book}:")
+            if cell not in decided and cell not in have:
+                cells.append({"cell": cell})
+    except Exception:       # noqa: BLE001 — ImportError／读事件失败：不挡入库
+        pass
+    char = json.loads(new_char.read_text(encoding="utf-8"))
+    try:
+        n = cc.apply_pending(char, {"cells": cells}, current=_char_cells(old_char))
+    except TypeError:
+        print("⚠ guji-manager 太旧，不认 apply_pending(current=)：待审格不会按「现行有字则文本不动」处理，请升到含该改动的版本")
+        return 0
+    if n.get("held_current"):
+        new_char.write_text(cc.dumps(char), encoding="utf-8", newline="\n")
+        print(f"待审格 {n['held_current']} 格现行已有字、首选字不同：文本不动，等人裁")
+    return int(n.get("held_current") or 0)
+
+
 def stamp_char_pending(char_json: Path, plan: dict) -> None:
     """book-text 的 char 按同版待审单（公众单＋团队单）写 `pending_reason`、去待审格的 `lacuna`（guji-format char v0.4
     §4.8，sheldon 11-03 定：`lacuna` 只给审过定阙的格）。不改 Step9，只在入库这步做；分行稿逐字节不变。"""
@@ -1338,6 +1375,7 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
     stale_doc, others = None, []
     old_char = d / f"{ch}.char.json"
     new_char = Path(plan["export_dir"]) / f"{ch}.char.json"
+    hold_pending_current(new_char, old_char, plan)
     has_punct = (d / f"{ch}.punct.json").exists()
     if has_punct and old_char.exists() and new_char.exists():
         sp = d / f"{ch}.punct-stale.json"
