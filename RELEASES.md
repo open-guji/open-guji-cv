@@ -56,6 +56,25 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 
 - `cv-2026.09.26-base`
 
+## v0.7.0
+
+对比 `v0.6.39`。用户 11-09 定升 MINOR：书级代码搬出 cv（四库字母整数版本号）、模型文件搬出 git。tag 经 ai-team 中转站打在 main 的发版合并提交上。
+
+### Added
+- 书级代码（v0.6.31 起分步进来，本版收尾）：各书工作区仓 `code/` 挂成 `guji_book.<name>`（`core/book_code.py`），有自己的整数版本号 `k<N>`（`code/releases/k<N>.json`，tag 走中转站），书配置 `code: N` 钉版本、工作副本不符拒跑；四库简写 `pin: c31-g19-m2-k3`、产物包标签 `cv0.7.0-c…-g…-m…-k…`；`guji code`（guji-manager ≥0.4.30）；公开面 `open_guji_cv.book_api`。
+- 书级钩子模块：`impl/keben/seal_ink`（新）、`impl/keben/jiazhu_step.free_split`，缺省什么都不做，书仓覆盖就生效。
+
+### Changed
+- 三条版式的缺省实现改名 `books/siku_zongmu|beixing|zengguang_youxue` → `impl/keben|modern|free`；书 `code/` 为空也能跑（全走缺省实现）。
+- 史記、全唐文的专属代码搬进各自书仓 `code/`（k1；史記 k2 待合）：**跑这两部书的工作区必须是带 `code/` 的书仓**。
+- 模型文件不再进 git：真源 R2，按 `config/model-registry.json` 自动取回（要 `GUJI_DATA_TOKEN` 或 `_READ`）。
+
+### Removed
+- `open_guji_cv/books/` 整包；`seg_set` 的 `shiji_wyg`／`quantangwen` 登记（改由书仓 `code.yaml` 的 name 认）。
+- `row_segment` 开关 `seal_inkcut`、`seal_gap_slots_empty`、`jiazhu_free_split`、`jiazhu_step_split`（搬进史記书仓；写 true 而没有书级代码接手就拒跑）。
+
+影响：对 v0.6.39 有 `code_hash` 变化的只有 **row_segment**（模块 `steps/row_segment`、`impl/keben/row_boundaries`、`impl/keben/jiazhu_step`、新 `impl/keben/seal_ink`）：各书 row_segment 起判过期；殿本、北行、幼學、全唐文切法逐字不变（缺省钩子什么都不做、代码只搬家），史記要换 k2 后重跑。用户 11-09 定「不怕过期」，殿本随第 8 轮重跑消化。底库：`check_base_corpus.py` 与 b21 一致，不配新底库。Wiki 已按 v0.7 重改。全量测试见发版 PR。
+
 ## v0.6.0
 
 对比 `v0.5.32`。用户 2026-10-31 定升 MINOR：切分代码模块化（共用原语库 `seg/`、各套书自管 `books/`）和一批功能拆分出去。tag 经 ai-team 中转站打在 main 的发版合并提交上。
