@@ -5,6 +5,12 @@
 
 ## [未发版]
 
+## [0.7.3] - 2026-11-10
+
+- 发版说明（A31 11-10，QTW 要）：基于 v0.7.2，只多 #1388。PATCH。
+
+- seed_admit 两个书级开关，缺省关、关时逐字节不变、不进参数 dump，code_equiv 已登记：`group_flow_pair_shape_nm_5b`（匹配器护栏 never_match 的待审格，5-b 首位落在两字对里也交 `group_flow_pair_shapes` 刻形判；全唐文 001–003 目录页 王 50 格看图全对，5-b 首位是土的那格挡掉）、`solo_cal_5b_canon`（solo_cal 5-b 档按本书码位表归一后比，5-b 给 慎、库给 愼 算一致；愼 5、吕 2 格）。形近字线 11-10。
+
 ## [0.7.2] - 2026-11-10
 
 - 发版说明（A31 11-10）：从 dev 9b5aa9f（#1381）切，只含 #1381，不含之后的 #1383。PATCH；只动 `scripts/zhengli/`，无 code_hash 变化、无需登记 code_equiv。需配套 guji-manager ≥ 0.4.37（`swap.booktext`）。
