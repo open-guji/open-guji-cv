@@ -136,6 +136,17 @@ def executor_like(tmp: Path):
                 os.environ[k] = v
 
 
+def old_char(seed_page, cell_key: str) -> str | None:
+    """旧产物 seed_admit 这一页里某格定的字（核对草稿的旧格是不是人裁的那个字）；读不到 → None。"""
+    if seed_page is None:
+        return None
+    for col in getattr(seed_page, "columns", []) or []:
+        for ch in getattr(col, "chars", []) or []:
+            if getattr(ch, "id", None) == cell_key:
+                return getattr(ch, "char", None)
+    return None
+
+
 def classify_row(row: dict) -> str:
     """绑定行 → 预检结论：
 
@@ -171,14 +182,16 @@ def cell_boxes(page_cells) -> dict[tuple[int, int, str], list[float]]:
     return out
 
 
-def propose_anchor(event_key: str, event_id: str, old_boxes: dict, new_cells) -> dict | None:
+def propose_anchor(event_key: str, event_id: str, old_boxes: dict, new_cells, old_bound: str | None = None) -> dict | None:
     """失锚事件 → 补锚草稿行；旧切分里找不到这一格 → None。
 
-    墨框取旧格页面框（人当时看的就是那一格）；按 `bind_ink` 预演落到新切分哪一格。"""
+    墨框取旧切分里**这条人裁当时绑到的格**（`old_bound`：照执行机条件在旧切分上算的绑定）的页面框，不按事件的格号取——
+    换过钉子的列格号会挪，按号取会把字裁到别的字上（SJ 11-10：01:49:4「務」落到「府」）。
+    没给 `old_bound` 才退回按事件格号。按 `bind_ink` 预演落到新切分哪一格。"""
     from .anchor import parse_cell_key
     from .anchor_backfill import bind_ink
     from .bindings import _cell_index
-    pk = parse_cell_key(event_key)
+    pk = parse_cell_key(old_bound or event_key)
     if pk is None:
         return None
     _book, page, col, slot, sub = pk
@@ -193,7 +206,7 @@ def propose_anchor(event_key: str, event_id: str, old_boxes: dict, new_cells) ->
         pred = "valid" if to == event_key else "rebound"
     return {"event": event_id, "key": event_key,
             "anchor": {"ink_bbox": [round(v, 2) for v in box], "source": "backfill:ink"},
-            "evidence": {"by": "seg_pins_check", "pred": pred, "to": to,
+            "evidence": {"by": "seg_pins_check", "pred": pred, "to": to, "old_cell": old_bound or event_key,
                          "inside": round(ins, 3), "second": round(second, 3)}}
 
 
@@ -284,13 +297,69 @@ def sandbox_rerun(book: str, pages: list[int], tmp: Path, pins: dict | None, log
     real_store, real_cache = ProductStore(), ImageCache()
     _copy_page_products(real_store.root, tmp / "products", book, pages)
     _copy_page_cache(real_cache.root, tmp / "cache", book, pages)
+    _drop_rerun_products(tmp / "products", book, pages)
     store, cache = ProductStore(tmp / "products"), ImageCache(tmp / "cache")
     bk = load_book(book)
     eng = Engine(bk, load_pipeline(default_pipeline_id(bk)), store=store, cache=cache,
                  log=log or (lambda s: None))
+    judge_missing(eng.ctx)
     with pins_override(book, pins):
         rep = eng.run(steps=list(RERUN_STEPS), pages=sorted(set(pages)), force=True)
     return store, cache, rep
+
+
+class SandboxNotReady(RuntimeError):
+    """沙箱条件与执行机不一致（缺切点裁判权重、字形库没拉），预检结论不可信，拒跑。"""
+
+
+def judge_missing(ctx) -> None:
+    """row_segment 要用 U-Net 切点裁判、本机却没有权重或 torch → 抛 `SandboxNotReady`。
+
+    没权重时 Step3 静默走旧规则（`seg/cut_select.ckpt_fingerprint` 返回空串），沙箱切出的与执行机不同（SJ 11-10）。"""
+    from ..steps.row_segment import RowSegmentStep
+    p = ctx.params_for(RowSegmentStep())
+    if getattr(p, "cut_judge", None) in ("unet", "unet_f64") and not getattr(p, "judge_fingerprint", ""):
+        from ..seg.cut_select import DEFAULT_CKPT
+        raise SandboxNotReady(f"row_segment 要用 U-Net 切点裁判，本机缺 torch 或权重 {DEFAULT_CKPT}："
+                              "沙箱会按旧规则切、与执行机不一致。先 `guji model fetch -w <工作区>`（不给 -w 按 cv 模型表补 models/）取回权重再跑")
+
+
+def glyph_db_missing() -> str | None:
+    """本机字形库索引 output/glyph.db 不在或没有 instances 表 → 提示文字；好的 → None。"""
+    import sqlite3
+
+    from ..core.workspace import glyph_db_path
+    path = glyph_db_path()
+    if not Path(path).is_file():
+        return f"本机没有字形库索引 {path}"
+    try:
+        con = sqlite3.connect(str(path))
+        try:
+            ok = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='instances'").fetchone()
+        finally:
+            con.close()
+    except sqlite3.Error as e:
+        return f"字形库索引 {path} 打不开（{e}）"
+    return None if ok else f"字形库索引 {path} 是空的（没有 instances 表）"
+
+
+def _drop_rerun_products(root: Path, book: str, pages: list[int]) -> None:
+    """沙箱里要重跑的那几步，先删掉拷进来的旧产物：重跑失败时就是「没有产物」，不会拿旧的当新的比（SJ 11-10）。"""
+    from ..core.spec import page_key
+    keys = {page_key(p) for p in pages}
+    for step in (*RERUN_STEPS, "row_segment_gate"):
+        d = Path(root) / book / step
+        if not d.is_dir():
+            continue
+        for f in d.iterdir():
+            if f.stem in keys or f.stem.split(".")[0] in keys:
+                f.unlink()
+
+
+def run_failures(rep) -> list[str]:
+    """沙箱重跑里失败（含上游缺失被拦）的 `步:页 原因`。"""
+    return [f"{o.step}:p{o.page} {o.error or o.status}" for o in getattr(rep, "outcomes", []) or []
+            if o.status == "failed"]
 
 
 # ── 6. 钉子退役（F2）─────────────────────────────────────────────────────────
