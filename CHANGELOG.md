@@ -6,6 +6,19 @@
 ## [未发版]
 
 - rerun_prep.sh 切到 cv 版本后先从 R2 取回 models/、fonts/、底库语料大文件（PATCH，A30 11-10；SJ r32 的 #1833/#1835/#1839 三单 prep 在「模板索引」段失败）：v0.7 起 cv 仓不带这些文件，从 v0.6.x 切过来时检出把它们删了，`pull-rare-index` 算出的 checkpoint 指纹是 `nockpt`，对不上已发布的向量包（`d2ce8bab0fd0`）。调 `ensure_repo_models()` 取回后指纹为 d2ce8bab0fd0，对得上。只改准备脚本，不动产物、指纹（L0）。
+- strokes 差一笔「学门槛」：`verify_learned`（多出那一笔的独占率、落墨率按本书两字刻例类中心判）、`extra_feats`、`bad_fit`。多出那一笔与别的笔交叉的组（木本、目自、十士）固定门槛弃权太多，殿本库留一 木本 弃权 99→2。不被 Step 引用，产物不变。
+- republish：book-text 遇增删格／改号改调 guji-manager `swap.booktext`（按新旧 cord 框的格级对照表判字、挪标点专名、守卫），swap run 不再因增删格报 need-A33；proof_cycle 格号变了时不按格号退回「推翻人裁」；换文文本线升 patch（ZM 11-10）。
+
+## [0.7.1] - 2026-11-10
+
+- 发版说明（A20 11-10，SJ 要）：从 dev f666f3d 切，只多 #1378（书级代码第 4 步代码等价，row_segment 指纹回到 v0.6.39，v0.7.0 判的 row_segment 过期撤销）。
+- PATCH 登记书级代码第 4 步（#1375）的代码等价：`row_segment`、`impl/keben/row_boundaries`、`impl/keben/jiazhu_step` 进 ENTRIES，新 code_dep `seal_ink` 进 SPLITS（缺省实现合回 jiazhu_step；史記书仓 k2 的 jiazhu_step＋seal_ink 合回 k1 那一项）。殿本／北行／幼學／全唐文与史記（配书仓 k2）的 row_segment `code_hash` 与 v0.6.39 逐位相同，**v0.7.0 起判的 row_segment 过期撤销**。证据：SJ 11-10 史記 02、05 册 10 页产物逐字节相同；缺省钩子分支是删开关后的原路径。
+
+## [0.7.0] - 2026-11-10
+
+- **MINOR**（用户 11-04、11-09 定）书级代码系列收尾＋模型文件搬出 git，见 RELEASES.md v0.7.0。从 dev 1bb3d44 切。
+- 书级代码第 4 步（cv #1375，Sheldon 11-10 选「先搬自成一块的，其余留着」）：`row_segment` 删开关 `seal_inkcut`／`seal_gap_slots_empty`／`jiazhu_free_split`／`jiazhu_step_split`，改成书级钩子 `impl/keben/seal_ink`（新）、`impl/keben/jiazhu_step.free_split`（缺省什么都不做），实现搬进史記书仓 `code/`（k2，书仓 PR #1）。书配置写 true 而工作区 `code/` 没覆盖对应钩子就拒跑（`row_segment._RETIRED`）。`row_segment`（及 `row_boundaries`、`jiazhu_step`、`seal_ink`）`code_hash` 变：**各书 row_segment 起过期**（殿本等切法逐字不变）。其余单书开关冻结留 cv（`doc/design/书级代码.md`）。
+- 模型文件搬出 git（用户 11-04 定，`doc/design/模型系统.md` 4.2 第 1 条）：`models/` 下 11 个文件 `git rm --cached`、`.gitignore` 忽略 `models/**`（留 README）。真源 R2，按 `config/model-registry.json` 取回：`guji model fetch`、`guji pipeline` 起跑前、测试开跑前、`install_release.py` 装完都自动取（**执行方要有 `GUJI_DATA_TOKEN` 或 `_READ`**，首跑约下 50 MB）。删前核过：表里 87 项 R2 全有，取回与原文件逐字节相同。模型内容不变，不影响指纹。
 
 ## [0.6.39] - 2026-11-10
 

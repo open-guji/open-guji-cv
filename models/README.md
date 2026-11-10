@@ -1,5 +1,10 @@
 # 模型检查点（不可重建的真源）
 
+> **2026-11-10（v0.7.0）起模型文件不进 git**（用户 11-04 定，`doc/design/模型系统.md` 4.2 第 1 条）：真源在 R2，
+> 本仓只带 `config/model-registry.json`（路径 → sha256）。`guji model fetch` 按表取回到本目录；`guji pipeline`、
+> 测试开跑前（`tests/conftest.py`）、`install_release.py` 都会自动取（要 `GUJI_DATA_TOKEN` 或 `_READ`）。
+> 换模型：放好文件 → `guji model registry` 重写表 → `guji model upload --execute` 传 R2 → 提交表。下文「进 Git」是旧说法。
+
 `glyph_cnn_r5/best.pt`（18.8 MB，**2026-09-17 起现役**）是
 `scripts/train_glyph_cnn.py` 训出的 CNN 分类器，Step5-b（生僻字候选）与
 embedding 检索都靠它。与 `glyph_store/`、`fonts/` 同一条判断标准——
