@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.6.39] - 测试中
+
+- PATCH（A31 11-10，sheldon 定）`republish.py push／edit-cell／add-alt／add-sprites --sync` 触发网站 proofing-sync 时带 `only=<书>/<章>`（原先 push 等没设 publish_only，整站发布，整站冒烟要好几分钟）。L0（只改发布触发）。
+
 - `human_chars`：人裁因现格字块图拿不到没法认格时，每册 ≤ 20 条默认放行（记 warning，事件不删），超过 20 条才报错拦下；`GUJI_ALLOW_LOST_HUMAN=1` 仍可无上限放行（PATCH，ZM-殿本二册 11-10，sheldon 定）。只改报错路径，产物不变；`lookup.py` 若在某步 `code_deps` 里，该步指纹会变，需要时用 `scripts/code_equiv.py` 登记。
 
 ## [0.6.38] - 2026-11-10
