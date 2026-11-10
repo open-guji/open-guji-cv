@@ -8,6 +8,9 @@
   near    格号相同，差 ≤ 0.25 格高——看图再定；
   keep    格号不同或偏差大——钉子还要留着。
 
+只比几何。为下游钉的钉子（防 alt_cut 格号不符、过送审闸、防漂移……）几何上可撤也不能撤：在 item 的
+`expected.keep_for` 写用途（一句话），本报告就一律判 keep（SJ 11-10 验收提出）。
+
 本机产物、缓存、中心库都不动。撤钉子由书线把 item 置 `status: retired` 并写 history，撤前跑 seg_pins_check 核人裁。
 
 用法：
@@ -38,11 +41,13 @@ def main(argv=None) -> int:
     from open_guji_cv.report.slots import CELLS_KIND, cells_step
 
     items = pc.read_items(verdict_store().items_path(MANUAL_CELLS_SHARD))
-    why_of = {}
+    why_of, keep_for = {}, {}
     for it in items:
         anc = it.get("anchor") or {}
+        key = (str(anc.get("book")), anc.get("page"), anc.get("col"))
         hist = it.get("history") or []
-        why_of[(str(anc.get("book")), anc.get("page"), anc.get("col"))] = (hist[-1].get("why") if hist else "") or ""
+        why_of[key] = (hist[0].get("why") if hist else "") or ""          # 首条（建钉时）的理由
+        keep_for[key] = str((it.get("expected") or {}).get("keep_for") or "")
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     rows, tally = [], {}
@@ -58,6 +63,8 @@ def main(argv=None) -> int:
             pcells = store.read(book, step, page_key(pg), CELLS_KIND)
             cc = None if pcells is None else next((c for c in pcells.columns if c.col == col), None)
             v = pc.retire_verdict(pin, cc)
+            if keep_for.get((book, pg, col)):
+                v = {**v, "verdict": "keep", "why": f"为下游钉：{keep_for[(book, pg, col)]}"}
             rows.append((book, pg, col, v["verdict"], v["max_dev"], v["why"], why_of.get((book, pg, col), "")))
             tally.setdefault(book, {"retire": 0, "near": 0, "keep": 0})[v["verdict"]] += 1
     with open(out / "retire.tsv", "w", encoding="utf-8") as f:
@@ -65,7 +72,8 @@ def main(argv=None) -> int:
         f.writelines("\t".join("" if x is None else str(x) for x in r) + "\n" for r in rows)
     lines = ["# 钉子退役报告", "", "| 册 | 可撤 | 接近 | 留 |", "| --- | --- | --- | --- |"]
     lines += [f"| {b} | {t['retire']} | {t['near']} | {t['keep']} |" for b, t in tally.items()]
-    lines += ["", "明细 `retire.tsv`。可撤的抽几列看图，再由书线撤（置 retired、写 history），撤前跑 seg_pins_check。"]
+    lines += ["", "明细 `retire.tsv`。只比几何：可撤的先查 pin_why 是不是为下游钉的（是就给 item 补 `expected.keep_for`），",
+              "再抽几列看图，由书线撤（置 retired、写 history），撤前跑 seg_pins_check。"]
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
     return 0
