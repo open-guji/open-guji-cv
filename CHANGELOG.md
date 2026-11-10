@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- strokes 差一笔「学门槛」：`verify_learned`（多出那一笔的独占率、落墨率按本书两字刻例类中心判）、`extra_feats`、`bad_fit`。多出那一笔与别的笔交叉的组（木本、目自、十士）固定门槛弃权太多，殿本库留一 木本 弃权 99→2。不被 Step 引用，产物不变。
 - republish：book-text 遇增删格／改号改调 guji-manager `swap.booktext`（按新旧 cord 框的格级对照表判字、挪标点专名、守卫），swap run 不再因增删格报 need-A33；proof_cycle 格号变了时不按格号退回「推翻人裁」；换文文本线升 patch（ZM 11-10）。
 
 ## [0.7.1] - 2026-11-10
