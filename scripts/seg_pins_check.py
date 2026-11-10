@@ -193,14 +193,25 @@ def main(argv=None) -> int:
         with open(out / "anchors_draft.jsonl", "w", encoding="utf-8") as f:
             for d in drafts:
                 f.write(json.dumps(d, ensure_ascii=False) + "\n")
+        # 已有锚行的事件要替换、不能追加：(event, key) 重复推上中心库会让全员 db pull 失败（SJ 11-10）
+        from open_guji_cv.feedback.anchor_backfill import anchors_path
+        af = anchors_path(book)
+        cur = af.read_text(encoding="utf-8").splitlines() if af.exists() else []
+        merged, replaced = pc.merge_anchor_drafts(cur, drafts)
+        for d in drafts:
+            d["action"] = "replace" if d["event"] in replaced else "append"
+        (out / "anchors_merged.jsonl").write_text("\n".join(merged) + ("\n" if merged else ""), encoding="utf-8")
         for d in drafts:
             ev = d["evidence"]
-            lines.append(f"- {d['key']} {ev.get('shape') or ''}（旧格 {ev['old_cell']}）→ {ev['pred']}"
+            lines.append(f"- {'【替换原锚行】' if d['action'] == 'replace' else ''}"
+                         f"{d['key']} {ev.get('shape') or ''}（旧格 {ev['old_cell']}）→ {ev['pred']}"
                          f"{(' ' + ev['to']) if ev['to'] and ev['to'] != d['key'] else ''}（墨框落入 {ev['inside']:.0%}）"
                          + (f" ⚠️ {ev['warn']}" if ev.get("warn") else ""))
         lines += [f"- {s}" for s in skipped]
-        lines += ["", f"草稿 {len(drafts)} 行在 `anchors_draft.jsonl`。逐条看图核人裁原意后，"
-                  f"追加到 `feedback/anchors/{book}.jsonl`（evidence 里写原因），再重跑本预检到 0。"]
+        lines += ["", f"草稿 {len(drafts)} 行在 `anchors_draft.jsonl`（其中替换原锚行 {len(replaced)} 条）。"
+                  f"逐条看图核人裁原意后，用 `anchors_merged.jsonl`（本机补锚档已并好草稿：已有锚的事件原地替换、"
+                  f"新的追加）整份覆盖 `feedback/anchors/{book}.jsonl`，**不要直接追加**（同一事件两行，"
+                  f"(event, key) 重复推上中心库会让全员 db pull 失败）；再重跑本预检到 0。"]
     elif probs:
         lines.append("- 没有旧切分（--no-run 时要给 --old-products），不出草稿")
     else:
@@ -210,9 +221,14 @@ def main(argv=None) -> int:
     from open_guji_cv.feedback.events import EventLog, iter_events_readonly
     dup = pc.duplicate_event_ids(e for e in iter_events_readonly(EventLog())
                                  if e.target.key.startswith(f"{book}:"))
-    lines += ["", "## 四、人裁事件 id 重复", "",
-              ("- 无" if not dup else "\n".join(f"- {k} ×{n}" for k, n in sorted(dup.items())))]
-    bad |= bool(dup)
+    from open_guji_cv.feedback.anchor_backfill import anchors_path
+    af = anchors_path(book)
+    adup = pc.duplicate_anchor_keys(af.read_text(encoding="utf-8").splitlines()) if af.exists() else {}
+    lines += ["", "## 四、人裁事件 id 重复、补锚档 (event, key) 重复", "",
+              ("- 事件 id：无" if not dup else "\n".join(f"- 事件 {k} ×{n}" for k, n in sorted(dup.items()))),
+              ("- 补锚档：无" if not adup else "\n".join(f"- 补锚档 {e} {k} ×{n}（只留一行）"
+                                                        for (e, k), n in sorted(adup.items())))]
+    bad |= bool(dup) or bool(adup)
 
     lines += ["", f"结论：{'有问题，先处理再推' if bad else '可以推'}"]
     (out / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

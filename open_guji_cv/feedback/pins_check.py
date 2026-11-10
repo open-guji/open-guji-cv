@@ -227,6 +227,38 @@ def duplicate_event_ids(events: Iterable) -> dict[str, int]:
     return {k: n for k, n in c.items() if n > 1}
 
 
+def duplicate_anchor_keys(lines: Iterable[str]) -> dict[tuple[str, str], int]:
+    """补锚档里 (event, key) 出现多次的 `{(event, key): 次数}`。中心库 anchors 表唯一键是 (src_path, event, key)，
+    重复行推上去还原 sha 对不上、全员 db pull 失败（SJ 11-10，rev 957044）。"""
+    c: Counter = Counter()
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        d = json.loads(line)
+        c[(d.get("event"), d.get("key"))] += 1
+    return {k: n for k, n in c.items() if n > 1}
+
+
+def merge_anchor_drafts(lines: list[str], drafts: list[dict]) -> tuple[list[str], set[str]]:
+    """把草稿并进补锚档原有各行：事件已有锚行的**原地替换**（一事件一行，`load_backfill` 也是按事件取），
+    没有的追加到末尾。返回（并好的各行，被替换的事件 id）。"""
+    by_ev = {d["event"]: d for d in drafts}
+    out, replaced = [], set()
+    for line in lines:
+        if not line.strip():
+            continue
+        ev = json.loads(line).get("event")
+        if ev in by_ev:
+            if ev not in replaced:
+                out.append(json.dumps(by_ev[ev], ensure_ascii=False))
+                replaced.add(ev)
+            continue        # 同一事件原有多行的，只留替换后那一行
+        out.append(line.rstrip("\n"))
+    out += [json.dumps(d, ensure_ascii=False) for d in drafts if d["event"] not in replaced]
+    return out, replaced
+
+
 # ── 5. 沙箱重跑（不碰本机产物与缓存）──────────────────────────────────────────
 
 #: 沙箱重跑的两步（闸 row_segment_gate 跟着 row_segment 自动跑）
