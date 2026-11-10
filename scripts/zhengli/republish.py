@@ -1177,6 +1177,20 @@ def hold_pending_current(new_char: Path, old_char: Path, plan: dict) -> int:
         f = plan.get(k)
         if f and Path(f).exists():
             cells += json.loads(Path(f).read_text(encoding="utf-8")).get("cells", [])
+    # 撤库重审格（cv#1333 `evict_review_cells`，sheldon 11-10）：现行有字则保持现字；现行是 □ 且没有候选也保持 □；人裁定了才改；
+    # 没有这个函数（cv#1333 未并入）、读不了事件，或这册没有这类格，都当没有
+    book = plan.get("book")
+    try:
+        from open_guji_cv.feedback.lookup import evict_review_cells, human_chars
+        ev = evict_review_cells(book) if book else {}
+        decided = human_chars(book) if ev else {}
+        have = {c["cell"] for c in cells}
+        for k in ev:
+            cell = k.removeprefix(f"{book}:")
+            if cell not in decided and cell not in have:
+                cells.append({"cell": cell})
+    except Exception:       # noqa: BLE001 — ImportError／读事件失败：不挡入库
+        pass
     char = json.loads(new_char.read_text(encoding="utf-8"))
     try:
         n = cc.apply_pending(char, {"cells": cells}, current=_char_cells(old_char))
