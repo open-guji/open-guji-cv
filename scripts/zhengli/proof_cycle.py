@@ -304,6 +304,10 @@ def cmd_apply(a) -> int:
         old_char = rp.book_text_dir(Path(a.book_text), plan["text_id"]) / f"{plan['chapter']}.char.json"
         new_char = export / f"{plan['chapter']}.char.json"
         sp = split_changes(old_char, new_char, human_chars_of(ws, book))
+        if list(_cells(old_char)) != list(_cells(new_char)) and sp["overrule"]:
+            # 格号变了（增删格、改号）：按格号比的「推翻人裁」会把别的块图的字当旧字退回；交 republish 按格级对照表处理（ZM 11-10）
+            log.note(f"格号有变：按格号比出的「机器推翻人裁」{len(sp['overrule'])} 格不按格号退回，交格级对照表与新单复审")
+            sp["overrule"] = []
         if sp["overrule"]:
             revert_cells(new_char, {a_: o for a_, o, _ in sp["overrule"]})
         log.note(f"文本改动 {len(sp['human']) + len(sp['machine']) + len(sp['overrule'])} 格：人裁 {len(sp['human'])} 格、"

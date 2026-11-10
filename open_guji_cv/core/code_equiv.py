@@ -278,6 +278,13 @@ _MV_IMPL = ("书级代码第 2 步（2026-11-09，cv v0.7.0）：三条版式的
             "只改 import 路径与 code_deps 里的模块名（逐文件核过：改动行全是改名）。改名前后 5 套书 × 23 步 code_hash 逐位相同"
             "（对 origin/dev dc16d35 逐步比对）")
 
+
+_HOOKS_1110 = ("书级代码第 4 步（cv #1375，2026-11-10）：row_segment 的史記开关 seal_inkcut／seal_gap_slots_empty／jiazhu_free_split／"
+               "jiazhu_step_split 改成书级钩子（impl/keben/seal_ink 新、jiazhu_step.free_split），实现原样搬进史記书仓 code/（k2）；"
+               "缺省钩子什么都不做，殿本等书走的分支代码未动。证据：SJ 11-10 用 cv dev 1bb3d44b＋书仓 PR #1 code/ 本地重跑 row_segment，"
+               "与 r28 main 包（v0.6.38＋k1）比 02 册 p2/13/58/100/150/200、05 册 p2/26/50/80 共 10 页产物逐字节相同"
+               "（史記走的正是改动的钩子分支，也覆盖 row_segment／row_boundaries 的公共部分）；殿本等缺省钩子分支是删开关后的原路径")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1380,6 +1387,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='dedab8d15ba911f5663eefdd6832051b82d9c55ee41abb51bfa825462f023638',
           old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
           evidence='seed_admit 在 001 2 页（--pages 76,100）上与 origin/dev 产物逐字节相同；group_flow_pair_shape_nm_5b／solo_cal_5b_canon 缺省关、不进 dump'),
+    Equiv("open_guji_cv.steps.row_segment",
+          new="1c2b138a859640333b390aad62c037e99a2d4eaf968754e402d12b65aeddd8b2",
+          old="5af1ee266342914c68f3ee53d59d6b778874cbf2d95c4190d6a6d3f67ed90733", evidence=_HOOKS_1110),
+    Equiv("open_guji_cv.impl.keben.row_boundaries",
+          new="8ff128e3e27f9a0b017c49a1ffdf38a750020858e4964b21d5c4653bbeb4dc8f",
+          old="8c31a0d7e3c8a4d224daccf2f32063af6c98a9dd0e47583d26a25fa01503061c", evidence=_HOOKS_1110),
+    Equiv("open_guji_cv.impl.keben.jiazhu_step",
+          new="f49b7576cdb30ee9b456eeb1e2f80d5aae0a2bda2779aee1dffaf8668b4f9921",
+          old="095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67", evidence=_HOOKS_1110),
 )
 
 
@@ -1475,6 +1491,16 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.steps.seed_admit": ("af762775452247be49c6f539663ecbf516a16ba29fb11f09d0fc7e11a5296fc1", (
         ("open_guji_cv.steps.seed_admit", "9fab395141161db5735b2e423fd924813f4a318a5bddd364992606fbd533bdeb"),
         ("open_guji_cv.utils.pua_v2_codes", "b19257019711a01c30b17a41303c24aac9e45b6f25718bae738e179545cd8d3f"))),
+    # 不是拆分、是 row_segment 新加了一个 code_dep（书级钩子 seal_ink，缺省什么都不做；cv #1375 书级代码第 4 步）：
+    # jiazhu_step 与 seal_ink 都还是这一版时合回 jiazhu_step 一项（键＝v0.6.39 时 jiazhu_step 进指纹的名字，搬家前的旧名）
+    "open_guji_cv.books.siku_zongmu.jiazhu_step": ("095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67", (
+        ("open_guji_cv.impl.keben.jiazhu_step", "095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67"),
+        ("open_guji_cv.impl.keben.seal_ink", "eb14ac23baa75eb2a4b7304f152687cdb0b3ecef596da6cacfaca988645fa418"))),
+    # 同上，史記书仓 k2（书级模块；书仓 code/equiv.yaml 只支持 moved／forked／entries，合项登在这里）：
+    # 书仓 jiazhu_step（经书仓 entries 换回 k1 的 941e…）与新钩子 seal_ink 都还是 k2 这一版时，合回 k1 时进指纹的那一项
+    "open_guji_cv.books.shiji_wyg.jiazhu_step": ("941e17d3b4de9157f37c8515f28ba8f3ae681c076bc97fb121d9c690bf5af0a0", (
+        ("guji_book.shiji_wyg.jiazhu_step", "941e17d3b4de9157f37c8515f28ba8f3ae681c076bc97fb121d9c690bf5af0a0"),
+        ("guji_book.shiji_wyg.seal_ink", "ddfdec934a1f07f81a14ab0a0083a6aefc272d8055aff9942b30c23d9f826a25"))),
 }
 
 

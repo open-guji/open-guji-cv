@@ -6,6 +6,25 @@
 ## [未发版]
 
 - seed_admit 两个书级开关，缺省关、关时逐字节不变、不进参数 dump，code_equiv 已登记：`group_flow_pair_shape_nm_5b`（匹配器护栏 never_match 的待审格，5-b 首位落在两字对里也交 `group_flow_pair_shapes` 刻形判；全唐文 001–003 目录页 王 50 格看图全对，5-b 首位是土的那格挡掉）、`solo_cal_5b_canon`（solo_cal 5-b 档按本书码位表归一后比，5-b 给 慎、库给 愼 算一致；愼 5、吕 2 格）。形近字线 11-10。
+- strokes 差一笔「学门槛」：`verify_learned`（多出那一笔的独占率、落墨率按本书两字刻例类中心判）、`extra_feats`、`bad_fit`。多出那一笔与别的笔交叉的组（木本、目自、十士）固定门槛弃权太多，殿本库留一 木本 弃权 99→2。不被 Step 引用，产物不变。
+- republish：book-text 遇增删格／改号改调 guji-manager `swap.booktext`（按新旧 cord 框的格级对照表判字、挪标点专名、守卫），swap run 不再因增删格报 need-A33；proof_cycle 格号变了时不按格号退回「推翻人裁」；换文文本线升 patch（ZM 11-10）。
+
+## [0.7.1] - 2026-11-10
+
+- 发版说明（A20 11-10，SJ 要）：从 dev f666f3d 切，只多 #1378（书级代码第 4 步代码等价，row_segment 指纹回到 v0.6.39，v0.7.0 判的 row_segment 过期撤销）。
+- PATCH 登记书级代码第 4 步（#1375）的代码等价：`row_segment`、`impl/keben/row_boundaries`、`impl/keben/jiazhu_step` 进 ENTRIES，新 code_dep `seal_ink` 进 SPLITS（缺省实现合回 jiazhu_step；史記书仓 k2 的 jiazhu_step＋seal_ink 合回 k1 那一项）。殿本／北行／幼學／全唐文与史記（配书仓 k2）的 row_segment `code_hash` 与 v0.6.39 逐位相同，**v0.7.0 起判的 row_segment 过期撤销**。证据：SJ 11-10 史記 02、05 册 10 页产物逐字节相同；缺省钩子分支是删开关后的原路径。
+
+## [0.7.0] - 2026-11-10
+
+- **MINOR**（用户 11-04、11-09 定）书级代码系列收尾＋模型文件搬出 git，见 RELEASES.md v0.7.0。从 dev 1bb3d44 切。
+- 书级代码第 4 步（cv #1375，Sheldon 11-10 选「先搬自成一块的，其余留着」）：`row_segment` 删开关 `seal_inkcut`／`seal_gap_slots_empty`／`jiazhu_free_split`／`jiazhu_step_split`，改成书级钩子 `impl/keben/seal_ink`（新）、`impl/keben/jiazhu_step.free_split`（缺省什么都不做），实现搬进史記书仓 `code/`（k2，书仓 PR #1）。书配置写 true 而工作区 `code/` 没覆盖对应钩子就拒跑（`row_segment._RETIRED`）。`row_segment`（及 `row_boundaries`、`jiazhu_step`、`seal_ink`）`code_hash` 变：**各书 row_segment 起过期**（殿本等切法逐字不变）。其余单书开关冻结留 cv（`doc/design/书级代码.md`）。
+- 模型文件搬出 git（用户 11-04 定，`doc/design/模型系统.md` 4.2 第 1 条）：`models/` 下 11 个文件 `git rm --cached`、`.gitignore` 忽略 `models/**`（留 README）。真源 R2，按 `config/model-registry.json` 取回：`guji model fetch`、`guji pipeline` 起跑前、测试开跑前、`install_release.py` 装完都自动取（**执行方要有 `GUJI_DATA_TOKEN` 或 `_READ`**，首跑约下 50 MB）。删前核过：表里 87 项 R2 全有，取回与原文件逐字节相同。模型内容不变，不影响指纹。
+
+## [0.6.39] - 2026-11-10
+
+- PATCH（A31 11-10，sheldon 定）`republish.py push／edit-cell／add-alt／add-sprites --sync` 触发网站 proofing-sync 时带 `only=<书>/<章>`（原先 push 等没设 publish_only，整站发布，整站冒烟要好几分钟）。L0（只改发布触发）。
+
+- `human_chars`：人裁因现格字块图拿不到没法认格时，每册 ≤ 20 条默认放行（记 warning，事件不删），超过 20 条才报错拦下；`GUJI_ALLOW_LOST_HUMAN=1` 仍可无上限放行（PATCH，ZM-殿本二册 11-10，sheldon 定）。只改报错路径，产物不变；`lookup.py` 若在某步 `code_deps` 里，该步指纹会变，需要时用 `scripts/code_equiv.py` 登记。
 
 ## [0.6.38] - 2026-11-10
 

@@ -177,3 +177,22 @@ def test_far_search_only_when_nothing_near():
     t = tpl("玉", YU)
     assert verify_extra(register(draw(far), t, RegParams(pin=(4,))), 4)[0] != "more"
     assert verify_extra(register(draw(far), t, RegParams(pin=(4,), pin_search_far=0.25)), 4)[0] == "more"
+
+
+MU = [("横", [(35, 12), (35, 88)]), ("竖", [(8, 50), (92, 50)]), ("撇", [(38, 47), (80, 15)]), ("点", [(38, 53), (80, 85)])]
+BEN = MU + [("横", [(72, 32), (72, 68)])]
+
+
+def test_verify_learned_crossing_stroke():
+    """本 的底横穿过竖，独占率天然偏低，固定门槛弃权；按本书刻例学门槛判得出（木本）。"""
+    from open_guji_cv.strokes import extra_feats, verify_learned
+    t = tpl("本", BEN)
+    plan = plan_pair(tpl("木", MU), t)
+    assert (plan.kind, plan.more, plan.stroke) == ("verify", "本", 4)
+    P = RegParams(pin=(plan.stroke,))
+    X = {c: [extra_feats(register(draw(s, jitter=1.0, seed=k), t, P), plan.stroke) for k in range(5)]
+         for c, s in (("木", MU), ("本", BEN))}
+    st = ClassStats.from_samples(X)
+    for c, s in (("木", MU), ("本", BEN)):
+        got, _ = verify_learned(register(draw(s, jitter=1.0, seed=42), t, P), plan.stroke, st)
+        assert got == c
