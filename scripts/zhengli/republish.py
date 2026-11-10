@@ -1667,9 +1667,9 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
         stale_doc, others = punct_stale_update(cur, _char_cells(old_char), _char_cells(new_char),
                                                volume=int(ch), base_commit=head, base_text_version=tv)
-        if others:
-            sys.exit("✗ 本轮有增删字（标点锚点会错位，不能走待重标清单）：" + "、".join(others[:12])
-                     + "\n  把改字推到分支 a32-<册号>-<主题>，通知 A33 在分支上重标，不要推 dev")
+        if others:      # 有增删字（一边是空）：同样按格级对照表走（ZM 11-10 单一路径），不再推分支等 A33
+            print("ⓘ 本轮有增删字，按格级对照表落 book-text：" + "、".join(others[:12]))
+            return _bump_book_text_cellmap(repo, plan, note, base)
     for t in ("char", "cord", "norm"):
         src = Path(plan["export_dir"]) / f"{ch}.{t}.json"
         if src.exists() and t == "cord":
@@ -1722,7 +1722,7 @@ def _structure_changed(old_char: Path, new_char: Path) -> bool:
 def _bump_book_text_cellmap(repo: Path, plan: dict, note: str, base: str) -> str:
     """格号变了（增删格、改号）：交 guji-manager `swap.booktext.remap_in_repo` 按格级对照表（新旧 cord 框 IoU）落 book-text——
     逐块图判字（□ 不覆盖现字、待审保持现字、改出重复字回退）、按表挪标点专名、守卫（专名挂法与条数、标点条数不变）。
-    不再按格号比、不再走待重标清单，也不再报 need-A33（守卫不过才报）。ZM 11-10，sheldon 同意。"""
+    不再按格号比、不再走待重标清单；守卫不过时 auto_cycle 报 guard-stop。ZM 11-10，sheldon 同意。"""
     try:
         from guji_manager.swap.booktext import remap_in_repo
     except ImportError:

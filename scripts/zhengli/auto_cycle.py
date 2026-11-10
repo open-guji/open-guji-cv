@@ -156,10 +156,12 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str) -> di
     out = ap.stdout + ap.stderr
     (plan_path.parent / "apply.out").write_text(out, encoding="utf-8")
     if ap.returncode and re.search(r"book-text.{0,8}这步失败|工作区有未提交的改动", out):
-        # 本地检查没过（多半是标点／实体锚点在新切分里不存在）：线上单还没换（这步在推库之前）；清掉未提交的升版改动，交 A33
+        # book-text 这步没过（格级对照表守卫拦下、或本地检查不过）：线上单还没换（这步在推库之前）；清掉未提交的改动。
+        # 切坏的（框对不上）交切分线重出包，切分没错、锚点挪不了的交 A33；修好后 `guji swap book-text --books <册> --push --sheet` 补落文本、补推单
         subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
         subprocess.run(["git", "clean", "-fdq", "--", "Book"], cwd=book_text)      # 待重标清单 NNN.punct-stale.json 是未跟踪文件，不清会混进下一册的提交
-        return {"verdict": "need-A33", "why": "book-text 本地检查不过（锚点落空等），线上单未换；交 A33 走 punct_redo／分支 PR",
+        return {"verdict": "guard-stop", "why": "book-text 守卫／本地检查不过，线上单未换；看 apply.out 与对照表，"
+                "切坏交切分线、锚点交 A33，修好后 guji swap book-text --sheet",
                 "log": str(log)}
     if ap.returncode:
         subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
