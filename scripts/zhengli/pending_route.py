@@ -11,6 +11,7 @@
   团队单 页在 --team-pages 里，或 --page-types 里不是 body 的页（非正文只给团队，用户 10-20 定）。
   公众单 其余。
   不扣   带 `recheck: true` 的格（pending_list --recheck 放回来的复审格，本来就是要人推翻或重定的）；
+         例外：给了 `--recheck-since`，该时刻之后有了人裁的复审格照扣（用户已答复）；
          --keep 名单上的格照旧留在单上（republish.py from-pack 传：人裁按锚框绑到了别的格或绑不上，
          原格号上的人裁不能算这一格定了字）。
   回流单 同一 (pending_reason, why) 的格 ≥ --reflow-min（缺省 20）：成片的问题先交 M7／M9／CV 修，不逐格审（设计 GUJI-543 §4.2）。
@@ -118,12 +119,18 @@ def page_of(cell: str) -> int:
     return int(cell.split(":", 1)[0])
 
 
-def route(pending: dict, decided: dict, team_pages: set[int], reflow_min: int, reflow_hold: bool) -> dict:
+def route(pending: dict, decided: dict, team_pages: set[int], reflow_min: int, reflow_hold: bool,
+          recheck_since: str = "") -> dict:
+    """``recheck_since``（UTC ISO，缺省空＝复审格一律不扣）：复审格在这个时刻之后有了人裁，就算用户已经答复，照样扣掉。
+    republish 传「线上旧单的 routed_as_of」——复审格放上线之后用户投的票，不该在下一版单上再出现（2026-11-10，用户指出）。"""
     cells = pending.get("cells", [])
     kept, dropped = [], []
     for c in cells:
         stale_ts = str((c.get("stale") or {}).get("ts") or "")
-        hits = [] if c.get("recheck") else [h for h in decided.get(c["cell"], []) if h[0] > stale_ts]
+        if c.get("recheck"):
+            hits = [h for h in decided.get(c["cell"], []) if h[0] > recheck_since] if recheck_since else []
+        else:
+            hits = [h for h in decided.get(c["cell"], []) if h[0] > stale_ts]
         (dropped if hits else kept).append(c)
     groups = Counter((_reason(c), tuple(c.get("why") or ())) for c in kept)
     # 「other／none」是「机器没把握」的兜底，不是同一个原因，不进回流单
@@ -147,6 +154,8 @@ def main(argv=None) -> int:
     ap.add_argument("--as-of", default=None, help="只认这个时刻（UTC ISO）之前的事件；缺省现在")
     ap.add_argument("--team-pages", default="", help="只给团队的页，如 89-132,196")
     ap.add_argument("--page-types", type=Path, default=None, help="{页: 页型} JSON；不是 body 的页进团队单")
+    ap.add_argument("--recheck-since", default="",
+                    help="复审格（recheck:true）在这个时刻（UTC ISO）之后有了人裁就扣掉；缺省不扣（republish 传线上旧单的 routed_as_of）")
     ap.add_argument("--reflow-min", type=int, default=20)
     ap.add_argument("--reflow-hold", action="store_true", help="回流单上的格不进公众单、团队单")
     ap.add_argument("--db-rev", default=None, help="分流时中心库的 rev，写进两张单的 based_on_db_rev")
@@ -164,7 +173,7 @@ def main(argv=None) -> int:
     if a.keep:
         for line in a.keep.read_text(encoding="utf-8").split():
             decided.pop(line.removeprefix(f"{a.book}:"), None)
-    res = route(pending, decided, team_pages, a.reflow_min, a.reflow_hold)
+    res = route(pending, decided, team_pages, a.reflow_min, a.reflow_hold, a.recheck_since or "")
 
     stem = re.sub(r"(\.pending)?\.json$", "", a.pending.name)
     a.out.mkdir(parents=True, exist_ok=True)
