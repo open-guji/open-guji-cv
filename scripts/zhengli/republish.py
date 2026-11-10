@@ -30,6 +30,8 @@ rev 自己数、差异没人看。本脚本分两步，中间停下等人看差�
   python scripts/zhengli/republish.py prep --book vol06 -w $WS --export-dir $WS/reports/vol06/_export [--recheck <复审清单>]
   python scripts/zhengli/republish.py push --book vol06 -w $WS --rev 006-r3 --yes [--sync] [--book-text <book-text 仓>]
   python scripts/zhengli/republish.py add-alt --book vol05 -w $WS [--yes --sync]   # 线上单漏了相似字：原地补，不换 rev
+  python scripts/zhengli/republish.py edit-cell --book vol05 -w $WS --withdraw 12:3:4 [--restore …] [--note 12:3:5=说明] --why … [--yes --sync]
+                                                                      # 单格原地撤下／放回／改说明，不换 rev
   python scripts/zhengli/republish.py add-sprites --book vol05 -w $WS --export-dir <cord 所在目录> [--yes --sync]
                                                                       # 线上单的雪碧图没上 R2：重建、核坐标不变、传 R2、原地补 sprites[]
 一条命令（M10 复盘第 3 项）：出单、过门、传图、推库、只发这一章、等网站发布、冒烟，一次做完：
@@ -841,6 +843,14 @@ def cmd_push(a) -> int:
         bak = out / f"online.{json.loads(online.read_text(encoding='utf-8')).get('rev')}.pending.json"
         shutil.copyfile(online, bak)
         print(f"旧单备份 → {bak}")
+    if online.exists():                                          # 上一版单格撤下的格，换单后照旧撤下（edit-cell，sheldon 11-10）
+        prev = json.loads(online.read_text(encoding="utf-8"))
+        carry = [c["cell"] for c in prev.get("withdrawn") or [] if c.get("cell")]
+        if carry:
+            nd = json.loads(Path(plan["pending"]).read_text(encoding="utf-8"))
+            r = edit_cells(nd, withdraw=carry, by="carry", why=f"沿用 {prev.get('rev')} 撤下")
+            Path(plan["pending"]).write_text(json.dumps(nd, ensure_ascii=False), encoding="utf-8")
+            print(f"沿用上一版撤下 {len(r['撤'])} 格" + (f"（新单上已没有 {len(r['找不到'])} 格）" if r["找不到"] else ""))
     online.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(plan["pending"], online)
     print(f"新单 → {online}")
@@ -1107,6 +1117,102 @@ def cmd_from_pack(a) -> int:
     if rc == 0 and b["id_mismatch"]:
         print(f"ⓘ {len(b['id_mismatch'])} 格人裁绑到了别的格或绑不上，照旧留在单上（差异单「人裁合并」一节）")
     return rc
+
+
+def edit_cells(doc: dict, *, withdraw=(), restore=(), notes=None, by: str = "", why: str = "",
+               at: str | None = None) -> dict:
+    """线上单单格原地改（不换 rev，sheldon 11-10）：撤下、放回、改说明。纯函数，原地改 doc，返回 {撤, 放回, 改说明, 找不到}。
+
+    - 撤下：格从 `cells[]` 挪到 `withdrawn[]`（带 `withdrawn: {by, at, why}`），网站不再显示；图仍在 `sprites[]`，可放回。
+    - 放回：从 `withdrawn[]` 挪回 `cells[]`（只能放回本 rev 撤下的格：图只出过这些格）。
+    - 改说明：改该格 `note`（网站卡片头上显示）；空串＝删掉说明。
+    每次操作记进 `edits[]`（{op, cell, by, at, why}），可追溯。加一个单上从没有过的格要出图，得换 rev（republish prep/issue）。"""
+    import datetime as _dt
+    at = at or _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cells = doc.setdefault("cells", [])
+    gone = doc.setdefault("withdrawn", [])
+    log = doc.setdefault("edits", [])
+    out = {"撤": [], "放回": [], "改说明": [], "找不到": []}
+
+    def norm(x):
+        return str(x).split(":", 1)[1] if str(x).count(":") == 3 else str(x)
+
+    for x in map(norm, withdraw):
+        hit = [c for c in cells if c.get("cell") == x]
+        if not hit:
+            out["找不到"].append(x)
+            continue
+        for c in hit:
+            cells.remove(c)
+            c["withdrawn"] = {"by": by, "at": at, "why": why}
+            gone.append(c)
+        out["撤"].append(x)
+        log.append({"op": "withdraw", "cell": x, "by": by, "at": at, "why": why})
+    for x in map(norm, restore):
+        hit = [c for c in gone if c.get("cell") == x]
+        if not hit:
+            out["找不到"].append(x)
+            continue
+        for c in hit:
+            gone.remove(c)
+            c.pop("withdrawn", None)
+            cells.append(c)
+        out["放回"].append(x)
+        log.append({"op": "restore", "cell": x, "by": by, "at": at, "why": why})
+    for x, note in (notes or {}).items():
+        x = norm(x)
+        hit = [c for c in cells if c.get("cell") == x]
+        if not hit:
+            out["找不到"].append(x)
+            continue
+        for c in hit:
+            if note:
+                c["note"] = note
+            else:
+                c.pop("note", None)
+        out["改说明"].append(x)
+        log.append({"op": "note", "cell": x, "by": by, "at": at, "why": why, "note": note})
+    if not gone:
+        doc.pop("withdrawn")
+    return out
+
+
+def cmd_edit_cell(a) -> int:
+    """线上单单格原地改：撤下、放回、改说明，不换 rev、不动别的格，网站已投的票照旧有效。"""
+    ws, book = Path(a.workspace).resolve(), a.book
+    chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
+    online = proofing_path(ws, text_id, chapter)
+    doc = json.loads(online.read_text(encoding="utf-8"))
+    rev = doc.get("rev")
+    notes = {}
+    for kv in a.note or []:
+        if "=" not in kv:
+            sys.exit(f"✗ --note 写成 格号=说明：{kv}")
+        k, v = kv.split("=", 1)
+        notes[k.strip()] = v.strip()
+    res = edit_cells(doc, withdraw=a.withdraw or [], restore=a.restore or [], notes=notes,
+                     by=a.by or os.environ.get("GUJI_ACTOR", ""), why=a.why or "")
+    votes = web_votes(ws, text_id, rev)
+    voted = [x for x in res["撤"] if votes.get(x)]
+    print(f"{book} {rev}：撤下 {len(res['撤'])}、放回 {len(res['放回'])}、改说明 {len(res['改说明'])}"
+          + (f"；找不到 {len(res['找不到'])}：{' '.join(res['找不到'][:20])}" if res["找不到"] else "")
+          + (f"\n⚠ 撤下的格里 {len(voted)} 格已有票（{' '.join(voted[:20])}）：票还在，换单前照常落票" if voted else ""))
+    if not (res["撤"] or res["放回"] or res["改说明"]):
+        return 1
+    out = Path(a.out) if a.out else ws / "reports" / book / "_publish" / f"{rev}-edit"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / f"{chapter}.pending.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    if not a.yes:
+        print(f"改好的单 → {out / f'{chapter}.pending.json'}；确认后加 --yes 写回数据目录")
+        return 0
+    shutil.copyfile(online, out / f"online.{rev}.pending.json")
+    shutil.copyfile(out / f"{chapter}.pending.json", online)
+    print(f"已写回 {online}")
+    if a.sync:
+        sync_and_publish(a, ws)
+    else:
+        print(f"还要：guji db sync -w {ws}；加 --sync 会顺带触发网站 proofing-sync（publish）")
+    return 0
 
 
 def cmd_add_alt(a) -> int:
@@ -1502,6 +1608,20 @@ def cmd_add_sprites(a) -> int:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
+    p = sp.add_parser("edit-cell", help="线上单单格原地改：撤下、放回、改说明（不换 rev）")
+    p.add_argument("--book", required=True)
+    p.add_argument("-w", "--workspace", required=True)
+    p.add_argument("--withdraw", nargs="+", metavar="格号", help="撤下这些格（页:列:格，可带「册:」）")
+    p.add_argument("--restore", nargs="+", metavar="格号", help="放回本 rev 撤下过的格")
+    p.add_argument("--note", nargs="+", metavar="格号=说明", help="改卡片头说明；说明空＝删掉")
+    p.add_argument("--why", help="为什么改（记进 edits[]）")
+    p.add_argument("--by", help="谁改的（缺省 GUJI_ACTOR）")
+    p.add_argument("--chapter")
+    p.add_argument("--text-id")
+    p.add_argument("--out")
+    p.add_argument("--yes", action="store_true", help="写回数据目录")
+    p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
+    p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
     p = sp.add_parser("add-alt", help="线上单原地补相似字（不换 rev）")
     p.add_argument("--book", required=True)
     p.add_argument("-w", "--workspace", required=True)
@@ -1589,7 +1709,7 @@ def main(argv=None) -> int:
     if a.cmd == "issue" and not a.label and not a.export_dir:
         ap.error("issue 要 --label（产物包）或 --export-dir（已导出的 char／cord）")
     return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "issue": cmd_issue,
-            "add-alt": cmd_add_alt, "add-sprites": cmd_add_sprites}[a.cmd](a)
+            "add-alt": cmd_add_alt, "add-sprites": cmd_add_sprites, "edit-cell": cmd_edit_cell}[a.cmd](a)
 
 
 if __name__ == "__main__":
