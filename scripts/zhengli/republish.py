@@ -810,7 +810,7 @@ def cmd_push(a) -> int:
     elif a.sync:
         todo.append(f"guji products pack push {book} --label {pack_label(a.rev)}   # 出单版产物包，落票免重跑")
     if not a.book_text:
-        todo += [f"book-text：同一次导出（{plan['export_dir']}）的 char／cord／norm 用 bump_original.py --pr TBD 升版，提交到 dev（文本与单子要一起换）"]
+        todo += [f"book-text：同一次导出（{plan['export_dir']}）的 char／cord／norm 用 bump_original.py 升版，把它打印的「版本记录」行写进提交信息，提交到 dev（文本与单子要一起换）"]
     if not published:
         todo += ["网站别等每日定时（待审单 21:23 UTC 先于文本 21:43 UTC，每天差 20 分钟）：单子推了就手动跑 kaiyuanguji-web 的 "
                  "proofing-sync.yml（target=production、parts=publish、dry_run=false）；加 --sync 时本脚本自动触发"]
@@ -1278,8 +1278,8 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
     """同一次导出的 char／cord／norm 拷进 book-text 的 dev、文本线升 minor、本地校验（--dev），提交并推 dev。
     返回改动前 dev 的提交号（锚点漂移 A03 以它为基准）。
 
-    2026-10-24 用户定：流程化小改直接提交 dev，不开 PR；`index/texts` 不在 dev 上提交，CHANGES 的 PR 列写 #TBD，
-    每日合并（book-text `scripts/daily_merge.py`）时重建索引、换成当天合并 PR 的号。"""
+    2026-10-24 用户定：流程化小改直接提交 dev，不开 PR；`index/texts` 不在 dev 上提交，版本记录行写进提交信息（book-text 不再有 CHANGES.md），
+    每日合并（book-text `scripts/daily_merge.py`）时重建索引。"""
     book_text_to_dev(repo)
     base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
     d = book_text_dir(repo, plan["text_id"])
@@ -1319,15 +1319,20 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
             if run(cmd, cwd=repo).returncode:
                 sys.exit(f"✗ book-text 改字清单这步失败：{' '.join(map(str, cmd))}")
         stale_doc = None
+    records: list[str] = []          # bump_original 打印的「版本记录」行，原样写进提交信息（book-text 不再有 CHANGES.md）
     for cmd in ([sys.executable, "scripts/book-text/bump_original.py", d, "--line", "text", "--level", "minor",
-                 "--chapter", ch, "--note", note, "--pr", "TBD"],
+                 "--chapter", ch, "--note", note],
                 [sys.executable, "-c", "import sys; sys.path.insert(0, 'scripts'); import original_version as OV; "
                  "OV.sync_headings(sys.argv[1])", d],      # 标点有变，目录缓存 headings 跟着重算（F-OV-12）
                 [sys.executable, "scripts/local_check.py", "--dev"],
-                ["git", "add", "-A", str(d)],
-                ["git", "commit", "-qm", f"{note}"]):
-        if run(cmd, cwd=repo).returncode:
+                ["git", "add", "-A", str(d)]):
+        r = run(cmd, cwd=repo)
+        if r.returncode:
             sys.exit(f"✗ book-text 这步失败：{' '.join(map(str, cmd))}")
+        records += [ln.strip() for ln in (r.stdout or "").splitlines() if ln.startswith("版本记录:")]
+    cmd = ["git", "commit", "-qm", f"{note}" + ("\n\n" + "\n".join(records) if records else "")]
+    if run(cmd, cwd=repo).returncode:
+        sys.exit("✗ book-text 这步失败：git commit")
     if stale_doc:                           # 补每条的改字提交号（A33 格式要求），再单独提交一次
         h = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
         for i in stale_doc["items"]:
@@ -1338,7 +1343,7 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
             sys.exit("✗ book-text 补待重标清单提交号失败")
     if not push_book_text_dev(repo):
         sys.exit("✗ book-text 推 dev 失败（rebase 冲突或网络）：提交在本地 dev 上，处理后 git push origin HEAD:dev")
-    print("book-text 已提交并推到 dev：每日合并（洛杉矶 03:30）进 main，CHANGES 的 #TBD 届时换成 PR 号")
+    print("book-text 已提交并推到 dev：每日合并（洛杉矶 03:30）进 main")
     return base
 
 
@@ -1463,7 +1468,7 @@ def main(argv=None) -> int:
             p.add_argument("--recheck", help="复审清单（格号<TAB>说明<TAB>旧人裁 id<TAB>旧人裁的字）：这些格不论放没放行、"
                                              "人裁过没有都放回单上，网站卡片头上显示说明；cellvotes draft 的 recheck.tsv 可直接给")
         if name == "issue":
-            p.add_argument("--note", help="book-text CHANGES 一行的说明（给了 --book-text 才升版）")
+            p.add_argument("--note", help="book-text 版本记录一行的说明（给了 --book-text 才升版）")
             p.add_argument("--no-publish-web", action="store_true", help="不触发网站发布")
             p.add_argument("--no-wait", action="store_true", help="触发网站发布后不等、不冒烟")
             p.add_argument("--engine", help="产物是哪份 cv 跑的（钉住的旧版 worktree）：出单版产物包用它存，包里记它的版本")
@@ -1479,7 +1484,7 @@ def main(argv=None) -> int:
         if name == "push":
             p.add_argument("--yes", action="store_true", help="看过差异单、确认推")
             p.add_argument("--book-text", help="book-text 仓：拷同一次导出、文本线升 minor、提交到新分支")
-            p.add_argument("--note", help="book-text CHANGES 一行的说明")
+            p.add_argument("--note", help="book-text 版本记录一行的说明")
             p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库，并触发网站 proofing-sync")
             p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
             p.add_argument("--no-pack", action="store_true", help="--sync 时不存出单版产物包 rev-<rev>")
