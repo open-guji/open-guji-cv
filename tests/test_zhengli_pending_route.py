@@ -112,3 +112,20 @@ def test_recheck_cells_not_deducted(tmp_path):
     assert pr.main(["--pending", str(p), "--book", "vol06", "--events", str(e), "--out", str(out)]) == 0
     cells = json.loads((out / "006.pending.json").read_text(encoding="utf-8"))["cells"]
     assert [c["cell"] for c in cells] == ["83:5:9"] and cells[0]["note"] == "旧裁 山，新票 由"
+
+
+def test_recheck_since_deducts_newer_human_vote(tmp_path):
+    """给了 --recheck-since：复审格在该时刻之后有了人裁就扣；之前的旧裁不扣。"""
+    pending = {"rev": "006-r6", "cells": [{"cell": "83:5:9", "review": "pending", "recheck": True},
+                                          {"cell": "83:5:10", "review": "pending", "recheck": True}]}
+    p = tmp_path / "006.pending.json"
+    p.write_text(json.dumps(pending), encoding="utf-8")
+    e = tmp_path / "e.jsonl"
+    e.write_text("\n".join([json.dumps(ev("83:5:9", "confirm", "2026-10-20T00:00:00Z", shape="由", book="vol06")),
+                            json.dumps(ev("83:5:10", "confirm", "2026-10-01T00:00:00Z", shape="山", book="vol06"))]),
+                 encoding="utf-8")
+    out = tmp_path / "out"
+    assert pr.main(["--pending", str(p), "--book", "vol06", "--events", str(e), "--recheck-since", "2026-10-10T00:00:00Z",
+                    "--out", str(out)]) == 0
+    cells = json.loads((out / "006.pending.json").read_text(encoding="utf-8"))["cells"]
+    assert [c["cell"] for c in cells] == ["83:5:10"]

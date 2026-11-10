@@ -757,6 +757,8 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
            "--events", events, "--out", routed]
     if st.get("rev") is not None:
         cmd += ["--db-rev", str(st["rev"])]
+    if old and old.get("routed_as_of"):           # 复审格放上线之后用户投过票的，不再放回（2026-11-10）
+        cmd += ["--recheck-since", str(old["routed_as_of"])]
     if a.team_pages:
         cmd += ["--team-pages", a.team_pages]
     if a.page_types:
