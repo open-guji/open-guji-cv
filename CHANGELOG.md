@@ -5,6 +5,12 @@
 
 ## [未发版]
 
+## [0.7.5] - 2026-11-10
+
+- 发版说明（A31 11-10，史記 GUJI-750 要）：基于 v0.7.4 + #1403–#1406。PATCH。
+- seg_pins_check（#1403–#1406，SJ）：沙箱失败判不通过、补锚按旧绑定位置取框、缺切点裁判权重或字形库拒跑；沙箱模式也认 `--base-items` 当基线；老失锚不计入结论；补锚草稿已有锚行的事件原地替换（出 `anchors_merged.jsonl`），第四节补锚档 (event,key) 重复判不通过。只动 scripts/ 与 feedback/pins_check.py。
+- cell_shrink 人工定框列加书级开关 `manual_ink_fit`（#1405，A22，缺省关、关时逐字节不变，不进 dump；code_equiv 已登记）。
+
 ## [0.7.4] - 2026-11-10
 
 - 出单门：复审格旧人裁与现行字套码位归一后相同就不上单（#1397，ZM；pending_route --codepoints，republish 传本册表）。只动 scripts/，不改 Step code_hash。PATCH。
