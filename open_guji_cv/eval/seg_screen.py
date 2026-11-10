@@ -108,3 +108,87 @@ def layout_col_shift(page_cells, layout_rows: dict[int, dict]) -> dict | None:
 def pitch_free_ignored(col_cells, layout_row: dict | None) -> bool:
     return bool(layout_row and layout_row.get("pitch") == "free"
                 and any(str(f).startswith("layout_unmerge") for f in col_cells.flags))
+
+
+# ── F4③ 列端格只有框条（表说有字的端格也查）──────────────────────────────────
+
+FRAME_ONLY_NEAR = 0.2     # 端格里的墨全落在离上／下版框线这么多格高以内，且有一行够宽（≥ FRAME_ROW）＝ 只是框条
+FRAME_ONLY_SPECK = 0.08   # 墨宽 < 列宽这么多的行当霉点，不算（史記 04 p125、殿本 vol28 p102 都有）
+
+
+def edge_frame_only(gray: np.ndarray, col_cells, ink_threshold: int = 128) -> list[int]:
+    """物理首／末格（非 blank）里的墨只是版框线 → 返回这些格的 slot（P5 判据：这种格该记空）。
+
+    条件：格里有墨行（≥ FRAME_ONLY_SPECK 列宽，更窄的当霉点）；所有这些墨行离对应的版框线（`border_top`／`border_bottom`，列图坐标）
+    ≤ FRAME_ONLY_NEAR 格高；其中至少一行墨宽 ≥ FRAME_ROW。版框线没探到（None）的一端不查。
+    只看墨宽会把「一」「二」的长横当框线（殿本 vol28 量出 4 例），所以要贴着框线。"""
+    cells = sorted(col_cells.cells, key=lambda c: c.y0)
+    if not cells:
+        return []
+    h, w = gray.shape[:2]
+    x0, x1 = (int(col_cells.content_x[0]), int(col_cells.content_x[1])) if col_cells.content_x else (0, w)
+    x0, x1 = max(0, x0), min(w, max(x1, x0 + 1))
+    row = (gray[:, x0:x1] < ink_threshold).sum(axis=1) / (x1 - x0)
+    near = FRAME_ONLY_NEAR * (col_cells.period or 1.0)
+    out = []
+    for c, border in ((cells[0], col_cells.border_top), (cells[-1], col_cells.border_bottom)):
+        if c.kind == "blank" or border is None:
+            continue
+        a, b = max(0, int(c.y0)), min(h, int(c.y1))
+        ys = np.nonzero(row[a:b] >= FRAME_ONLY_SPECK)[0] + a
+        if len(ys) and np.abs(ys - border).max() <= near and row[ys].max() >= FRAME_ROW and c.slot not in out:
+            out.append(c.slot)
+    return out
+
+
+# ── ②c 一页多列格位表回退（QTW 11-10 验收：表整页错一列时，错的列都打 layout_off／layout_unmerge 退回几何切，
+#        格号不从墨来，②b 比格号集合抓不到）──────────────────────────────────────────
+
+LAYOUT_FALLBACK_TAGS = ("layout_off", "layout_unmerge")
+LAYOUT_FALLBACK_MIN = 2   # 一页这么多列退回才报
+
+
+def layout_fallback_cols(page_cells) -> list[int]:
+    """本页打了表回退旗（layout_off／layout_unmerge）的列号；不到 LAYOUT_FALLBACK_MIN 列返回空。"""
+    cols = [cc.col for cc in page_cells.columns
+            if any(str(f).startswith(LAYOUT_FALLBACK_TAGS) for f in (cc.flags or []))]
+    return cols if len(cols) >= LAYOUT_FALLBACK_MIN else []
+
+
+# ── ①b 外框到页边距离离群（QTW 11-10 验收：006 p153 右版框没印出，列网整体挪一列、末列落在版心条，
+#        各列宽都正常，宽度比看不出）──────────────────────────────────────────────
+
+MARGIN_DEV = 0.8          # 外框线到本页左／右边的距离，与本册同奇偶页的中位差 > 这么多列宽才报
+
+
+def frame_margins(borders) -> dict | None:
+    """一页边框结果 → {right, left, pitch}：最右、最左界行在版框中高处到页右、左边的距离（px）与中位列宽。
+
+    边框坐标原点在页右上角、x 向左（`seg/frame_types`），所以 x 最小的是最右那条。
+    `borders` 可以是产物 `Borders`（有 `to_result`）或 `BorderDetectionResult`。"""
+    if hasattr(borders, "to_result"):
+        borders = borders.to_result()
+    v = getattr(borders, "verticals", None) or []
+    if len(v) < 3:
+        return None
+    ym = (borders.top.y_at(borders.width / 2) + borders.bottom.y_at(borders.width / 2)) / 2
+    xs = sorted(float(line.x_at(ym)) for line in v)
+    return {"right": xs[0], "left": borders.width - xs[-1], "pitch": float(np.median(np.diff(xs)))}
+
+
+def margin_outliers(margins: dict[int, dict]) -> list[dict]:
+    """{页: frame_margins} → 离群页：左或右距离与同奇偶页中位差 > MARGIN_DEV × 中位列宽。"""
+    out = []
+    for parity in (0, 1):
+        pages = {p: m for p, m in margins.items() if m and p % 2 == parity}
+        if len(pages) < 5:
+            continue
+        med = {s: float(np.median([m[s] for m in pages.values()])) for s in ("left", "right")}
+        pitch = float(np.median([m["pitch"] for m in pages.values()]))
+        for p, m in sorted(pages.items()):
+            dev = {s: m[s] - med[s] for s in ("left", "right")}
+            side = max(dev, key=lambda s: abs(dev[s]))
+            if abs(dev[side]) > MARGIN_DEV * pitch:
+                out.append({"page": p, "side": side, "dev": round(dev[side] / pitch, 2),
+                            "dist": round(m[side]), "median": round(med[side])})
+    return out

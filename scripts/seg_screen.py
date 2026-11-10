@@ -8,7 +8,8 @@
     python scripts/seg_screen.py --books 04 06 --out <报告目录>
     python scripts/seg_screen.py --books 001 002 --seal-blank     # 加 F8：列出 seed_admit 会按印框记空的格（要原图）
 
-输出：每项一张 TSV（edge_ink.tsv、colnet_page.tsv、layout_col_shift.tsv、pitch_free_ignored.tsv、seal_blank.tsv）
+输出：每项一张 TSV（edge_ink、edge_frame_only、colnet_page、frame_margin、layout_col_shift、layout_fallback、
+pitch_free_ignored、seal_blank）
 和 summary.md（逐册计数）。要看图就把 TSV 交 `guji-manager review-pages build`。
 格位表取本册 row_segment 的 `layout_prior` 参数（册配置里写的那份）；没开的册跳过 ②b 与 F7。
 """
@@ -21,7 +22,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-CHECKS = ("edge_ink", "colnet_page", "layout_col_shift", "pitch_free_ignored", "seal_blank")
+CHECKS = ("edge_ink", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
+          "pitch_free_ignored", "seal_blank")
 
 
 def _engine(book: str):
@@ -51,8 +53,12 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             print(f"⚠️ {book}：{e}，跳过 ②b／F7", file=sys.stderr)
     keys = sorted(p.stem for p in store.step_dir(book, "row_segment").glob("p[0-9]*.json"))
     c = counts.setdefault(book, {k: 0 for k in CHECKS} | {"pages": 0})
+    margins = {}
     for key in keys:
         page = int(key[1:])
+        b = store.read(book, "border_detect", key, "borders")      # 中位要全册算，先于 --pages 过滤
+        if b is not None:
+            margins[page] = ss.frame_margins(b)
         if pages and page not in pages:
             continue
         cells = store.read(book, "row_segment", key, "cells")
@@ -64,6 +70,10 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             for hit in ss.colnet_page(gate):
                 rows["colnet_page"].append((book, page, hit["col"], hit["ratio"], f"带宽 {hit['width']}px"))
             c["colnet_page"] += bool(ss.colnet_page(gate))
+        fb = ss.layout_fallback_cols(cells)
+        if fb:
+            rows["layout_fallback"].append((book, page, ",".join(map(str, fb)), len(fb), "格位表回退几何切的列"))
+            c["layout_fallback"] += 1
         lay_page = {col: r for (pg, col), r in layout.items() if pg == page}
         sh = ss.layout_col_shift(cells, lay_page)
         if sh:
@@ -84,6 +94,9 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             gray = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
             if gray is None:
                 continue
+            for slot in ss.edge_frame_only(gray, cc):
+                rows["edge_frame_only"].append((book, page, cc.col, slot, "端格里只有版框线"))
+                c["edge_frame_only"] += 1
             e = ss.edge_ink(gray, cc)
             if e:
                 rows["edge_ink"].append((book, page, cc.col, max(e["top"], e["bottom"]),
@@ -95,6 +108,17 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             for (col, slot, sub), info in sorted(page_seal_blank(ctx, page, ctx.params_for(SeedAdmitStep())).items()):
                 rows["seal_blank"].append((book, page, col, f"{slot}{sub}", str(info)[:80]))
                 c["seal_blank"] += 1
+    _margins_done(book, margins, rows, c, pages)
+
+
+def _margins_done(book, margins, rows, c, pages):
+    from open_guji_cv.eval import seg_screen as ss
+    for h in ss.margin_outliers(margins):
+        if pages and h["page"] not in pages:
+            continue
+        rows["frame_margin"].append((book, h["page"], h["side"], h["dev"],
+                                     f"外框到页边 {h['dist']}px，同奇偶页中位 {h['median']}px"))
+        c["frame_margin"] += 1
 
 
 def main(argv=None) -> int:
@@ -121,7 +145,7 @@ def main(argv=None) -> int:
     lines = ["# 切分筛查", "", "| " + " | ".join(hdr) + " |", "|" + " --- |" * len(hdr)]
     for b, c in counts.items():
         lines.append("| " + " | ".join([b, str(c["pages"]), *[str(c[k]) for k in hdr[2:]]]) + " |")
-    lines += ["", "edge_ink、pitch_free_ignored 按列计；colnet_page、layout_col_shift 按页计；seal_blank 按格计。"]
+    lines += ["", "edge_ink、pitch_free_ignored 按列计；colnet_page、frame_margin、layout_col_shift、layout_fallback 按页计；edge_frame_only、seal_blank 按格计。"]
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
     return 0

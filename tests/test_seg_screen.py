@@ -77,3 +77,51 @@ def test_pitch_free_ignored():
     assert ss.pitch_free_ignored(cc, {"pitch": "free"})
     assert not ss.pitch_free_ignored(cc, {"slots": [1]})
     assert not ss.pitch_free_ignored(_col(1, [1]), {"pitch": "free"})
+
+
+def test_edge_frame_only():
+    cc = _col(1, [1, 2, 3])                   # 格 100–400，下版框线在 480
+    cc.border_bottom = 400.0
+    g = _img(500)
+    g[392:398, 5:95] = 0                      # 末格里只有贴着下框的粗横线
+    g[350:351, 50:52] = 0                     # 霉点不算
+    assert ss.edge_frame_only(g, cc) == [3]
+    g[330:340, 20:80] = 0                     # 格中间的「一」：离框线远 → 是字
+    assert ss.edge_frame_only(g, cc) == []
+
+
+def test_edge_frame_only_skips_blank_and_unknown_border():
+    cc = _col(1, [1, 2, 3], kinds={3: "blank"})
+    cc.border_bottom = 400.0
+    g = _img(500)
+    g[392:398, 5:95] = 0
+    assert ss.edge_frame_only(g, cc) == []
+    cc2 = _col(1, [1, 2, 3])
+    cc2.border_bottom = None
+    assert ss.edge_frame_only(g, cc2) == []
+
+
+def test_layout_fallback_cols():
+    page = PageCells(page=5, period=100.0, ref_w=200.0, columns=[
+        _col(1, [1], flags=["layout_off：坏格…"]), _col(2, [1]), _col(3, [1], flags=["layout_unmerge（layout）：…"])])
+    assert ss.layout_fallback_cols(page) == [1, 3]
+    page.columns[2].flags = []
+    assert ss.layout_fallback_cols(page) == []
+
+
+def _borders(right, left, width=1000, n=6, pitch=100.0):
+    from open_guji_cv.seg.frame_types import BorderDetectionResult, HLine, VLine
+    xs = [right + i * pitch for i in range(n)]
+    xs[-1] = width - left
+    return BorderDetectionResult(width=width, height=800, top=HLine(y_at_right=50.0, slope=0.0, kind="top"),
+                                 bottom=HLine(y_at_right=750.0, slope=0.0, kind="bottom"),
+                                 verticals=[VLine(x_at_top=x, slope=0.0) for x in xs])
+
+
+def test_margin_outliers():
+    m = {p: ss.frame_margins(_borders(200, 300)) for p in range(2, 22, 2)}
+    assert m[2]["right"] == 200 and m[2]["left"] == 300
+    assert ss.margin_outliers(m) == []
+    m[8] = ss.frame_margins(_borders(320, 300))      # 右框没印出、整网左挪一列多
+    hits = ss.margin_outliers(m)
+    assert [(h["page"], h["side"]) for h in hits] == [(8, "right")]
