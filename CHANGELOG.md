@@ -5,7 +5,7 @@
 
 ## [未发版]
 
-## [0.6.34] - 测试中
+## [0.6.34] - 2026-11-10
 
 - PATCH（A31 11-10，用户定删 book-text 各书 CHANGES.md）`scripts/zhengli/republish.py` 的 `bump_book_text` 不再传 `--pr TBD`，改收 bump_original 打印的「版本记录」行写进 book-text 提交信息。与 manager、book-text 同名 PR 配套。L0。
 
