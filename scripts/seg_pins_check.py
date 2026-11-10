@@ -40,7 +40,7 @@ def main(argv=None) -> int:
     ap.add_argument("--book", required=True, help="册号（book id）")
     ap.add_argument("--items", help="新 manual-cells items.jsonl（沙箱模式：要推的那份）")
     ap.add_argument("--no-run", action="store_true", help="不沙箱重跑：新钉子已在本机分片、本机已重跑")
-    ap.add_argument("--base-items", help="--no-run 时：改钉子之前的分片（与本机现行分片比出改动列）")
+    ap.add_argument("--base-items", help="改钉子之前的分片：--no-run 时与本机现行分片比；沙箱模式下替代本机分片当基线")
     ap.add_argument("--old-products", help="--no-run 时：旧切分的产物根（出补锚草稿用）")
     ap.add_argument("--pages", help="直接点名页（逗号分隔），盖过按改动算出的页")
     ap.add_argument("--out", default="seg_pins_check_out", help="报告目录")
@@ -65,7 +65,8 @@ def main(argv=None) -> int:
         old = pc.pins_of(pc.read_items(Path(a.base_items)), book) if a.base_items else None
     else:
         new_file = Path(a.items)
-        old = pc.pins_of(pc.read_items(shard), book)
+        # 基线：给了 --base-items 就用它（本机分片已经推过新钉子时，拿推之前那份比），否则本机分片
+        old = pc.pins_of(pc.read_items(Path(a.base_items) if a.base_items else shard), book)
     fmt = check_manual_cells(new_file) if new_file.exists() else [f"{new_file} 不存在"]
     new = pc.pins_of(pc.read_items(new_file), book)
     changed = pc.diff_pins(old, new) if old is not None else {k: "pinned" for k in new}
