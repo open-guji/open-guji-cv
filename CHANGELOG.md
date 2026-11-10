@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- PATCH（A31 11-10，用户定删 book-text 各书 CHANGES.md）`scripts/zhengli/republish.py` 的 `bump_book_text` 不再传 `--pr TBD`，改收 bump_original 打印的「版本记录」行写进 book-text 提交信息。与 manager、book-text 同名 PR 配套。L0。
+
 - PATCH（A31 11-09，SJ 反映史記 r20 manifest 的 manager_version 为空）`core/contract.manager_version()` 在没设 `GUJI_MANAGER_VERSION` 时取已装 guji-manager 的版本（`m<版本>`，与 manager 子进程口径一致），没装仍为 None。只供审计，不进指纹，L0。
 
 ## [0.6.33] - 2026-11-09
