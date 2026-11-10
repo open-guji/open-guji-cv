@@ -130,7 +130,7 @@ def sh(cmd, tries: int = 3, **kw) -> subprocess.CompletedProcess:
     return r
 
 
-def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str) -> dict:
+def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_unlanded: str = "") -> dict:
     env = {**os.environ, "GUJI_WORKSPACE": str(ws), "PYTHONIOENCODING": "utf-8"}
     label, rev = d["main"], d["online_rev"]
     man = pc.pack_info(ws, book, label)
@@ -151,7 +151,8 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str) -> di
         return {"verdict": "blocked", "why": f"plan 之后没有产物沙箱 {sandbox}"}
     ap = sh([sys.executable, HERE / "proof_cycle.py", "apply", "--book", book, "-w", str(ws),
              "--plan", str(plan_path), "--hash", plan["hash"], "--book-text", str(book_text),
-             "--reuse-products", str(sandbox), "--no-web"], cwd=CV, env=env)
+             "--reuse-products", str(sandbox), "--no-web",
+             *(["--ack-unlanded-votes", ack_unlanded] if ack_unlanded else [])], cwd=CV, env=env)
     log = plan_path.parent / "执行记录.md"
     out = ap.stdout + ap.stderr
     (plan_path.parent / "apply.out").write_text(out, encoding="utf-8")
@@ -201,6 +202,8 @@ def main(argv=None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="同 --only-decide")
     ap.add_argument("--max", type=int, default=0, help="最多重出几册（试跑用）")
     ap.add_argument("--no-publish", action="store_true", help="最后不统一发网站")
+    ap.add_argument("--ack-unlanded-votes", default="", metavar="原因",
+                    help="旧单上的票没落完也照换（写明原因），原样交给 proof_cycle apply → republish issue；swap run 透传")
     a = ap.parse_args(argv)
     from ensure_manager import ensure as _ensure_manager  # 搬去 manager 的命令要它（拆分 P2）
     _ensure_manager()
@@ -215,7 +218,7 @@ def main(argv=None) -> int:
         d = decide(ws, book)
         print(f"{book}\t{d['verdict']}\t{d['why']}", flush=True)
         if d["verdict"] == "go" and not (a.only_decide or a.dry_run) and (not a.max or len(done) < a.max):
-            d = {**d, **run_book(ws, book, Path(a.book_text), d, a.reviewer)}
+            d = {**d, **run_book(ws, book, Path(a.book_text), d, a.reviewer, a.ack_unlanded_votes)}
             print(f"{book}\t→ {d['verdict']}\t{d['why']}", flush=True)
             if d["verdict"] == "done":
                 done.append((book, d["new_rev"]))
