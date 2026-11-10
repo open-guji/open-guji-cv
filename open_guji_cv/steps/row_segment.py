@@ -380,7 +380,7 @@ def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, perio
     EDGE_ROWS），或者墨大多是碎点、连不成笔画（印章，见 STROKE_FRAC），或者墨只是一两道竖线（见 VLINE_COLS），或者格一半以上落在印框里（`in_seal(cell)`，
     印来自印章定位 `seals`，见 `_in_seal`）。
 
-    `seal_gaps`（书级 `seal_gap_slots_empty`）：表首字与末字之间、表说空的格位（字距拉开的题署行）落在印框里的也记空，
+    `seal_gaps`（书级代码 `seal_ink.GAP_SLOTS_EMPTY`）：表首字与末字之间、表说空的格位（字距拉开的题署行）落在印框里的也记空，
     只认 `in_seal`，不跑上面那些墨像不像字的判据。"""
     import numpy as np
     body = sorted(occ)
@@ -768,13 +768,6 @@ def _in_seal(seals, mapper, img=None, ink_threshold: int = 128):
 
 
 
-#: `seal_inkcut`：开运算核（像素）与开运算后保留的最小连通块（像素）。印泥在二值图里是多孔的碎点，开运算剩不下；
-#: 刻字笔画实心，开运算后留下骨干，再在原墨里膨胀回去
-SEAL_OPEN_K, SEAL_OPEN_MIN_AREA = 7, 150
-#: 表里有雙行小注的列：小字笔画细，核换小的，不然小字跟印泥一起被抹掉（史記 03 p2 第 8 列）
-SEAL_OPEN_K_NOTES, SEAL_OPEN_MIN_AREA_NOTES = 5, 60
-
-
 def _seal_rows(seals, mapper, content_x, h: int) -> tuple[int, int] | None:
     """大印（无笔画掩码的印）在这一列列图里压着的行段 [y0, y1)；不压着就是 None。"""
     if mapper is None or not seals:
@@ -786,27 +779,6 @@ def _seal_rows(seals, mapper, content_x, h: int) -> tuple[int, int] | None:
         if any(m is None and bx0 <= x <= bx1 and by0 <= yy <= by1 for bx0, by0, bx1, by1, m in seals):
             ys.append(y)
     return (ys[0], min(h, ys[-1] + 4)) if ys else None
-
-
-def _seal_inkcut(img, rows: tuple[int, int], ink_threshold: int, notes: bool = False):
-    """把列图 `rows` 行段里的印泥抹白：开运算（SEAL_OPEN_K）去掉多孔碎点，丢掉小块，剩下的笔画骨干在原墨里膨胀回去。"""
-    import cv2
-    import numpy as np
-    a, b = rows
-    g = img if img.ndim == 2 else img.mean(axis=2).astype(img.dtype)
-    out = g.copy()
-    ink = (g[a:b] < ink_threshold).astype(np.uint8)
-    kk, min_area = (SEAL_OPEN_K_NOTES, SEAL_OPEN_MIN_AREA_NOTES) if notes else (SEAL_OPEN_K, SEAL_OPEN_MIN_AREA)
-    k = np.ones((kk, kk), np.uint8)
-    op = cv2.morphologyEx(ink, cv2.MORPH_OPEN, k)
-    n, lab, st, _c = cv2.connectedComponentsWithStats(op, connectivity=8)
-    small = st[:, cv2.CC_STAT_AREA] < min_area
-    small[0] = False
-    op[small[lab]] = 0
-    keep = (cv2.dilate(op, k) > 0) & (ink > 0)
-    band = out[a:b]
-    band[(ink > 0) & ~keep] = 255
-    return out
 
 
 def _under_stain(seals, mapper, content_x, border_top: float, period: float) -> bool:
@@ -916,6 +888,19 @@ def _has_jiazhu(cells) -> bool:
     return any(c.kind.startswith("jiazhu") for c in cells)
 
 
+_JZ_STEP = "open_guji_cv.impl.keben.jiazhu_step"
+_SEAL_INK = "open_guji_cv.impl.keben.seal_ink"
+#: 已搬进书级代码的旧书级开关 → 接手它的缺省模块（2026-11-10，Sheldon 定「先搬自成一块的」）。缺省模块什么都不做，
+#: 书仓 `code/` 覆盖它才生效（史記：`code/jiazhu_step.py`、`code/seal_ink.py`）。书配置里还写着 true、而本工作区
+#: `code/` 没覆盖那个模块（比如还钉着搬家前的 k1）就拒跑——悄悄当关，这本书的切法变了没人知道。写 false 或删掉照常。
+_RETIRED: dict[str, str] = {
+    "jiazhu_free_split": _JZ_STEP,
+    "jiazhu_step_split": _JZ_STEP,
+    "seal_gap_slots_empty": _SEAL_INK,
+    "seal_inkcut": _SEAL_INK,
+}
+
+
 class RowSegmentParams(BaseModel):
     n_body_slots: int | None = None      # None = Book.chars_per_line
     n_raised: int = 0                    # 抬头多出的格数；版式先验，raised 不自动推
@@ -996,6 +981,24 @@ class RowSegmentParams(BaseModel):
     yolo_cover: float = 0.6
     yolo_max_h: float = 1.3
 
+    @model_validator(mode="before")
+    @classmethod
+    def _retired_switches(cls, data):
+        """搬进书级代码的旧开关（`_RETIRED`）：读进来就丢掉；写着 true 而本工作区书级代码没接手就报错。"""
+        if not isinstance(data, dict) or not any(k in data for k in _RETIRED):
+            return data
+        on = [k for k in _RETIRED if data.get(k)]
+        if on:
+            from ..core.seg_set import _book_code
+            bc = _book_code()
+            have = bc.overrides if bc is not None else {}
+            miss = [k for k in on if _RETIRED[k] not in have]
+            if miss:
+                mods = sorted({_RETIRED[k].rsplit(".", 1)[1] for k in miss})
+                raise ValueError(f"row_segment 开关 {miss} 已搬进书级代码（cv 2026-11-10）：本工作区 code/ 要覆盖 "
+                                 f"{['keben.' + m for m in mods]}（史記升到书仓 k2 起），或者从书配置删掉这几行")
+        return {k: v for k, v in data.items() if k not in _RETIRED}
+
     @model_validator(mode="after")
     def _fill_yolo_fingerprint(self):
         if self.yolo_merge and not self.yolo_fingerprint:
@@ -1070,15 +1073,8 @@ class RowSegmentParams(BaseModel):
     #: （02:12:6「州上洛縣」、08:11:8「邑侯」）。格号不变，a、b 的 y0/y1 可以不同；只在挑定格网后的最终那遍切用，
     #: 不影响挑格网。殿本两行逐字对齐，不开。书级开关；False＝关（缺省，不进参数哈希）。
     jiazhu_rows: bool = False
-    #: **雙行小注两行字数可不等**（2026-11-03，史記文淵閣本，设计稿方案 A，Sheldon 定）：要 `jiazhu_rows`。格位表说段尾
-    #: 一格只有一半有字（段字数为奇数）时，多出的那个字归 a 还是 b 由图定（两种分法各切、取切线压墨少的），短的那行
-    #: 格号照「本行第几字」从段首数。缺省按「右行多一字」（光盘版整理本口径）。书级开关；False＝关（缺省，不进参数哈希）。
-    jiazhu_free_split: bool = False
-    #: **雙行小注逐步切**（2026-11-04，史記文淵閣本，A22 评审过，见 `books/shiji_wyg/jiazhu_step`）：要 `jiazhu_rows`、
-    #: `roster_ref_corpus`／`roster_ref_pins`（整理本）。挑定格网后，整理本认得出 `<右|左>` 分法的夹注段两行各按自己的字数、
-    #: 在自己墨的范围里切，段下正文格按表重切（小字行距比格网小，长行被压进短行的格数，并字后一路错下去）。
-    #: 核不上整列退回原切法；有列级人裁的列不动。书级开关；False＝关（缺省，不进参数哈希）。
-    jiazhu_step_split: bool = False
+    #: 原 `jiazhu_free_split`（雙行小注两行字数可不等）、`jiazhu_step_split`（雙行小注逐步切）两个书级开关 2026-11-10
+    #: 搬进书级代码：缺省实现 `impl/keben/jiazhu_step`（什么都不做），史記书仓 `code/jiazhu_step.py` 覆盖。见 `_RETIRED`。
     #: **一行就完的雙行小注**（2026-11-04，全唐文）：「闕一字」这类小注头一行「字｜闕」并排、第二行只有右半「一」，
     #: 夹注判据要连着两行量得出缝，整段落空，两字挤进一个整宽正文格（r9b 字形线退回 8 格）。开了就补认这种段
     #: （`jiazhu_split.single_row_heads`）。书级开关；False＝关（缺省，不进参数哈希）。
@@ -1099,16 +1095,8 @@ class RowSegmentParams(BaseModel):
     #: 框线上沿（版框内、≤0.35 格）。只动等距格网（含表挪一格的派生）的末线；首线、DP 格网、中间格线、格号不变。
     #: 书级开关；False＝关（缺省，不进参数哈希）。
     grid_end_fit: bool = False
-    #: **大印下表中间的空格位记空**（2026-11-03，史記文淵閣本）：卷首叶题署行（「漢　　太　　史　　令司馬遷　撰」
-    #: 「宋中郎外兵曹　參　軍裴　駰集解」）字距拉开，表里是跳着的格位；「文淵閣寶」大印压在这些空格位上，缺省只记空
-    #: 列端的表空格，中间的空格位里的印泥被切成字，格数对不上整理本、整列对位落空（01–10 册 p2 约 97 格）。开着时
-    #: 表首字与末字之间、表说空的格位落在印框里（`_in_seal`）也记空。书级开关；False＝关（缺省，不进参数哈希）。
-    seal_gap_slots_empty: bool = False
-    #: **大印下按墨缝切、剔印泥**（2026-11-03，史記文淵閣本）：大印压着的列（`_under_stain`），先把印框行段里的印泥从列图里
-    #: 抹掉（`_seal_inkcut`：印泥在二值图里是多孔碎点，开运算剩不下；刻字笔画实心留得下），再按平常的候选格网打分挑格，
-    #: 不再硬取等距格网。卷首叶题署行（「宋中郎外兵曹　參　軍裴　駰集解」）字大、字距随手拉开，等距格网劈字、并字、
-    #: 印泥空格成假格（01–10 册 p2 约 80 格）。只改切分用的列图，Step4 裁字仍用原列图。书级开关；False＝关（缺省，不进参数哈希）。
-    seal_inkcut: bool = False
+    #: 原 `seal_gap_slots_empty`、`seal_inkcut`（大印下表中间空格位记空、剔印泥再切）两个书级开关 2026-11-10 搬进书级代码：
+    #: 缺省实现 `impl/keben/seal_ink`（不做），史記书仓 `code/seal_ink.py` 覆盖。见 `_RETIRED`。
     #: **备选切法**（2026-11-03，史記文淵閣本第 7 轮，设计稿 https://claude.ai/artifact/NVqgK8BS2GietVShFnoqUU）：
     #: 按格位表切的列，另切一份不带先验的格网，和主切法不同时放进产物 `alt_columns`；Step4/5 照样裁、认，
     #: align_ref 坐标对位挑和整理本吻合多的那份（写本有些列字不在格网上：题署、篇题大字、夹注行数与表不合）。
@@ -1204,18 +1192,10 @@ class RowSegmentParams(BaseModel):
                 d.pop("layout_tail_empty", None)
             if not self.jiazhu_rows:
                 d.pop("jiazhu_rows", None)
-            if not self.jiazhu_free_split:
-                d.pop("jiazhu_free_split", None)
-            if not self.jiazhu_step_split:
-                d.pop("jiazhu_step_split", None)
             if not self.jiazhu_single_head:
                 d.pop("jiazhu_single_head", None)
             if not self.jiazhu_half_a:
                 d.pop("jiazhu_half_a", None)
-            if not self.seal_gap_slots_empty:
-                d.pop("seal_gap_slots_empty", None)
-            if not self.seal_inkcut:
-                d.pop("seal_inkcut", None)
             if not self.alt_cut:
                 d.pop("alt_cut", None)
             if self.row_pitch == "uniform":
@@ -1264,7 +1244,7 @@ class RowSegmentStep(Step):
                    "open_guji_cv.impl.keben.roster_glyph", "open_guji_cv.impl.keben.yolo_tool_infer", "open_guji_cv.steps.occlusion",
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",
                    "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige",
-                   "open_guji_cv.impl.keben.jiazhu_step"),
+                   "open_guji_cv.impl.keben.jiazhu_step", "open_guji_cv.impl.keben.seal_ink"),
         soft_params=("roster_glyph_fingerprint", "manual_cells_fingerprint"),
         path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins", "page_map_pins",
                      "page_map_ref_file", "page_map_overrides"),
@@ -1384,15 +1364,19 @@ class RowSegmentStep(Step):
             raise ValueError(f"layout_prior 表 {_layout_path(p.layout_prior)} 里没有 {ctx.book.id}："
                              "先跑 scripts/dzg_import.py map 与 scripts/dzg_layout.py 补这一册；"
                              "确实不要先验的书在书 yaml 写 params.row_segment.layout_prior: \"\"")
-        # 雙行小注逐步切（`jiazhu_step_split`，史記）：本页各列整理本的夹注段分法
+        # 书级钩子（2026-11-10 搬出共用 Step）：雙行小注（`impl/keben/jiazhu_step`）、大印下剔印泥（`impl/keben/seal_ink`）。
+        # 缺省实现什么都不做；史記书仓 code/ 覆盖。
+        import importlib
+        from ..core.seg_set import resolve
+        _step_impl = importlib.import_module(resolve(ctx.book, _JZ_STEP))
+        _seal_impl = importlib.import_module(resolve(ctx.book, _SEAL_INK))
+        free_split = getattr(_step_impl, "free_split", None)
+        # 雙行小注逐步切（史記）：本页各列整理本的夹注段分法；缺省实现返回 None（不切）
         step_notes = None
-        if p.jiazhu_step_split and p.jiazhu_rows and p.roster_ref_corpus and p.roster_ref_pins:
-            import importlib
-            from ..core.seg_set import resolve
+        if p.jiazhu_rows and p.roster_ref_corpus and p.roster_ref_pins:
             from ..core.workspace import corpus_path
-            _step_impl = importlib.import_module(resolve(ctx.book, "open_guji_cv.impl.keben.jiazhu_step"))
             step_notes = _step_impl.page_note_runs(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins),
-                                                   ctx.book.id, page) or {}
+                                                   ctx.book.id, page)
         # 等距格网（impl/keben/row_grid）：只给逐列格位先验命中的页算，是那里的候选格网之一
         grids = {}
         # 印框（列端表空格记空的判据之一）：同样只给格位先验命中的页用
@@ -1474,14 +1458,14 @@ class RowSegmentStep(Step):
                 continue
             img = ctx.image("column_image", column_key(page, gc.col))
             inkcut = False
-            if p.seal_inkcut and seals and lay is not None:
+            if _seal_impl.inkcut is not None and seals and lay is not None:
                 wrec0 = wins.column(gc.col)
                 if wrec0 is not None:
                     mapper0 = ColumnMapper.of(page_w, wrec0)
                     if _under_stain(seals, mapper0, gc.content_x or (0, img.shape[1]), gc.border_top, gate.period):
                         rows_ = _seal_rows(seals, mapper0, gc.content_x or (0, img.shape[1]), img.shape[0])
                         if rows_ is not None:
-                            img = _seal_inkcut(img, rows_, p.ink_threshold, notes=bool(lay.get("notes")))
+                            img = _seal_impl.inkcut(img, rows_, p.ink_threshold, notes=bool(lay.get("notes")))
                             inkcut = True
             # 先粗后精（2026-11-03，全唐文 CPU 提速）：下面挑格网要把一列切十几遍（表／闸抬头／挪一格／等距格网／挤格逐条去线），
             # 每遍都跑折线候选（find_seam）和 U-Net 判官——全唐文册06 p27 一页 339 次前向，落进产物的切点只有 15 个。
@@ -1509,7 +1493,7 @@ class RowSegmentStep(Step):
                     grid_bounds=bounds if bounds is not None else grids[gc.col].bounds(n_body, n_r) if grid else None, **l_kw,
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({"jiazhu_rows": True} if p.jiazhu_rows and final else {}),
-                    **({"jiazhu_free_split": True} if p.jiazhu_rows and p.jiazhu_free_split and final else {}),
+                    **({"free_split": free_split} if p.jiazhu_rows and free_split is not None and final else {}),
                     **({"jiazhu_single_head": True} if p.jiazhu_single_head else {}),
                     **({"jiazhu_half_a": True} if p.jiazhu_half_a else {}),
                     **({"grid_end_fit": True} if p.grid_end_fit and final else {}),
@@ -1545,7 +1529,7 @@ class RowSegmentStep(Step):
                 wrec_c = wins.column(gc.col)
                 mapper_c = None if wrec_c is None else ColumnMapper.of(page_w, wrec_c)
                 nj = _junk(r, occ, gc.content_x, p.ink_threshold, gate.period,
-                           _in_seal(seals, mapper_c, img, p.ink_threshold), p.seal_gap_slots_empty)
+                           _in_seal(seals, mapper_c, img, p.ink_threshold), _seal_impl.GAP_SLOTS_EMPTY)
                 if nj:
                     prior_flags.append(f"layout_frame_junk：列端 {nj} 格的墨不像字（框线／碎墨／越界墨／印框），记空")
             # 逐列格位先验命中的列，候选格网按图挑：
@@ -1646,11 +1630,11 @@ class RowSegmentStep(Step):
                 mapper = None if wrec is None else ColumnMapper.of(page_w, wrec)
                 in_seal = _in_seal(seals, mapper, img, p.ink_threshold)
                 junk = [_junk(c[0], c[3], gc.content_x, p.ink_threshold, gate.period, in_seal,
-                              p.seal_gap_slots_empty)
+                              _seal_impl.GAP_SLOTS_EMPTY)
                         for c in cands]
                 scores = [_score(c) for c in cands]
                 # 大印压着列首：格网直接取表的等距格网，不比坏格（见上「大印下的列」）
-                # `seal_inkcut`：印泥已从列图里抹掉，照常按打分挑格网（不再硬取等距格网）；但带小注的列不认「表挪一格」——
+                # 剔过印泥（书级 `seal_ink.inkcut`）：印泥已从列图里抹掉，照常按打分挑格网（不再硬取等距格网）；但带小注的列不认「表挪一格」——
                 # 抹过的印下空白让挪一格的格网少劈一个字就胜出，大字整列错一格、印上多出空格（01:54 c3）
                 if inkcut and lay.get("notes"):
                     big = (1 << 30,) * 4
@@ -1725,7 +1709,7 @@ class RowSegmentStep(Step):
                             if ri is None:
                                 continue
                             ji = _junk(ri, occ_b, gc.content_x, p.ink_threshold, gate.period, in_seal,
-                                      p.seal_gap_slots_empty)
+                                      _seal_impl.GAP_SLOTS_EMPTY)
                             if len(_merged_cuts(img, ri.cells, gate.period, p.ink_threshold)) < len(cuts):
                                 ci = (ri, n_rb, t_sb, occ_b, "layout_unmerge" + (f"（{why_b}）" if why_b else ""))
                                 trial.append((_score(ci), i, ci, ji))
