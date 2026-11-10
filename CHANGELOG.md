@@ -5,6 +5,16 @@
 
 ## [未发版]
 
+## [0.6.37] - 2026-11-10
+
+- 发版说明（A31 11-10）：从 dev 1520d9b 切，含 #1361、#1363（待审条目化：换单逐格对条目、add-cell）、#1362＋#1364（border 越界修复，登等价，不过期）。待审条目要 guji-manager ≥ v0.4.35（旧 manager 照旧整张换单）。
+
+- PATCH（A22 #1362，A31 登等价）`impl/keben/border` 外框采样列越过图宽时去掉（史記09 年表页 border_detect IndexError）；只影响原先崩的页，登 `core/code_equiv`（keben 3 页逐字节相同＋代码论证），各书 border_detect 不过期。
+
+- PATCH（A31 11-10，待审条目化第 2 步）`republish.py add-cell`：单上加一格不换 rev——开待审条目，现行字块图单独出一张 webp（文件名按内容 sha256，传 R2），条目带它、导出时并进 `sprites[]`，网站照旧发布。L0。
+
+- PATCH（A31 11-10，sheldon 定待审条目化）`republish.py push` 换单改为逐格对待审条目（guji-manager `review/pending_items`，`guji pending`）：没变的格条目不动、变了只改字段、新格开条目、不再待审的关掉、人工撤下的不放回；格号与图块指纹（字块图 sha1）都记；导出的整张单每格带 `id`／`ver`（网站按条目记票）。`edit-cell` 有条目时改条目。manager 没有条目模块时照旧整张换。L0。
+
 ## [0.6.36] - 2026-11-10
 
 - 发版说明（A31 11-10）：从 dev 7917fa4 切，含 #1354、#1355（edit-cell 单格原地改）、#1356、#1357、#1358（row_segment 1.48 列端框线格记空，各书从 Step3 起重算）。配 guji-manager ≥ v0.4.34。

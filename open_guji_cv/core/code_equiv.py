@@ -56,6 +56,10 @@ _GL_1027 = ("网格模式加 grid_lattice_fallback（GUJI-748 vol12 p139，缺�
             "（全册，yaml 已点名网格页 p79）与 vol07 新图 134 页（全册）、column_warp 在 vol12 152 页上与 origin/dev "
             "（border_detect 1.11，1fa91e8；column_warp 比的是 126e021）产物逐字节相同；scripts/code_equiv.py check，2026-10-27")
 
+_BX_1110 = ("外框采样列 xs 去掉 ≥ 图宽的列（cv #1362，史記09 年表页 border_detect IndexError）：border_detect 在测试样本 keben 3 页上"
+            "与 fd4976e0~1 产物逐字节相同；另按代码论证——xs 用来取 binm[·, xs]，原先没崩的页里 ≥ 图宽的列从没被取过墨"
+            "（取了就 IndexError），去掉后各偏移的取墨集合不变、均值不变；scripts/code_equiv.py check，2026-11-10（A31）")
+
 _BC_1027 = ("push_bottom_to_bar 右界截到图内（GUJI-748，换源新图 vol23 p10、vol37 p74 越界报错）：只在原先越界报错的页上生效；"
             "border_detect 在殿本 vol20 新图 94 页（每 3 页取 1）上与 origin/dev f3b96b9 产物逐字节相同；scripts/code_equiv.py check，2026-10-27")
 
@@ -1367,6 +1371,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="47cde846ac5378eef452e9734fb179698ab7c960af78ac738dc1bbcbbca7cabd",
           old="2d6aa09866629ba270df420a4ad7ca0a15aae9b23730f3ca354fc74b54925da1",
           evidence=_MV_IMPL),
+    Equiv("open_guji_cv.impl.keben.border",
+          new="632040e47845843bc5f8afcab1d9fb6564d95b4bf7ffb68bbd2d37f191347a23",
+          old="fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e",
+          evidence=_BX_1110),
 )
 
 

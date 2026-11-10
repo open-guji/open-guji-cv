@@ -843,8 +843,8 @@ def cmd_push(a) -> int:
         bak = out / f"online.{json.loads(online.read_text(encoding='utf-8')).get('rev')}.pending.json"
         shutil.copyfile(online, bak)
         print(f"旧单备份 → {bak}")
-    if online.exists():                                          # 上一版单格撤下的格，换单后照旧撤下（edit-cell，sheldon 11-10）
-        prev = json.loads(online.read_text(encoding="utf-8"))
+    if not reconcile_items(ws, book, plan, a, old_doc) and online.exists():
+        prev = json.loads(online.read_text(encoding="utf-8"))   # 没有条目（manager 太旧）：上一版撤下的格照旧撤下（edit-cell）
         carry = [c["cell"] for c in prev.get("withdrawn") or [] if c.get("cell")]
         if carry:
             nd = json.loads(Path(plan["pending"]).read_text(encoding="utf-8"))
@@ -883,6 +883,54 @@ def cmd_push(a) -> int:
         todo.append("⚠ 这次出了雪碧图目录，但单子里没有 sprites[]：网站取不到图（见 sprite_pub.py）")
     print("\n还要做：\n" + "\n".join(f"- {t}" for t in todo))
     return 0
+
+
+def cell_fingerprints(book: str, cells: list[str]) -> dict[str, str]:
+    """格号 → 图块指纹（现行产物的字块图 sha1，同人裁锚 `content_sha`）。取不到的格不给。"""
+    import hashlib
+    from open_guji_cv.feedback.anchor import _resolved, patch_key
+    from open_guji_cv.products.cache import ImageCache
+    cache, out = ImageCache(), {}
+    for cell in cells:
+        m = re.fullmatch(r"(\d+):(\d+):(-?\d+)([ab]?)", cell)
+        if not m:
+            continue
+        try:
+            path = cache.get(book, "char_patch", _resolved(book, patch_key(int(m[1]), int(m[2]), int(m[3]), m[4])))
+            if path is not None:
+                out[cell] = hashlib.sha1(Path(path).read_bytes()).hexdigest()
+        except Exception:
+            continue
+    return out
+
+
+def reconcile_items(ws: Path, book: str, plan: dict, a, old_doc: dict | None) -> bool:
+    """待审条目化（sheldon 11-10，guji-manager doc/00-总览/设计-待审条目化.md）：新单不再整张替换，而是逐格对条目——
+    没变的格条目不动（票、说明、撤下都留着），变了的只改字段，新出现的开新条目，不再待审的关掉；人工撤下的不放回。
+    然后从条目导出整张单写回 `plan["pending"]`（单头取新单）。manager 没有条目模块就返回 False（照旧整张换）。"""
+    try:
+        from guji_manager.review import pending_items as P
+    except ImportError:
+        print("ⓘ guji-manager 没有待审条目模块（要 ≥ 带 guji pending 的版本）：照旧整张换单")
+        return False
+    text_id, chapter = plan.get("text_id") or text_id_of(ws), plan["chapter"]
+    store = P.ItemStore.open(data_dir(ws), text_id, chapter)
+    if not store.items and old_doc:                              # 第一次：先把现行单导成条目（src=import:<旧 rev>）
+        P.import_sheet(store, old_doc, by="republish")
+        print(f"现行单 {old_doc.get('rev')} 导成条目 {len(store.items)} 条")
+    nd = json.loads(Path(plan["pending"]).read_text(encoding="utf-8"))
+    cells = [c.get("cell") for c in nd.get("cells") or [] if c.get("cell")]
+    fps = {} if getattr(a, "no_fingerprint", False) else cell_fingerprints(book, cells)
+    res = P.reconcile(store, nd.get("cells") or [], src=f"rev:{a.rev}", fps=fps, by=os.environ.get("GUJI_ACTOR", "republish"))
+    n = store.save()
+    print("条目 reconcile：" + "、".join(f"{k} {len(v) if isinstance(v, list) else v}" for k, v in res.items())
+          + f"（追加 {n} 行，指纹 {len(fps)}/{len(cells)} 格）")
+    if res.get("撤下仍判待审"):
+        print(f"ⓘ 人工撤下、机器仍判待审 {len(res['撤下仍判待审'])} 格，保持撤下：{' '.join(res['撤下仍判待审'][:20])}")
+    if res.get("图变"):
+        print(f"ⓘ 格号对上、图块变了 {len(res['图变'])} 格（条目照旧，标 fp_changed）：{' '.join(res['图变'][:20])}")
+    Path(plan["pending"]).write_text(json.dumps(P.export_sheet(store, nd), ensure_ascii=False), encoding="utf-8")
+    return True
 
 
 DATA = "https://data.openguji.com"
@@ -1177,6 +1225,35 @@ def edit_cells(doc: dict, *, withdraw=(), restore=(), notes=None, by: str = "", 
     return out
 
 
+def _items_edit(ws: Path, text_id: str, chapter: str, doc: dict, a, notes: dict, by: str):
+    """edit-cell 走待审条目（有 guji-manager 条目模块时）：撤下、放回、改说明记进条目日志，再导出整张单。
+    返回 (结果, 新单)；没有条目模块返回 None。"""
+    try:
+        from guji_manager.review import pending_items as P
+    except ImportError:
+        return None
+    store = P.ItemStore.open(data_dir(ws), text_id, chapter)
+    if not store.items:
+        P.import_sheet(store, doc, by=by)
+    res = {"撤": [], "放回": [], "改说明": [], "找不到": []}
+    why = a.why or ""
+    for op, refs, key in (("withdraw", a.withdraw or [], "撤"), ("restore", a.restore or [], "放回")):
+        for x in refs:
+            try:
+                getattr(store, op)(x, by=by, why=why)
+                res[key].append(P.norm_cell(x))
+            except (KeyError, ValueError):
+                res["找不到"].append(P.norm_cell(x))
+    for x, note in notes.items():
+        try:
+            store.note(x, note, by=by, why=why)
+            res["改说明"].append(P.norm_cell(x))
+        except (KeyError, ValueError):
+            res["找不到"].append(P.norm_cell(x))
+    store.save()
+    return res, P.export_sheet(store, doc)
+
+
 def cmd_edit_cell(a) -> int:
     """线上单单格原地改：撤下、放回、改说明，不换 rev、不动别的格，网站已投的票照旧有效。"""
     ws, book = Path(a.workspace).resolve(), a.book
@@ -1190,8 +1267,12 @@ def cmd_edit_cell(a) -> int:
             sys.exit(f"✗ --note 写成 格号=说明：{kv}")
         k, v = kv.split("=", 1)
         notes[k.strip()] = v.strip()
-    res = edit_cells(doc, withdraw=a.withdraw or [], restore=a.restore or [], notes=notes,
-                     by=a.by or os.environ.get("GUJI_ACTOR", ""), why=a.why or "")
+    by = a.by or os.environ.get("GUJI_ACTOR", "")
+    items = _items_edit(ws, text_id, chapter, doc, a, notes, by) if a.yes else None
+    if items is not None:                                        # 有条目：改条目、从条目导出整张单（guji pending 同一套）
+        res, doc = items
+    else:
+        res = edit_cells(doc, withdraw=a.withdraw or [], restore=a.restore or [], notes=notes, by=by, why=a.why or "")
     votes = web_votes(ws, text_id, rev)
     voted = [x for x in res["撤"] if votes.get(x)]
     print(f"{book} {rev}：撤下 {len(res['撤'])}、放回 {len(res['放回'])}、改说明 {len(res['改说明'])}"
@@ -1212,6 +1293,90 @@ def cmd_edit_cell(a) -> int:
         sync_and_publish(a, ws)
     else:
         print(f"还要：guji db sync -w {ws}；加 --sync 会顺带触发网站 proofing-sync（publish）")
+    return 0
+
+
+def cell_image(book: str, cell: str, max_side: int = 96) -> tuple[bytes, int, int, str] | None:
+    """这格现行字块图 → (webp 字节, 宽, 高, 图块指纹 sha1)；取不到 → None。图按内容寻址（待审条目化第 2 步）。"""
+    import hashlib
+    import io
+    from PIL import Image
+    from open_guji_cv.feedback.anchor import _resolved, patch_key
+    from open_guji_cv.products.cache import ImageCache
+    m = re.fullmatch(r"(\d+):(\d+):(-?\d+)([ab]?)", cell)
+    if not m:
+        return None
+    path = ImageCache().get(book, "char_patch", _resolved(book, patch_key(int(m[1]), int(m[2]), int(m[3]), m[4])))
+    if path is None:
+        return None
+    raw = Path(path).read_bytes()
+    im = Image.open(io.BytesIO(raw)).convert("L")
+    im.thumbnail((max_side, max_side))
+    buf = io.BytesIO()
+    im.save(buf, "WEBP", quality=80)
+    return buf.getvalue(), im.width, im.height, hashlib.sha1(raw).hexdigest()
+
+
+def cmd_add_cell(a) -> int:
+    """单上加一格（不换 rev，待审条目化）：开一条待审条目，字块图按内容寻址单独出一张、传 R2，再导出整张单。
+    要 guji-manager 有条目模块（`guji pending`）。"""
+    import hashlib
+    try:
+        from guji_manager.review import pending_items as P
+    except ImportError:
+        sys.exit("✗ 要 guji-manager 带待审条目（guji pending）的版本")
+    ws, book = Path(a.workspace).resolve(), a.book
+    chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
+    online = proofing_path(ws, text_id, chapter)
+    head = json.loads(online.read_text(encoding="utf-8")) if online.exists() else {}
+    store = P.ItemStore.open(data_dir(ws), text_id, chapter)
+    if not store.items and head:
+        P.import_sheet(store, head, by="add-cell")
+    by = a.by or os.environ.get("GUJI_ACTOR", "")
+    states = cell_states(products_root(ws), book)
+    out = Path(a.out) if a.out else ws / "reports" / book / "_publish" / f"{head.get('rev') or chapter}-add"
+    pub = out / "pub"
+    pub.mkdir(parents=True, exist_ok=True)
+    entries_all = []
+    for x in a.cell:
+        cell = P.norm_cell(x)
+        doc = {"recheck": True} if a.recheck else {}
+        if a.note:
+            doc["note"] = a.note
+        st = states.get(cell)
+        if st and st[1]:
+            doc["c"] = st[1]
+        sprites, fp = [], ""
+        img = None if a.no_image else cell_image(book, cell)
+        if img:
+            data, w, h, fp = img
+            sha = hashlib.sha256(data).hexdigest()
+            name = f"c{sha[:16]}.webp"
+            (pub / name).write_bytes(data)
+            e = {"name": name, "sha256": sha, "md5": hashlib.md5(data).hexdigest(), "bytes": len(data)}
+            sprites, doc["img"] = [e], {"s": name, "x": 0, "y": 0, "w": w, "h": h}
+            entries_all.append(e)
+        elif not a.no_image:
+            print(f"⚠ {cell}：取不到现行字块图（先把这页跑到 cell_shrink），只加文字卡")
+        r = store.add(cell, doc, by=by, why=a.why or "", src=a.src or f"human:{by or '?'}", fp=fp, sprites=sprites)
+        print(f"{r['id']}\t{r['cell']}\t{r['state']}\tv{r['ver']}" + ("\t带图" if sprites else ""))
+    sheet = P.export_sheet(store, head)
+    (out / f"{chapter}.pending.json").write_text(json.dumps(sheet, ensure_ascii=False), encoding="utf-8")
+    if not a.yes:
+        store.pending = []
+        print(f"预览 → {out / f'{chapter}.pending.json'}；确认后加 --yes（传图、写条目、写回数据目录）")
+        return 0
+    if entries_all:
+        print(f"字块图 {len(entries_all)} 张 → R2：{sprite_pub.upload(entries_all, pub)}")
+    store.save()
+    online.parent.mkdir(parents=True, exist_ok=True)
+    online.write_text(json.dumps(sheet, ensure_ascii=False), encoding="utf-8")
+    print(f"已写回 {online}")
+    if a.sync:
+        a.publish_only = f"{text_id}/{chapter}"
+        sync_and_publish(a, ws)
+    else:
+        print(f"还要：guji db sync -w {ws}；加 --sync 会顺带触发网站发布这一章")
     return 0
 
 
@@ -1622,6 +1787,22 @@ def main(argv=None) -> int:
     p.add_argument("--yes", action="store_true", help="写回数据目录")
     p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
     p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
+    p = sp.add_parser("add-cell", help="单上加一格（不换 rev）：开待审条目，字块图单独出一张传 R2")
+    p.add_argument("--book", required=True)
+    p.add_argument("-w", "--workspace", required=True)
+    p.add_argument("--cell", nargs="+", required=True, metavar="格号", help="要加的格（页:列:格，可带「册:」）")
+    p.add_argument("--note", help="卡片头说明（如「撤库重审」「点校存疑」）")
+    p.add_argument("--recheck", action="store_true", help="标复审格")
+    p.add_argument("--src", help="来源（缺省 human:<谁>；脚本写 script:<名>）")
+    p.add_argument("--why")
+    p.add_argument("--by")
+    p.add_argument("--no-image", action="store_true", help="不出图（只加文字卡）")
+    p.add_argument("--chapter")
+    p.add_argument("--text-id")
+    p.add_argument("--out")
+    p.add_argument("--yes", action="store_true", help="传图、写条目、写回数据目录")
+    p.add_argument("--sync", action="store_true", help="写完再 guji db sync 并触发网站发布这一章")
+    p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
     p = sp.add_parser("add-alt", help="线上单原地补相似字（不换 rev）")
     p.add_argument("--book", required=True)
     p.add_argument("-w", "--workspace", required=True)
@@ -1709,7 +1890,8 @@ def main(argv=None) -> int:
     if a.cmd == "issue" and not a.label and not a.export_dir:
         ap.error("issue 要 --label（产物包）或 --export-dir（已导出的 char／cord）")
     return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "issue": cmd_issue,
-            "add-alt": cmd_add_alt, "add-sprites": cmd_add_sprites, "edit-cell": cmd_edit_cell}[a.cmd](a)
+            "add-alt": cmd_add_alt, "add-sprites": cmd_add_sprites, "edit-cell": cmd_edit_cell,
+            "add-cell": cmd_add_cell}[a.cmd](a)
 
 
 if __name__ == "__main__":
