@@ -862,6 +862,8 @@ def cmd_push(a) -> int:
         cmd += ["--pages-json", pages]
     run(cmd, env={**os.environ, "GUJI_WORKSPACE": str(ws)})
     label = pack_rev(a, ws, book, a.rev) if a.sync else None
+    if a.sync and plan.get("chapter"):                           # 只发这一章，别整站发（整站冒烟要好几分钟）
+        a.publish_only = f"{plan.get('text_id') or text_id_of(ws)}/{plan['chapter']}"
     published = sync_and_publish(a, ws) if a.sync else False
     if a.sync:                                                   # 后台「文本整理」的人审进度（所有册），失败不挡
         import progress_report
@@ -1292,6 +1294,7 @@ def cmd_edit_cell(a) -> int:
     shutil.copyfile(out / f"{chapter}.pending.json", online)
     print(f"已写回 {online}")
     if a.sync:
+        a.publish_only = f"{text_id}/{chapter}"
         sync_and_publish(a, ws)
     else:
         print(f"还要：guji db sync -w {ws}；加 --sync 会顺带触发网站 proofing-sync（publish）")
@@ -1425,6 +1428,7 @@ def cmd_add_alt(a) -> int:
     shutil.copyfile(out / f"{chapter}.pending.json", online)
     print(f"已写回 {online}")
     if a.sync:
+        a.publish_only = f"{text_id}/{chapter}"
         sync_and_publish(a, ws)
     else:
         print(f"还要：guji db sync -w {ws}；加 --sync 会顺带触发网站 proofing-sync（publish）")
@@ -1766,6 +1770,7 @@ def cmd_add_sprites(a) -> int:
     shutil.copyfile(out / f"{chapter}.pending.json", online)
     print(f"已写回 {online}")
     if a.sync:
+        a.publish_only = f"{text_id}/{chapter}"
         sync_and_publish(a, ws)
     else:
         print(f"还要：guji db sync -w {ws}；加 --sync 会顺带触发网站 proofing-sync（publish）")
