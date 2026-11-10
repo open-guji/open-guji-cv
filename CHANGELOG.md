@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 两个书级开关，缺省关、关时逐字节不变、不进参数 dump，code_equiv 已登记：`group_flow_pair_shape_nm_5b`（匹配器护栏 never_match 的待审格，5-b 首位落在两字对里也交 `group_flow_pair_shapes` 刻形判；全唐文 001–003 目录页 王 50 格看图全对，5-b 首位是土的那格挡掉）、`solo_cal_5b_canon`（solo_cal 5-b 档按本书码位表归一后比，5-b 给 慎、库给 愼 算一致；愼 5、吕 2 格）。形近字线 11-10。
+
 ## [0.6.38] - 2026-11-10
 
 - 发版说明（A31 11-10）：从 dev 83bd46b 切，含 #1366（row_segment 1.49：卷端题列起格把框线记空格照旧算上，修 #1357 带来的格号后移，史記 01 p119 c2）。各书从 row_segment 起过期。

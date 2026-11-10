@@ -1375,6 +1375,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="632040e47845843bc5f8afcab1d9fb6564d95b4bf7ffb68bbd2d37f191347a23",
           old="fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e",
           evidence=_BX_1110),
+    # group_flow_pair_shape_nm_5b／solo_cal_5b_canon 书级开关（缺省关，2026-11-10，形近字线 全唐文 001–003 c38 第三层 王、愼吕）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='dedab8d15ba911f5663eefdd6832051b82d9c55ee41abb51bfa825462f023638',
+          old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
+          evidence='seed_admit 在 001 2 页（--pages 76,100）上与 origin/dev 产物逐字节相同；group_flow_pair_shape_nm_5b／solo_cal_5b_canon 缺省关、不进 dump'),
 )
 
 
