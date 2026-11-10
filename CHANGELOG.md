@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- rerun_prep.sh 切到 cv 版本后先从 R2 取回 models/、fonts/、底库语料大文件（PATCH，A30 11-10；SJ r32 的 #1833/#1835/#1839 三单 prep 在「模板索引」段失败）：v0.7 起 cv 仓不带这些文件，从 v0.6.x 切过来时检出把它们删了，`pull-rare-index` 算出的 checkpoint 指纹是 `nockpt`，对不上已发布的向量包（`d2ce8bab0fd0`）。调 `ensure_repo_models()` 取回后指纹为 d2ce8bab0fd0，对得上。只改准备脚本，不动产物、指纹（L0）。
+
 ## [0.6.39] - 2026-11-10
 
 - PATCH（A31 11-10，sheldon 定）`republish.py push／edit-cell／add-alt／add-sprites --sync` 触发网站 proofing-sync 时带 `only=<书>/<章>`（原先 push 等没设 publish_only，整站发布，整站冒烟要好几分钟）。L0（只改发布触发）。
