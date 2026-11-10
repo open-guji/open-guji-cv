@@ -624,11 +624,16 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         for k in [k for k in lost if k in out]:
             del lost[k]
     miss = sorted({k for k in no_patch if k not in out})
+    # 2026-11-10 用户定：默认放行，只设上限——每册 ≤ LOST_HUMAN_DEFAULT_MAX 条落空直接丢（事件不删，只是这轮没采信），
+    # 记 warning；超过上限报错拦下，确认要丢再设 GUJI_ALLOW_LOST_HUMAN=1。
     if miss and not _env_on("GUJI_ALLOW_LOST_HUMAN"):
-        raise RuntimeError(
-            f"human_chars({book})：{len(miss)} 条人裁因为现格字块图拿不到（cache/ 里没有、原图也切不出）"
-            f"没法认格，会被当成绑丢，例：{', '.join(miss[:5])}。先 `guji source pull {book}`"
-            f"（或 `guji cache warm --book {book}`）再跑；确认要丢再设 GUJI_ALLOW_LOST_HUMAN=1。")
+        if len(miss) > LOST_HUMAN_DEFAULT_MAX:
+            raise RuntimeError(
+                f"human_chars({book})：{len(miss)} 条人裁因为现格字块图拿不到（cache/ 里没有、原图也切不出）"
+                f"没法认格，会被当成绑丢（超过默认放行上限 {LOST_HUMAN_DEFAULT_MAX} 条），例：{', '.join(miss[:5])}。"
+                f"先 `guji source pull {book}`（或 `guji cache warm --book {book}`）再跑；确认要丢再设 GUJI_ALLOW_LOST_HUMAN=1。")
+        _logger.warning("human_chars(%s)：%d 条人裁因现格字块图拿不到没法认格，按上限内默认放行，这轮不采信（事件不删）：%s",
+                        book, len(miss), ", ".join(miss))
     return out
 
 
@@ -656,6 +661,9 @@ def evict_review_cells(book: str, log=None) -> dict[str, dict]:
         if key.startswith(pre):
             out[key] = {"char": p.get("char_self"), "event": e.id, "ts": e.ts}
     return out
+
+
+LOST_HUMAN_DEFAULT_MAX = 20   # 每册落空人裁默认放行的上限（开书全流程 S11 口径）
 
 
 def _env_on(name: str) -> bool:

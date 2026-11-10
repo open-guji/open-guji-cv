@@ -91,6 +91,10 @@ def test_unbound_for_missing_patch_raises(tmp_path, monkeypatch):
     row = {"event": ev.id, "key": ev.target.key, "status": "unanchored", "bound": None, "why": "no_patch"}
     monkeypatch.setattr(B, "book_bindings", lambda book, log=None: {ev.id: row})
     monkeypatch.delenv("GUJI_ALLOW_LOST_HUMAN", raising=False)
+    # 2026-11-10 起：上限内默认放行；超过上限才拦
+    lost0 = {}
+    assert human_chars("vol01", stale={}, lost=lost0) == {}
+    monkeypatch.setattr("open_guji_cv.feedback.lookup.LOST_HUMAN_DEFAULT_MAX", 0)
     with pytest.raises(RuntimeError, match="字块图"):
         human_chars("vol01", stale={})
     monkeypatch.setenv("GUJI_ALLOW_LOST_HUMAN", "1")
