@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+## [0.7.1] - 2026-11-10
+
+- 发版说明（A20 11-10，SJ 要）：从 dev f666f3d 切，只多 #1378（书级代码第 4 步代码等价，row_segment 指纹回到 v0.6.39，v0.7.0 判的 row_segment 过期撤销）。
 - PATCH 登记书级代码第 4 步（#1375）的代码等价：`row_segment`、`impl/keben/row_boundaries`、`impl/keben/jiazhu_step` 进 ENTRIES，新 code_dep `seal_ink` 进 SPLITS（缺省实现合回 jiazhu_step；史記书仓 k2 的 jiazhu_step＋seal_ink 合回 k1 那一项）。殿本／北行／幼學／全唐文与史記（配书仓 k2）的 row_segment `code_hash` 与 v0.6.39 逐位相同，**v0.7.0 起判的 row_segment 过期撤销**。证据：SJ 11-10 史記 02、05 册 10 页产物逐字节相同；缺省钩子分支是删开关后的原路径。
 
 ## [0.7.0] - 2026-11-10
