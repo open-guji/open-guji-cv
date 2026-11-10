@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- seed_admit 两个书级开关，缺省关、关时逐字节不变、不进参数 dump，code_equiv 已登记：`group_flow_pair_shape_nm_5b`（匹配器护栏 never_match 的待审格，5-b 首位落在两字对里也交 `group_flow_pair_shapes` 刻形判；全唐文 001–003 目录页 王 50 格看图全对，5-b 首位是土的那格挡掉）、`solo_cal_5b_canon`（solo_cal 5-b 档按本书码位表归一后比，5-b 给 慎、库给 愼 算一致；愼 5、吕 2 格）。形近字线 11-10。
 - rerun_prep.sh 切到 cv 版本后先从 R2 取回 models/、fonts/、底库语料大文件（PATCH，A30 11-10；SJ r32 的 #1833/#1835/#1839 三单 prep 在「模板索引」段失败）：v0.7 起 cv 仓不带这些文件，从 v0.6.x 切过来时检出把它们删了，`pull-rare-index` 算出的 checkpoint 指纹是 `nockpt`，对不上已发布的向量包（`d2ce8bab0fd0`）。调 `ensure_repo_models()` 取回后指纹为 d2ce8bab0fd0，对得上。只改准备脚本，不动产物、指纹（L0）。
 - strokes 差一笔「学门槛」：`verify_learned`（多出那一笔的独占率、落墨率按本书两字刻例类中心判）、`extra_feats`、`bad_fit`。多出那一笔与别的笔交叉的组（木本、目自、十士）固定门槛弃权太多，殿本库留一 木本 弃权 99→2。不被 Step 引用，产物不变。
 
