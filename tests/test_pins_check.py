@@ -110,3 +110,61 @@ def test_retire_verdict():
     assert pc.retire_verdict(pin, col([(0, 150), (150, 200)]))["verdict"] == "keep"
     r = pc.retire_verdict(pin, col([(0, 100), (100, 200)], kinds=("char", "blank")))
     assert r["verdict"] == "keep" and "缺 1 格" in r["why"]
+
+
+def test_propose_anchor_uses_old_bound_cell():
+    # 旧切分里人裁当时绑在 2 号（格号已挪），事件键还是 1 号：墨框要取 2 号那格（SJ 01:49:4 務→府）
+    old = _cells(7, [(1, 1, None, (0, 0, 100, 100)), (1, 2, None, (0, 100, 100, 200))])
+    new = _cells(7, [(1, 1, None, (0, 100, 100, 200))])
+    d = pc.propose_anchor("b:7:1:1", "e", pc.cell_boxes(old), new, old_bound="b:7:1:2")
+    assert d["anchor"]["ink_bbox"] == [0, 100, 100, 200]
+    assert d["evidence"]["old_cell"] == "b:7:1:2" and d["evidence"]["to"] == "b:7:1:1"
+
+
+def test_run_failures():
+    from open_guji_cv.core.engine import PageOutcome
+    rep = SimpleNamespace(outcomes=[PageOutcome("row_segment", 3, "ok"),
+                                    PageOutcome("cell_shrink", 3, "failed", error="上游缺失")])
+    assert pc.run_failures(rep) == ["cell_shrink:p3 上游缺失"]
+    assert pc.run_failures(None) == []
+
+
+def test_drop_rerun_products(tmp_path):
+    d = tmp_path / "b" / "cell_shrink"
+    d.mkdir(parents=True)
+    for n in ("p0003.json", "p0004.json", "_manifest.jsonl"):
+        (d / n).write_text("{}")
+    pc._drop_rerun_products(tmp_path, "b", [3])
+    assert sorted(f.name for f in d.iterdir()) == ["_manifest.jsonl", "p0004.json"]
+
+
+def test_glyph_db_missing(tmp_path, monkeypatch):
+    import sqlite3
+
+    from open_guji_cv.core import workspace
+    db = tmp_path / "glyph.db"
+    monkeypatch.setattr(workspace, "glyph_db_path", lambda *a, **k: db)
+    assert "没有" in pc.glyph_db_missing()
+    sqlite3.connect(str(db)).close()
+    assert "空" in pc.glyph_db_missing()
+    con = sqlite3.connect(str(db))
+    con.execute("CREATE TABLE instances (instance_id TEXT)")
+    con.commit()
+    con.close()
+    assert pc.glyph_db_missing() is None
+
+
+def test_judge_missing(monkeypatch):
+    import pytest
+    p = SimpleNamespace(cut_judge="unet", judge_fingerprint="")
+    ctx = SimpleNamespace(params_for=lambda st: p)
+    with pytest.raises(pc.SandboxNotReady):
+        pc.judge_missing(ctx)
+    p.judge_fingerprint = "abc"
+    pc.judge_missing(ctx)
+    pc.judge_missing(SimpleNamespace(params_for=lambda st: SimpleNamespace(cut_judge="none", judge_fingerprint="")))
+
+
+def test_old_char():
+    seed = SimpleNamespace(columns=[SimpleNamespace(chars=[SimpleNamespace(id="b:7:1:2", char="務")])])
+    assert pc.old_char(seed, "b:7:1:2") == "務" and pc.old_char(seed, "b:7:1:3") is None and pc.old_char(None, "x") is None

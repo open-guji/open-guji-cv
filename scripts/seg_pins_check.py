@@ -20,7 +20,8 @@
 
     python scripts/seg_pins_check.py --book 04 --no-run --base-items <改之前的分片> --old-products <旧产物根>
 
-  --pages 可直接点名页。退出码：0 = 可以推；3 = 有问题（看报告）；2 = 用法错。
+  --pages 可直接点名页。退出码：0 = 可以推；3 = 有问题（看报告）；2 = 用法错或本机条件不够（缺切点裁判权重、
+  字形库没拉：结论不可信，拒跑）。沙箱里任何一步失败（如缺原图）一律判不通过。
 """
 from __future__ import annotations
 
@@ -83,18 +84,26 @@ def main(argv=None) -> int:
     bad = bool(fmt)
     lines += [f"- 格式：{p}" for p in fmt]
 
+    if pages:
+        why = pc.glyph_db_missing()
+        if why:
+            print(f"❌ {why}：人裁绑定要读它。先 `guji db sync -w <工作区>`（或 db pull）拉字形库再跑。", file=sys.stderr)
+            return 2
+
     if a.no_run:
         store = ProductStore()
         old_store = ProductStore(Path(a.old_products)) if a.old_products else None
     else:
         lines.append(f"- 沙箱：`{tmp}`（从 row_segment 跑到 cell_shrink）")
-        store, _cache, rep = pc.sandbox_rerun(book, pages, tmp / "sandbox", new) if pages else (ProductStore(), None, None)
+        try:
+            store, _cache, rep = pc.sandbox_rerun(book, pages, tmp / "sandbox", new) if pages else (ProductStore(), None, None)
+        except pc.SandboxNotReady as e:
+            print(f"❌ {e}", file=sys.stderr)
+            return 2
         old_store = ProductStore()
-        if rep is not None:
-            errs = [f"{s}:{p} {e}" for s, d in getattr(rep, "errors", {}).items() for p, e in d.items()] \
-                if isinstance(getattr(rep, "errors", None), dict) else []
-            lines += [f"- 沙箱重跑出错：{e}" for e in errs]
-            bad |= bool(errs)
+        errs = pc.run_failures(rep) if rep is not None else []
+        lines += [f"- 沙箱重跑失败：{e}" for e in errs]
+        bad |= bool(errs)
     lines.append("")
 
     # 1. 钉子 vs cell_shrink
@@ -103,6 +112,10 @@ def main(argv=None) -> int:
     for pg, col in sorted(cols):
         chars = store.read(book, "cell_shrink", page_key(pg), "char_index")
         cc = None if chars is None else next((c for c in chars.columns if c.col == col), None)
+        if chars is None:
+            lines.append(f"- {book}:{pg}:{col} cell_shrink 没出产物（重跑失败或上游缺失）")
+            n1 += 1
+            continue
         for p in pc.check_pin_vs_chars(new[(pg, col)], cc):
             lines.append(f"- {book}:{pg}:{col} {p}")
             n1 += 1
@@ -135,6 +148,8 @@ def main(argv=None) -> int:
     lines += ["", "## 三、补锚草稿", ""]
     if old_store is not None and probs:
         step = cells_step(book)
+        # 旧切分上照执行机条件再算一遍绑定：人裁当时落在哪一格，按那一格的位置出墨框（不按事件格号）
+        old_rows = pc.simulate_bindings(book, pages, tmp / "exec_old", store=old_store)
         drafts, skipped = [], []
         from open_guji_cv.feedback.events import EventLog, iter_events_readonly
         has_anchor = {e.id for e in iter_events_readonly(EventLog())
@@ -145,22 +160,32 @@ def main(argv=None) -> int:
                 skipped.append(f"{r['key']}：事件自带锚，补锚档不起作用，要人重审")
                 continue
             pg = int(r["key"].split(":")[1])
+            orow = old_rows.get(eid) or {}
+            ob = orow.get("bound") if orow.get("status") in pc.USE or orow.get("bound") else None
+            if not ob:
+                skipped.append(f"{r['key']}：旧切分下这条人裁也没绑上（{orow.get('status') or '无绑定'}），不出草稿，要人重审")
+                continue
             oc = old_store.read(book, step, page_key(pg), CELLS_KIND)
             nc = store.read(book, step, page_key(pg), CELLS_KIND)
-            d = (pc.propose_anchor(r["key"], eid, pc.cell_boxes(oc), nc)
+            d = (pc.propose_anchor(r["key"], eid, pc.cell_boxes(oc), nc, old_bound=ob)
                  if oc is not None and nc is not None else None)
             if d is None:
-                skipped.append(f"{r['key']}：旧切分里没有这一格")
+                skipped.append(f"{r['key']}：旧切分里没有 {ob} 这一格")
                 continue
             d["evidence"]["shape"] = r.get("shape")
+            seen = pc.old_char(old_store.read(book, "seed_admit", page_key(pg), "seed_admit"), ob)
+            d["evidence"]["old_char"] = seen
+            if seen and r.get("shape") and seen != r.get("shape"):
+                d["evidence"]["warn"] = f"旧格 {ob} 定的是「{seen}」，人裁是「{r.get('shape')}」"
             drafts.append(d)
         with open(out / "anchors_draft.jsonl", "w", encoding="utf-8") as f:
             for d in drafts:
                 f.write(json.dumps(d, ensure_ascii=False) + "\n")
         for d in drafts:
             ev = d["evidence"]
-            lines.append(f"- {d['key']} {ev.get('shape') or ''} → {ev['pred']}"
-                         f"{(' ' + ev['to']) if ev['to'] and ev['to'] != d['key'] else ''}（墨框落入 {ev['inside']:.0%}）")
+            lines.append(f"- {d['key']} {ev.get('shape') or ''}（旧格 {ev['old_cell']}）→ {ev['pred']}"
+                         f"{(' ' + ev['to']) if ev['to'] and ev['to'] != d['key'] else ''}（墨框落入 {ev['inside']:.0%}）"
+                         + (f" ⚠️ {ev['warn']}" if ev.get("warn") else ""))
         lines += [f"- {s}" for s in skipped]
         lines += ["", f"草稿 {len(drafts)} 行在 `anchors_draft.jsonl`。逐条看图核人裁原意后，"
                   f"追加到 `feedback/anchors/{book}.jsonl`（evidence 里写原因），再重跑本预检到 0。"]
