@@ -517,3 +517,14 @@ def test_add_cell_opens_item_with_own_image(tmp_path, monkeypatch):
     assert c["c"] == "曰" and c["note"] == "撤库重审" and c["recheck"] and c["id"].startswith("pi_")
     assert c["img"]["s"] in {e["name"] for e in doc["sprites"]} and len(uploaded) == 1
     assert P.ItemStore.open(data, "bk", "004").find("7:2:3")[0]["fp"] == "sha1fp"
+
+
+def test_structure_changed_only_on_cell_add_del(tmp_path):
+    """格号集合或次序变了才走格级对照表（增删格、改号）；只换字仍走原路（ZM 11-10）。"""
+    def char(p, s):
+        d = {"pages": [{"page": 1, "columns": [{"cells": [{"a": f"1:1:{i + 1}", "c": c} for i, c in enumerate(s)]}]}]}
+        p.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+        return p
+    a, b, c = char(tmp_path / "a.json", "語子"), char(tmp_path / "b.json", "語孟子"), char(tmp_path / "c.json", "論子")
+    assert rp._structure_changed(a, b)
+    assert not rp._structure_changed(a, c)
