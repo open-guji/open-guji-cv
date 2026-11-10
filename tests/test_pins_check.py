@@ -168,3 +168,12 @@ def test_judge_missing(monkeypatch):
 def test_old_char():
     seed = SimpleNamespace(columns=[SimpleNamespace(chars=[SimpleNamespace(id="b:7:1:2", char="務")])])
     assert pc.old_char(seed, "b:7:1:2") == "務" and pc.old_char(seed, "b:7:1:3") is None and pc.old_char(None, "x") is None
+
+
+def test_split_preexisting():
+    from open_guji_cv.feedback.pins_check import split_preexisting
+    old = {"a": {"status": "unanchored"}, "b": {"status": "valid", "bound": "k"},
+           "c": {"status": "review"}}
+    probs, pre = split_preexisting(["a", "b", "c", "d"], {"c"}, old)
+    # a：不在改动列、旧下也没绑上 → 老失锚；b：旧下绑得上 → 本次弄坏的；c：在改动列；d：没有旧切分
+    assert pre == {"a"} and probs == ["b", "c", "d"]
