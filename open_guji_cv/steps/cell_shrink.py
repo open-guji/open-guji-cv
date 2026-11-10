@@ -403,7 +403,8 @@ class CellShrinkStep(Step):
         book_deps=("frame_bar_strategy",),
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
                    "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.seg.seam", "open_guji_cv.seg.frame_line",
-                   "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect"),
+                   "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect",
+                   "open_guji_cv.impl.keben.patch_clean"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────
@@ -593,7 +594,11 @@ class CellShrinkStep(Step):
         }
         ex = CharExtractor(padding_ratio=p.padding_ratio, min_ink_ratio=p.min_ink_ratio,
                            strategy=p.strategy, frame_guard=p.frame_guard)
-        return ex.extract_page(img, grid, ctx.book.id, str(page))
+        pairs = ex.extract_page(img, grid, ctx.book.id, str(page))
+        # 发前清格（书级钩子 `impl/keben/patch_clean`，2026-11-10 SJ）：格框格号不动，字块里不属于本格的墨抹白。
+        # 缺省不清；`render` 再生字块也走这里，两条路一致。
+        clean = _patch_clean_hook(ctx)
+        return clean(img, pairs, ink_threshold=128) if clean is not None else pairs
 
     # ── 多候选试切（Step7「切分裁决」板块要看的数据）────────────────────
     def _cand_variants(self, ctx: RunContext, page: int, cc: ColumnCells,
@@ -852,6 +857,14 @@ class CellShrinkStep(Step):
         raise KeyError(f"再生不出字块: {key}{'alt' if alt else ''}{sub}")
 
 
+def _patch_clean_hook(ctx: RunContext):
+    """这册书的发前清格实现（`impl/keben/patch_clean.clean_column`；缺省 None＝不清）。"""
+    import importlib
+    from ..core.seg_set import resolve
+    return getattr(importlib.import_module(resolve(ctx.book, _PATCH_CLEAN)), "clean_column", None)
+
+
+_PATCH_CLEAN = "open_guji_cv.impl.keben.patch_clean"
 _RENDER_MEMO: dict = {}
 _INNER_MEMO: dict = {}     # (书, 页) → 整页内框线（render 逐格再生时不必每格重拟）
 _RENDER_MEMO_MAX = 4      # 页数；一页 9 列字块合计几 MB，再生基本按页顺序来
