@@ -465,3 +465,29 @@ def test_edit_cells_withdraw_restore_note():
     r = rp.edit_cells(doc, restore=["1:1:1"], by="A31")
     assert r["放回"] == ["1:1:1"] and "withdrawn" not in doc and "withdrawn" not in doc["cells"][-1]
     assert [e["op"] for e in doc["edits"]] == ["withdraw", "note", "note", "restore"]
+
+
+def test_reconcile_items_keeps_votes_withdrawn_and_unchanged(tmp_path, monkeypatch):
+    """待审条目化（sheldon 11-10）：换单逐格对条目，没变的不动、撤下的不放回，导出的单每格带 id。"""
+    P = pytest.importorskip("guji_manager.review.pending_items")
+    import argparse
+    monkeypatch.setattr(rp, "data_dir", lambda ws: tmp_path / "data")
+    monkeypatch.setattr(rp, "cell_fingerprints", lambda book, cells: {c: "fp" + c for c in cells})
+    old = {"rev": "004-r1", "cells": [{"cell": "1:1:1", "review": "pending", "why": ["a"]},
+                                      {"cell": "1:1:2", "review": "pending", "why": ["b"]}],
+           "withdrawn": [{"cell": "1:1:3", "why": ["c"]}]}
+    new = {"rev": "004-r2", "sprites": [], "cells": [{"cell": "1:1:1", "review": "pending", "why": ["a"]},
+                                                      {"cell": "1:1:3", "review": "pending", "why": ["c2"]},
+                                                      {"cell": "1:1:4", "review": "pending", "why": ["d"]}]}
+    pend = tmp_path / "new.pending.json"
+    pend.write_text(json.dumps(new), encoding="utf-8")
+    plan = {"pending": str(pend), "chapter": "004", "text_id": "bk"}
+    assert rp.reconcile_items(tmp_path / "bk-书", "vol04", plan, argparse.Namespace(rev="004-r2"), old)
+    doc = json.loads(pend.read_text(encoding="utf-8"))
+    assert doc["rev"] == "004-r2"
+    assert [c["cell"] for c in doc["cells"]] == ["1:1:1", "1:1:4"]
+    assert [c["cell"] for c in doc["withdrawn"]] == ["1:1:3"]
+    store = P.ItemStore.open(tmp_path / "data", "bk", "004")
+    assert store.find("1:1:2")[0]["state"] == "closed"
+    keep = store.find("1:1:1")[0]
+    assert doc["cells"][0]["id"] == keep["id"] and keep["fp"] == "fp1:1:1"

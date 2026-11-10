@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- PATCH（A31 11-10，sheldon 定待审条目化）`republish.py push` 换单改为逐格对待审条目（guji-manager `review/pending_items`，`guji pending`）：没变的格条目不动、变了只改字段、新格开条目、不再待审的关掉、人工撤下的不放回；格号与图块指纹（字块图 sha1）都记；导出的整张单每格带 `id`／`ver`（网站按条目记票）。`edit-cell` 有条目时改条目。manager 没有条目模块时照旧整张换。L0。
+
 ## [0.6.36] - 2026-11-10
 
 - 发版说明（A31 11-10）：从 dev 7917fa4 切，含 #1354、#1355（edit-cell 单格原地改）、#1356、#1357、#1358（row_segment 1.48 列端框线格记空，各书从 Step3 起重算）。配 guji-manager ≥ v0.4.34。

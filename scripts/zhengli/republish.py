@@ -843,8 +843,8 @@ def cmd_push(a) -> int:
         bak = out / f"online.{json.loads(online.read_text(encoding='utf-8')).get('rev')}.pending.json"
         shutil.copyfile(online, bak)
         print(f"旧单备份 → {bak}")
-    if online.exists():                                          # 上一版单格撤下的格，换单后照旧撤下（edit-cell，sheldon 11-10）
-        prev = json.loads(online.read_text(encoding="utf-8"))
+    if not reconcile_items(ws, book, plan, a, old_doc) and online.exists():
+        prev = json.loads(online.read_text(encoding="utf-8"))   # 没有条目（manager 太旧）：上一版撤下的格照旧撤下（edit-cell）
         carry = [c["cell"] for c in prev.get("withdrawn") or [] if c.get("cell")]
         if carry:
             nd = json.loads(Path(plan["pending"]).read_text(encoding="utf-8"))
@@ -883,6 +883,54 @@ def cmd_push(a) -> int:
         todo.append("⚠ 这次出了雪碧图目录，但单子里没有 sprites[]：网站取不到图（见 sprite_pub.py）")
     print("\n还要做：\n" + "\n".join(f"- {t}" for t in todo))
     return 0
+
+
+def cell_fingerprints(book: str, cells: list[str]) -> dict[str, str]:
+    """格号 → 图块指纹（现行产物的字块图 sha1，同人裁锚 `content_sha`）。取不到的格不给。"""
+    import hashlib
+    from open_guji_cv.feedback.anchor import _resolved, patch_key
+    from open_guji_cv.products.cache import ImageCache
+    cache, out = ImageCache(), {}
+    for cell in cells:
+        m = re.fullmatch(r"(\d+):(\d+):(-?\d+)([ab]?)", cell)
+        if not m:
+            continue
+        try:
+            path = cache.get(book, "char_patch", _resolved(book, patch_key(int(m[1]), int(m[2]), int(m[3]), m[4])))
+            if path is not None:
+                out[cell] = hashlib.sha1(Path(path).read_bytes()).hexdigest()
+        except Exception:
+            continue
+    return out
+
+
+def reconcile_items(ws: Path, book: str, plan: dict, a, old_doc: dict | None) -> bool:
+    """待审条目化（sheldon 11-10，guji-manager doc/00-总览/设计-待审条目化.md）：新单不再整张替换，而是逐格对条目——
+    没变的格条目不动（票、说明、撤下都留着），变了的只改字段，新出现的开新条目，不再待审的关掉；人工撤下的不放回。
+    然后从条目导出整张单写回 `plan["pending"]`（单头取新单）。manager 没有条目模块就返回 False（照旧整张换）。"""
+    try:
+        from guji_manager.review import pending_items as P
+    except ImportError:
+        print("ⓘ guji-manager 没有待审条目模块（要 ≥ 带 guji pending 的版本）：照旧整张换单")
+        return False
+    text_id, chapter = plan.get("text_id") or text_id_of(ws), plan["chapter"]
+    store = P.ItemStore.open(data_dir(ws), text_id, chapter)
+    if not store.items and old_doc:                              # 第一次：先把现行单导成条目（src=import:<旧 rev>）
+        P.import_sheet(store, old_doc, by="republish")
+        print(f"现行单 {old_doc.get('rev')} 导成条目 {len(store.items)} 条")
+    nd = json.loads(Path(plan["pending"]).read_text(encoding="utf-8"))
+    cells = [c.get("cell") for c in nd.get("cells") or [] if c.get("cell")]
+    fps = {} if getattr(a, "no_fingerprint", False) else cell_fingerprints(book, cells)
+    res = P.reconcile(store, nd.get("cells") or [], src=f"rev:{a.rev}", fps=fps, by=os.environ.get("GUJI_ACTOR", "republish"))
+    n = store.save()
+    print("条目 reconcile：" + "、".join(f"{k} {len(v) if isinstance(v, list) else v}" for k, v in res.items())
+          + f"（追加 {n} 行，指纹 {len(fps)}/{len(cells)} 格）")
+    if res.get("撤下仍判待审"):
+        print(f"ⓘ 人工撤下、机器仍判待审 {len(res['撤下仍判待审'])} 格，保持撤下：{' '.join(res['撤下仍判待审'][:20])}")
+    if res.get("图变"):
+        print(f"ⓘ 格号对上、图块变了 {len(res['图变'])} 格（条目照旧，标 fp_changed）：{' '.join(res['图变'][:20])}")
+    Path(plan["pending"]).write_text(json.dumps(P.export_sheet(store, nd), ensure_ascii=False), encoding="utf-8")
+    return True
 
 
 DATA = "https://data.openguji.com"
@@ -1177,6 +1225,35 @@ def edit_cells(doc: dict, *, withdraw=(), restore=(), notes=None, by: str = "", 
     return out
 
 
+def _items_edit(ws: Path, text_id: str, chapter: str, doc: dict, a, notes: dict, by: str):
+    """edit-cell 走待审条目（有 guji-manager 条目模块时）：撤下、放回、改说明记进条目日志，再导出整张单。
+    返回 (结果, 新单)；没有条目模块返回 None。"""
+    try:
+        from guji_manager.review import pending_items as P
+    except ImportError:
+        return None
+    store = P.ItemStore.open(data_dir(ws), text_id, chapter)
+    if not store.items:
+        P.import_sheet(store, doc, by=by)
+    res = {"撤": [], "放回": [], "改说明": [], "找不到": []}
+    why = a.why or ""
+    for op, refs, key in (("withdraw", a.withdraw or [], "撤"), ("restore", a.restore or [], "放回")):
+        for x in refs:
+            try:
+                getattr(store, op)(x, by=by, why=why)
+                res[key].append(P.norm_cell(x))
+            except (KeyError, ValueError):
+                res["找不到"].append(P.norm_cell(x))
+    for x, note in notes.items():
+        try:
+            store.note(x, note, by=by, why=why)
+            res["改说明"].append(P.norm_cell(x))
+        except (KeyError, ValueError):
+            res["找不到"].append(P.norm_cell(x))
+    store.save()
+    return res, P.export_sheet(store, doc)
+
+
 def cmd_edit_cell(a) -> int:
     """线上单单格原地改：撤下、放回、改说明，不换 rev、不动别的格，网站已投的票照旧有效。"""
     ws, book = Path(a.workspace).resolve(), a.book
@@ -1190,8 +1267,12 @@ def cmd_edit_cell(a) -> int:
             sys.exit(f"✗ --note 写成 格号=说明：{kv}")
         k, v = kv.split("=", 1)
         notes[k.strip()] = v.strip()
-    res = edit_cells(doc, withdraw=a.withdraw or [], restore=a.restore or [], notes=notes,
-                     by=a.by or os.environ.get("GUJI_ACTOR", ""), why=a.why or "")
+    by = a.by or os.environ.get("GUJI_ACTOR", "")
+    items = _items_edit(ws, text_id, chapter, doc, a, notes, by) if a.yes else None
+    if items is not None:                                        # 有条目：改条目、从条目导出整张单（guji pending 同一套）
+        res, doc = items
+    else:
+        res = edit_cells(doc, withdraw=a.withdraw or [], restore=a.restore or [], notes=notes, by=by, why=a.why or "")
     votes = web_votes(ws, text_id, rev)
     voted = [x for x in res["撤"] if votes.get(x)]
     print(f"{book} {rev}：撤下 {len(res['撤'])}、放回 {len(res['放回'])}、改说明 {len(res['改说明'])}"
