@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- PATCH（A31 11-10，A23 要）`hold_pending_current` 把撤库重审格（`feedback.lookup.evict_review_cells`，cv#1333）也算作待审：现行有字则文本不动，现行是 □ 且无候选也保持 □，人裁定了才改。cv#1333 没并入时自动跳过。L0。
+
 - PATCH（A31 11-10，用户定）`republish.py` 入库前加 `hold_pending_current`：待审格现行 book-text 已有字、首选字不同时文本不动（等人裁定了再改，少改 book-text 提交）；现行是 □／缺格才写首选字。需 guji-manager 含 `apply_pending(current=)` 的版本，旧版跳过并提示。L0。
 
 ## [0.6.34] - 2026-11-10
