@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- PATCH（A31 11-09，SJ 反映史記 r20 manifest 的 manager_version 为空）`core/contract.manager_version()` 在没设 `GUJI_MANAGER_VERSION` 时取已装 guji-manager 的版本（`m<版本>`，与 manager 子进程口径一致），没装仍为 None。只供审计，不进指纹，L0。
+
 ## [0.6.33] - 2026-11-09
 
 - 发版说明（A31 11-09）：从 dev 93e03bc 切，含 #1338、#1339（rerun_prep 修复）、#1340（删 decision_build，book-text 只录首选字）。
