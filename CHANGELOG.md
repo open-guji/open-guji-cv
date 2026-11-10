@@ -5,7 +5,7 @@
 
 ## [未发版]
 
-## [0.6.39] - 测试中
+## [0.6.39] - 2026-11-10
 
 - PATCH（A31 11-10，sheldon 定）`republish.py push／edit-cell／add-alt／add-sprites --sync` 触发网站 proofing-sync 时带 `only=<书>/<章>`（原先 push 等没设 publish_only，整站发布，整站冒烟要好几分钟）。L0（只改发布触发）。
 
