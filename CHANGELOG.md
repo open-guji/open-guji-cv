@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- auto_cycle 加 `--ack-unlanded-votes <原因>`，透传给 proof_cycle apply → republish issue（ZM 提，ai-team 字的等价与归一审视陷阱 4；`guji swap run` 同名参数透传到这里）。只动 `scripts/zhengli/`，PATCH。
+
 - republish.py 三处文案「文本线升 minor」改 patch（纯文案，用户 11-10 定小改动一律 patch；ZM 提）。L0。
 
 - 格号变动单一路径收尾（ZM 11-10）：republish 遇「格号没变但有增删字」也走格级对照表（`swap.booktext`），不再退出叫人推 a32 分支等 A33；auto_cycle 的 book-text 失败结论改叫 `guard-stop`，提示切坏交切分线、锚点交 A33、修好后 `guji swap book-text --sheet`。只动 `scripts/zhengli/`，PATCH。
