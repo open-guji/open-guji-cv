@@ -21,6 +21,15 @@
 
 每个 MINOR 一段：这一版多了什么。逐版细节见仓里 [CHANGELOG.md](https://github.com/open-guji/open-guji-cv/blob/dev/CHANGELOG.md)（含全部 PATCH）和 [RELEASES.md](https://github.com/open-guji/open-guji-cv/blob/dev/RELEASES.md)（MINOR 的发版说明）。
 
+### v0.7（2026-11-10，v0.7.0）
+
+- **书级代码**：只给一本书用的切分代码搬出 cv，进各书工作区仓 `code/`，有自己的整数版本号 `k<N>`（tag 走中转站）；cv 留三条版式的缺省实现 `impl/keben|modern|free`（原 `books/siku_zongmu|beixing|zengguang_youxue`），书仓 `code/` 为空也能跑。史記、全唐文已搬（k1；史記 k2 把印泥、雙行小注两行字数可不等也搬了过去）。共用 Step 不再加单书开关，改留钩子（`jiazhu_step`、`seal_ink`）。
+- **四库版本号统一「字母＋整数」**：c 语料、g 字形、m 模型、k 书级代码；册配置可写 `pin: c31-g19-m2-k3`，产物包标签 `cv0.7.0-c…-g…-m…-k…`。
+- **模型文件搬出 git**：真源在 R2，cv 只带路径 → sha256 表，起跑、测试、装包时自动取回。
+- v0.6.x 期间（39 个 PATCH，11-01 到 11-10）累积的主要变化：殿本换 Commons 新图源（第 7 轮起）与按版框重切；参校本属性 `reference_profile`（A／B／C 块）；页型表 `page_kinds` 取代散在各步的页号（老写法警告）；seed_admit 从 1.3x 到 1.8x，加了一大批按书开的放行／退审旋钮（`p_ref_*`、`solo_5b`／`solo_cal`／`solo_adapt_*`、`num_run_*`、折叠组 `fold_*`、`group_flow_*`、撤库重审闸 `evict_review` 缺省开等，见 [开关登记表](https://github.com/open-guji/open-guji-cv/blob/dev/doc/开关登记表.md)）；row_segment 到 1.49（等距格网优先、表挪一格、列端框线格记空、书名列 `layout_title_fit`、`grid_end_fit`）；border_detect 弱框护栏、`hline_hints` 页级人给框位；切点判官结果落盘复用；出单与网页校对的待审条目化（`republish.py`）；笔画模板算法库 `strokes`（研究用）。
+
+**本次 Wiki 改写（2026-11-10）**：按 v0.7 改了切分代码的结构说法（管线全景、Step3、各书一览、实验与评测、页型、殿本页）、钉版本（产物与数据）、首页与侧栏版本号。**截图没有重出**：v0.6 版截图取自换图源前的产物包，殿本第 7 轮起图源换成 Commons，页面构图一致、坐标与图不同；等第 8 轮 main 包出来再按 `wiki/tools/make_shots.py` 重出。
+
 ### v0.6（2026-10-31，v0.6.0）
 
 - **切分模块化**：共用原语库 `seg/`（找线、网格、折线、拉直、投影、走缝、切点裁判）＋每套书自管 `books/<套书>/`（殿本、史記、幼學、北行），套书登记 `core/seg_set.py`，各套书一份样页单。没有任何 Step 的 `code_hash` 变。

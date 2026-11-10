@@ -68,10 +68,10 @@ Step3 一共有三个结构先验开关，按这部书的整理本是什么样�
 
 ## 怎么验
 
-切分代码按套书分目录（`books/<套书>/`），每套书有一份**样页单** `samples.yaml`，列着 10–30 页以前出过问题的页。改切分的 PR 要在样页上比改前改后，变了的页逐页看图：
+每条版式的缺省实现（`impl/<版式>/`）和每个有书级代码的书仓（`code/samples.yaml`）各有一份**样页单**，列着 10–30 页以前出过问题的页。改切分的 PR 要在样页上比改前改后，变了的页逐页看图：
 
 ```bash
-python scripts/seg_samples.py affected --base origin/dev     # 这次改动牵动哪几套书
+python scripts/seg_samples.py affected --base origin/dev     # 这次改动牵动哪几条版式／哪几本书
 python scripts/seg_samples.py submit --set affected --base origin/dev --cv <分支> --why "…"
 ```
 
