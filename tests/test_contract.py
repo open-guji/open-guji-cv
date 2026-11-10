@@ -21,7 +21,11 @@ def test_manifest_fields_carry_contract_and_manager(monkeypatch):
     f = cvv.manifest_fields()
     assert f["contract_version"] == CONTRACT_VERSION and f["manager_version"] == "m0.1.0"
     monkeypatch.delenv(MANAGER_VERSION_ENV)
-    assert cvv.manifest_fields()["manager_version"] is None
+    import importlib.metadata as md
+    monkeypatch.setattr(md, "version", lambda n: (_ for _ in ()).throw(md.PackageNotFoundError(n)))
+    assert cvv.manifest_fields()["manager_version"] is None          # 没装 manager
+    monkeypatch.setattr(md, "version", lambda n: "0.4.31")
+    assert cvv.manifest_fields()["manager_version"] == "m0.4.31"     # env 没设：取已装版本
 
 
 def test_old_manifest_line_without_new_fields_loads(tmp_path):
