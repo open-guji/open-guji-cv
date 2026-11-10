@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.7.4] - 2026-11-10
+
+- 出单门：复审格旧人裁与现行字套码位归一后相同就不上单（#1397，ZM；pending_route --codepoints，republish 传本册表）。只动 scripts/，不改 Step code_hash。PATCH。
+
 - auto_cycle 加 `--ack-unlanded-votes <原因>`，透传给 proof_cycle apply → republish issue（ZM 提，ai-team 字的等价与归一审视陷阱 4；`guji swap run` 同名参数透传到这里）。只动 `scripts/zhengli/`，PATCH。
 
 - republish.py 三处文案「文本线升 minor」改 patch（纯文案，用户 11-10 定小改动一律 patch；ZM 提）。L0。
