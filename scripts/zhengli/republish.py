@@ -1639,7 +1639,7 @@ def closeout_derive(repo: Path, plan: dict, base: str | None) -> None:
 
 
 def bump_book_text(repo: Path, plan: dict, note: str) -> str:
-    """同一次导出的 char／cord／norm 拷进 book-text 的 dev、文本线升 minor、本地校验（--dev），提交并推 dev。
+    """同一次导出的 char／cord／norm 拷进 book-text 的 dev、文本线升 patch、本地校验（--dev），提交并推 dev。
     返回改动前 dev 的提交号（锚点漂移 A03 以它为基准）。
 
     2026-10-24 用户定：流程化小改直接提交 dev，不开 PR；`index/texts` 不在 dev 上提交，版本记录行写进提交信息（book-text 不再有 CHANGES.md），
@@ -1902,7 +1902,7 @@ def main(argv=None) -> int:
         if name in ("from-pack", "issue"):
             p.add_argument("--label", required=name == "from-pack",
                            help="产物包标签（guji products pack list <册>）" + ("；issue 给了就走 from-pack，不给就要 --export-dir" if name == "issue" else ""))
-            p.add_argument("--book-text", help="book-text 仓：读线上文本版本" + ("；issue 还会拷同一次导出、文本线升 minor、提交到新分支" if name == "issue" else ""))
+            p.add_argument("--book-text", help="book-text 仓：读线上文本版本" + ("；issue 还会拷同一次导出、文本线升 patch、提交到新分支" if name == "issue" else ""))
             p.add_argument("--text-version", help="不给 --book-text 时手给线上文本版本")
             p.add_argument("--no-pull", action="store_true", help="不先 guji db pull")
             p.add_argument("--out-root", help="缺省 <工作区>/reports/<册>/_publish")
@@ -1938,7 +1938,7 @@ def main(argv=None) -> int:
             p.add_argument("--old-source-rev", type=int, help="换单门：线上旧单是在哪一版页表上出的（缺省看单子的 source_rev／出单时刻）")
         if name == "push":
             p.add_argument("--yes", action="store_true", help="看过差异单、确认推")
-            p.add_argument("--book-text", help="book-text 仓：拷同一次导出、文本线升 minor、提交到新分支")
+            p.add_argument("--book-text", help="book-text 仓：拷同一次导出、文本线升 patch、提交到新分支")
             p.add_argument("--note", help="book-text 版本记录一行的说明")
             p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库，并触发网站 proofing-sync")
             p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
