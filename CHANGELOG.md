@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.6.37] - 2026-11-10
+
+- 发版说明（A31 11-10）：从 dev 1520d9b 切，含 #1361、#1363（待审条目化：换单逐格对条目、add-cell）、#1362＋#1364（border 越界修复，登等价，不过期）。待审条目要 guji-manager ≥ v0.4.35（旧 manager 照旧整张换单）。
+
 - PATCH（A22 #1362，A31 登等价）`impl/keben/border` 外框采样列越过图宽时去掉（史記09 年表页 border_detect IndexError）；只影响原先崩的页，登 `core/code_equiv`（keben 3 页逐字节相同＋代码论证），各书 border_detect 不过期。
 
 - PATCH（A31 11-10，待审条目化第 2 步）`republish.py add-cell`：单上加一格不换 rev——开待审条目，现行字块图单独出一张 webp（文件名按内容 sha256，传 R2），条目带它、导出时并进 `sprites[]`，网站照旧发布。L0。
