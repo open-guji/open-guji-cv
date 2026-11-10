@@ -491,3 +491,29 @@ def test_reconcile_items_keeps_votes_withdrawn_and_unchanged(tmp_path, monkeypat
     assert store.find("1:1:2")[0]["state"] == "closed"
     keep = store.find("1:1:1")[0]
     assert doc["cells"][0]["id"] == keep["id"] and keep["fp"] == "fp1:1:1"
+
+
+def test_add_cell_opens_item_with_own_image(tmp_path, monkeypatch):
+    """单上加一格不换 rev（待审条目化第 2 步）：条目带按内容寻址的单图，导出的单 sprites[] 里有它。"""
+    P = pytest.importorskip("guji_manager.review.pending_items")
+    import argparse
+    data = tmp_path / "data"
+    online = data / "feedback" / "lists" / "proofing" / "bk" / "004.pending.json"
+    online.parent.mkdir(parents=True)
+    online.write_text(json.dumps({"rev": "004-r1", "cells": [{"cell": "1:1:1", "review": "pending"}], "sprites": []}),
+                      encoding="utf-8")
+    monkeypatch.setattr(rp, "data_dir", lambda ws: data)
+    monkeypatch.setattr(rp, "cell_states", lambda products, book: {"7:2:3": ("admit", "曰")})
+    monkeypatch.setattr(rp, "cell_image", lambda book, cell: (b"RIFFxxxxWEBP", 40, 42, "sha1fp"))
+    uploaded = []
+    monkeypatch.setattr(rp.sprite_pub, "upload", lambda entries, pub: uploaded.extend(entries) or {"uploaded": len(entries)})
+    a = argparse.Namespace(workspace=str(tmp_path / "bk-书"), book="vol04", chapter="004", text_id="bk", cell=["vol04:7:2:3"],
+                           note="撤库重审", recheck=True, src=None, why="", by="sheldon", no_image=False, out=None,
+                           yes=True, sync=False, no_publish_web=True)
+    assert rp.cmd_add_cell(a) == 0
+    doc = json.loads(online.read_text(encoding="utf-8"))
+    assert doc["rev"] == "004-r1"
+    c = next(x for x in doc["cells"] if x["cell"] == "7:2:3")
+    assert c["c"] == "曰" and c["note"] == "撤库重审" and c["recheck"] and c["id"].startswith("pi_")
+    assert c["img"]["s"] in {e["name"] for e in doc["sprites"]} and len(uploaded) == 1
+    assert P.ItemStore.open(data, "bk", "004").find("7:2:3")[0]["fp"] == "sha1fp"

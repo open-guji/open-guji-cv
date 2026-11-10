@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- PATCH（A31 11-10，待审条目化第 2 步）`republish.py add-cell`：单上加一格不换 rev——开待审条目，现行字块图单独出一张 webp（文件名按内容 sha256，传 R2），条目带它、导出时并进 `sprites[]`，网站照旧发布。L0。
+
 - PATCH（A31 11-10，sheldon 定待审条目化）`republish.py push` 换单改为逐格对待审条目（guji-manager `review/pending_items`，`guji pending`）：没变的格条目不动、变了只改字段、新格开条目、不再待审的关掉、人工撤下的不放回；格号与图块指纹（字块图 sha1）都记；导出的整张单每格带 `id`／`ver`（网站按条目记票）。`edit-cell` 有条目时改条目。manager 没有条目模块时照旧整张换。L0。
 
 ## [0.6.36] - 2026-11-10
