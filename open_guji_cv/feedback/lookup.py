@@ -632,6 +632,32 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     return out
 
 
+def evict_review_cells(book: str, log=None) -> dict[str, dict]:
+    """人撤库、要求这一格重新人审的格 → `{裸 id: {"char", "event", "ts"}}`（Sheldon 2026-11-09）。
+
+    库内刻例审阅卡上点「撤库」，多半是这块图切坏了、看不出是哪个字：除了出库（`glyph_audit` 消费器）、
+    作废旧人裁（`stale_verdicts.tsv`），这一格的**文本也要撤下来、重新人审**——否则下一轮 5a 还会拿库里
+    别的刻例把它自动放过去。只认带 `payload.review` 的撤库事件（审阅页出的；体检卡的旧撤库不追溯）。
+    同一格之后再有人裁定字的，由 `human_chars` 那条路采信，seed_admit 的闸看见 `channel=human` 就不拦。"""
+    from .events import EventLog, iter_events_readonly
+    _log = log or EventLog()
+    try:
+        evs = list(iter_events_readonly(_log))
+    except FileNotFoundError:
+        return {}
+    pre = f"{book}:"
+    out: dict[str, dict] = {}
+    for e in sorted(evs, key=lambda e: (e.ts, e.batch, e.seq)):
+        p = e.payload or {}
+        if e.kind != "glyph_audit" or p.get("v") != "evict" or not p.get("review"):
+            continue
+        iid = str(p.get("target") or p.get("instance_id") or e.target.key)
+        key = iid[3:] if iid.startswith("v2:") else iid
+        if key.startswith(pre):
+            out[key] = {"char": p.get("char_self"), "event": e.id, "ts": e.ts}
+    return out
+
+
 def _env_on(name: str) -> bool:
     import os
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")

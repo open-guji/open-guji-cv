@@ -5,6 +5,16 @@
 
 ## [未发版]
 
+## [0.6.35] - 2026-11-10
+
+- 发版说明（A31 11-10）：从 dev d0de2985 切，含 #1333（撤库重审闸）、#1349、#1350（待审格现行有字则 book-text 不动，撤库重审格也保持）。配 guji-manager ≥ v0.4.34。
+
+- PATCH 撤库重审格自动上单（A23，Sheldon 11-09「不论什么版本，撤库就给这格出待审卡，人裁定了再改 book-text」）：`scripts/zhengli/republish.py` prep 读带 `review` 的撤库事件，撤库后没人再裁的格并进复审清单（卡片头显示「撤库重审」），book-text 不因此改字。L0（脚本，不进指纹）。
+- PATCH 撤库重审闸 `seed_admit.evict_review`（缺省开，A23，Sheldon 11-09）：库内刻例审阅卡上「撤库」的格（带 `review` 的 `glyph_audit evict` 事件，guji-manager 审阅页出）机器放行一律退回待审（doubt `evict_review`，待审原因 seg_defect）；`feedback/lookup.evict_review_cells`。seed_admit 指纹变；没有这类事件的书产物不变。
+- PATCH（A31 11-10，A23 要）`hold_pending_current` 把撤库重审格（`feedback.lookup.evict_review_cells`，cv#1333）也算作待审：现行有字则文本不动，现行是 □ 且无候选也保持 □，人裁定了才改。cv#1333 没并入时自动跳过。L0。
+
+- PATCH（A31 11-10，用户定）`republish.py` 入库前加 `hold_pending_current`：待审格现行 book-text 已有字、首选字不同时文本不动（等人裁定了再改，少改 book-text 提交）；现行是 □／缺格才写首选字。需 guji-manager 含 `apply_pending(current=)` 的版本，旧版跳过并提示。L0。
+
 ## [0.6.34] - 2026-11-10
 
 - PATCH（A31 11-10，用户定删 book-text 各书 CHANGES.md）`scripts/zhengli/republish.py` 的 `bump_book_text` 不再传 `--pr TBD`，改收 bump_original 打印的「版本记录」行写进 book-text 提交信息。与 manager、book-text 同名 PR 配套。L0。

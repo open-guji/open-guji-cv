@@ -432,3 +432,23 @@ def test_closeout_derive_after_text_push(tmp_path, monkeypatch, capsys):
     rc[0] = 1
     rp.closeout_derive(tmp_path / "bt", plan, "base123")     # 失败不抛
     assert "没跑通" in capsys.readouterr().out
+
+
+def test_evict_recheck_merges_and_skips_decided(tmp_path, monkeypatch):
+    """撤库重审格自动上单（Sheldon 11-09）：并进手给清单、手给的说明优先、撤库后人已再裁的不上。"""
+    import open_guji_cv.feedback.lookup as lookup
+    monkeypatch.setattr(lookup, "evict_review_cells", lambda book, log=None: {
+        "vol01:1:1:1": {"char": "甲"}, "vol01:1:1:2": {"char": "乙"}, "vol01:1:1:3": {"char": "丙"}})
+    monkeypatch.setattr(lookup, "human_chars", lambda book, **kw: {"vol01:1:1:3": "丙"})
+    user = tmp_path / "rc.tsv"
+    user.write_text("1:1:2\t手给说明\n2:2:2\t别的复审\n", encoding="utf-8")
+    p = rp.evict_recheck(tmp_path, "vol01", str(user), tmp_path)
+    rows = [ln.split("\t") for ln in p.read_text(encoding="utf-8").splitlines()]
+    assert [r[0] for r in rows] == ["1:1:2", "2:2:2", "1:1:1"]
+    assert rows[0][1] == "手给说明" and rows[2][1] == rp.EVICT_NOTE
+
+
+def test_evict_recheck_none_when_no_events(tmp_path, monkeypatch):
+    import open_guji_cv.feedback.lookup as lookup
+    monkeypatch.setattr(lookup, "evict_review_cells", lambda book, log=None: {})
+    assert rp.evict_recheck(tmp_path, "vol01", None, tmp_path) is None

@@ -653,6 +653,53 @@ def seg_selfcheck_on(text_id: str) -> bool:
     return bool((sd.book_opts(text_id) or {}).get("enabled"))
 
 
+EVICT_NOTE = "撤库重审：库内刻例审阅判这块图不该当刻例（多半切坏），请重新定字"
+
+
+def evict_recheck(ws: Path, book: str, user_recheck: str | None, out: Path) -> Path | None:
+    """撤库重审格自动上单（Sheldon 2026-11-09）：库内刻例审阅卡上「撤库」的格（带 `review` 的 glyph_audit evict 事件，
+    `feedback.lookup.evict_review_cells`），不论这册现在是什么版本，出单都放回单上当复审格，卡片头上显示 `EVICT_NOTE`；
+    book-text 不因此改字（待审格 book-text 留现字），人在单上定了字再按投票改。撤库之后人已再裁过的格（`human_chars`
+    里有，撤库时旧人裁已作废，留下的都是撤库后裁的）不再上单。和 `--recheck` 手给的清单合并，手给的说明优先。
+    没有这类格返回 None（照用原清单）。"""
+    old = os.environ.get("GUJI_WORKSPACE")
+    os.environ["GUJI_WORKSPACE"] = str(ws)
+    try:
+        from open_guji_cv.feedback.lookup import evict_review_cells, human_chars
+        try:
+            cells = evict_review_cells(book)
+        except Exception as e:          # noqa: BLE001 —— 事件日志读不了不挡出单，只报出来
+            print(f"  ⚠ 撤库重审：读事件失败（{type(e).__name__}: {e}），这次不自动加撤库格")
+            return None
+        if not cells:
+            return None
+        try:
+            decided = human_chars(book)
+        except Exception as e:          # noqa: BLE001 —— 认不出人裁就全上单（多出几张卡，不漏）
+            print(f"  ⚠ 撤库重审：读人裁失败（{type(e).__name__}: {e}），撤库格全部上单")
+            decided = {}
+    finally:
+        if old is None:
+            os.environ.pop("GUJI_WORKSPACE", None)
+        else:
+            os.environ["GUJI_WORKSPACE"] = old
+    todo = {k: v for k, v in cells.items() if k not in decided}
+    if not todo:
+        return None
+    lines = []
+    if user_recheck:
+        lines += [ln for ln in Path(user_recheck).read_text(encoding="utf-8").splitlines() if ln.strip()]
+    given = {ln.split("\t", 1)[0].strip().removeprefix(f"{book}:") for ln in lines}
+    for k in sorted(todo):
+        cell = k.removeprefix(f"{book}:")
+        if cell not in given:
+            lines.append(f"{cell}\t{EVICT_NOTE}")
+    path = out / "recheck_merged.tsv"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"  撤库重审 {len(todo)} 格并进复审清单 → {path}")
+    return path
+
+
 def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     ws, book = Path(a.workspace).resolve(), a.book
     chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
@@ -668,6 +715,9 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     py = sys.executable
     env = {**os.environ, "GUJI_WORKSPACE": str(ws), "PYTHONIOENCODING": "utf-8"}
 
+    merged = evict_recheck(ws, book, getattr(a, "recheck", None), out)
+    if merged is not None:
+        a.recheck = str(merged)
     cards = ws / "reports" / book / f"{book}.cards.alt.json"
     if not a.no_alt:
         cards.unlink(missing_ok=True)             # 上一次的卡不能顶替这一次（格号可能已变）
@@ -1166,6 +1216,43 @@ def punct_stale_update(stale: dict | None, old: dict[str, str], new: dict[str, s
     return doc, others
 
 
+def hold_pending_current(new_char: Path, old_char: Path, plan: dict) -> int:
+    """待审格现行（book-text）已有字、导出的字不同：导出改回现行字，文本不动，等人裁定了再改（sheldon 11-10 定，少改 book-text 提交）。
+    要在比对改字（punct-stale 等）之前做。需要 guji-manager 的 `apply_pending(current=…)`；旧版 manager 不认就跳过并提示。"""
+    from guji_manager.formats import guji_char_cord as cc
+    if not (new_char.exists() and old_char.exists()):
+        return 0
+    cells = []
+    for k in ("pending", "team"):
+        f = plan.get(k)
+        if f and Path(f).exists():
+            cells += json.loads(Path(f).read_text(encoding="utf-8")).get("cells", [])
+    # 撤库重审格（cv#1333 `evict_review_cells`，sheldon 11-10）：现行有字则保持现字；现行是 □ 且没有候选也保持 □；人裁定了才改；
+    # 没有这个函数（cv#1333 未并入）、读不了事件，或这册没有这类格，都当没有
+    book = plan.get("book")
+    try:
+        from open_guji_cv.feedback.lookup import evict_review_cells, human_chars
+        ev = evict_review_cells(book) if book else {}
+        decided = human_chars(book) if ev else {}
+        have = {c["cell"] for c in cells}
+        for k in ev:
+            cell = k.removeprefix(f"{book}:")
+            if cell not in decided and cell not in have:
+                cells.append({"cell": cell})
+    except Exception:       # noqa: BLE001 — ImportError／读事件失败：不挡入库
+        pass
+    char = json.loads(new_char.read_text(encoding="utf-8"))
+    try:
+        n = cc.apply_pending(char, {"cells": cells}, current=_char_cells(old_char))
+    except TypeError:
+        print("⚠ guji-manager 太旧，不认 apply_pending(current=)：待审格不会按「现行有字则文本不动」处理，请升到含该改动的版本")
+        return 0
+    if n.get("held_current"):
+        new_char.write_text(cc.dumps(char), encoding="utf-8", newline="\n")
+        print(f"待审格 {n['held_current']} 格现行已有字、首选字不同：文本不动，等人裁")
+    return int(n.get("held_current") or 0)
+
+
 def stamp_char_pending(char_json: Path, plan: dict) -> None:
     """book-text 的 char 按同版待审单（公众单＋团队单）写 `pending_reason`、去待审格的 `lacuna`（guji-format char v0.4
     §4.8，sheldon 11-03 定：`lacuna` 只给审过定阙的格）。不改 Step9，只在入库这步做；分行稿逐字节不变。"""
@@ -1288,6 +1375,7 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
     stale_doc, others = None, []
     old_char = d / f"{ch}.char.json"
     new_char = Path(plan["export_dir"]) / f"{ch}.char.json"
+    hold_pending_current(new_char, old_char, plan)
     has_punct = (d / f"{ch}.punct.json").exists()
     if has_punct and old_char.exists() and new_char.exists():
         sp = d / f"{ch}.punct-stale.json"
