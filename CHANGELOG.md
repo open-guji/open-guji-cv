@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- 改切分（A22 P5 11-10，#1357）`row_segment` 1.48：列端物理首／末格只有版框线的记空（各书一律），列上打 `edge_frame_only`，格上打 `frame_line`（「不是字」标记，A31 定名，manager resolve 的 `new_not_char` 认它）；软参数 `manual_cells_fingerprint`。**各书从 row_segment 起过期**。同一列别的格 slot、格号、锚不变；book-text 导出时这一格不再出字。
+- PATCH（QTW/A22 11-10，#1356、SJ #1354）`seg_screen` 加三项筛查；`seg_pins_retire` 取建钉理由、`keep_for` 的钉子判留。L0。
 - PATCH（A31 11-10，sheldon 定「先单格原地改」）`republish.py edit-cell`：线上单单格原地撤下（挪进 `withdrawn[]`）、放回、改说明，不换 rev、不动别的格，已投的票照旧有效；每次操作记 `edits[]`。换单（push）时上一版撤下的格照旧撤下。L0。
 
 ## [0.6.35] - 2026-11-10
