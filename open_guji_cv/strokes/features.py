@@ -70,6 +70,29 @@ class ClassStats:
                    sd=np.asarray(d["sd"], float), n=d["n"])
 
 
+def bad_fit(fit: Fit, stroke: int, min_cover: float = 0.85, min_on_ink: float = 0.7,
+            max_ink_frac: float = 0.45) -> bool:
+    """整体贴坏了：骨架被解释得少、别的笔有一笔不落墨、或墨框里墨太满（切坏的黑块）。"""
+    others = [s.on_ink for j, s in enumerate(fit.strokes) if j != stroke]
+    return fit.cover < min_cover or bool(others and min(others) < min_on_ink) or fit.ink_frac > max_ink_frac
+
+
+def extra_feats(fit: Fit, stroke: int) -> np.ndarray:
+    """差一笔「学门槛」用的特征：验的那一笔的（独占率, 落墨率）。"""
+    s = fit.strokes[stroke]
+    return np.array([s.excl, s.on_ink], float)
+
+
+def verify_learned(fit: Fit, stroke: int, stats: "ClassStats", margin: float = 0.3, **bad):
+    """差一笔按本书刻例学门槛：stats 是两字刻例 `extra_feats` 的类统计（`ClassStats.from_samples`）。
+    多出那一笔和别的笔交叉时（本 的底横、自 的撇、士 的短横）独占率天然只有 0.3–0.6，固定门槛弃权太多；
+    殿本库留一（2026-11-10）：木本 弃权 99→2、目自 80→29、十士 21→2，大太／王玉 不变。
+    返回 (字或 None, 距离表)；贴坏照 `bad_fit` 弃权。"""
+    if bad_fit(fit, stroke, **bad):
+        return None, {}
+    return stats.decide(extra_feats(fit, stroke), margin=margin)
+
+
 def verify_extra(fit: Fit, stroke: int, hi: float = 0.75, lo: float = 0.2, min_cover: float = 0.85,
                  min_on_ink: float = 0.7, max_ink_frac: float = 0.45):
     """差一笔：fit 用笔多的字的模板贴。返回 ("more" | "less" | None, 独占率)。
@@ -77,8 +100,7 @@ def verify_extra(fit: Fit, stroke: int, hi: float = 0.75, lo: float = 0.2, min_c
     整体贴坏了也弃权：骨架被解释得少（cover < min_cover），或别的笔有一笔落墨率 < min_on_ink
     （模板被邻字碎墨、坏切拉走；全唐文留出 4,536 格里 7 个异判有 3 个是这种），或墨框里墨太满（切坏的黑条 0.61；全唐文 300 格常规最高 0.24）。"""
     e = fit.strokes[stroke].excl
-    others = [s.on_ink for j, s in enumerate(fit.strokes) if j != stroke]
-    if fit.cover < min_cover or (others and min(others) < min_on_ink) or fit.ink_frac > max_ink_frac:
+    if bad_fit(fit, stroke, min_cover, min_on_ink, max_ink_frac):
         return None, e
     if e >= hi:
         return "more", e
@@ -87,4 +109,4 @@ def verify_extra(fit: Fit, stroke: int, hi: float = 0.75, lo: float = 0.2, min_c
     return None, e
 
 
-__all__ = ["FEATS", "stroke_feats", "geometry", "ClassStats", "verify_extra"]
+__all__ = ["FEATS", "stroke_feats", "geometry", "ClassStats", "verify_extra", "verify_learned", "extra_feats", "bad_fit"]
