@@ -1391,6 +1391,14 @@ ENTRIES: tuple[Equiv, ...] = (
     Equiv("open_guji_cv.impl.keben.jiazhu_step",
           new="f49b7576cdb30ee9b456eeb1e2f80d5aae0a2bda2779aee1dffaf8668b4f9921",
           old="095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67", evidence=_HOOKS_1110),
+    # glyph_match 加 sim_model 开关（CNN 逐对相似度，缺省关；A23，2026-11-10）
+    Equiv("open_guji_cv.steps.glyph_match",
+          new="15d5d1779c227b6b21a0640c43b8cd099e63b930410b2f5ea309133446c88309",
+          old="fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32",
+          evidence="glyph_match 加 sim_model 开关（缺省 None＝关，sim_model／sim_model_sha 不进参数 dump，匹配器不换精验）："
+                   "测试样页 keben 3 页（--pages 1,2,3，库用全唐文 glyph.db）与 origin/dev 9c8d894 产物逐字节相同；"
+                   "新模块 clustering.sim_cnn 不进 code_deps（开着时其代码哈希经 sim_model_sha 进参数指纹）；"
+                   "scripts/code_equiv.py check，2026-11-10"),
 )
 
 
