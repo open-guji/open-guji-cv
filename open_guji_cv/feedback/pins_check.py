@@ -136,6 +136,17 @@ def executor_like(tmp: Path):
                 os.environ[k] = v
 
 
+def old_char(seed_page, cell_key: str) -> str | None:
+    """旧产物 seed_admit 这一页里某格定的字（核对草稿的旧格是不是人裁的那个字）；读不到 → None。"""
+    if seed_page is None:
+        return None
+    for col in getattr(seed_page, "columns", []) or []:
+        for ch in getattr(col, "chars", []) or []:
+            if getattr(ch, "id", None) == cell_key:
+                return getattr(ch, "char", None)
+    return None
+
+
 def classify_row(row: dict) -> str:
     """绑定行 → 预检结论：
 
@@ -149,6 +160,14 @@ def classify_row(row: dict) -> str:
     if row.get("why") == "no_patch" or st == "unanchored":
         return "unbound"
     return "lost"
+
+
+def split_preexisting(probs: list[str], in_cols: set[str], old_rows: dict[str, dict]) -> tuple[list[str], set[str]]:
+    """有问题的绑定分成（本次要管的, 老失锚）。老失锚＝不在改动列、旧切分下也没绑上（`classify_row` 不是 ok）：
+    推不推这次钉子都一样，单列出来、不计入预检结论（SJ 11-10，01 p59 四条老 unanchored/review）。
+    没有旧切分的（`old_rows` 里没有这条）照旧算本次的。"""
+    pre = {e for e in probs if e not in in_cols and e in old_rows and classify_row(old_rows[e]) != "ok"}
+    return [e for e in probs if e not in pre], pre
 
 
 def simulate_bindings(book: str, pages: list[int], tmp: Path, store=None) -> dict[str, dict]:
@@ -171,14 +190,16 @@ def cell_boxes(page_cells) -> dict[tuple[int, int, str], list[float]]:
     return out
 
 
-def propose_anchor(event_key: str, event_id: str, old_boxes: dict, new_cells) -> dict | None:
+def propose_anchor(event_key: str, event_id: str, old_boxes: dict, new_cells, old_bound: str | None = None) -> dict | None:
     """失锚事件 → 补锚草稿行；旧切分里找不到这一格 → None。
 
-    墨框取旧格页面框（人当时看的就是那一格）；按 `bind_ink` 预演落到新切分哪一格。"""
+    墨框取旧切分里**这条人裁当时绑到的格**（`old_bound`：照执行机条件在旧切分上算的绑定）的页面框，不按事件的格号取——
+    换过钉子的列格号会挪，按号取会把字裁到别的字上（SJ 11-10：01:49:4「務」落到「府」）。
+    没给 `old_bound` 才退回按事件格号。按 `bind_ink` 预演落到新切分哪一格。"""
     from .anchor import parse_cell_key
     from .anchor_backfill import bind_ink
     from .bindings import _cell_index
-    pk = parse_cell_key(event_key)
+    pk = parse_cell_key(old_bound or event_key)
     if pk is None:
         return None
     _book, page, col, slot, sub = pk
@@ -193,7 +214,7 @@ def propose_anchor(event_key: str, event_id: str, old_boxes: dict, new_cells) ->
         pred = "valid" if to == event_key else "rebound"
     return {"event": event_id, "key": event_key,
             "anchor": {"ink_bbox": [round(v, 2) for v in box], "source": "backfill:ink"},
-            "evidence": {"by": "seg_pins_check", "pred": pred, "to": to,
+            "evidence": {"by": "seg_pins_check", "pred": pred, "to": to, "old_cell": old_bound or event_key,
                          "inside": round(ins, 3), "second": round(second, 3)}}
 
 
@@ -204,6 +225,38 @@ def duplicate_event_ids(events: Iterable) -> dict[str, int]:
     c = Counter(getattr(e, "id", None) or (e.get("id") if isinstance(e, dict) else None) for e in events)
     c.pop(None, None)
     return {k: n for k, n in c.items() if n > 1}
+
+
+def duplicate_anchor_keys(lines: Iterable[str]) -> dict[tuple[str, str], int]:
+    """补锚档里 (event, key) 出现多次的 `{(event, key): 次数}`。中心库 anchors 表唯一键是 (src_path, event, key)，
+    重复行推上去还原 sha 对不上、全员 db pull 失败（SJ 11-10，rev 957044）。"""
+    c: Counter = Counter()
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        d = json.loads(line)
+        c[(d.get("event"), d.get("key"))] += 1
+    return {k: n for k, n in c.items() if n > 1}
+
+
+def merge_anchor_drafts(lines: list[str], drafts: list[dict]) -> tuple[list[str], set[str]]:
+    """把草稿并进补锚档原有各行：事件已有锚行的**原地替换**（一事件一行，`load_backfill` 也是按事件取），
+    没有的追加到末尾。返回（并好的各行，被替换的事件 id）。"""
+    by_ev = {d["event"]: d for d in drafts}
+    out, replaced = [], set()
+    for line in lines:
+        if not line.strip():
+            continue
+        ev = json.loads(line).get("event")
+        if ev in by_ev:
+            if ev not in replaced:
+                out.append(json.dumps(by_ev[ev], ensure_ascii=False))
+                replaced.add(ev)
+            continue        # 同一事件原有多行的，只留替换后那一行
+        out.append(line.rstrip("\n"))
+    out += [json.dumps(d, ensure_ascii=False) for d in drafts if d["event"] not in replaced]
+    return out, replaced
 
 
 # ── 5. 沙箱重跑（不碰本机产物与缓存）──────────────────────────────────────────
@@ -284,13 +337,69 @@ def sandbox_rerun(book: str, pages: list[int], tmp: Path, pins: dict | None, log
     real_store, real_cache = ProductStore(), ImageCache()
     _copy_page_products(real_store.root, tmp / "products", book, pages)
     _copy_page_cache(real_cache.root, tmp / "cache", book, pages)
+    _drop_rerun_products(tmp / "products", book, pages)
     store, cache = ProductStore(tmp / "products"), ImageCache(tmp / "cache")
     bk = load_book(book)
     eng = Engine(bk, load_pipeline(default_pipeline_id(bk)), store=store, cache=cache,
                  log=log or (lambda s: None))
+    judge_missing(eng.ctx)
     with pins_override(book, pins):
         rep = eng.run(steps=list(RERUN_STEPS), pages=sorted(set(pages)), force=True)
     return store, cache, rep
+
+
+class SandboxNotReady(RuntimeError):
+    """沙箱条件与执行机不一致（缺切点裁判权重、字形库没拉），预检结论不可信，拒跑。"""
+
+
+def judge_missing(ctx) -> None:
+    """row_segment 要用 U-Net 切点裁判、本机却没有权重或 torch → 抛 `SandboxNotReady`。
+
+    没权重时 Step3 静默走旧规则（`seg/cut_select.ckpt_fingerprint` 返回空串），沙箱切出的与执行机不同（SJ 11-10）。"""
+    from ..steps.row_segment import RowSegmentStep
+    p = ctx.params_for(RowSegmentStep())
+    if getattr(p, "cut_judge", None) in ("unet", "unet_f64") and not getattr(p, "judge_fingerprint", ""):
+        from ..seg.cut_select import DEFAULT_CKPT
+        raise SandboxNotReady(f"row_segment 要用 U-Net 切点裁判，本机缺 torch 或权重 {DEFAULT_CKPT}："
+                              "沙箱会按旧规则切、与执行机不一致。先 `guji model fetch -w <工作区>`（不给 -w 按 cv 模型表补 models/）取回权重再跑")
+
+
+def glyph_db_missing() -> str | None:
+    """本机字形库索引 output/glyph.db 不在或没有 instances 表 → 提示文字；好的 → None。"""
+    import sqlite3
+
+    from ..core.workspace import glyph_db_path
+    path = glyph_db_path()
+    if not Path(path).is_file():
+        return f"本机没有字形库索引 {path}"
+    try:
+        con = sqlite3.connect(str(path))
+        try:
+            ok = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='instances'").fetchone()
+        finally:
+            con.close()
+    except sqlite3.Error as e:
+        return f"字形库索引 {path} 打不开（{e}）"
+    return None if ok else f"字形库索引 {path} 是空的（没有 instances 表）"
+
+
+def _drop_rerun_products(root: Path, book: str, pages: list[int]) -> None:
+    """沙箱里要重跑的那几步，先删掉拷进来的旧产物：重跑失败时就是「没有产物」，不会拿旧的当新的比（SJ 11-10）。"""
+    from ..core.spec import page_key
+    keys = {page_key(p) for p in pages}
+    for step in (*RERUN_STEPS, "row_segment_gate"):
+        d = Path(root) / book / step
+        if not d.is_dir():
+            continue
+        for f in d.iterdir():
+            if f.stem in keys or f.stem.split(".")[0] in keys:
+                f.unlink()
+
+
+def run_failures(rep) -> list[str]:
+    """沙箱重跑里失败（含上游缺失被拦）的 `步:页 原因`。"""
+    return [f"{o.step}:p{o.page} {o.error or o.status}" for o in getattr(rep, "outcomes", []) or []
+            if o.status == "failed"]
 
 
 # ── 6. 钉子退役（F2）─────────────────────────────────────────────────────────

@@ -60,6 +60,10 @@ _BX_1110 = ("外框采样列 xs 去掉 ≥ 图宽的列（cv #1362，史記09 �
             "与 fd4976e0~1 产物逐字节相同；另按代码论证——xs 用来取 binm[·, xs]，原先没崩的页里 ≥ 图宽的列从没被取过墨"
             "（取了就 IndexError），去掉后各偏移的取墨集合不变、均值不变；scripts/code_equiv.py check，2026-11-10（A31）")
 
+_MF_1110 = ("cell_shrink 人工定框列加书级开关 manual_ink_fit（缺省关不进 dump；SJ 11-10 报定框满宽网格框带进邻字）："
+            "开关关着时殿本 vol28 30 页（p1–30，main 包）、全唐文 001 20 页（p1–20，main 包）与 origin/dev 345e5877 产物逐字节相同；"
+            "scripts/code_equiv.py check --always，2026-11-10（A22）")
+
 _BC_1027 = ("push_bottom_to_bar 右界截到图内（GUJI-748，换源新图 vol23 p10、vol37 p74 越界报错）：只在原先越界报错的页上生效；"
             "border_detect 在殿本 vol20 新图 94 页（每 3 页取 1）上与 origin/dev f3b96b9 产物逐字节相同；scripts/code_equiv.py check，2026-10-27")
 
@@ -284,6 +288,10 @@ _HOOKS_1110 = ("书级代码第 4 步（cv #1375，2026-11-10）：row_segment �
                "缺省钩子什么都不做，殿本等书走的分支代码未动。证据：SJ 11-10 用 cv dev 1bb3d44b＋书仓 PR #1 code/ 本地重跑 row_segment，"
                "与 r28 main 包（v0.6.38＋k1）比 02 册 p2/13/58/100/150/200、05 册 p2/26/50/80 共 10 页产物逐字节相同"
                "（史記走的正是改动的钩子分支，也覆盖 row_segment／row_boundaries 的公共部分）；殿本等缺省钩子分支是删开关后的原路径")
+
+_PCLEAN_1110 = ("cell_shrink 加书级钩子「发前清格」（impl/keben/patch_clean，缺省 clean_column=None 不清，2026-11-10 SJ）："
+                "缺省时 `_extract_column` 原样返回；史記文淵閣本 02 册 12 页（p2 卷端＋正文每 20 页取 1）与 origin/dev df08209 "
+                "产物逐字节相同，scripts/code_equiv.py check，书仓 k2（无覆盖）")
 
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
@@ -1382,6 +1390,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="632040e47845843bc5f8afcab1d9fb6564d95b4bf7ffb68bbd2d37f191347a23",
           old="fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e",
           evidence=_BX_1110),
+    Equiv("open_guji_cv.steps.cell_shrink",
+          new="cb1f88b8123e924d82cba4cc17a75c4560f43fad9eb3d8540c7418f87711adaa",
+          old="94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e",
+          evidence=_MF_1110),
     # group_flow_pair_shape_nm_5b／solo_cal_5b_canon 书级开关（缺省关，2026-11-10，形近字线 全唐文 001–003 c38 第三层 王、愼吕）
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='dedab8d15ba911f5663eefdd6832051b82d9c55ee41abb51bfa825462f023638',
@@ -1396,6 +1408,9 @@ ENTRIES: tuple[Equiv, ...] = (
     Equiv("open_guji_cv.impl.keben.jiazhu_step",
           new="f49b7576cdb30ee9b456eeb1e2f80d5aae0a2bda2779aee1dffaf8668b4f9921",
           old="095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67", evidence=_HOOKS_1110),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="0d920c95deb46011204479d86cd85122a98a463341fc45f8b989dae5afdbb5b6",
+          old="94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e", evidence=_PCLEAN_1110),
 )
 
 
@@ -1501,6 +1516,11 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.books.shiji_wyg.jiazhu_step": ("941e17d3b4de9157f37c8515f28ba8f3ae681c076bc97fb121d9c690bf5af0a0", (
         ("guji_book.shiji_wyg.jiazhu_step", "941e17d3b4de9157f37c8515f28ba8f3ae681c076bc97fb121d9c690bf5af0a0"),
         ("guji_book.shiji_wyg.seal_ink", "ddfdec934a1f07f81a14ab0a0083a6aefc272d8055aff9942b30c23d9f826a25"))),
+    # 不是拆分、是 cell_shrink 新加了一个 code_dep（书级钩子 patch_clean「发前清格」，缺省不清；2026-11-10 SJ）：
+    # 两块都还是这一版时合回 cell_shrink 一项。史記书仓覆盖了 patch_clean（k3 起）就照常过期，那是要的
+    "open_guji_cv.steps.cell_shrink": ("94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e", (
+        ("open_guji_cv.steps.cell_shrink", "94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e"),
+        ("open_guji_cv.impl.keben.patch_clean", "44241a22b9f46de4a70feb68662ece757511aa86727cfe2b0034a1d8a56db16e"))),
 }
 
 
