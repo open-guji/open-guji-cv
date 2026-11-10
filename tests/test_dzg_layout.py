@@ -460,26 +460,18 @@ def test_row_pitch_param_default_uniform_not_in_dump():
     assert params_hash(free) != params_hash(RS.RowSegmentParams())
 
 
-def test_seal_gap_slots_empty_param_off_by_default():
-    from open_guji_cv.steps.row_segment import RowSegmentParams
-    assert "seal_gap_slots_empty" not in RowSegmentParams().model_dump()
-    assert RowSegmentParams(seal_gap_slots_empty=True).model_dump()["seal_gap_slots_empty"] is True
-
-
-def test_seal_inkcut_removes_speckle_keeps_strokes():
-    """大印下剔印泥：多孔碎点（印泥）抹白，实心笔画留下。"""
-    import numpy as np
-    from open_guji_cv.steps.row_segment import RowSegmentParams, _seal_inkcut
-    rng = np.random.default_rng(0)
-    img = np.full((300, 120), 255, np.uint8)
-    dots = rng.random((300, 120)) < 0.25
-    img[:150][dots[:150]] = 0                      # 上半：印泥碎点
-    img[180:260, 50:62] = 0                        # 下半：一道实心竖笔
-    img[60:120, 30:90] = 255
-    img[80:92, 30:90] = 0                          # 印里一道实心横笔（印下的字）
-    out = _seal_inkcut(img, (0, 300), 128)
-    assert (out[180:260, 50:62] == 0).all()
-    assert (out[80:92, 35:85] == 0).mean() > 0.9
-    speck = (img[:60] == 0).sum()
-    assert (out[:60] == 0).sum() < 0.1 * speck
-    assert "seal_inkcut" not in RowSegmentParams().model_dump()
+def test_retired_switches_moved_to_book_code(tmp_path):
+    """印泥、雙行小注四个旧开关 2026-11-10 搬进书级代码：缺省实现不做；写 false 照常读；写 true 而工作区 code/ 没接手就拒跑。"""
+    import pytest
+    from open_guji_cv.core.workspace import reset_workspace_override, set_workspace_override
+    from open_guji_cv.impl.keben import jiazhu_step, seal_ink
+    from open_guji_cv.steps.row_segment import _RETIRED, RowSegmentParams
+    assert seal_ink.inkcut is None and seal_ink.GAP_SLOTS_EMPTY is False and jiazhu_step.free_split is None
+    tok = set_workspace_override(str(tmp_path))    # 没有 code/ 的工作区
+    try:
+        for k in _RETIRED:
+            assert k not in RowSegmentParams(**{k: False}).model_dump()
+            with pytest.raises(ValueError, match="书级代码"):
+                RowSegmentParams(**{k: True})
+    finally:
+        reset_workspace_override(tok)
