@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- PATCH（A31 11-10，用户定）`republish.py` 入库前加 `hold_pending_current`：待审格现行 book-text 已有字、首选字不同时文本不动（等人裁定了再改，少改 book-text 提交）；现行是 □／缺格才写首选字。需 guji-manager 含 `apply_pending(current=)` 的版本，旧版跳过并提示。L0。
+
 ## [0.6.34] - 2026-11-10
 
 - PATCH（A31 11-10，用户定删 book-text 各书 CHANGES.md）`scripts/zhengli/republish.py` 的 `bump_book_text` 不再传 `--pr TBD`，改收 bump_original 打印的「版本记录」行写进 book-text 提交信息。与 manager、book-text 同名 PR 配套。L0。
