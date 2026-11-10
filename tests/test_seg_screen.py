@@ -125,3 +125,13 @@ def test_margin_outliers():
     m[8] = ss.frame_margins(_borders(320, 300))      # 右框没印出、整网左挪一列多
     hits = ss.margin_outliers(m)
     assert [(h["page"], h["side"]) for h in hits] == [(8, "right")]
+
+
+def test_seg_primitive_frame_only_edge_cells():
+    from open_guji_cv.seg.profile import frame_only_edge_cells
+    g = _img(500)
+    g[392:398, 5:95] = 0                      # 末格只有贴下框的线
+    g[130:170, 30:70] = 0                     # 首格有字
+    spans = [(100, 200), (200, 300), (300, 400)]
+    assert frame_only_edge_cells(g, spans, (0, 100), 100.0, 400.0, 100.0) == [2]
+    assert frame_only_edge_cells(g, spans, (0, 100), 100.0, None, 100.0) == []

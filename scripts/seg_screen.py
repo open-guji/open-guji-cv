@@ -74,6 +74,10 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
         if fb:
             rows["layout_fallback"].append((book, page, ",".join(map(str, fb)), len(fb), "格位表回退几何切的列"))
             c["layout_fallback"] += 1
+        # edge_frame_only 只报 cell_shrink 后还判字（cell_type != empty）的格：判 empty 的下游无害（QTW 11-10 验收）
+        ci = store.read(book, "cell_shrink", key, "char_index")
+        shrink_char = None if ci is None else {(cc_.col, ch.slot) for cc_ in ci.columns for ch in cc_.chars
+                                               if ch.cell_type != "empty"}
         lay_page = {col: r for (pg, col), r in layout.items() if pg == page}
         sh = ss.layout_col_shift(cells, lay_page)
         if sh:
@@ -95,6 +99,8 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             if gray is None:
                 continue
             for slot in ss.edge_frame_only(gray, cc):
+                if shrink_char is not None and (cc.col, slot) not in shrink_char:
+                    continue
                 rows["edge_frame_only"].append((book, page, cc.col, slot, "端格里只有版框线"))
                 c["edge_frame_only"] += 1
             e = ss.edge_ink(gray, cc)
