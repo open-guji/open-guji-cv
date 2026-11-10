@@ -1652,6 +1652,8 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
     stale_doc, others = None, []
     old_char = d / f"{ch}.char.json"
     new_char = Path(plan["export_dir"]) / f"{ch}.char.json"
+    if old_char.exists() and new_char.exists() and _structure_changed(old_char, new_char):
+        return _bump_book_text_cellmap(repo, plan, note, base)
     hold_pending_current(new_char, old_char, plan)
     has_punct = (d / f"{ch}.punct.json").exists()
     if has_punct and old_char.exists() and new_char.exists():
@@ -1685,8 +1687,8 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
                 sys.exit(f"✗ book-text 改字清单这步失败：{' '.join(map(str, cmd))}")
         stale_doc = None
     records: list[str] = []          # bump_original 打印的「版本记录」行，原样写进提交信息（book-text 不再有 CHANGES.md）
-    for cmd in ([sys.executable, "scripts/book-text/bump_original.py", d, "--line", "text", "--level", "minor",
-                 "--chapter", ch, "--note", note],
+    for cmd in ([sys.executable, "scripts/book-text/bump_original.py", d, "--line", "text", "--level", "patch",
+                 "--chapter", ch, "--note", note],      # 换文只升 patch（sheldon 11-09）
                 [sys.executable, "-c", "import sys; sys.path.insert(0, 'scripts'); import original_version as OV; "
                  "OV.sync_headings(sys.argv[1])", d],      # 标点有变，目录缓存 headings 跟着重算（F-OV-12）
                 [sys.executable, "scripts/local_check.py", "--dev"],
@@ -1709,6 +1711,63 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
     if not push_book_text_dev(repo):
         sys.exit("✗ book-text 推 dev 失败（rebase 冲突或网络）：提交在本地 dev 上，处理后 git push origin HEAD:dev")
     print("book-text 已提交并推到 dev：每日合并（洛杉矶 03:30）进 main")
+    return base
+
+
+def _structure_changed(old_char: Path, new_char: Path) -> bool:
+    """格号集合或次序变了（增删格、改号）。只换字不算。"""
+    return list(_char_cells(old_char)) != list(_char_cells(new_char))
+
+
+def _bump_book_text_cellmap(repo: Path, plan: dict, note: str, base: str) -> str:
+    """格号变了（增删格、改号）：交 guji-manager `swap.booktext.remap_in_repo` 按格级对照表（新旧 cord 框 IoU）落 book-text——
+    逐块图判字（□ 不覆盖现字、待审保持现字、改出重复字回退）、按表挪标点专名、守卫（专名挂法与条数、标点条数不变）。
+    不再按格号比、不再走待重标清单，也不再报 need-A33（守卫不过才报）。ZM 11-10，sheldon 同意。"""
+    try:
+        from guji_manager.swap.booktext import remap_in_repo
+    except ImportError:
+        sys.exit("✗ book-text 这步失败：本轮有增删格，要 guji-manager 的 swap.booktext（含格级对照表平移）；先升级 manager")
+    d = book_text_dir(repo, plan["text_id"])
+    ch = plan["chapter"]
+    for t in ("char", "cord", "norm"):
+        src = Path(plan["export_dir"]) / f"{ch}.{t}.json"
+        if src.exists() and t == "cord":
+            copy_cord_for_site(src, d / f"{ch}.{t}.json")
+        elif src.exists():
+            shutil.copyfile(src, d / f"{ch}.{t}.json")
+    pending = set()
+    for k in ("pending", "team"):
+        f = plan.get(k)
+        if f and Path(f).exists():
+            pending |= {c["cell"] for c in json.loads(Path(f).read_text(encoding="utf-8")).get("cells", []) if c.get("cell")}
+    out = Path(plan["export_dir"]).parent / "cellmap"
+    r = remap_in_repo(repo, d, ch, base=base, pending=pending, out_dir=out)
+    if not r["ok"]:
+        subprocess.run(["git", "checkout", "--", "."], cwd=repo)
+        sys.exit("✗ book-text 这步失败：格号变动守卫不过（" + "；".join(r["problems"]) + f"），对照表 {r['table']}")
+    print(f"格号变动：{r['counts']}；字 {r['chars']}；锚点挪 {r['remap']['moved']}、留待重标 {len(r['left'])}、专名复核 {len(r['review'])}")
+    records: list[str] = []
+    lines = [("text", note)] + [(ln, f"{plan.get('book')} 换包格号变动：按格级对照表挪锚（留待重标 {len(r['left'])}，复核 {len(r['review'])}）")
+                                for ln in ("punct", "entity") if (d / f"{ch}.{ln}.json").exists()]
+    for ln, nt in lines:
+        p = run([sys.executable, "scripts/book-text/bump_original.py", d, "--line", ln, "--level", "patch", "--chapter", ch, "--note", nt], cwd=repo)
+        if p.returncode:
+            subprocess.run(["git", "checkout", "--", "."], cwd=repo)
+            sys.exit(f"✗ book-text 这步失败：bump {ln}（{(p.stdout or '')[-200:]}）")
+        records += [ln_.strip() for ln_ in (p.stdout or "").splitlines() if ln_.startswith("版本记录:")]
+    for cmd in ([sys.executable, "-c", "import sys; sys.path.insert(0, 'scripts'); import original_version as OV; "
+                 "OV.sync_headings(sys.argv[1])", d],
+                [sys.executable, "scripts/local_check.py", "--dev"],
+                ["git", "add", "-A", str(d)]):
+        if run(cmd, cwd=repo).returncode:
+            subprocess.run(["git", "checkout", "--", "."], cwd=repo)
+            sys.exit(f"✗ book-text 这步失败：{' '.join(map(str, cmd))}")
+    msg = note + f"\n\n格号变动按格级对照表落 book-text：{r['counts']}；字 {r['chars']}\n" + "\n".join(records)
+    if run(["git", "commit", "-qm", msg], cwd=repo).returncode:
+        sys.exit("✗ book-text 这步失败：git commit")
+    if not push_book_text_dev(repo):
+        sys.exit("✗ book-text 推 dev 失败（rebase 冲突或网络）：提交在本地 dev 上，处理后 git push origin HEAD:dev")
+    print("book-text 已提交并推到 dev（格号变动按对照表）：每日合并（洛杉矶 03:30）进 main")
     return base
 
 

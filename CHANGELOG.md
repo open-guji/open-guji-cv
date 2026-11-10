@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- republish：book-text 遇增删格／改号改调 guji-manager `swap.booktext`（按新旧 cord 框的格级对照表判字、挪标点专名、守卫），swap run 不再因增删格报 need-A33；proof_cycle 格号变了时不按格号退回「推翻人裁」；换文文本线升 patch（ZM 11-10）。
+
 ## [0.7.1] - 2026-11-10
 
 - 发版说明（A20 11-10，SJ 要）：从 dev f666f3d 切，只多 #1378（书级代码第 4 步代码等价，row_segment 指纹回到 v0.6.39，v0.7.0 判的 row_segment 过期撤销）。
