@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- republish.py 三处文案「文本线升 minor」改 patch（纯文案，用户 11-10 定小改动一律 patch；ZM 提）。L0。
+
 - 格号变动单一路径收尾（ZM 11-10）：republish 遇「格号没变但有增删字」也走格级对照表（`swap.booktext`），不再退出叫人推 a32 分支等 A33；auto_cycle 的 book-text 失败结论改叫 `guard-stop`，提示切坏交切分线、锚点交 A33、修好后 `guji swap book-text --sheet`。只动 `scripts/zhengli/`，PATCH。
 - rerun_prep.sh 切到 cv 版本后先从 R2 取回 models/、fonts/、底库语料大文件（PATCH，A30 11-10；SJ r32 的 #1833/#1835/#1839 三单 prep 在「模板索引」段失败）：v0.7 起 cv 仓不带这些文件，从 v0.6.x 切过来时检出把它们删了，`pull-rare-index` 算出的 checkpoint 指纹是 `nockpt`，对不上已发布的向量包（`d2ce8bab0fd0`）。调 `ensure_repo_models()` 取回后指纹为 d2ce8bab0fd0，对得上。只改准备脚本，不动产物、指纹（L0）。
 - strokes 差一笔「学门槛」：`verify_learned`（多出那一笔的独占率、落墨率按本书两字刻例类中心判）、`extra_feats`、`bad_fit`。多出那一笔与别的笔交叉的组（木本、目自、十士）固定门槛弃权太多，殿本库留一 木本 弃权 99→2。不被 Step 引用，产物不变。
