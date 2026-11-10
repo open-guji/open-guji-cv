@@ -653,6 +653,53 @@ def seg_selfcheck_on(text_id: str) -> bool:
     return bool((sd.book_opts(text_id) or {}).get("enabled"))
 
 
+EVICT_NOTE = "撤库重审：库内刻例审阅判这块图不该当刻例（多半切坏），请重新定字"
+
+
+def evict_recheck(ws: Path, book: str, user_recheck: str | None, out: Path) -> Path | None:
+    """撤库重审格自动上单（Sheldon 2026-11-09）：库内刻例审阅卡上「撤库」的格（带 `review` 的 glyph_audit evict 事件，
+    `feedback.lookup.evict_review_cells`），不论这册现在是什么版本，出单都放回单上当复审格，卡片头上显示 `EVICT_NOTE`；
+    book-text 不因此改字（待审格 book-text 留现字），人在单上定了字再按投票改。撤库之后人已再裁过的格（`human_chars`
+    里有，撤库时旧人裁已作废，留下的都是撤库后裁的）不再上单。和 `--recheck` 手给的清单合并，手给的说明优先。
+    没有这类格返回 None（照用原清单）。"""
+    old = os.environ.get("GUJI_WORKSPACE")
+    os.environ["GUJI_WORKSPACE"] = str(ws)
+    try:
+        from open_guji_cv.feedback.lookup import evict_review_cells, human_chars
+        try:
+            cells = evict_review_cells(book)
+        except Exception as e:          # noqa: BLE001 —— 事件日志读不了不挡出单，只报出来
+            print(f"  ⚠ 撤库重审：读事件失败（{type(e).__name__}: {e}），这次不自动加撤库格")
+            return None
+        if not cells:
+            return None
+        try:
+            decided = human_chars(book)
+        except Exception as e:          # noqa: BLE001 —— 认不出人裁就全上单（多出几张卡，不漏）
+            print(f"  ⚠ 撤库重审：读人裁失败（{type(e).__name__}: {e}），撤库格全部上单")
+            decided = {}
+    finally:
+        if old is None:
+            os.environ.pop("GUJI_WORKSPACE", None)
+        else:
+            os.environ["GUJI_WORKSPACE"] = old
+    todo = {k: v for k, v in cells.items() if k not in decided}
+    if not todo:
+        return None
+    lines = []
+    if user_recheck:
+        lines += [ln for ln in Path(user_recheck).read_text(encoding="utf-8").splitlines() if ln.strip()]
+    given = {ln.split("\t", 1)[0].strip().removeprefix(f"{book}:") for ln in lines}
+    for k in sorted(todo):
+        cell = k.removeprefix(f"{book}:")
+        if cell not in given:
+            lines.append(f"{cell}\t{EVICT_NOTE}")
+    path = out / "recheck_merged.tsv"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"  撤库重审 {len(todo)} 格并进复审清单 → {path}")
+    return path
+
+
 def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     ws, book = Path(a.workspace).resolve(), a.book
     chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
@@ -668,6 +715,9 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     py = sys.executable
     env = {**os.environ, "GUJI_WORKSPACE": str(ws), "PYTHONIOENCODING": "utf-8"}
 
+    merged = evict_recheck(ws, book, getattr(a, "recheck", None), out)
+    if merged is not None:
+        a.recheck = str(merged)
     cards = ws / "reports" / book / f"{book}.cards.alt.json"
     if not a.no_alt:
         cards.unlink(missing_ok=True)             # 上一次的卡不能顶替这一次（格号可能已变）

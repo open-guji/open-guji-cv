@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- PATCH 撤库重审格自动上单（A23，Sheldon 11-09「不论什么版本，撤库就给这格出待审卡，人裁定了再改 book-text」）：`scripts/zhengli/republish.py` prep 读带 `review` 的撤库事件，撤库后没人再裁的格并进复审清单（卡片头显示「撤库重审」），book-text 不因此改字。L0（脚本，不进指纹）。
 - PATCH 撤库重审闸 `seed_admit.evict_review`（缺省开，A23，Sheldon 11-09）：库内刻例审阅卡上「撤库」的格（带 `review` 的 `glyph_audit evict` 事件，guji-manager 审阅页出）机器放行一律退回待审（doubt `evict_review`，待审原因 seg_defect）；`feedback/lookup.evict_review_cells`。seed_admit 指纹变；没有这类事件的书产物不变。
 - PATCH（A31 11-10，用户定删 book-text 各书 CHANGES.md）`scripts/zhengli/republish.py` 的 `bump_book_text` 不再传 `--pr TBD`，改收 bump_original 打印的「版本记录」行写进 book-text 提交信息。与 manager、book-text 同名 PR 配套。L0。
 
