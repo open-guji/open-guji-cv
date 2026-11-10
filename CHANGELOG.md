@@ -7,8 +7,9 @@
 
 ## [0.7.5] - 2026-11-10
 
-- 发版说明（A31 11-10，史記 GUJI-750 要）：基于 v0.7.4 + #1403–#1406。PATCH。
+- 发版说明（A31 11-10，史記 GUJI-750 要）：基于 v0.7.4 + #1403–#1406、#1408。PATCH。
 - seg_pins_check（#1403–#1406，SJ）：沙箱失败判不通过、补锚按旧绑定位置取框、缺切点裁判权重或字形库拒跑；沙箱模式也认 `--base-items` 当基线；老失锚不计入结论；补锚草稿已有锚行的事件原地替换（出 `anchors_merged.jsonl`），第四节补锚档 (event,key) 重复判不通过。只动 scripts/ 与 feedback/pins_check.py。
+- cell_shrink 加书级钩子「发前清格」（#1408，impl/keben/patch_clean，缺省不清；SJ 要，史記书仓 k4 需 cv ≥0.7.5）。
 - cell_shrink 人工定框列加书级开关 `manual_ink_fit`（#1405，A22，缺省关、关时逐字节不变，不进 dump；code_equiv 已登记）。
 
 ## [0.7.4] - 2026-11-10
