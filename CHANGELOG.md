@@ -5,6 +5,12 @@
 
 ## [未发版]
 
+## [0.7.0] - 2026-11-10
+
+- **MINOR**（用户 11-04、11-09 定）书级代码系列收尾＋模型文件搬出 git，见 RELEASES.md v0.7.0。从 dev 1bb3d44 切。
+- 书级代码第 4 步（cv #1375，Sheldon 11-10 选「先搬自成一块的，其余留着」）：`row_segment` 删开关 `seal_inkcut`／`seal_gap_slots_empty`／`jiazhu_free_split`／`jiazhu_step_split`，改成书级钩子 `impl/keben/seal_ink`（新）、`impl/keben/jiazhu_step.free_split`（缺省什么都不做），实现搬进史記书仓 `code/`（k2，书仓 PR #1）。书配置写 true 而工作区 `code/` 没覆盖对应钩子就拒跑（`row_segment._RETIRED`）。`row_segment`（及 `row_boundaries`、`jiazhu_step`、`seal_ink`）`code_hash` 变：**各书 row_segment 起过期**（殿本等切法逐字不变）。其余单书开关冻结留 cv（`doc/design/书级代码.md`）。
+- 模型文件搬出 git（用户 11-04 定，`doc/design/模型系统.md` 4.2 第 1 条）：`models/` 下 11 个文件 `git rm --cached`、`.gitignore` 忽略 `models/**`（留 README）。真源 R2，按 `config/model-registry.json` 取回：`guji model fetch`、`guji pipeline` 起跑前、测试开跑前、`install_release.py` 装完都自动取（**执行方要有 `GUJI_DATA_TOKEN` 或 `_READ`**，首跑约下 50 MB）。删前核过：表里 87 项 R2 全有，取回与原文件逐字节相同。模型内容不变，不影响指纹。
+
 ## [0.6.39] - 2026-11-10
 
 - PATCH（A31 11-10，sheldon 定）`republish.py push／edit-cell／add-alt／add-sprites --sync` 触发网站 proofing-sync 时带 `only=<书>/<章>`（原先 push 等没设 publish_only，整站发布，整站冒烟要好几分钟）。L0（只改发布触发）。

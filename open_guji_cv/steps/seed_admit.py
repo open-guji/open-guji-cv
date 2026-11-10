@@ -3681,7 +3681,7 @@ def _jiazhu_uneven_pass(ctx: RunContext, page: int, out: list, mmap: dict | None
                         amap: dict | None = None, coord: dict | None = None) -> int:
     """雙行小注分法不均闸（只降级）。→ 降级格数。
 
-    Step3 雙行小注逐步切（`row_segment.jiazhu_step_split`，史記）按整理本分法切、两行分法不是 ⌈N/2⌉／⌊N/2⌋ 的段，
+    Step3 雙行小注逐步切（书级钩子 `impl/keben/jiazhu_step`，史記书仓覆盖）按整理本分法切、两行分法不是 ⌈N/2⌉／⌊N/2⌋ 的段，
     列旗记 `jiazhu_uneven:<首格>-<末格>`；段内的夹注格（sub a／b）送审，doubt 码 `jiazhu_uneven`、
     `evidence.seg_kind=jiazhu_uneven`（待审归 seg_defect，细分 jiazhu_uneven，review/reasons.py，A31 11-04 定）。
     已放行、且放行字＝字形库首选＝整理本字（三者一致，图上有字形证据）的格不降（第 10 轮整列送审 8 列 276 格、其中 210 格三者一致，11-04 收窄）。
