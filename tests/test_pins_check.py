@@ -177,3 +177,27 @@ def test_split_preexisting():
     probs, pre = split_preexisting(["a", "b", "c", "d"], {"c"}, old)
     # a：不在改动列、旧下也没绑上 → 老失锚；b：旧下绑得上 → 本次弄坏的；c：在改动列；d：没有旧切分
     assert pre == {"a"} and probs == ["b", "c", "d"]
+
+
+def test_duplicate_anchor_keys():
+    import json
+    from open_guji_cv.feedback.pins_check import duplicate_anchor_keys
+    ln = [json.dumps({"event": "e1", "key": "b:1:2:3"}), "", json.dumps({"event": "e1", "key": "b:1:2:3"}),
+          json.dumps({"event": "e1", "key": "b:1:2:4"}), json.dumps({"event": "e2", "key": "b:1:2:3"})]
+    assert duplicate_anchor_keys(ln) == {("e1", "b:1:2:3"): 2}
+
+
+def test_merge_anchor_drafts_replaces_in_place():
+    import json
+    from open_guji_cv.feedback.pins_check import duplicate_anchor_keys, merge_anchor_drafts
+    cur = [json.dumps({"event": "e1", "key": "k1", "anchor": {"bbox": [0]}}),
+           json.dumps({"event": "e2", "key": "k2", "anchor": {"bbox": [1]}}),
+           json.dumps({"event": "e1", "key": "k1", "anchor": {"bbox": [2]}})]
+    drafts = [{"event": "e1", "key": "k1", "anchor": {"ink_bbox": [9]}},
+              {"event": "e3", "key": "k3", "anchor": {"ink_bbox": [8]}}]
+    out, rep = merge_anchor_drafts(cur, drafts)
+    rows = [json.loads(x) for x in out]
+    assert rep == {"e1"}
+    assert [r["event"] for r in rows] == ["e1", "e2", "e3"]
+    assert rows[0]["anchor"] == {"ink_bbox": [9]}
+    assert duplicate_anchor_keys(out) == {}
