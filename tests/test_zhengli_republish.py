@@ -452,3 +452,16 @@ def test_evict_recheck_none_when_no_events(tmp_path, monkeypatch):
     import open_guji_cv.feedback.lookup as lookup
     monkeypatch.setattr(lookup, "evict_review_cells", lambda book, log=None: {})
     assert rp.evict_recheck(tmp_path, "vol01", None, tmp_path) is None
+
+
+def test_edit_cells_withdraw_restore_note():
+    """单格原地改（sheldon 11-10）：撤下、放回、改说明，不碰别的格，记 edits。"""
+    doc = {"rev": "001-r3", "cells": [{"cell": "1:1:1"}, {"cell": "1:1:2", "note": "旧"}, {"cell": "1:1:3"}]}
+    r = rp.edit_cells(doc, withdraw=["vol01:1:1:1", "9:9:9"], notes={"1:1:2": "新说明", "1:1:3": ""}, by="A31", why="试",
+                      at="2026-11-10T00:00:00Z")
+    assert r["撤"] == ["1:1:1"] and r["找不到"] == ["9:9:9"] and sorted(r["改说明"]) == ["1:1:2", "1:1:3"]
+    assert [c["cell"] for c in doc["cells"]] == ["1:1:2", "1:1:3"] and doc["cells"][0]["note"] == "新说明"
+    assert doc["withdrawn"][0]["withdrawn"]["by"] == "A31"
+    r = rp.edit_cells(doc, restore=["1:1:1"], by="A31")
+    assert r["放回"] == ["1:1:1"] and "withdrawn" not in doc and "withdrawn" not in doc["cells"][-1]
+    assert [e["op"] for e in doc["edits"]] == ["withdraw", "note", "note", "restore"]
