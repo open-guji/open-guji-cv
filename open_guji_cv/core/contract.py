@@ -24,4 +24,13 @@ MANAGER_VERSION_ENV = "GUJI_MANAGER_VERSION"
 
 
 def manager_version() -> str | None:
-    return os.environ.get(MANAGER_VERSION_ENV) or None
+    """env 优先；没设（`guji pipeline` 在进程内直接跑、不经 manager 起子进程时）取已装 guji-manager 的版本，没装则 None。
+    manifest 里 manager_version 为空（史記 r20，11-09）即因此；只供审计，不进指纹。"""
+    v = os.environ.get(MANAGER_VERSION_ENV)
+    if v:
+        return v
+    try:
+        from importlib.metadata import version
+        return "m" + version("guji-manager")
+    except Exception:  # noqa: BLE001 — 没装 manager 就留空
+        return None

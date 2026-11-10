@@ -1,13 +1,27 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` - 文档（书级代码第 5 步）：`doc/切分代码结构.md` 改成三层（seg／impl 缺省实现／书仓 code/）、各书怎么改自己的切分与出 k<N>；`doc/版本号规矩.md` 加「四库版本号与书级代码」一节；`doc/开关登记表.md`、Wiki「各书一览」换新路径。
-- PATCH 书级代码：起跑前比对书仓 `code/` 与 `k<N>` 清单时不算 `*.md`（改 README 不再让钉了 `code: N` 的册拒跑）；设计文档补打 tag 走中转站的用法。L0。
-下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
 ## [未发版]
 
 - PATCH 撤库重审闸 `seed_admit.evict_review`（缺省开，A23，Sheldon 11-09）：库内刻例审阅卡上「撤库」的格（带 `review` 的 `glyph_audit evict` 事件，guji-manager 审阅页出）机器放行一律退回待审（doubt `evict_review`，待审原因 seg_defect）；`feedback/lookup.evict_review_cells`。seed_admit 指纹变；没有这类事件的书产物不变。
+- PATCH（A31 11-10，用户定删 book-text 各书 CHANGES.md）`scripts/zhengli/republish.py` 的 `bump_book_text` 不再传 `--pr TBD`，改收 bump_original 打印的「版本记录」行写进 book-text 提交信息。与 manager、book-text 同名 PR 配套。L0。
+
+- PATCH（A31 11-09，SJ 反映史記 r20 manifest 的 manager_version 为空）`core/contract.manager_version()` 在没设 `GUJI_MANAGER_VERSION` 时取已装 guji-manager 的版本（`m<版本>`，与 manager 子进程口径一致），没装仍为 None。只供审计，不进指纹，L0。
+
+## [0.6.33] - 2026-11-09
+
+- 发版说明（A31 11-09）：从 dev 93e03bc 切，含 #1338、#1339（rerun_prep 修复）、#1340（删 decision_build，book-text 只录首选字）。
+
+- PATCH（A31 11-09，用户定 book-text 只录首选字）删 `scripts/zhengli/decision_build.py` 与其测试；`text_release.py run` 的 G1 改为「线上单待审清零」（不再生成 decision.json、不再算「看不出」占比）；`export_guji_format.py --pending` 提示改为写首选字、不写 pending_reason；runbook E3 注明废弃。待审信息、候选、人裁事件都在 KV。L0（不影响切分／识别产物）。
+
+## [0.6.32] - 2026-11-09
+
+- 发版说明（A31 11-09，A24 要）：从 dev 56f6227 切，含 #1332（seed_admit `textlayer_ref_gap`，缺省关）、#1334（rerun_prep 工作区完整检出）、#1335（#1332 的 code_equiv 登记，殿本 vol04 38 页逐字节相同，seed_admit 指纹不变）。
+- 文档（书级代码第 5 步）：`doc/切分代码结构.md` 改成三层（seg／impl 缺省实现／书仓 code/）、各书怎么改自己的切分与出 k<N>；`doc/版本号规矩.md` 加「四库版本号与书级代码」一节；`doc/开关登记表.md`、Wiki「各书一览」换新路径。
+- PATCH 书级代码：起跑前比对书仓 `code/` 与 `k<N>` 清单时不算 `*.md`（改 README 不再让钉了 `code: N` 的册拒跑）；设计文档补打 tag 走中转站的用法。L0。
+- PATCH 登记 #1332（seed_admit `textlayer_ref_gap`，缺省关）的代码等价：殿本 vol04 新图 38 页与改前逐字节相同，seed_admit 指纹不变（L0）。
 
 ## [0.6.31] - 2026-11-09
 

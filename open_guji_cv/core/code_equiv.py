@@ -1281,6 +1281,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='a79811a45e4cb8c7a9068d7f5df0e1b8af8b8d8711d196fead426184bd9eec4c',
           old='4ebd6999371f4c921c34212cb4235e32e97bcc2b96d9ce24f06e72e952465ba6',
           evidence='seed_admit 在 001 3 页（--pages 76,100,150）上与 origin/dev 产物逐字节相同；solo_cal_allow／lead_5b 缺省关'),
+    # textlayer_ref_gap 书级开关（缺省关，2026-11-09，R02 参校本没字第二见证，#1332）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='7fb78be931a21f6f71c24a7b69b3092cf110f52f2a395119ddfa74ab064be13c',
+          old='4ebd6999371f4c921c34212cb4235e32e97bcc2b96d9ce24f06e72e952465ba6',
+          evidence='seed_admit 在殿本 vol04 新图 38 页（--pages 每 6 页取 1，加 p17/p100/p186）上与 3576628（#1332 之前的 dev）产物逐字节相同；textlayer_ref_gap 缺省空＝关、参数不进 dump；用殿本新图包 cv0.6.29-c20-g21-r9c-v0629，scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-09'),
     # grid_end_fit 书级开关（缺省关，2026-11-09，殿本 vol28 列尾下溢）
     Equiv(module="open_guji_cv.steps.row_segment",
           new="6a3617931b93c706e43d43ccd2e1b9f5d63e1307343c424637cb0ecb77b32258",
