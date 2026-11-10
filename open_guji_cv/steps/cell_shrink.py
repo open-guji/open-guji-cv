@@ -112,6 +112,11 @@ class CellShrinkParams(BaseModel):
     """一整团实心墨（墨点、污渍）的格记空，旗 `ink_blob`（extractor `is_ink_blob`，见 `INK_BLOB_*`）。缺省关＝旧行为。
     开（全唐文 S6）：011:68:1:14 是夹在空格里的一团墨，列端渣格闸够不着，被当字（2026-11-05）。"""
 
+    manual_ink_fit: bool = False
+    """人工定框列（Step3 `manual_cells`，格级钉子）每格先在框内收到墨迹、再外扩 padding，框外的像素抹白
+    （`_manual_fit_crop`）。缺省关＝旧行为（按框外扩 padding 直接裁）。开（史記）：正文定框多是满宽、上下相接的
+    网格框，外扩的 padding 带进上下邻字，图块认错（08:124:5 连续 7 字、04:122:1、10:2:6；SJ 11-10 报）。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
@@ -144,6 +149,8 @@ class CellShrinkParams(BaseModel):
             d.pop("ink_blob_empty", None)
         if isinstance(d, dict) and not self.inner_frame_keep_cross:
             d.pop("inner_frame_keep_cross", None)
+        if isinstance(d, dict) and not self.manual_ink_fit:
+            d.pop("manual_ink_fit", None)
         return d
 
 
@@ -506,7 +513,8 @@ class CellShrinkStep(Step):
         from ..clustering.extractor import CharExtractor
         p: CellShrinkParams = ctx.params_for(self)  # type: ignore[assignment]
         if "roster" in cc.flags:
-            return _roster_crops(ctx.book.id, page, cc, img, p.padding_ratio)
+            return _roster_crops(ctx.book.id, page, cc, img, p.padding_ratio,
+                                 ink_fit=p.manual_ink_fit and "manual_cells" in cc.flags)
         h, w = img.shape[:2]
         # Step3 每个物理位置一格；夹注 a/b 合成一格（满宽），空白格给 empty
         pos_count: dict[int, int] = {}
@@ -870,23 +878,61 @@ def _apply_seam(img: np.ndarray, patch: np.ndarray, bbox: tuple, seam_top, seam_
     return masked[r0:r1, c0:c1], (float(x0 + c0), float(y0 + r0), float(x0 + c1), float(y0 + r1))
 
 
+def _manual_fit_crop(img: np.ndarray, box: tuple[float, float, float, float],
+                     padding_ratio: float) -> tuple[tuple[int, int, int, int], np.ndarray, float, float]:
+    """人工定框格（`manual_ink_fit`）：框内收到墨迹 → 外扩 padding → 框外抹白。
+
+    返回 (裁块 x0,y0,x1,y1, 图块, 墨宽, 墨高)。框内没有够大的墨就按框本身当墨框。小于框面积 0.2%（至少 4 像素）
+    的碎墨不撑墨框（纸屑、邻字飞白），但仍留在图块里。"""
+    import cv2
+    h, w = img.shape[:2]
+    bx0, by0 = max(0, int(round(box[0]))), max(0, int(round(box[1])))
+    bx1, by1 = min(w, int(round(box[2]))), min(h, int(round(box[3])))
+    ix0, iy0, ix1, iy1 = bx0, by0, bx1, by1
+    if bx1 > bx0 and by1 > by0:
+        ink = (img[by0:by1, bx0:bx1] < 128).astype(np.uint8)
+        n, _, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+        keep = stats[1:][stats[1:, cv2.CC_STAT_AREA] >= max(4, 0.002 * ink.size)]
+        if len(keep):
+            ix0 = bx0 + int(keep[:, cv2.CC_STAT_LEFT].min())
+            iy0 = by0 + int(keep[:, cv2.CC_STAT_TOP].min())
+            ix1 = bx0 + int((keep[:, cv2.CC_STAT_LEFT] + keep[:, cv2.CC_STAT_WIDTH]).max())
+            iy1 = by0 + int((keep[:, cv2.CC_STAT_TOP] + keep[:, cv2.CC_STAT_HEIGHT]).max())
+    iw, ih = ix1 - ix0, iy1 - iy0
+    pad = padding_ratio * max(iw, ih)
+    x0, y0 = max(0, int(round(ix0 - pad))), max(0, int(round(iy0 - pad)))
+    x1, y1 = min(w, int(round(ix1 + pad))), min(h, int(round(iy1 + pad)))
+    patch = img[y0:y1, x0:x1].copy()
+    if patch.size:
+        outside = np.ones(patch.shape[:2], dtype=bool)
+        outside[max(0, by0 - y0):max(0, by1 - y0), max(0, bx0 - x0):max(0, bx1 - x0)] = False
+        patch[outside] = 255
+    return (x0, y0, x1, y1), patch, float(iw), float(ih)
+
+
 def _roster_crops(book: str, page: int, cc: ColumnCells, img: np.ndarray,
-                  padding_ratio: float) -> list[tuple[object, np.ndarray | None]]:
+                  padding_ratio: float, ink_fit: bool = False) -> list[tuple[object, np.ndarray | None]]:
     """职名列（Step3 `roster_pages` 分支切的列，overview#450）：每格按它自己的字框裁。
 
     正文链按 pos 满宽裁、雙行 a/b 合成一格再从缝拆——前提是两行逐格对齐、一格一字
     满宽。职名列两条都不成立：雙行两行相位不齐（按 pos 并 y 会一格裹进上下两字），
     「臣」偏右小字可能与官衔末字 y 重叠。Step3 已给了逐字紧框（x0..x1, y0..y1），
-    这里外扩 padding 直接裁，不再过 CharExtractor 的网格收缩。"""
+    这里外扩 padding 直接裁，不再过 CharExtractor 的网格收缩。
+
+    `ink_fit`（人工定框列且开了 `manual_ink_fit`）：人画的框常是满宽网格框，先收到框内墨迹再外扩、框外抹白
+    （`_manual_fit_crop`），不把上下邻字带进图块。"""
     from ..clustering.extractor import CharInstance
     h, w = img.shape[:2]
     out: list[tuple[object, np.ndarray | None]] = []
     for c in sorted(cc.cells, key=lambda c: (c.pos, c.sub or "")):
         bw, bh = c.x1 - c.x0, c.y1 - c.y0
-        pad = padding_ratio * max(bw, bh)
-        x0, y0 = max(0, int(round(c.x0 - pad))), max(0, int(round(c.y0 - pad)))
-        x1, y1 = min(w, int(round(c.x1 + pad))), min(h, int(round(c.y1 + pad)))
-        patch = img[y0:y1, x0:x1]
+        if ink_fit:
+            (x0, y0, x1, y1), patch, bw, bh = _manual_fit_crop(img, (c.x0, c.y0, c.x1, c.y1), padding_ratio)
+        else:
+            pad = padding_ratio * max(bw, bh)
+            x0, y0 = max(0, int(round(c.x0 - pad))), max(0, int(round(c.y0 - pad)))
+            x1, y1 = min(w, int(round(c.x1 + pad))), min(h, int(round(c.y1 + pad)))
+            patch = img[y0:y1, x0:x1]
         ink = float((patch < 128).mean()) if patch.size else 0.0
         inst = CharInstance(
             id=f"{book}:{page}:{cc.col}:{c.slot}{c.sub or ''}", book=book, page=str(page),

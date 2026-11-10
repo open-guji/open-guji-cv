@@ -134,23 +134,34 @@ def main(argv=None) -> int:
                 eid, r["key"], r.get("shape"), r["status"], r.get("bound"), r.get("why"),
                 verdict[eid], int(eid in in_cols))) + "\n" for eid, r in sorted(rows.items(), key=lambda kv: kv[1]["key"]))
     probs = [eid for eid, v in verdict.items() if v != "ok"]
+    # 旧切分上照执行机条件再算一遍绑定：补锚草稿要（人裁当时落在哪一格），也用来认「老失锚」——
+    # 不在改动列、旧切分下也没绑上的，推不推这次钉子都一样，单列出来、不计入结论（SJ 11-10）
+    old_rows = (pc.simulate_bindings(book, pages, tmp / "exec_old", store=old_store)
+                if old_store is not None and probs else {})
+    probs, preexist = pc.split_preexisting(probs, in_cols, old_rows)
     lines += ["## 二、照执行机条件重算人裁绑定", "",
               f"- 涉及页人裁 {len(rows)} 条，其中改动列里 {len(in_cols)} 条",
-              f"- 失锚（执行机 seed_admit 报 no_patch 或悄悄丢人裁）{sum(v == 'unbound' for v in verdict.values())} 条；"
-              f"对不上（review／void，回待审）{sum(v == 'lost' for v in verdict.values())} 条",
+              f"- 失锚（执行机 seed_admit 报 no_patch 或悄悄丢人裁）{sum(verdict[e] == 'unbound' for e in probs)} 条；"
+              f"对不上（review／void，回待审）{sum(verdict[e] == 'lost' for e in probs)} 条"
+              + (f"；另老失锚 {len(preexist)} 条（见下，不计）" if preexist else ""),
               "- 明细 `bindings.tsv`", ""]
     for eid in sorted(probs, key=lambda e: rows[e]["key"]):
         r = rows[eid]
         lines.append(f"- {r['key']} {r.get('shape') or ''} {r['status']}{('/' + r['why']) if r.get('why') else ''}"
                      f"{'' if eid in in_cols else '（不在改动列）'}")
     bad |= any(verdict[e] == "unbound" for e in probs) or any(e in in_cols for e in probs)
+    if preexist:
+        lines += ["", f"### 老失锚 {len(preexist)} 条（不在改动列、旧切分下也没绑上，不计入结论）", ""]
+        for eid in sorted(preexist, key=lambda e: rows[e]["key"]):
+            r, o = rows[eid], old_rows[eid]
+            lines.append(f"- {r['key']} {r.get('shape') or ''} {r['status']}{('/' + r['why']) if r.get('why') else ''}"
+                         f"（旧切分：{o.get('status')}{('/' + o['why']) if o.get('why') else ''}）")
 
     # 3. 补锚草稿
     lines += ["", "## 三、补锚草稿", ""]
     if old_store is not None and probs:
         step = cells_step(book)
-        # 旧切分上照执行机条件再算一遍绑定：人裁当时落在哪一格，按那一格的位置出墨框（不按事件格号）
-        old_rows = pc.simulate_bindings(book, pages, tmp / "exec_old", store=old_store)
+        # old_rows（上面算好）：人裁当时落在哪一格，按那一格的位置出墨框（不按事件格号）
         drafts, skipped = [], []
         from open_guji_cv.feedback.events import EventLog, iter_events_readonly
         has_anchor = {e.id for e in iter_events_readonly(EventLog())

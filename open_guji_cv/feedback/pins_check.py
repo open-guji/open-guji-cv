@@ -162,6 +162,14 @@ def classify_row(row: dict) -> str:
     return "lost"
 
 
+def split_preexisting(probs: list[str], in_cols: set[str], old_rows: dict[str, dict]) -> tuple[list[str], set[str]]:
+    """有问题的绑定分成（本次要管的, 老失锚）。老失锚＝不在改动列、旧切分下也没绑上（`classify_row` 不是 ok）：
+    推不推这次钉子都一样，单列出来、不计入预检结论（SJ 11-10，01 p59 四条老 unanchored/review）。
+    没有旧切分的（`old_rows` 里没有这条）照旧算本次的。"""
+    pre = {e for e in probs if e not in in_cols and e in old_rows and classify_row(old_rows[e]) != "ok"}
+    return [e for e in probs if e not in pre], pre
+
+
 def simulate_bindings(book: str, pages: list[int], tmp: Path, store=None) -> dict[str, dict]:
     """照执行机条件重算这些页的绑定：`{event_id: row}`。`store`：新切分所在产物仓（缺省本机）。"""
     from .bindings import book_bindings
