@@ -111,9 +111,21 @@ def test_split_changes_human_vs_machine_and_revert(tmp_path):
     new = _char(tmp_path, "new.json", [("3:1:1", "官"), ("3:1:2", "論"), ("3:1:3", "彖"), ("3:1:4", "甲"), ("3:1:5", "已")])
     sp = pc.split_changes(old, new, {"3:1:2": "論", "3:1:3": "象"})
     assert sp == {"human": [("3:1:2", "", "論")], "overrule": [("3:1:3", "象", "彖")],
-                  "machine": [("3:1:1", "宫", "官"), ("3:1:5", "", "已")]}
+                  "machine": [("3:1:1", "宫", "官"), ("3:1:5", "", "已")], "norm": []}
     pc.revert_cells(new, {a: o for a, o, _ in sp["overrule"]})
     assert pc._cells(new) == {"3:1:1": "官", "3:1:2": "論", "3:1:3": "象", "3:1:4": "甲", "3:1:5": "已"}
+
+
+def test_split_changes_codepoint_norm_is_not_overrule(tmp_path):
+    """旧人裁「别」、机器出「別」，归一表里有 别→別：不算推翻人裁、不上单，文本留旧字（vol03 1:8:20，第三册线 11-10）。"""
+    old = _char(tmp_path, "old.json", [("3:1:1", "别"), ("3:1:2", "象")])
+    new = _char(tmp_path, "new.json", [("3:1:1", "別"), ("3:1:2", "彖")])
+    human = {"3:1:1": "别", "3:1:2": "象"}
+    assert pc.split_changes(old, new, human)["overrule"] == [("3:1:1", "别", "別"), ("3:1:2", "象", "彖")]  # 不给归一表：老行为
+    sp = pc.split_changes(old, new, human, {"别": "別"})
+    assert sp["norm"] == [("3:1:1", "别", "別")] and sp["overrule"] == [("3:1:2", "象", "彖")]
+    pc.revert_cells(new, {a: o for a, o, _ in sp["norm"]})
+    assert pc._cells(new)["3:1:1"] == "别"
 
 
 def test_status_done_when_all_voted_or_idle(tmp_path, monkeypatch):
