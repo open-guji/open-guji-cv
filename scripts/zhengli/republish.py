@@ -759,6 +759,12 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
         cmd += ["--db-rev", str(st["rev"])]
     if old and old.get("routed_as_of"):           # 复审格放上线之后用户投过票的，不再放回（2026-11-10）
         cmd += ["--recheck-since", str(old["routed_as_of"])]
+    from proof_cycle import codepoint_map
+    cpm = codepoint_map(ws, book)
+    if cpm:                                       # 出单门：复审格旧人裁与现行字归一后相同，不上单
+        cpf = out / "codepoints.json"
+        cpf.write_text(json.dumps(cpm, ensure_ascii=False), encoding="utf-8")
+        cmd += ["--codepoints", cpf]
     if a.team_pages:
         cmd += ["--team-pages", a.team_pages]
     if a.page_types:
