@@ -129,3 +129,25 @@ def test_recheck_since_deducts_newer_human_vote(tmp_path):
                     "--out", str(out)]) == 0
     cells = json.loads((out / "006.pending.json").read_text(encoding="utf-8"))["cells"]
     assert [c["cell"] for c in cells] == ["83:5:10"]
+
+
+import pytest
+
+
+@pytest.mark.parametrize("prior,ref,norm,dropped", [
+    ("别", "別", {"别": "別"}, True),        # 归一后同字：不上单
+    ("刋", "刊", {"刋": "刊"}, True),
+    ("别", "別", {}, False),                 # 没有归一表：照常
+    ("撰", "𢰅", {"刋": "刊"}, False),       # 不在表里（形近字组）：照常
+    ("恭", "載", {"恭": "共"}, False),
+])
+def test_route_gate_drops_norm_only_recheck(prior, ref, norm, dropped):
+    c = {"cell": "1:1:1", "recheck": True, "prior": {"c": prior}, "ref": {"c": ref}}
+    r = pr.route({"cells": [c]}, {}, set(), 99, False, norm=norm)
+    assert (len(r["dropped"]) == 1) == dropped
+    assert (len(r["public"]) == 1) == (not dropped)
+
+
+def test_route_gate_ignores_non_recheck():
+    c = {"cell": "1:1:1", "prior": {"c": "别"}, "ref": {"c": "別"}}
+    assert len(pr.route({"cells": [c]}, {}, set(), 99, False, norm={"别": "別"})["public"]) == 1

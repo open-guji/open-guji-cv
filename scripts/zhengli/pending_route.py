@@ -119,14 +119,26 @@ def page_of(cell: str) -> int:
     return int(cell.split(":", 1)[0])
 
 
+def norm_only(c: dict, norm: dict[str, str]) -> bool:
+    """出单门（2026-11-10，字的等价与归一审视）：复审格上旧人裁（prior.c）与现行文本字（ref.c）套码位归一表后是同一个字，
+    就没有可复审的分歧（如 别／別），不上单。两边缺一边、或本来就是同一个字面（没有歧义）都不管。"""
+    if not c.get("recheck") or not norm:
+        return False
+    a, b = (c.get("prior") or {}).get("c"), (c.get("ref") or {}).get("c")
+    return bool(a and b and a != b and norm.get(a, a) == norm.get(b, b))
+
+
 def route(pending: dict, decided: dict, team_pages: set[int], reflow_min: int, reflow_hold: bool,
-          recheck_since: str = "") -> dict:
+          recheck_since: str = "", norm: dict[str, str] | None = None) -> dict:
     """``recheck_since``（UTC ISO，缺省空＝复审格一律不扣）：复审格在这个时刻之后有了人裁，就算用户已经答复，照样扣掉。
     republish 传「线上旧单的 routed_as_of」——复审格放上线之后用户投的票，不该在下一版单上再出现（2026-11-10，用户指出）。"""
     cells = pending.get("cells", [])
     kept, dropped = [], []
     for c in cells:
         stale_ts = str((c.get("stale") or {}).get("ts") or "")
+        if norm_only(c, norm or {}):
+            dropped.append(c)
+            continue
         if c.get("recheck"):
             hits = [h for h in decided.get(c["cell"], []) if h[0] > recheck_since] if recheck_since else []
         else:
@@ -160,6 +172,8 @@ def main(argv=None) -> int:
     ap.add_argument("--reflow-hold", action="store_true", help="回流单上的格不进公众单、团队单")
     ap.add_argument("--db-rev", default=None, help="分流时中心库的 rev，写进两张单的 based_on_db_rev")
     ap.add_argument("--keep", type=Path, default=None, help="不扣的格号，一行一个（可带「册:」前缀）")
+    ap.add_argument("--codepoints", type=Path, default=None,
+                    help="码位归一表（JSON {另一码位: 本书码位}）：复审格旧人裁与现行字归一后相同就不上单")
     ap.add_argument("--out", required=True, type=Path)
     a = ap.parse_args(argv)
 
@@ -173,7 +187,8 @@ def main(argv=None) -> int:
     if a.keep:
         for line in a.keep.read_text(encoding="utf-8").split():
             decided.pop(line.removeprefix(f"{a.book}:"), None)
-    res = route(pending, decided, team_pages, a.reflow_min, a.reflow_hold, a.recheck_since or "")
+    res = route(pending, decided, team_pages, a.reflow_min, a.reflow_hold, a.recheck_since or "",
+                norm=json.loads(a.codepoints.read_text(encoding="utf-8")) if a.codepoints else None)
 
     stem = re.sub(r"(\.pending)?\.json$", "", a.pending.name)
     a.out.mkdir(parents=True, exist_ok=True)
