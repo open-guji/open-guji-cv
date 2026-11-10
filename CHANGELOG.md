@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `human_chars`：人裁因现格字块图拿不到没法认格时，每册 ≤ 20 条默认放行（记 warning，事件不删），超过 20 条才报错拦下；`GUJI_ALLOW_LOST_HUMAN=1` 仍可无上限放行（PATCH，ZM-殿本二册 11-10，sheldon 定）。只改报错路径，产物不变；`lookup.py` 若在某步 `code_deps` 里，该步指纹会变，需要时用 `scripts/code_equiv.py` 登记。
+
 ## [0.6.38] - 2026-11-10
 
 - 发版说明（A31 11-10）：从 dev 83bd46b 切，含 #1366（row_segment 1.49：卷端题列起格把框线记空格照旧算上，修 #1357 带来的格号后移，史記 01 p119 c2）。各书从 row_segment 起过期。
