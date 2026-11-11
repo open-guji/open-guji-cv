@@ -329,7 +329,11 @@ class RunContext:
         self.book = book
         self.store = store
         self.cache = cache
-        self.params: dict[str, BaseModel] = params or {}
+        #: 不给 `params`（控制台、`guji cache get／warm`、审阅卡等不经 Engine 直接建的 ctx）：第一次取参数时按
+        #: `core/pipeline.resolve_params` 现算，与 Engine 同一份。以前这里是空表，只补得上册配置那层，**套书缺省**
+        #: （书仓 `code/defaults.yaml`）整层丢掉：史記 column_warp `tight_rule_band` 没开，再生列图把贴列左缘的
+        #: 偏旁当界行抹掉，`cache get` 取到的「約」只剩「勺」，与跑步时出的字块不同（SJ r39 03:177:8:21b，2026-11-11）。
+        self._params: dict[str, BaseModel] | None = params
         self.log = log or (lambda s: print(s, flush=True))
         self._raw: "OrderedDict[int, np.ndarray]" = OrderedDict()
         #: 查「谁产出这种产物」按这条管线来（2026-09-14，三模式方案「地基 2」）。
@@ -344,6 +348,17 @@ class RunContext:
         #: 一步跑批期间的参数缓存 {step_id: 参数}，引擎跑一步时设、跑完清（`Engine._run_one_step`），
         #: 并行 worker 一个进程只跑一步，建 ctx 时就设。None＝不缓存，每次现算（控制台等直接建的 ctx）。
         self._params_memo: dict | None = None
+
+    @property
+    def params(self) -> dict[str, BaseModel]:
+        if self._params is None:
+            from .pipeline import resolve_params
+            self._params = resolve_params(self.pipeline, self.book)
+        return self._params
+
+    @params.setter
+    def params(self, value: dict[str, BaseModel]) -> None:
+        self._params = value
 
     @property
     def pipeline(self):
