@@ -8,7 +8,7 @@
     python scripts/seg_screen.py --books 04 06 --out <报告目录>
     python scripts/seg_screen.py --books 001 002 --seal-blank     # 加 F8：列出 seed_admit 会按印框记空的格（要原图）
 
-输出：每项一张 TSV（edge_ink、edge_frame_only、colnet_page、frame_margin、layout_col_shift、layout_fallback、
+输出：每项一张 TSV（edge_ink、orphan、edge_frame_only、colnet_page、frame_margin、layout_col_shift、layout_fallback、
 pitch_free_ignored、seal_blank）
 和 summary.md（逐册计数）。要看图就把 TSV 交 `guji-manager review-pages build`。
 格位表取本册 row_segment 的 `layout_prior` 参数（册配置里写的那份）；没开的册跳过 ②b 与 F7。
@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-CHECKS = ("edge_ink", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
+CHECKS = ("edge_ink", "orphan", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
           "pitch_free_ignored", "seal_blank")
 
 
@@ -78,6 +78,8 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
         ci = store.read(book, "cell_shrink", key, "char_index")
         shrink_char = None if ci is None else {(cc_.col, ch.slot) for cc_ in ci.columns for ch in cc_.chars
                                                if ch.cell_type != "empty"}
+        char_boxes = {} if ci is None else {cc_.col: [ch.bbox_col for ch in cc_.chars if ch.cell_type == "char"]
+                                            for cc_ in ci.columns if cc_.ok}
         lay_page = {col: r for (pg, col), r in layout.items() if pg == page}
         sh = ss.layout_col_shift(cells, lay_page)
         if sh:
@@ -90,14 +92,18 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             if ss.pitch_free_ignored(cc, lay_page.get(cc.col)):
                 rows["pitch_free_ignored"].append((book, page, cc.col, "", "表写 pitch: free，选中挤格补线格网"))
                 c["pitch_free_ignored"] += 1
-            if "manual_cells" in cc.flags or "roster" in cc.flags:
-                continue                  # 人定字框、职名列不按格网查端外墨
             p = ctx.cache.get(book, "column_image", column_key(page, cc.col))
-            if p is None:
-                continue
-            gray = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+            gray = None if p is None else cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
             if gray is None:
                 continue
+            boxes = char_boxes.get(cc.col)
+            if boxes:                     # 漏切块：人定字框、职名列也查（墨不在任何字格里与怎么切无关）
+                for o in ss.orphan_ink(gray, boxes):
+                    rows["orphan"].append((book, page, cc.col, o["ratio"],
+                                           f"{o['where']} 墨 {o['ink']}px bbox {o['bbox']}"))
+                    c["orphan"] += 1
+            if "manual_cells" in cc.flags or "roster" in cc.flags:
+                continue                  # 人定字框、职名列不按格网查端外墨
             for slot in ss.edge_frame_only(gray, cc):
                 if shrink_char is not None and (cc.col, slot) not in shrink_char:
                     continue
@@ -151,7 +157,7 @@ def main(argv=None) -> int:
     lines = ["# 切分筛查", "", "| " + " | ".join(hdr) + " |", "|" + " --- |" * len(hdr)]
     for b, c in counts.items():
         lines.append("| " + " | ".join([b, str(c["pages"]), *[str(c[k]) for k in hdr[2:]]]) + " |")
-    lines += ["", "edge_ink、pitch_free_ignored 按列计；colnet_page、frame_margin、layout_col_shift、layout_fallback 按页计；edge_frame_only、seal_blank 按格计。"]
+    lines += ["", "edge_ink、pitch_free_ignored 按列计；colnet_page、frame_margin、layout_col_shift、layout_fallback 按页计；edge_frame_only、seal_blank 按格计；orphan 按块计。"]
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
     return 0
