@@ -9,6 +9,7 @@
 | ②a | `colnet_page` | 页内某正文列文字带宽 < 0.7 或 > 1.3 倍本页中位（整页列网错，常漏首列再劈出窄条） |
 | ②b | `layout_col_shift` | 格位表列号整页挪 ±1 后对上的列明显更多（表把整页列号错了一列） |
 | F7 | `pitch_free_ignored` | 表行写了 `pitch: free`，最后选中的格网却是挤格补线（`layout_unmerge`），pitch 没起作用 |
+| ①c | `orphan` | 列中间整块墨不在任何字格里（先剥界行、版框长直线；判据照 SJ 快筛 ORPH，见 `orphan_ink`） |
 | F8 | `seal_blank` | seed_admit 会按印框记空的格（`occlusion.page_seal_blank`），本机跑到 cell_shrink 就能看 |
 """
 from __future__ import annotations
@@ -191,4 +192,82 @@ def margin_outliers(margins: dict[int, dict]) -> list[dict]:
             if abs(dev[side]) > MARGIN_DEV * pitch:
                 out.append({"page": p, "side": side, "dev": round(dev[side] / pitch, 2),
                             "dist": round(m[side]), "median": round(med[side])})
+    return out
+
+
+# ── ①c 漏切块（SJ 切分快筛 ORPH，11-11 搬进来）：列中间整块墨不在任何字格里，edge_ink 只看列端抓不到 ─────────────
+
+ORPH_VLINE = 200          # 竖向开运算长度（px）：剥界行
+ORPH_HLINE = 0.85         # 横向开运算长度（列宽倍数，至少 40px）：剥版框横线
+ORPH_CLOSE = 9            # 闭运算核（px）：把一个字的散笔画连成一块
+ORPH_FRAC = 0.25          # 块墨量 ≥ 本列字格墨量中位 × 这么多，
+ORPH_MIN_PX = 150         # 且 ≥ 这么多像素才算一个字
+ORPH_INSIDE = 0.2         # 块墨落在字格里的份额 ≤ 这么多才算漏切
+
+
+def strip_long_lines(ink: np.ndarray) -> np.ndarray:
+    """二值墨图（0/1）剥掉长直线：竖向开运算 ORPH_VLINE px（界行）、横向开运算 ORPH_HLINE 列宽（版框）。
+
+    写本连笔加贯穿整列的界行，不剥的话一串字连成一块，连通块分析全错（SJ 快筛第二节）。"""
+    import cv2
+    w = ink.shape[1]
+    vl = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((ORPH_VLINE, 1), np.uint8))
+    hl = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, max(40, int(ORPH_HLINE * w))), np.uint8))
+    return ((ink > 0) & ~((vl | hl) > 0)).astype(np.uint8)
+
+
+def orphan_ink(gray: np.ndarray, boxes, ink_threshold: int = 128) -> list[dict]:
+    """一列列图 + 本列字格框（列图坐标 (x0, y0, x1, y1)，取 cell_shrink 判 char 的格）→ 漏切块
+    `[{"bbox": [x0, y0, x1, y1], "ink": 像素, "ratio": 占字格中位, "where": head|mid|tail}]`。
+
+    判据照 SJ `tools/seg_check/orphan.py`（r35／r41 史記十册验过）：剥长直线 → 闭运算 → 连通块；
+    块内真墨 ≥ max(ORPH_MIN_PX, ORPH_FRAC × 字格墨中位)、落在字格里的 ≤ ORPH_INSIDE。排除：
+    版框残带（高 ≤30 且宽 ≥半列或宽 ≥4×高）、粗版框黑带（宽 ≥0.8 列、高 ≤60、填充 ≥0.25）、
+    版框折角（墨心贴列边 15% 内、填充 <0.3）、界行残段（宽 ≤25 且 ≤0.3×高）、稀疏框形（填充 <0.1）、
+    网点霉斑（≥15 小块且块中位 <40px）、邻列字边（贴列图左／右边、只占边上 1/4 宽）。"""
+    import cv2
+    boxes = [tuple(int(round(v)) for v in b) for b in boxes]
+    if not boxes:
+        return []
+    ink = strip_long_lines((gray < ink_threshold).astype(np.uint8))
+    h, w = ink.shape
+    blob = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((ORPH_CLOSE, ORPH_CLOSE), np.uint8))
+    n, lab, st, _ = cv2.connectedComponentsWithStats(blob, connectivity=8)
+    union = np.zeros_like(ink)
+    inks = []
+    for x0, y0, x1, y1 in boxes:
+        x0, y0, x1, y1 = max(0, x0), max(0, y0), min(w, x1), min(h, y1)
+        union[y0:y1, x0:x1] = 1
+        inks.append(int(ink[y0:y1, x0:x1].sum()))
+    med = float(np.median(inks))
+    ytop, ybot = min(b[1] for b in boxes), max(b[3] for b in boxes)
+    out = []
+    for i in range(1, n):
+        x, y, bw, bh, _a = (int(v) for v in st[i])
+        m = (lab[y:y + bh, x:x + bw] == i) & (ink[y:y + bh, x:x + bw] > 0)
+        real = int(m.sum())
+        if real < ORPH_FRAC * med or real < ORPH_MIN_PX:
+            continue
+        if int((union[y:y + bh, x:x + bw] & m).sum()) > ORPH_INSIDE * real:
+            continue
+        fill = real / (bw * bh)
+        if bh <= 30 and (bw >= 0.5 * w or bw >= 4 * bh):
+            continue                                      # 版框残带
+        if bw >= 0.8 * w and bh <= 60 and fill >= 0.25:
+            continue                                      # 粗版框黑带（列尾整宽）
+        cx = x + float(np.nonzero(m)[1].mean())
+        if (cx >= 0.85 * w or cx <= 0.15 * w) and fill < 0.3:
+            continue                                      # 版框折角
+        if bw <= 0.3 * bh and bw <= 25:
+            continue                                      # 界行残段
+        if fill < 0.10:
+            continue                                      # 稀疏框形
+        k, _l, s2, _c = cv2.connectedComponentsWithStats(m.astype(np.uint8), connectivity=8)
+        if k - 1 >= 15 and float(np.median(s2[1:, 4])) < 40:
+            continue                                      # 网点／霉斑碎点
+        if (x <= 1 and x + bw <= 0.25 * w) or (x + bw >= w - 1 and x >= 0.75 * w):
+            continue                                      # 邻列字边
+        where = "head" if y + bh <= ytop + 5 else "tail" if y >= ybot - 5 else "mid"
+        out.append({"bbox": [x, y, x + bw, y + bh], "ink": real, "ratio": round(real / max(med, 1.0), 2),
+                    "where": where})
     return out
