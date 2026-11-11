@@ -1198,3 +1198,34 @@ def test_book_level_ref_free_groups(monkeypatch):
     assert flow._rf("jys", FlowConfig(groups=("jys",))) and not flow._rf("ry", FlowConfig(groups=("ry",)))
     assert "group_flow_ref_free" not in SeedAdmitParams().model_dump()
     assert SeedAdmitParams(group_flow=("ry",), group_flow_ref_free=["ry"]).model_dump()["group_flow_ref_free"] == ["ry"]
+
+
+# —— 丈文（A24 2026-11-11，史記 r38 vol08:40:3:20b）：glyph_match 放行字须与整理本（参校本）同字 ——
+
+def test_zw_review_requires_ref_agree(monkeypatch):
+    """库里形似丈的文刻例把整理本作丈的格放成文：文意没给字 → 降审；文意给了整理本的字 → 改字；放行字与整理本同字 → 不动。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    pick = {"a": None, "b": "丈", "c": None, "d": None}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(pick[r.id], via=name))
+    a = Rec("a", "文", True, "match_solo", "match")       # 放行 文、整理本 丈、文意不表态 → 降审
+    b = Rec("b", "文", True, "match_solo", "match")       # 文意说 丈 = 整理本 → 降审（review 只降审不改字，见下）
+    c = Rec("c", "文", True, "match_solo", "match")       # 整理本也作 文 → 保持
+    amap = {"a": ("丈", "equal"), "b": ("丈", "equal"), "c": ("文", "equal")}
+    group_flow_pass([a, b, c], amap, lambda cid: [], lambda r: False, FlowConfig(groups=("zw",), provisional=False))
+    assert not a.admit and "group_flow_ref_dissent" in a.doubts
+    assert not b.admit
+    assert c.admit and c.char == "文"
+
+
+def test_zw_lift_requires_ref_agree(monkeypatch):
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict("文", via=name))
+    cands = lambda cid: [("文", 0.99), ("丈", 0.985)]   # noqa: E731
+    r = Rec("a")
+    group_flow_pass([r], {"a": ("丈", "equal")}, cands, lambda r: False, FlowConfig(groups=("zw",), provisional=False))
+    assert not r.admit and "group_flow_ref_dissent" in r.doubts
+    r = Rec("b")
+    group_flow_pass([r], {"b": ("文", "equal")}, cands, lambda r: False, FlowConfig(groups=("zw",), provisional=False))
+    assert r.admit and r.char == "文"
