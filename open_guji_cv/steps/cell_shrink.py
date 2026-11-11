@@ -23,6 +23,10 @@ from ..products.kinds.columns import PageWindows
 from ._warpmap import ColumnMapper
 
 
+MANUAL_INK_FIT_REV = 2
+"""`manual_ink_fit` 裁法修订号（进开了的书的参数 dump）。改 `_manual_fit_crop` 的产物就加 1。"""
+
+
 class CellShrinkParams(BaseModel):
     strategy: str = "component_owner"     # | padding_box
     padding_ratio: float = 0.08
@@ -151,6 +155,10 @@ class CellShrinkParams(BaseModel):
             d.pop("inner_frame_keep_cross", None)
         if isinstance(d, dict) and not self.manual_ink_fit:
             d.pop("manual_ink_fit", None)
+        if isinstance(d, dict) and self.manual_ink_fit:
+            # 开了的书改裁法要重切：算法修订号进 dump，只让开了的书判过期（关着的书 dump 不变，代码改动登 code_equiv）。
+            # 2：跨框笔画大半在框内的整块留下（_manual_fit_crop，SJ cv #1410）
+            d["manual_ink_fit_rev"] = MANUAL_INK_FIT_REV
         return d
 
 

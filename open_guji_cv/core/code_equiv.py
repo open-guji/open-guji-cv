@@ -64,6 +64,10 @@ _MF_1110 = ("cell_shrink 人工定框列加书级开关 manual_ink_fit（缺省�
             "开关关着时殿本 vol28 30 页（p1–30，main 包）、全唐文 001 20 页（p1–20，main 包）与 origin/dev 345e5877 产物逐字节相同；"
             "scripts/code_equiv.py check --always，2026-11-10（A22）")
 
+_MF_1111 = ("manual_ink_fit 跨框笔画整块留下（SJ cv #1410）＋开了的书 dump 加 manual_ink_fit_rev（只让开了的书过期）："
+            "开关关着时殿本 vol28 30 页、全唐文 001 20 页 cell_shrink 与 origin/dev 58108ae 产物逐字节相同；"
+            "scripts/code_equiv.py check --always，2026-11-11（A22）")
+
 _BC_1027 = ("push_bottom_to_bar 右界截到图内（GUJI-748，换源新图 vol23 p10、vol37 p74 越界报错）：只在原先越界报错的页上生效；"
             "border_detect 在殿本 vol20 新图 94 页（每 3 页取 1）上与 origin/dev f3b96b9 产物逐字节相同；scripts/code_equiv.py check，2026-10-27")
 
@@ -1394,6 +1398,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="cb1f88b8123e924d82cba4cc17a75c4560f43fad9eb3d8540c7418f87711adaa",
           old="94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e",
           evidence=_MF_1110),
+    Equiv("open_guji_cv.steps.cell_shrink",
+          new="54311ec727a64754a83015d384ae554080a65bbf46af05ee3653cbf3530e08fd",
+          old="94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e",
+          evidence=_MF_1111),
     # group_flow_pair_shape_nm_5b／solo_cal_5b_canon 书级开关（缺省关，2026-11-10，形近字线 全唐文 001–003 c38 第三层 王、愼吕）
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='dedab8d15ba911f5663eefdd6832051b82d9c55ee41abb51bfa825462f023638',
