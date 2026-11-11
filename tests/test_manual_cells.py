@@ -81,3 +81,18 @@ def test_manual_ink_fit_switch_not_in_dump_when_off():
     from open_guji_cv.steps.cell_shrink import CellShrinkParams
     assert "manual_ink_fit" not in CellShrinkParams().model_dump(mode="json")
     assert CellShrinkParams(manual_ink_fit=True).model_dump(mode="json")["manual_ink_fit"] is True
+
+
+def test_manual_ink_fit_keeps_own_stroke_crossing_box():
+    """本格字的笔画大半在框内、伸出框一截（田左竖、正末横）：整块留下；邻字伸进来的大半在框外，照旧抹白。"""
+    import numpy as np
+    from open_guji_cv.steps.cell_shrink import _manual_fit_crop
+    img = np.full((300, 80), 255, np.uint8)
+    img[30:90, 20:60] = 0          # 本格字身，下沿伸出框（框到 80）
+    img[92:96, 30:34] = 0          # 下格的小块，整块在框外
+    img[70:110, 66:70] = 0         # 下格的长撇，大半在框外、伸进本框一截
+    _, p, iw, ih = _manual_fit_crop(img, (0, 0, 80, 80), 0.0)
+    assert ih == 60.0              # 墨框撑到字身下沿 90
+    assert p.shape == (60, 50)     # 裁块 x 20–70、y 30–90
+    assert (p[:, 0:40] < 128).all()
+    assert (p[:, 46:50] < 128).sum() == 10 * 4     # 撇只留框内那截（y 70–80）

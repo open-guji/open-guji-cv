@@ -891,18 +891,46 @@ def _apply_seam(img: np.ndarray, patch: np.ndarray, bbox: tuple, seam_top, seam_
     return masked[r0:r1, c0:c1], (float(x0 + c0), float(y0 + r0), float(x0 + c1), float(y0 + r1))
 
 
+_SPARE_IN, _SPARE_OUT, _SPARE_EXT = 0.5, 0.35, 0.3   # 跨框笔画留下的门槛（_manual_fit_crop）
+
+
 def _manual_fit_crop(img: np.ndarray, box: tuple[float, float, float, float],
                      padding_ratio: float) -> tuple[tuple[int, int, int, int], np.ndarray, float, float]:
     """人工定框格（`manual_ink_fit`）：框内收到墨迹 → 外扩 padding → 框外抹白。
 
     返回 (裁块 x0,y0,x1,y1, 图块, 墨宽, 墨高)。框内没有够大的墨就按框本身当墨框。小于框面积 0.2%（至少 4 像素）
-    的碎墨不撑墨框（纸屑、邻字飞白），但仍留在图块里。"""
+    的碎墨不撑墨框（纸屑、邻字飞白），但仍留在图块里。
+
+    跨框笔画（2026-11-11 SJ）：人画的框常比字紧一点，本格字的笔画伸出框外一截（田的左竖、正的末横）。
+    一块连通墨大半（≥`_SPARE_IN`）在框内、框外部分不超过 `_SPARE_OUT` 且伸出不超过框高／宽的 `_SPARE_EXT`，
+    算本格的字：整块留下、撑墨框，不抹白。邻字伸进来的笔画大半在框外，照旧抹。"""
     import cv2
     h, w = img.shape[:2]
     bx0, by0 = max(0, int(round(box[0]))), max(0, int(round(box[1])))
     bx1, by1 = min(w, int(round(box[2]))), min(h, int(round(box[3])))
     ix0, iy0, ix1, iy1 = bx0, by0, bx1, by1
+    spare = None                                   # (rx0, ry0, 掩码)：框外要留的本格笔画
     if bx1 > bx0 and by1 > by0:
+        mx = int(round(_SPARE_EXT * (bx1 - bx0))) + 1
+        my = int(round(_SPARE_EXT * (by1 - by0))) + 1
+        rx0, ry0 = max(0, bx0 - mx), max(0, by0 - my)
+        rx1, ry1 = min(w, bx1 + mx), min(h, by1 + my)
+        big = (img[ry0:ry1, rx0:rx1] < 128).astype(np.uint8)
+        _, lab, st, _ = cv2.connectedComponentsWithStats(big, connectivity=8)
+        inner = lab[by0 - ry0:by1 - ry0, bx0 - rx0:bx1 - rx0]
+        ids, cnt = np.unique(inner[inner > 0], return_counts=True)
+        keep_ids = []
+        for i, k in zip(ids, cnt):
+            a = int(st[i, cv2.CC_STAT_AREA])
+            if k < a and k >= _SPARE_IN * a and a - k <= _SPARE_OUT * a:
+                cx, cy = st[i, cv2.CC_STAT_LEFT] + rx0, st[i, cv2.CC_STAT_TOP] + ry0
+                cx1, cy1 = cx + st[i, cv2.CC_STAT_WIDTH], cy + st[i, cv2.CC_STAT_HEIGHT]
+                # 碰到外扩区边沿＝块还没看全，不算
+                if cx > rx0 or rx0 == 0:
+                    if cy > ry0 or ry0 == 0:
+                        if cx1 < rx1 or rx1 == w:
+                            if cy1 < ry1 or ry1 == h:
+                                keep_ids.append(i)
         ink = (img[by0:by1, bx0:bx1] < 128).astype(np.uint8)
         n, _, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
         keep = stats[1:][stats[1:, cv2.CC_STAT_AREA] >= max(4, 0.002 * ink.size)]
@@ -911,6 +939,12 @@ def _manual_fit_crop(img: np.ndarray, box: tuple[float, float, float, float],
             iy0 = by0 + int(keep[:, cv2.CC_STAT_TOP].min())
             ix1 = bx0 + int((keep[:, cv2.CC_STAT_LEFT] + keep[:, cv2.CC_STAT_WIDTH]).max())
             iy1 = by0 + int((keep[:, cv2.CC_STAT_TOP] + keep[:, cv2.CC_STAT_HEIGHT]).max())
+            if keep_ids:
+                m = np.isin(lab, keep_ids)
+                ys, xs = np.nonzero(m)
+                ix0, iy0 = min(ix0, rx0 + int(xs.min())), min(iy0, ry0 + int(ys.min()))
+                ix1, iy1 = max(ix1, rx0 + int(xs.max()) + 1), max(iy1, ry0 + int(ys.max()) + 1)
+                spare = (rx0, ry0, m)
     iw, ih = ix1 - ix0, iy1 - iy0
     pad = padding_ratio * max(iw, ih)
     x0, y0 = max(0, int(round(ix0 - pad))), max(0, int(round(iy0 - pad)))
@@ -919,6 +953,11 @@ def _manual_fit_crop(img: np.ndarray, box: tuple[float, float, float, float],
     if patch.size:
         outside = np.ones(patch.shape[:2], dtype=bool)
         outside[max(0, by0 - y0):max(0, by1 - y0), max(0, bx0 - x0):max(0, bx1 - x0)] = False
+        if spare is not None:
+            rx0, ry0, m = spare
+            full = np.zeros((h, w), dtype=bool)
+            full[ry0:ry0 + m.shape[0], rx0:rx0 + m.shape[1]] = m
+            outside &= ~full[y0:y1, x0:x1]
         patch[outside] = 255
     return (x0, y0, x1, y1), patch, float(iw), float(ih)
 
