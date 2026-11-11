@@ -516,6 +516,14 @@ class SeedAdmitParams(BaseModel):
     库字与对位整理本字不同（或这一位没有整理本字）时，本步把它按升档前的样子看（`verdict=unsure`、`char`／`via` 空，
     与没开共识时逐字节相同），走原通道；库字与整理本字相同的共识 same 照旧。全唐文 r15 这类 46 格 r14 原放行字
     看图全对，其中 35 格共识字与原放行字相同。"""
+    consensus_lib_cov: float | None = None
+    """共识升档 same 的库字放行（全唐文 f4 字形线，2026-11-11；书级，缺省关，`None`＝关、关时逐字节不变、不进 dump）。
+    5a 共识升档（`via="consensus:<n>"`，多条刻例同意）判 same 的格，若库字与整理本对位字不同（或没有对位），
+    `consensus_fallback` 会把它退回 unsure，常落进待审。本支只看**仍待审**、非人裁的格：退档前记录是共识 same、
+    判的字就是库首位、cov ≥ 本值、无护栏、无硬疑问（`_hard_blocked`）、字不是 己已巳／〓／非汉字 → 放库字，
+    通道 `consensus_lib`，evidence `consensus_lib`（cov、via、整理本字）；不入字形库（C4）。只升不降。
+    依据：f4 016–030 待审里这类 88 格，cov≥0.97 的 78 格（𥳑19 刺8 珏8 𠋫6…，其中 35 格整理本是另一个字如 剌）
+    逐格看图 0 错、存疑 1；同一门槛下普通库 unsure（非共识）错率 35%，故只认共识升档。"""
     blank_ink_nonchar: bool = False
     """整理本空格位上有墨、库又认不出的格判非字放行（A22 S02 深挖 11-06，Sheldon 定「这几列没有必要完全挡住」；
     缺省关、关时不进参数 dump；配 align_ref `coord_blank_ink`）。条件：坐标对位说这一位是空格（`ref_char=""`）、
@@ -1484,6 +1492,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and self.solo_5b_cov is None:
             for k in ("solo_5b_cov", "solo_5b_gap", "solo_5b_min_n"):
                 d.pop(k, None)
+        if isinstance(d, dict) and self.consensus_lib_cov is None:
+            d.pop("consensus_lib_cov", None)
         if isinstance(d, dict) and self.solo_adapt_pct is None:
             for k in ("solo_adapt_pct", "solo_adapt_floor", "solo_adapt_gap", "solo_adapt_min_n", "solo_adapt_window",
                       "solo_adapt_profile", "solo_adapt_fingerprint"):
@@ -2667,6 +2677,11 @@ class SeedAdmitStep(Step):
                                  mmap_raw=mmap_raw)
             n_auto += d_s5
             n_review -= d_s5
+        if p.consensus_lib_cov is not None:
+            # 5b-c consensus_lib（升）：共识升档 same、库字＝库首位、cov 够、无护栏 → 放库字（字形线 f4，缺省关）
+            d_cl = _consensus_lib_pass(p, out, mmap_raw)
+            n_auto += d_cl
+            n_review -= d_cl
         if p.solo_adapt_pct is not None:
             # 5b-a solo_adapt（升）：无参照格按字自适应门槛（字自比分布＋高危字对，形近字线 001–003，缺省关）
             d_sa = _solo_adapt_pass(p, out, mmap, amap, _opt(ctx, "rare_candidates", page),
@@ -3187,6 +3202,40 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
                 "lib": ch, "cov": round(cov1, 4), "gap": gap, "rare": rmap.get(rec.id), "n_trusted": keben.get(ch, 0),
                 # 本书可信刻例不足、靠同族借库才够：抽检时单独成层
                 **({"borrowed": True} if keben_own is not None and keben_own.get(ch, 0) < p.solo_5b_min_n else {})}}
+            n += 1
+    return n
+
+
+def consensus_lib_decide(*, raw, doubts, cov_min: float) -> str | None:
+    """`SeedAdmitParams.consensus_lib_cov` 的判据，纯函数。`raw`：共识退档前的 glyph_match 记录。→ 放行字或 None。"""
+    if raw is None or not _is_consensus_same(raw) or not raw.char or not raw.candidates:
+        return None
+    top, cov1 = max(raw.candidates, key=lambda t: t[1])
+    ch = raw.char
+    if top != ch or float(cov1) < cov_min or float(raw.cov or 0.0) < cov_min:
+        return None
+    if ch == "〓" or ch in _JYS or not _is_hanzi(ch):
+        return None
+    if raw.guard is not None or _hard_blocked(doubts or [], raw.guard):
+        return None
+    return ch
+
+
+def _consensus_lib_pass(p: "SeedAdmitParams", out: list, mmap_raw: dict) -> int:
+    """共识升档 same 的库字放行：只把**仍待审**的格升为放行。→ 升级格数。见 `SeedAdmitParams.consensus_lib_cov`。"""
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if rec.admit or rec.provenance == "human" or rec.channel == "human":
+                continue
+            raw = mmap_raw.get(rec.id)
+            ch = consensus_lib_decide(raw=raw, doubts=rec.doubts, cov_min=p.consensus_lib_cov)
+            if ch is None:
+                continue
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "consensus_lib", "consensus_lib", ch
+            rec.doubts = []
+            rec.evidence = {**rec.evidence, "no_glyph_lib": True, "consensus_lib": {
+                "lib": ch, "cov": round(float(raw.cov or 0.0), 4), "via": raw.via}}
             n += 1
     return n
 

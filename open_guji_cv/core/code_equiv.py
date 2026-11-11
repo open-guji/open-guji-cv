@@ -1407,6 +1407,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='dedab8d15ba911f5663eefdd6832051b82d9c55ee41abb51bfa825462f023638',
           old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
           evidence='seed_admit 在 001 2 页（--pages 76,100）上与 origin/dev 产物逐字节相同；group_flow_pair_shape_nm_5b／solo_cal_5b_canon 缺省关、不进 dump'),
+    # consensus_lib_cov 书级开关（缺省关，2026-11-11，字形线 全唐文 f4 共识升档 same 库字放行）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='04cc4ded6d8f2b51187a372a1bf9c7cdb5f39bebbd0a371e3783ccf135245df7',
+          old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
+          evidence='seed_admit 在 016 3 页（--pages 141,103,80）上与 origin/dev 产物逐字节相同；全唐文 f4 包 016 共识升档待审页；consensus_lib_cov 缺省关、不进 dump'),
     Equiv("open_guji_cv.steps.row_segment",
           new="1c2b138a859640333b390aad62c037e99a2d4eaf968754e402d12b65aeddd8b2",
           old="5af1ee266342914c68f3ee53d59d6b778874cbf2d95c4190d6a6d3f67ed90733", evidence=_HOOKS_1110),
