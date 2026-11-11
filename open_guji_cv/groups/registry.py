@@ -304,6 +304,14 @@ GROUPS: dict[str, GroupSpec] = {
         kind="near_form", solvers=("image",), config_dir="config/groups/ss",
         flow=FlowSpec((SS_BARS,), combine="first", lift_ref_agree=True), overlaps=("ts", "sb"),
         note="形近不同义，按数横定（十一横一竖，士两横一竖）；补放须与整理本（缺位用坐标对位字）同字，只补放不复核。与 土士 ts、十卜 sb 共用「士」「十」。"),
+    # 丈文（2026-11-11，A24，史記 SJ 来信 GUJI-750）：手写本里 丈＝大＋右上一点、文＝一点一横＋乂，库里个别形似丈的文刻例经 glyph_match same
+    #   把丈放成文（r38 vol08:40:3:20b，参校本作丈）。不硬拦 NEVER_MATCH（会拦掉 r36 五册文 450 格、丈 27 格）：按文意 L1 规则定字，
+    #   并要求放行字与整理本（参校本）同字——补放须同字（`lift_ref_agree`），复核时放行字≠整理本字且方法没给出整理本字就降审（`review_ref_agree`）。
+    "zw": GroupSpec(
+        id="zw", name="丈文", members=frozenset("丈文"), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/zw",
+        flow=FlowSpec((CTX,), review=True, lift_ref_agree=True, review_ref_agree=True),
+        note="形近不同义，按文意定（L1 规则，弃权查 L2 表）；放行字须与整理本（参校本）同字：补放要同字，复核时与整理本不同又没有文意给出整理本字的降审（不改字）。"),
     "wm": GroupSpec(
         id="wm", name="未末", members=frozenset("未末"),
         backends=(),

@@ -57,7 +57,7 @@ def test_judge_uses_window_and_members(tmp_path):
 
 
 @pytest.mark.parametrize("g", ["jys", "ry", "rr", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt", "rm",
-                               "mz", "yr", "zy", "sb", "js", "em", "fc", "mb", "yz", "guan", "hou", "liang"])
+                               "mz", "yr", "zy", "sb", "js", "em", "fc", "mb", "yz", "guan", "hou", "liang", "zw"])
 def test_shipped_rules_load_and_stay_in_group(g):
     from open_guji_cv.groups.registry import FLOW_GROUPS
     spec = FLOW_GROUPS[g]
