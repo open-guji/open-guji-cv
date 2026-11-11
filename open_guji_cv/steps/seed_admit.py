@@ -2677,11 +2677,6 @@ class SeedAdmitStep(Step):
                                  mmap_raw=mmap_raw)
             n_auto += d_s5
             n_review -= d_s5
-        if p.consensus_lib_cov is not None:
-            # 5b-c consensus_lib（升）：共识升档 same、库字＝库首位、cov 够、无护栏 → 放库字（字形线 f4，缺省关）
-            d_cl = _consensus_lib_pass(p, out, mmap_raw)
-            n_auto += d_cl
-            n_review -= d_cl
         if p.solo_adapt_pct is not None:
             # 5b-a solo_adapt（升）：无参照格按字自适应门槛（字自比分布＋高危字对，形近字线 001–003，缺省关）
             d_sa = _solo_adapt_pass(p, out, mmap, amap, _opt(ctx, "rare_candidates", page),
@@ -2743,6 +2738,12 @@ class SeedAdmitStep(Step):
             d_ng = _near_knn_pass(p, out, amap, mmap, ctx, page, patch_missing, stage="gap")
             n_auto += d_ng
             n_review -= d_ng
+        if p.consensus_lib_cov is not None:
+            # 5b-c consensus_lib（升）：共识升档 same、库字＝库首位、cov 够、无护栏、字组没留审 → 放库字
+            # （字形线 f4，缺省关；排在各补放通道与 near_knn_gap 之后，只收它们都没放的格）
+            d_cl = _consensus_lib_pass(p, out, mmap_raw, amap, _coord_refs(ctx, page, coord_cache))
+            n_auto += d_cl
+            n_review -= d_cl
         if human_lost:
             # 顺移豁免对位表：现役对位为主，缺格的补坐标对位字（coord_fallback 放行的格没有现役对位；史記 2026-11-03）
             d_hu = _human_unbound_pass(ctx, page, out, human_lost,
@@ -3206,8 +3207,12 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
     return n
 
 
-def consensus_lib_decide(*, raw, doubts, cov_min: float) -> str | None:
-    """`SeedAdmitParams.consensus_lib_cov` 的判据，纯函数。`raw`：共识退档前的 glyph_match 记录。→ 放行字或 None。"""
+def consensus_lib_decide(*, raw, doubts, cov_min: float, group_review: bool = False) -> str | None:
+    """`SeedAdmitParams.consensus_lib_cov` 的判据，纯函数。`raw`：共识退档前的 glyph_match 记录；
+    `group_review`：形近字组已判留审（如 一/二 组弃权，f4 027:154:6:1 是黑条）→ 不放。
+    不要求整理本字＝库字：f4 实放 81 格里 55 格整理本是别字（剌/刺、寖/寢 等整理本错）、23 格无整理本字，看图都是库对。→ 放行字或 None。"""
+    if group_review:
+        return None
     if raw is None or not _is_consensus_same(raw) or not raw.char or not raw.candidates:
         return None
     top, cov1 = max(raw.candidates, key=lambda t: t[1])
@@ -3221,7 +3226,8 @@ def consensus_lib_decide(*, raw, doubts, cov_min: float) -> str | None:
     return ch
 
 
-def _consensus_lib_pass(p: "SeedAdmitParams", out: list, mmap_raw: dict) -> int:
+def _consensus_lib_pass(p: "SeedAdmitParams", out: list, mmap_raw: dict, amap: dict | None = None,
+                        coord: dict | None = None) -> int:
     """共识升档 same 的库字放行：只把**仍待审**的格升为放行。→ 升级格数。见 `SeedAdmitParams.consensus_lib_cov`。"""
     n = 0
     for col in out:
@@ -3229,13 +3235,16 @@ def _consensus_lib_pass(p: "SeedAdmitParams", out: list, mmap_raw: dict) -> int:
             if rec.admit or rec.provenance == "human" or rec.channel == "human":
                 continue
             raw = mmap_raw.get(rec.id)
-            ch = consensus_lib_decide(raw=raw, doubts=rec.doubts, cov_min=p.consensus_lib_cov)
+            ref = ((amap or {}).get(rec.id) or (None, None))[0] or (coord or {}).get(rec.id)
+            grp = (rec.evidence or {}).get("group")
+            ch = consensus_lib_decide(raw=raw, doubts=rec.doubts, cov_min=p.consensus_lib_cov,
+                                      group_review=isinstance(grp, dict) and grp.get("decision") == "review")
             if ch is None:
                 continue
             rec.admit, rec.channel, rec.provenance, rec.char = True, "consensus_lib", "consensus_lib", ch
             rec.doubts = []
             rec.evidence = {**rec.evidence, "no_glyph_lib": True, "consensus_lib": {
-                "lib": ch, "cov": round(float(raw.cov or 0.0), 4), "via": raw.via}}
+                "lib": ch, "ref": ref, "cov": round(float(raw.cov or 0.0), 4), "via": raw.via}}
             n += 1
     return n
 
