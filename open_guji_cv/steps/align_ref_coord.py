@@ -350,9 +350,22 @@ CIRCLE_CHARS = "○◯〇"
 CIRCLE_MIN_COV = 0.9
 
 
-def _is_circle(r) -> bool:
-    c = r.candidates[0] if r.candidates else None
-    return bool(c) and c[0] in CIRCLE_CHARS and float(c[1]) >= CIRCLE_MIN_COV
+#: `circle_ext` 的圈号认定：○ 在前 `CIRCLE_EXT_TOPK` 名、cov 过线，且不比首位低过 `CIRCLE_EXT_MARGIN`
+CIRCLE_EXT_TOPK = 3
+CIRCLE_EXT_MARGIN = 0.03
+
+
+def _is_circle(r, ext: bool = False) -> bool:
+    cands = r.candidates or []
+    c = cands[0] if cands else None
+    if bool(c) and c[0] in CIRCLE_CHARS and float(c[1]) >= CIRCLE_MIN_COV:
+        return True
+    if not ext or not c:
+        return False
+    # 圈号压在印纹/墨点旁，首位被别的字抢走：○ 排前几名、cov 够高且与首位相差不大也认
+    top = float(c[1])
+    return any(x[0] in CIRCLE_CHARS and float(x[1]) >= CIRCLE_MIN_COV and float(x[1]) >= top - CIRCLE_EXT_MARGIN
+               for x in cands[:CIRCLE_EXT_TOPK])
 
 
 # ── 列内按坐标配字 ──────────────────────────────────────────────────────
@@ -400,13 +413,18 @@ def _recs(units: list[CellUnit], pairs: dict[int, Unit]) -> list[tuple[str, int,
     return recs
 
 
+def sym_recs(syms: list[CellUnit]) -> list[tuple[str, int, str | None, str, float]]:
+    """圈号格 → 空格位记录（`ref_char=""`），供 `coord_dp*` 配完后补回。"""
+    return _recs(syms, {})
+
+
 def _kind_ok(u: CellUnit, ref: Unit) -> bool:
     """`coord_relaxed` 按次序配时的类型对应：同类，或整理本只有右行的夹注（`[臣|]`）配正文格。"""
     return u.kind == ref.kind or (u.kind == "c" and ref.kind == "n" and not ref.b)
 
 
 def _coord_relaxed(units: list[CellUnit], text: list[tuple[int, Unit]],
-                   b_hint: float | None, order_ok: bool) -> ColumnCoord | None:
+                   b_hint: float | None, order_ok: bool, ext: bool = False) -> ColumnCoord | None:
     """`coord_relaxed`（2026-10-31，史記文淵閣本）：几何配法之外的三条补路，返回 None＝照走原配法。
 
     1. **圈号格**：考證、注文里的「○」刻本占一格，daizhige 不录（03:220 列 1「簡公○事在」），
@@ -415,7 +433,10 @@ def _coord_relaxed(units: list[CellUnit], text: list[tuple[int, Unit]],
        正好等于整理本格位（差一个常数，含 0）时，按格号配——格号本来就是网格量化后的行号；
     3. **按次序配**（只限职名分支切的列，`order_ok`）：职名页按整理本字数重切，格数与整理本字数
        相等、类型逐个对得上，就按次序配；字距是排版疏密，不是格位。
-    配上的列照旧过 `_coord_conflict` 与错位闸。"""
+    配上的列照旧过 `_coord_conflict` 与错位闸。
+
+    `ext`（`coord_circle_ext`，2026-11-12，GUJI-767）：有圈号格而几何拟不上时，不再直接放弃，按格号配
+    （圈号格占格位，其后字位的格号差要把前面的圈号格数算进去）。"""
     syms = [u for u in units if u.sym]
     body = [u for u in units if not u.sym]
     L = len(text)
@@ -440,30 +461,38 @@ def _coord_relaxed(units: list[CellUnit], text: list[tuple[int, Unit]],
             idx = {id(u): k for k, u in enumerate(units)}
             pairs = {idx[id(body[j + k])]: r for k, (_p, r) in enumerate(text)}
             return ColumnCoord(True, recs=_recs(units, pairs), agree=agree, b=b, unique=len(cands) == 1)
-    if syms:
+    if syms and not ext:
         return None
-    # 按格号配：整理本格位 + 常数 ＝ Step3 格号，逐个类型对得上
-    if len(units) >= L:
+    # 按格号配：整理本格位 + 常数 ＝ Step3 格号，逐个类型对得上（`ext` 且有圈号格：只在非圈号格里配，
+    # 其后字位的格号加上前面圈号格数）
+    base = body if syms else units
+    if len(base) >= L:
         pos = [p for p, _u in text]
         kinds = [u.kind for _p, u in text]
         hits = []
-        for j in range(0, len(units) - L + 1):
-            run = units[j:j + L]
+
+        def _shift(u: CellUnit) -> int:
+            return sum(1 for s in syms if s.slot < u.slot)
+        for j in range(0, len(base) - L + 1):
+            run = base[j:j + L]
             if [u.kind for u in run] != kinds:
                 continue
-            d = {u.slot - p for u, p in zip(run, pos)}
+            d = {u.slot - _shift(u) - p for u, p in zip(run, pos)}
             if len(d) != 1:
                 continue
             k = d.pop()
-            span = {p + k for p in pos}
-            extras = units[:j] + units[j + L:]
+            span = {p + k + _shift(u) for p, u in zip(pos, run)}
+            extras = base[:j] + base[j + L:]
             if any(min(abs(u.slot - s) for s in span) < 1 for u in extras):
                 continue
             hits.append((sum(_agree(u, r) for u, (_p, r) in zip(run, text)), j, k))
         if len(hits) == 1:
             agree, j, _k = hits[0]
-            return ColumnCoord(True, recs=_recs(units, {j + i: r for i, (_p, r) in enumerate(text)}),
+            idx = {id(u): n for n, u in enumerate(units)}
+            return ColumnCoord(True, recs=_recs(units, {idx[id(base[j + i])]: r for i, (_p, r) in enumerate(text)}),
                                agree=agree, unique=True)
+    if syms:
+        return None
     if order_ok and len(units) == L and all(_kind_ok(u, r) for u, (_p, r) in zip(units, text)):
         agree = sum(_agree(u, r) for u, (_p, r) in zip(units, text))
         return ColumnCoord(True, recs=_recs(units, {i: r for i, (_p, r) in enumerate(text)}), agree=agree)
@@ -684,7 +713,7 @@ def _gap_column(units: list[CellUnit], line: RefLine, b_hint: float | None) -> C
 
 def coord_column(units: list[CellUnit], line: RefLine,
                  b_hint: float | None = None, relaxed: bool = False,
-                 order_ok: bool = False, gap: bool = False) -> ColumnCoord:
+                 order_ok: bool = False, gap: bool = False, circle_ext: bool = False) -> ColumnCoord:
     """列内按坐标配字。整理本字位的**相对格位**（光盘版＝连续序号；逐列本＝daizhige
     格位，run 之间的空格位也算）决定每个字该落在哪一行；格按几何行号 `g` 排好，取一段
     与整理本字位数相同、类型逐个对得上的连续格，要求 `g − 格位` 近似常数（残差 ≤
@@ -699,7 +728,7 @@ def coord_column(units: list[CellUnit], line: RefLine,
     if L == 0:
         return ColumnCoord(False, "整理本行为空")
     if relaxed:
-        r = _coord_relaxed(units, text, b_hint, order_ok)
+        r = _coord_relaxed(units, text, b_hint, order_ok, circle_ext)
         if r is not None:
             return r
     if len(units) < L:
@@ -953,11 +982,12 @@ def coord_dp_flat(units: list[CellUnit], text: list[tuple[int, Unit]],
 
 
 def column_units(book: str, page: int, col: int, match_col, cells_col,
-                 carrier_of, symbols: bool = False) -> list[CellUnit]:
+                 carrier_of, symbols: bool = False, circle_ext: bool = False) -> list[CellUnit]:
     """`glyph_match` 的一列（字格）+ `cells` 的一列（几何）→ 阅读顺序的格单元。
 
     只收 `glyph_match` 里有的格（Step3 判 blank 的格不在里面）；几何取 `cells`
-    同 (slot, sub) 的 y 中心。查不到几何的格让整列放弃（返回空）。"""
+    同 (slot, sub) 的 y 中心。查不到几何的格让整列放弃（返回空）。
+    `circle_ext`（GUJI-767）：圈号认定放宽到前几名（`_is_circle`），夹注格 a/b 都是圈号的整格也算圈号格。"""
     if cells_col is None or not cells_col.period:
         return []
     per = float(cells_col.period)
@@ -966,6 +996,7 @@ def column_units(book: str, page: int, col: int, match_col, cells_col,
            for c in cells_col.cells}
     by_slot: dict[int, CellUnit] = {}
     order: list[int] = []
+    circ: dict[int, list[bool]] = {}
     for r in match_col.chars:
         sub = r.sub or ""
         g = geo.get((r.slot, sub))
@@ -979,10 +1010,15 @@ def column_units(book: str, page: int, col: int, match_col, cells_col,
                 order.append(r.slot)
             u.ids[sub] = r.id
             u.carrier[sub] = carrier_of(r.id) or ""
+            if circle_ext and symbols:
+                circ.setdefault(r.slot, []).append(_is_circle(r, True))
         else:
             by_slot[r.slot] = CellUnit("c", r.slot, g, {"": r.id}, {"": carrier_of(r.id) or ""},
-                                       sym=symbols and _is_circle(r))
+                                       sym=symbols and _is_circle(r, circle_ext))
             order.append(r.slot)
+    for s, flags in circ.items():
+        if flags and all(flags):
+            by_slot[s].sym = True
     units = [by_slot[s] for s in order]
     units.sort(key=lambda u: u.g)
     return units
