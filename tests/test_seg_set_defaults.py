@@ -65,6 +65,22 @@ def test_book_params_over_seg_set_defaults(tmp_path):
     assert eng.ctx.params_for(STEPS["column_gate"]).count_mode == "detected"
 
 
+def test_bare_run_context_sees_seg_set_defaults(tmp_path):
+    """不经 Engine 直接建的 RunContext（`guji cache get／warm`、控制台、审阅卡）与 Engine 取同一份参数：
+    以前套书缺省整层丢掉，再生的列图、字块与跑步时出的不同（史記 r39 03:177:8:21b，2026-11-11）。"""
+    from open_guji_cv.core.step import RunContext
+    book = make_book(edition="modern", params={"cell_shrink": {"frame_guard": True},
+                                               "glyph_match": {"norm_stroke": None}})
+    eng = Engine(book, load_pipeline("modern_body"), store=ProductStore(tmp_path / "p"),
+                 cache=ImageCache(tmp_path / "c"), log=lambda s: None)
+    bare = RunContext(book, ProductStore(tmp_path / "p"), ImageCache(tmp_path / "c"), log=lambda s: None)
+    assert bare.params_for(STEPS["column_gate"]).count_mode == "detected"          # 套书缺省
+    assert bare.params_for(STEPS["cell_shrink"]).frame_guard is True                # 册配置压过套书缺省
+    assert bare.params_for(STEPS["cell_shrink"]).inner_frame_cut is False           # 套书缺省
+    for sid in STEPS:
+        assert bare.params_for(STEPS[sid]).model_dump() == eng.ctx.params_for(STEPS[sid]).model_dump(), sid
+
+
 def test_optional_upstream_absent_from_pipeline():
     pl = load_pipeline("modern_body")
     assert not pl.provides("seals")                 # cell_shrink 的可选上游，这条链没有生产者

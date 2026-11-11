@@ -309,3 +309,24 @@ def base_params(pipeline: Pipeline, book) -> dict[str, dict]:
                 else:
                     tgt[k] = v
     return merged
+
+
+def resolve_params(pipeline: Pipeline, book, overrides: dict[str, dict] | None = None) -> dict:
+    """这册书这条管线各 Step 的参数 `{step_id: 参数对象}`（`Engine` 与不经 Engine 直接建的 `RunContext` 同一份）。
+
+    层（低 → 高）：Step 默认 < 管线 yaml `params:` < 套书缺省（书仓 `code/defaults.yaml`）< 册配置 `params:`
+    （写 `null` = 去掉下层的值）< 调用方覆盖 `overrides`（CLI `--params`／控制台表单）。没在任何一层出现的 Step 不进表，
+    `RunContext.params_for` 按 Step 默认＋册配置补。"""
+    merged: dict[str, dict] = base_params(pipeline, book)
+    for sid, kv in (getattr(book, "params", None) or {}).items():
+        if sid not in STEPS:        # 册配置点名了没注册的 Step：同以前 `_with_book_params`，不报错、不生效
+            continue
+        tgt = merged.setdefault(sid, {})
+        for k, v in kv.items():
+            if v is None:
+                tgt.pop(k, None)
+            else:
+                tgt[k] = v
+    for sid, override in (overrides or {}).items():
+        merged.setdefault(sid, {}).update(override)
+    return {sid: STEPS[sid].spec.params(**kv) for sid, kv in merged.items()}
