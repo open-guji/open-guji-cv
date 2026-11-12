@@ -488,3 +488,62 @@ def odd_cell_heights(col_cells, *, tall: float = CELL_TALL, short: float = CELL_
         if r >= tall or r <= short:
             out.append({"slot": c.slot, "sub": c.sub, "ratio": round(r, 2), "kind": "tall" if r >= tall else "short"})
     return out
+
+
+# ── 整页均匀：正文格高、夹注半格宽（2026-11-12，Sheldon：除点名页外正文格高很均匀、双行小注宽度也均匀） ────────
+
+PITCH_COL_DEV = 0.10       # 一列整字格高中位与本页中位差 > 这么多：整列格网缩放了（挤格／漏格／格网错位）
+PITCH_TALL = 1.5           # 单格高 ≥ 本页格高中位 × 这么多：多半两字并一格（cell_size 只比本列，整列都歪时比不出）
+PITCH_SHORT = 0.6          # 单格高 ≤ 本页中位 × 这么多：多半一字拆两格
+PITCH_MIN_CELLS = 20       # 本页整字格少于这么多不判（职名页、书衣、空页）
+PITCH_COL_MIN = 8          # 一列整字格少于这么多不比列中位（三五字的书名列格高本来就松，vol01/28 试跑全是这种误报）
+HALF_LO, HALF_HI = 0.70, 1.40   # 夹注半格宽 ÷ 本册夹注半格宽中位，出这个范围报
+HALF_PAIR = 0.30           # 同号 a/b 两半宽差 ÷ 两半宽和 > 这么多：中缝切偏了
+
+
+def page_pitch(page_cells, skip_cols=()) -> float | None:
+    """一页正文整字格（kind=char、无 sub、非职名列）格高中位；不到 PITCH_MIN_CELLS 格返回 None。"""
+    hs = [c.y1 - c.y0 for cc in page_cells.columns if cc.ok and cc.col not in skip_cols and "roster" not in cc.flags
+          for c in cc.cells if c.kind == "char" and c.sub is None]
+    if len(hs) < PITCH_MIN_CELLS:
+        return None
+    hs.sort()
+    return float(hs[len(hs) // 2])
+
+
+def pitch_outliers(col_cells, pitch: float) -> dict | None:
+    """一列对本页格高中位：列中位偏 > PITCH_COL_DEV，或有格 ≥ PITCH_TALL／≤ PITCH_SHORT 倍 → 
+    {"col_ratio", "cells": [{slot, sub, ratio, kind}]}；都正常 → None。"""
+    cells = [c for c in col_cells.cells if c.kind != "blank"]
+    full = sorted(c.y1 - c.y0 for c in cells if c.sub is None and c.kind == "char")
+    col_ratio = full[len(full) // 2] / pitch if len(full) >= PITCH_COL_MIN else 1.0
+    odd = []
+    for k, c in enumerate(cells):
+        r = (c.y1 - c.y0) / pitch
+        end = k == len(cells) - 1           # 列末字格吃掉下面的空格位（字块照样收墨），不算并格；cell_size 还会比本列
+        if (c.sub is None and r >= PITCH_TALL and not end) or r <= PITCH_SHORT:
+            odd.append({"slot": c.slot, "sub": c.sub, "ratio": round(r, 2), "kind": "tall" if r >= 1 else "short"})
+    if abs(col_ratio - 1) <= PITCH_COL_DEV and not odd:
+        return None
+    return {"col_ratio": round(col_ratio, 3), "cells": odd}
+
+
+def half_widths(col_cells) -> list[tuple[int, str, float]]:
+    """一列夹注半格（a／b）的框宽 [(slot, sub, 宽 px)]。"""
+    return [(c.slot, c.sub, c.x1 - c.x0) for c in col_cells.cells if c.sub in ("a", "b")]
+
+
+def half_width_outliers(col_cells, median_w: float) -> list[dict]:
+    """夹注半格宽对本册半格宽中位出 [HALF_LO, HALF_HI]，或同号 a/b 宽差 > HALF_PAIR → [{slot, sub, ratio|asym}]。"""
+    out, by = [], {}
+    for slot, sub, w in half_widths(col_cells):
+        by.setdefault(slot, {})[sub] = w
+        r = w / max(median_w, 1.0)
+        if r < HALF_LO or r > HALF_HI:
+            out.append({"slot": slot, "sub": sub, "ratio": round(r, 2)})
+    for slot, d in by.items():
+        if len(d) == 2:
+            asym = abs(d["a"] - d["b"]) / max(d["a"] + d["b"], 1.0)
+            if asym > HALF_PAIR:
+                out.append({"slot": slot, "sub": "ab", "asym": round(asym, 2)})
+    return out

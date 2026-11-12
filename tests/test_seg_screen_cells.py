@@ -73,3 +73,23 @@ def test_odd_cell_heights():
     odd = ss.odd_cell_heights(N(cells=cells))
     assert [(o["slot"], o["kind"]) for o in odd] == [(4, "tall"), (6, "short")]
     assert ss.odd_cell_heights(N(cells=cells[:3])) == []
+
+
+def test_page_pitch_and_half_width():
+    from types import SimpleNamespace as N
+
+    def cell(slot, y0, h, sub=None, x0=0, x1=100, kind="char"):
+        return N(slot=slot, sub=sub, y0=y0, y1=y0 + h, x0=x0, x1=x1, kind=kind)
+    good = N(col=1, ok=True, flags=[], cells=[cell(i, i * 100, 100) for i in range(1, 11)])
+    squeezed = N(col=2, ok=True, flags=[], cells=[cell(i, i * 85, 85) for i in range(1, 11)])     # 整列格网缩了 15%
+    merged = N(col=3, ok=True, flags=[], cells=[cell(1, 0, 100), cell(2, 100, 180), *[cell(i, i * 100, 100) for i in range(3, 9)]])
+    page = N(columns=[good, squeezed, merged])
+    p = ss.page_pitch(page)
+    assert p == 100
+    assert ss.pitch_outliers(good, p) is None
+    assert ss.pitch_outliers(squeezed, p)["col_ratio"] == 0.85
+    assert [o["slot"] for o in ss.pitch_outliers(merged, p)["cells"]] == [2]
+    jz = N(cells=[cell(5, 0, 50, "a", 0, 50), cell(5, 0, 50, "b", 50, 100),
+                  cell(6, 50, 50, "a", 0, 80), cell(6, 50, 50, "b", 80, 100)])               # 6 号中缝切偏
+    hits = ss.half_width_outliers(jz, 50)
+    assert {(o["slot"], o["sub"]) for o in hits} == {(6, "a"), (6, "b"), (6, "ab")}

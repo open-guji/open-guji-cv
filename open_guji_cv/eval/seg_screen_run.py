@@ -8,6 +8,8 @@
 - 格级（SJ 史記快筛，2026-11-12 并进来）：cell_flags（FOR／Lh／Lv／Fend／Fpatch／JZW，一格一行，value＝flags）；
 - 列级对格号：pin_slots（钉子列 cell_shrink 格号≠钉子）、layout_slots（非钉子列对格位表：「同数」判过只计数，异数要看）；
 - cell_size：一列里格高离群（≥1.7 倍中位多半两字并一格、≤0.5 倍多半一字拆两格），按列一行；
+- page_pitch（2026-11-12）：正文格高对本页中位（整列偏 >10%，或单格 ≥1.5／≤0.6 倍），职名列不查；value＝列中位比；
+- half_width（2026-11-12）：夹注半格宽对本册半格宽中位出 0.7–1.4 倍，或同号 a/b 宽差 >30%；
 - pin_stale：中心库有 active 钉子、本页产物却没用上（产物早于钉子，要从 row_segment 重跑）。
 
 钉子列（产物带 `manual_cells` 旗）只比格号、不跑墨账与端外墨（SJ 第 5 条）；有钉子而产物没用上的列照普通列查；职名列不跑端外墨。`skip` 点名的页整页不查（书配置
@@ -18,7 +20,7 @@ from __future__ import annotations
 import sys
 
 CHECKS = ("edge_ink", "orphan", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
-          "pitch_free_ignored", "cell_flags", "cell_size", "pin_slots", "pin_stale", "layout_slots", "seal_blank")
+          "pitch_free_ignored", "cell_flags", "cell_size", "page_pitch", "half_width", "pin_slots", "pin_stale", "layout_slots", "seal_blank")
 
 
 def _engine(book: str):
@@ -73,6 +75,12 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
     keys = sorted(p.stem for p in store.step_dir(book, "row_segment").glob("p[0-9]*.json"))
     c = counts.setdefault(book, {k: 0 for k in CHECKS} | {"pages": 0, "layout_same_count": 0})
     margins = {}
+    halves = []                                                    # 本册夹注半格宽中位要全册算，先过一遍
+    for key in keys:
+        pc = store.read(book, "row_segment", key, "cells")
+        if pc is not None and int(key[1:]) not in skip:
+            halves += [w for cc in pc.columns if cc.ok and "roster" not in cc.flags for _s, _b, w in ss.half_widths(cc)]
+    half_med = sorted(halves)[len(halves) // 2] if len(halves) >= 10 else None
     for key in keys:
         page = int(key[1:])
         b = store.read(book, "border_detect", key, "borders")      # 中位要全册算，先于 --pages 过滤
@@ -102,6 +110,7 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
         wins = store.read(book, "column_warp", key, "column_windows") if cell_checks else None
         win_by_col = {} if wins is None else {w.col: w for w in wins.columns}
         lay_page = {col: r for (pg, col), r in layout.items() if pg == page}
+        pitch = ss.page_pitch(cells)
         sh = ss.layout_col_shift(cells, lay_page)
         if sh:
             rows["layout_col_shift"].append((book, page, "", sh["shift"],
@@ -147,6 +156,20 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
                 rows["cell_size"].append((book, page, cc.col, ",".join(sorted({o["kind"] for o in odd})),
                                           " ".join(f"{o['slot']}{o['sub'] or ''}×{o['ratio']}" for o in odd)))
                 c["cell_size"] += 1
+            if pitch and "roster" not in cc.flags:
+                po = ss.pitch_outliers(cc, pitch)
+                if po:
+                    rows["page_pitch"].append((book, page, cc.col, po["col_ratio"],
+                                               " ".join(f"{o['slot']}{o['sub'] or ''}×{o['ratio']}" for o in po["cells"])
+                                               + f" 本页格高 {pitch:.0f}px"))
+                    c["page_pitch"] += 1
+            if half_med and "roster" not in cc.flags:
+                ho = ss.half_width_outliers(cc, half_med)
+                if ho:
+                    rows["half_width"].append((book, page, cc.col, len(ho), " ".join(
+                        f"{o['slot']}{o['sub']}" + (f"×{o['ratio']}" if "ratio" in o else f" 差{o['asym']}") for o in ho)
+                        + f" 本册半格宽 {half_med:.0f}px"))
+                    c["half_width"] += 1
             if cell_checks and chars:
                 _cell_flags(book, page, cc.col, gray, chars, win_by_col.get(cc.col), ctx, rows, c)
             if "roster" in cc.flags:
@@ -223,7 +246,7 @@ def write_report(rows: dict[str, list], counts: dict, out, seal_blank: bool = Fa
     for b, c in counts.items():
         lines.append("| " + " | ".join([b, str(c["pages"]), *[str(c[k]) for k in hdr[2:]]]) + " |")
     same = sum(c.get("layout_same_count", 0) for c in counts.values())
-    lines += ["", "edge_ink、pitch_free_ignored、cell_size、pin_slots、pin_stale、layout_slots 按列计；colnet_page、frame_margin、layout_col_shift、"
+    lines += ["", "edge_ink、pitch_free_ignored、cell_size、page_pitch、half_width、pin_slots、pin_stale、layout_slots 按列计；colnet_page、frame_margin、layout_col_shift、"
               "layout_fallback 按页计；edge_frame_only、cell_flags、seal_blank 按格计；orphan 按块计。"
               f"版式对格号「同数」（只编号不同，判过）{same} 列，只计数不出行。"]
     text = "\n".join(lines) + "\n"
