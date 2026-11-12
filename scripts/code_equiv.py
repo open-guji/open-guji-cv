@@ -11,7 +11,7 @@
 1. 列出这一步的模块（Step 模块 + `code_deps`）里，`--base` 与工作区「只认代码」哈希不同的；
 2. `git worktree add` 一份 `--base` 的检出；
 3. 把 `--products`／`--cache` 各拷两份（旧、新），删掉这一步自己的旧产物（免得格级复用搬旧记录），
-   分别用旧代码（`PYTHONPATH=<检出>`）与现代码跑 `guji step <step>`；
+   分别用旧代码（`PYTHONPATH=<检出>` 加在原有 PYTHONPATH 之前）与现代码跑 `guji step <step>`；
 4. 逐页比这一步产物的 sha256（`scripts/parallel_equivalence.py`）。全同才打印 `Equiv(...)` 登记行，
    贴进 `open_guji_cv/core/code_equiv.py::ENTRIES`。任何一页不同就报出来、退出码 1。
 
@@ -59,9 +59,16 @@ def step_modules(step_id: str) -> list[str]:
     return [type(st).__module__, *st.spec.code_deps]
 
 
+def _pythonpath(code_root: Path, base: str | None) -> str:
+    """子进程的 PYTHONPATH：被比的检出放最前（保证跑的是这份 cv），原有的 PYTHONPATH 追加在后——
+    guji_manager 等靠 PYTHONPATH 指向源码检出装的包才找得到（史記跑批线程 11-12 反馈，原先整个覆盖）。"""
+    return os.pathsep.join([str(code_root), *([base] if base else [])])
+
+
 def _run_step(code_root: Path, step: str, book: str, pages: str, ws: str, products: Path,
               cache: Path, jobs: int, log: Path) -> int:
-    env = dict(os.environ, PYTHONPATH=str(code_root), GUJI_PRODUCTS_DIR=str(products),
+    env = dict(os.environ, PYTHONPATH=_pythonpath(code_root, os.environ.get("PYTHONPATH")),
+               GUJI_PRODUCTS_DIR=str(products),
                GUJI_CACHE_DIR=str(cache), GUJI_WORKSPACE=ws, PYTHONIOENCODING="utf-8")
     argv = ["guji", "step", step, book, "-w", ws, "--pages", pages, "--jobs", str(jobs),
             "--allow-cv-mismatch", "--why", "code_equiv：私有产物目录里比两版代码"]
