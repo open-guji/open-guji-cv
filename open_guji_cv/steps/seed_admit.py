@@ -733,6 +733,12 @@ class SeedAdmitParams(BaseModel):
     `ref_lib_coord_dissent`（硬疑问，补放通道不再按现役字放回）、落人审（全唐文 r11 11-05：去借库后本书库缺
     麒／褚／俘 刻例，库首位落到 麟／諸／俾，现役对位跟着错位成 equal，ref_lib 照放；坐标对位是对的。r11 ref_lib
     226 格里有坐标对位的 14 格、两边不一致 9 格，看图 7 格坐标对、2 格现役对）。缺省关（关时逐字节不变，不进 dump）。"""
+    solo_coord_dissent: bool = False
+    """match_solo 系放行前看坐标对位（同 `ref_lib_coord_dissent` 的判据，GUJI-750）：坐标对位给了实字、与放行字
+    （库 same 取库字，否则库候选 top1）语义不同，不单独放行，记 doubt `solo_coord_dissent`（硬疑问，补放通道不再放回）、
+    落人审。起因：史记 r49 十册 match_solo 系放行 68 格里，坐标对位字≠放行字 16 格，看图 6 格坐标对（槨→以、陪→倍、
+    毒→毐 ×2、理→里、旱→早）、4 格放行对（二→三 ×2、一→二 ×2：数字处坐标对位常漂）、5 格误报（坐标字是私用码／异体）、1 格不确定。
+    故豁免：坐标字不是汉字（私用码、占位）、两边都是数字、语义同字（异体）。缺省关（关时逐字节不变，不进 dump）。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
     variant_graph_fingerprint: str = ""
@@ -1539,6 +1545,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("replace_form_edge_exclude", None)
         if isinstance(d, dict) and not self.ref_lib_coord_dissent:
             d.pop("ref_lib_coord_dissent", None)
+        if isinstance(d, dict) and not self.solo_coord_dissent:
+            d.pop("solo_coord_dissent", None)
         if isinstance(d, dict) and not self.lane_coord_few_stroke:
             d.pop("lane_coord_few_stroke", None)
         if isinstance(d, dict) and not self.lane_coord_blind_guard:
@@ -2227,6 +2235,10 @@ class SeedAdmitStep(Step):
                       and _solo_ctx_vetoed(dmap.get(r.id), r.candidates, vm_here, p.solo_ctx_veto)):
                     ok, channel = False, None
                     doubts.append("solo_ctx_veto")
+                elif (ok and p.solo_coord_dissent and channel in _SOLO_CHANNELS
+                      and _solo_coord_dissented(r, vm_here, _coord_refs(ctx, page, coord_cache))):
+                    ok, channel = False, None
+                    doubts.append("solo_coord_dissent")
                 # 异体等价只经间接路径成立的撤回（`variant_indirect_guard`）。库形取
                 # 这几条通道自己比的那个字：match_ref 库 same 时是 r.char，其余是 cov 最高的候选。
                 if (ok and p.variant_indirect_guard and align_char and r.candidates
@@ -4040,7 +4052,9 @@ _LANE_HARD = frozenset({"context_blank_cell", "context_tall_cell", "form_open", 
                         # match_ref 库判 diff 拦下的格（`match_ref_diff_guard`）：同理
                         "match_ref_diff",
                         # 坐标对位与现役对位不一致拦下的 ref_lib 格（`ref_lib_coord_dissent`）：同理
-                        "ref_lib_coord_dissent"})
+                        "ref_lib_coord_dissent",
+                        # 坐标对位与 match_solo 系放行字不一致拦下的格（`solo_coord_dissent`）：同理
+                        "solo_coord_dissent"})
 #: R1/R4 另外不碰的：context 乱码护栏拦下过格的**整列**（overview#427：列切窄、整列字块是
 #: 笔画残边，证人字再齐也对不上图——vol04 p217c3 只有 2 格带这个码，同列其余 4 格看图同样是乱码）。
 _LANE_GARBLE = frozenset({"ctx_garble_shape", "ctx_garble_rare", "ctx_garble_run"})
@@ -6228,6 +6242,23 @@ def _solo_ctx_vetoed(dec, cands, vmap, thresh: float) -> bool:
     top, prob = ranked[0]
     lib = max(cands, key=lambda t: t[1])[0]
     return prob >= thresh and vmap.semantic(top) != vmap.semantic(lib)
+
+
+_SOLO_COORD_NUMS = frozenset("一二三四五六七八九十廿卅")
+
+
+def _solo_coord_dissented(r, vmap, coord: dict) -> bool:
+    """`solo_coord_dissent`：坐标对位给了实字、与 match_solo 放行字语义不同 → True（要拦）。
+    放行字＝库 same 取库字，否则库候选 top1（同 `_pick_char` 对 solo 通道的取法）。豁免见参数说明：
+    坐标字非汉字（私用码／占位）、两边都是数字（坐标对位在数字处常漂）、语义同字（异体）。"""
+    cr = coord.get(r.id)
+    if cr in (None, "", "〓") or len(cr) != 1 or not _ruling_han(cr):
+        return False
+    cands = list(r.candidates or [])
+    ch = r.char if r.verdict == "same" and r.char else (max(cands, key=lambda t: t[1])[0] if cands else None)
+    if not ch or vmap.semantic(cr) == vmap.semantic(ch):
+        return False
+    return not (cr in _SOLO_COORD_NUMS and ch in _SOLO_COORD_NUMS)
 
 
 def _lib_cov(cands, ch: str) -> float | None:
