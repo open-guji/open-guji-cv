@@ -18,7 +18,7 @@
 
 ## [0.7.12] - 2026-11-12
 
-- 发版说明（A24 11-12，SJ 要）：基于 v0.7.11，只多 #1438（`follow_ref` 表项不再接管 `follow_ref_variants` 路径）。PATCH。史記 r45 给 follow_ref 追加 嵗=歳 后，嵗 的格 ids 判 歲，原来靠 variants 改回整理本 嵗，表里有了 嵗 这一项后表路接管、只认 歳，歲 就留下来了。修：整理本形在表里、本格字不是表里那一形时，只要开了 `follow_ref_variants` 且同义异体，仍按参校本取异体改回整理本形。**受影响面：开了 `follow_ref_variants` 且 `follow_ref` 表非空的书（目前只有史記），seed_admit 起过期，要从 seed_admit 重跑；其它书 dump 不变，`code_equiv` 已登记 seed_admit（按代码论证，未做逐页比对），不过期。** `seed_admit` 参数 dump 对这类书加 `follow_ref_variants_rev: 1`。不含 dev 上的 #1394、#1429–#1437。无底库变更。
+- 发版说明（A24 11-12，SJ 要）：基于 v0.7.11，只多 #1438（`follow_ref` 表项不再接管 `follow_ref_variants` 路径）。PATCH。史記 r45 给 follow_ref 追加 嵗=歳 后，嵗 的格 ids 判 歲，原来靠 variants 改回整理本 嵗，表里有了 嵗 这一项后表路接管、只认 歳，歲 就留下来了。修：整理本形在表里、本格字不是表里那一形时，只要开了 `follow_ref_variants` 且同义异体，仍按参校本取异体改回整理本形。**受影响面：开了 `follow_ref_variants` 且 `follow_ref` 表非空的书（目前只有史記），seed_admit 起过期，要从 seed_admit 重跑（影响不止 嵗：表里每个整理本形此后都会走 variants，带出此前不改的同义异体改字，史記 r47 实测 吳→呉 6 格，看图与整理本均是呉）；其它书 dump 不变，`code_equiv` 已登记 seed_admit（按代码论证，未做逐页比对），不过期。** `seed_admit` 参数 dump 对这类书加 `follow_ref_variants_rev: 1`。不含 dev 上的 #1394、#1429–#1437。无底库变更。
 
 ## [0.7.11] - 2026-11-12
 
