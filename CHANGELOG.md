@@ -1,9 +1,23 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+- scripts/seg_fork_drift.py 加 `--ws <书仓>`：比书仓 code/ 覆盖模块与 cv 缺省实现（分叉点取书仓文件首次提交时刻），整份同缺省时提示可去掉覆盖。` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
 ## [未发版]
+
+## [0.7.14] - 2026-11-12
+
+- 发版说明（A31 11-12）：dev 上 v0.7.13 之后的全部改动，PATCH；含 seed_admit `vis_ruling_half`（缺省关）。
+- seed_admit `vis_ruling_half`（书级，缺省关、不进 dump；A31 11-12，SJ 史記）：`group_flow_llm_skip_half` 开着时，有放行型看图裁定的夹注半格也能放行（裁定 cell＝当前格号、字＝整理本字、无 clipped／frame_residue／jiazhu_*／split_* 疑点；evidence.half=True）。金标 3 格 0 错。PATCH。
+- 切分筛查新判据 `eval/seg_screen.odd_cell_heights`（表 `cell_size`）：一列里格高 ≥1.7 倍中位（多半两字并一格）或 ≤0.5 倍（一字拆两格）。在殿本 vol01 旧包（11-09）上量召回时发现：ZM 11-12 钉的职名页并格四列格高都是中位的 1.8–1.9 倍，原有判据只靠成串 FOR 抓到；整册 1724 列只有 6 列命中。不进指纹。
+- `eval/seg_screen_run`：钉子列按产物的 `manual_cells` 旗认（产物早于钉子的列照普通列查），新表 `pin_stale` 列出「有 active 钉子、本页产物没用上」的列（要从 row_segment 重跑）。不进指纹。
+- 切分筛查并进史記快筛的格级判据（`guji seg check` 用，《切分三方向》第 2 步）：`eval/seg_screen` 加 `ink_ledger`／`ledger_flags`（FOR、Lh、Lv）、`end_frame_hits`（Fend）、`patch_edge_lines`（Fpatch）、`jiazhu_wide`（JZW）、`pin_slots_diff`（钉子列只比格号）、`layout_slots_diff`（版式对格号，同数判过）；跑法搬进 `eval/seg_screen_run.py`（`scripts/seg_screen.py` 变薄壳，多出 cell_flags／pin_slots／layout_slots 三张表，缓存缺图现算）。原语 `seg/rules` 加 `vertical_rule_mask`／`horizontal_rule_mask`。殿本 vol01 6 页非钉子列格级 flags 与 SJ `tools/seg_check/seg_detect.py` 逐格相同。不进指纹，产物不变。
+- 新原语 `seg/rules.py`：`long_rule_mask`／`strip_long_rules` 剥长直线（界行竖 200px、版框横线 0.85 列宽且至少 40px，参数在签名上）。史記 patch_clean、史記快筛、`eval/seg_screen` 原先各抄一份；`eval/seg_screen.strip_long_lines` 改调它（逐像素同，有单测）。不进任何 Step 指纹，产物不变。
+- 切分人定覆盖统一读取入口 `feedback/seg_overrides.SegOverrides`（列级 manual-cells／抬头／column-slots／cuts／pins／solo／forced 一处读，`blocks_layout` 定哪些屏蔽格位表），row_segment 改用；row_segment 新书级钩子 `impl/keben/row_hooks`（`grid_adjust`／`jiazhu_heads`／`half_a_left`，缺省 None），全唐文可不再复制整份 row_boundaries。code_equiv 已登记（殿本 vol01 11 页、vol28 10 页逐字节同），**各书产物不过期**。
+- row_segment `alt_cut` 备选与主切法有字格（框、种类、半边）全同、只差空格框或格号的不再出（SJ r43 09:194:5 闸判抬头一格、表是 0，备选格号 -1..14 被 seed_admit 选中、整列格号减一）。开了 `alt_cut` 的书参数 dump 加 `alt_cut_rev`，**只有史記 row_segment 起过期**；关着的书 code_equiv 已登记（殿本 vol28 15 页、全唐文 001 13 页逐字节同），殿本、全唐文不过期。
+- strokes `ClassStats` 加各类自己的标准差（`sds`）与似然比判 `llr_decide`：两类散布差很多（木 紧、本 散）时合并方差会判错；全唐文已放行 15,477 格按册留出（别册放行格学类分布），木本 不一致 23→5、人入 29→6、未末 25→0。不被 Step 引用，产物不变。
+- 5a 精验可选度量学习 CNN（`glyph_match.sim_model`，缺省关；A23，Sheldon 11-10 同意接进 pipeline 按书测）：新模块 `clustering/sim_cnn.py`（`SimNet`、`CnnVerifier`，整库嵌入算一次，逐对分＝余弦），训练脚本 `scripts/train_glyph_sim_cnn.py`。全唐文端到端（同一 kNN 粗排与护栏）首位命中 99.41→99.74%、精度 99.9% 下 same 放行 74.3→78.7%、每格 28→14 ms。关着时 `sim_model`／`sim_model_sha` 不进参数 dump，glyph_match 代码等价已登记（keben 3 页逐字节相同），**各书产物不过期**；开着时权重 sha256＋sim_cnn 代码哈希进参数指纹。开了要按书重标 `consensus_cov`／`consensus_margin`、`font_tier.cov`。
 
 ## [0.7.13] - 2026-11-12
 
@@ -12,7 +26,7 @@
 
 ## [0.7.12] - 2026-11-12
 
-- 发版说明（A24 11-12，SJ 要）：基于 v0.7.11，只多 #1438（`follow_ref` 表项不再接管 `follow_ref_variants` 路径）。PATCH。史記 r45 给 follow_ref 追加 嵗=歳 后，嵗 的格 ids 判 歲，原来靠 variants 改回整理本 嵗，表里有了 嵗 这一项后表路接管、只认 歳，歲 就留下来了。修：整理本形在表里、本格字不是表里那一形时，只要开了 `follow_ref_variants` 且同义异体，仍按参校本取异体改回整理本形。**受影响面：开了 `follow_ref_variants` 且 `follow_ref` 表非空的书（目前只有史記），seed_admit 起过期，要从 seed_admit 重跑；其它书 dump 不变，`code_equiv` 已登记 seed_admit（按代码论证，未做逐页比对），不过期。** `seed_admit` 参数 dump 对这类书加 `follow_ref_variants_rev: 1`。不含 dev 上的 #1394、#1429–#1437。无底库变更。
+- 发版说明（A24 11-12，SJ 要）：基于 v0.7.11，只多 #1438（`follow_ref` 表项不再接管 `follow_ref_variants` 路径）。PATCH。史記 r45 给 follow_ref 追加 嵗=歳 后，嵗 的格 ids 判 歲，原来靠 variants 改回整理本 嵗，表里有了 嵗 这一项后表路接管、只认 歳，歲 就留下来了。修：整理本形在表里、本格字不是表里那一形时，只要开了 `follow_ref_variants` 且同义异体，仍按参校本取异体改回整理本形。**受影响面：开了 `follow_ref_variants` 且 `follow_ref` 表非空的书（目前只有史記），seed_admit 起过期，要从 seed_admit 重跑（影响不止 嵗：表里每个整理本形此后都会走 variants，带出此前不改的同义异体改字，史記 r47 实测 吳→呉 6 格，看图与整理本均是呉）；其它书 dump 不变，`code_equiv` 已登记 seed_admit（按代码论证，未做逐页比对），不过期。** `seed_admit` 参数 dump 对这类书加 `follow_ref_variants_rev: 1`。不含 dev 上的 #1394、#1429–#1437。无底库变更。
 
 ## [0.7.11] - 2026-11-12
 

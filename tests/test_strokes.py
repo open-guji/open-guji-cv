@@ -196,3 +196,17 @@ def test_verify_learned_crossing_stroke():
     for c, s in (("木", MU), ("本", BEN)):
         got, _ = verify_learned(register(draw(s, jitter=1.0, seed=42), t, P), plan.stroke, st)
         assert got == c
+
+
+def test_class_stats_llr_uses_per_class_spread():
+    """两类散布差很多（木 的底横位置几乎不落墨，本 有长有短）：各类自己的方差判，合并方差会判错。"""
+    rng = np.random.default_rng(0)
+    tight = [np.array([0.0, 0.3]) + rng.normal(0, 0.02, 2) for _ in range(40)]       # 木
+    broad = [np.array([0.6, 0.9]) + rng.normal(0, 0.2, 2) for _ in range(40)]         # 本
+    st = ClassStats.from_samples({"木": tight, "本": broad})
+    x = np.array([0.15, 0.55])          # 短底横的 本：离 木 的中心更近，但 木 那么紧，不像 木
+    assert st.llr_decide(x, t=2.0)[0] == "本"
+    assert st.llr_decide(np.array([0.0, 0.31]), t=2.0)[0] == "木"
+    assert st.llr_decide(x, t=1e6)[0] is None          # 门槛够高就弃权
+    back = ClassStats.from_json(st.to_json())
+    assert back.llr_decide(x, t=2.0)[0] == "本"

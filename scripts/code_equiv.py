@@ -85,7 +85,8 @@ def cmd_hash(args) -> int:
 
 def cmd_check(args) -> int:
     from open_guji_cv.core.code_equiv import canonical
-    mods = step_modules(args.step)
+    gate = getattr(args, 'gate', None)
+    mods = step_modules(gate or args.step)
     changed = []
     for m in mods:
         old, new = code_hash_at(m, args.base), code_hash_at(m, None)
@@ -117,6 +118,8 @@ def cmd_check(args) -> int:
                     shutil.rmtree(dst)
                 shutil.copytree(src, dst)
             shutil.rmtree(prod / args.book / args.step, ignore_errors=True)
+            if gate:
+                shutil.rmtree(prod / args.book / gate, ignore_errors=True)
             print(f"跑 {name}（{code_root}）…", flush=True)
             rcs[name] = _run_step(code_root, args.step, args.book, args.pages, args.workspace,
                                   prod, cache, args.jobs, work / f"{name}.log")
@@ -124,7 +127,8 @@ def cmd_check(args) -> int:
             print(f"✗ 跑批失败：{rcs}，日志在 {work}/old.log、new.log")
             return 1
         from scripts.parallel_equivalence import compare
-        rep = compare(work / "old" / "products", work / "new" / "products", args.book, [args.step])[args.step]
+        _cmp = compare(work / "old" / "products", work / "new" / "products", args.book, [gate or args.step])
+        rep = _cmp[gate or args.step]
         if rep["diff"] or rep["only_a"] or rep["only_b"] or rep["same"] == 0:
             print(f"✗ 不等价：相同 {rep['same']} 页，不同 {rep['diff']}，只在旧 {rep['only_a']}，只在新 {rep['only_b']}")
             return 1
@@ -159,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--workdir", default=None)
     c.add_argument("--note", default="", help="附进 evidence 的说明（比如页的来历）")
     c.add_argument("--keep", action="store_true", help="留着基线检出")
+    c.add_argument("--gate", default=None, help="要证等价的是挂在 --step 出口的闸（如 column_gate 挂 column_warp）：模块取闸的，比的也是闸的产物")
     c.add_argument("--always", action="store_true",
                    help="这一步的指纹模块没变也照样跑两遍比产物（改的是 feedback/ 之类指纹外的代码时用）")
     args = ap.parse_args(argv)
