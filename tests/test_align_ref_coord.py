@@ -154,7 +154,7 @@ def _uniq_lines(n: int, width: int = 19) -> list[str]:
     return ["".join(chr(base + i * width + k) for k in range(width)) for i in range(n)]
 
 
-def _setup(tmp_path, monkeypatch, *, seal_col_carrier_wrong: bool = True):
+def _setup(tmp_path, monkeypatch, *, seal_col_carrier_wrong: bool = True, drop=None, wrong=None):
     lines = _uniq_lines(40)
     corpus = tmp_path / "ref.txt"
     corpus.write_text("\n".join(lines), encoding="utf-8")
@@ -167,6 +167,8 @@ def _setup(tmp_path, monkeypatch, *, seal_col_carrier_wrong: bool = True):
         if ci == 1:
             slots = list(range(1, 22))      # 前两格印章假格：slot 1、2 空，字从 slot 3 起
         for i, slot in enumerate(slots):
+            if drop == (ci, slot):
+                continue                                    # 漏切一格（几何配不上，走 coord_dp）
             if ci == 1 and slot <= 2:
                 ch = "㐀"                                   # 假格上认出来的噪声
             else:
@@ -174,6 +176,8 @@ def _setup(tmp_path, monkeypatch, *, seal_col_carrier_wrong: bool = True):
                 ch = text[k]
                 if ci == 1 and seal_col_carrier_wrong and k % 3:
                     ch = "㐁"                               # 印章压着，三个里认错两个
+            if wrong == (ci, slot):
+                ch = "㐂"                                   # 字形库系统误读：载体字≠整理本字，候选里也没有
             mrecs.append(MatchRec(id=f"{BOOK}:{PAGE}:{ci}:{slot}", slot=slot, verdict="unsure",
                                   cov=0.9, candidates=[(ch, 0.9)]))
             g = float(slot) if ci == 1 else float(slot) + 2   # 列2、3 也缩进 2 格
@@ -437,3 +441,27 @@ def test_column_units_marks_note_cell_with_two_circles():
 def test_circle_ext_off_not_in_params_dump():
     assert "coord_circle_ext" not in AlignRefParams(corpus="x").model_dump()
     assert AlignRefParams(corpus="x", coord_circle_ext=True).model_dump()["coord_circle_ext"] is True
+
+
+def test_ref_hint_records_dp_cells_without_glyph_evidence_and_changes_nothing_else(tmp_path, monkeypatch):
+    """`coord_ref_hint`（GUJI-767）：dp 配上但无字形证据的整理本字只记 ref_hint，coord/chars 不变；关着不落盘。"""
+    from open_guji_cv.core.step import RunContext
+    ctx, corpus, page_lines = _setup(tmp_path, monkeypatch, drop=(3, 3), wrong=(3, 10))
+
+    def run(**kw):
+        c = RunContext(ctx.book, ctx.store, ctx.cache,
+                       params={"align_ref": AlignRefParams(corpus=corpus, coord="on", coord_dp=True, **kw)},
+                       log=lambda s: None)
+        return AlignRefStep().run_page(c, PAGE)["align_ref"]
+    off, on = run(), run(coord_ref_hint=True)
+    assert 3 in off.coord_cols and "dp" in off.coord_note, off.coord_fallback
+    assert off.ref_hint == {} and "ref_hint" not in off.model_dump()
+    assert on.coord == off.coord and on.coord_cols == off.coord_cols and on.chars == off.chars
+    tid = f"{BOOK}:{PAGE}:3:10"
+    assert tid not in {c.id for c in on.coord}
+    assert on.ref_hint == {tid: page_lines[2][9]}
+
+
+def test_ref_hint_off_not_in_params_dump():
+    assert "coord_ref_hint" not in AlignRefParams(corpus="x").model_dump()
+    assert AlignRefParams(corpus="x", coord_ref_hint=True).model_dump()["coord_ref_hint"] is True
