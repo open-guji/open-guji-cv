@@ -1665,6 +1665,10 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and (self.follow_ref_variants_gap is None or not self.follow_ref_variants):
             d.pop("follow_ref_variants_gap", None)
             d.pop("follow_ref_variants_cov", None)
+        if isinstance(d, dict) and self.follow_ref and self._follow_variants():
+            # 表项不再接管 variants 路径（史記 r45 嵗=歳，cv#1438）：只有「表非空且按参校本取异体」的书输出会变，
+            # 修订号进 dump 只让它们过期（别的书 dump 不变，代码改动登 code_equiv）。
+            d["follow_ref_variants_rev"] = FOLLOW_REF_VARIANTS_REV
         if isinstance(d, dict):
             if self.edge_pair:
                 d.pop("edge_pair", None)        # 缺省值不进 dump（缺省开；关了才写 edge_pair: false）
@@ -4361,6 +4365,10 @@ def _ref_lib_coord_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict,
             rec.doubts = ["lane_ref_lib_coord"]
             n += 1
     return n
+
+
+#: 1：`follow_ref` 表里有整理本形、本格字不是表里那一形时，仍按参校本取异体（cv#1438）。
+FOLLOW_REF_VARIANTS_REV = 1
 
 
 def _parse_follow_ref(spec: str) -> dict[str, str]:
