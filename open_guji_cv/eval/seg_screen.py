@@ -208,12 +208,9 @@ ORPH_INSIDE = 0.2         # 块墨落在字格里的份额 ≤ 这么多才算�
 def strip_long_lines(ink: np.ndarray) -> np.ndarray:
     """二值墨图（0/1）剥掉长直线：竖向开运算 ORPH_VLINE px（界行）、横向开运算 ORPH_HLINE 列宽（版框）。
 
-    写本连笔加贯穿整列的界行，不剥的话一串字连成一块，连通块分析全错（SJ 快筛第二节）。"""
-    import cv2
-    w = ink.shape[1]
-    vl = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((ORPH_VLINE, 1), np.uint8))
-    hl = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, max(40, int(ORPH_HLINE * w))), np.uint8))
-    return ((ink > 0) & ~((vl | hl) > 0)).astype(np.uint8)
+    写本连笔加贯穿整列的界行，不剥的话一串字连成一块，连通块分析全错（SJ 快筛第二节）。实现在原语 `seg.rules`。"""
+    from ..seg.rules import strip_long_rules
+    return strip_long_rules(ink, vline=ORPH_VLINE, hline_frac=ORPH_HLINE, hline_min=40)
 
 
 def orphan_ink(gray: np.ndarray, boxes, ink_threshold: int = 128) -> list[dict]:
