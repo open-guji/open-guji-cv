@@ -1458,6 +1458,13 @@ ENTRIES: tuple[Equiv, ...] = (
           new='d572284813e4fded87ab399e69fd3c79edd7152c5d6ee95c29bcd1ef4c98ad82',
           old='bc4749f1f07753e004d84b5006ec4cfbdf1af23383c457f085475acc05063b22',
           evidence='按页列数 expected_cols_pages（缺省空、不进参数 dump；殿本 vol01 p100 图上 10 列、版框探出 9 列，参校本质检）：column_warp 与 column_gate 在殿本 vol01 9 页（--pages 1,22,45,48,88,100,105,130,150，含职名页 p100、p48/88/105）上与 origin/dev 62cc5009 产物逐字节相同；scripts/code_equiv.py check，2026-11-12（ZM-切分）'),
+    # row_segment alt_cut：有字格全同（只差空格框、格号）不出备选，开了的书 dump 加 alt_cut_rev（SJ r43 09:194:5，2026-11-12）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='82e424e3e8231dc6b779254abfcb7a084d9ae876f4962f2583a777f05f1da392',
+          old='5af1ee266342914c68f3ee53d59d6b778874cbf2d95c4190d6a6d3f67ed90733',
+          evidence='alt_cut 关着时：row_segment 在殿本 vol28 新图 15 页（1,2,3,5,8,12,20,30,45,60,80,100,130,160,190，main 包）、'
+                   '全唐文 001 13 页（1,3,10,20,35,40,50,64,65,80,100,140,190）上与 origin/dev ba636a6 产物逐字节相同；'
+                   '开着的书（史記）参数 dump 多 alt_cut_rev，照常过期；scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn（全唐文），2026-11-12（A22）'),
 )
 
 
