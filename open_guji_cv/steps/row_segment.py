@@ -901,6 +901,22 @@ _RETIRED: dict[str, str] = {
 }
 
 
+ALT_CUT_REV = 2
+"""`alt_cut` 备选出法修订号（进开了的书的参数 dump）。改备选格网或「出不出备选」的判据就加 1。"""
+
+
+def _alt_same_ink_cells(main_cells, alt_cells) -> bool:
+    """`alt_cut` 的备选格网和主切法「有字格」是否一模一样（框、种类、半边全同；格号、空格不比）。
+
+    一样就不出备选：备选只差在空格的框（多为列尾）和格号上——格号是主切法按格位表定的抬头级数排的，
+    备选听闸、没有表，换过去只会把整列格号挪一格，切出的字块一个不变（史記 r43 09:194:5，闸判抬头一格、
+    表是 0，备选格号 -1..14，主切法 1..15；SJ 11-12 报）。
+    """
+    def ink(cells):
+        return [(c.y0, c.y1, c.x0, c.x1, c.kind, c.sub) for c in cells if c.kind != "blank"]
+    return ink(main_cells) == ink(alt_cells)
+
+
 class RowSegmentParams(BaseModel):
     n_body_slots: int | None = None      # None = Book.chars_per_line
     n_raised: int = 0                    # 抬头多出的格数；版式先验，raised 不自动推
@@ -1198,6 +1214,10 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_half_a", None)
             if not self.alt_cut:
                 d.pop("alt_cut", None)
+            else:
+                # 开了的书改备选出法要重切：修订号进 dump，只让开了的书判过期（关着的书 dump 不变，代码改动登 code_equiv）。
+                # 2：有字格全同（只差空格框、格号）不出备选（`_alt_same_ink_cells`，史記 r43 09:194:5）
+                d["alt_cut_rev"] = ALT_CUT_REV
             if self.row_pitch == "uniform":
                 d.pop("row_pitch", None)
             if not self.grid_end_fit:
@@ -1839,8 +1859,7 @@ class RowSegmentStep(Step):
                         alt_fl += fl_
                     ca = _emit(ra, dict(base, n_raised=gate_raised, top_slack=gc.top_slack),
                                alt_fl, None, occ, gate_raised)
-                    if [(c.y0, c.y1, c.x0, c.x1, c.kind, c.sub) for c in ca.cells] != \
-                            [(c.y0, c.y1, c.x0, c.x1, c.kind, c.sub) for c in out[-1].cells]:
+                    if not _alt_same_ink_cells(out[-1].cells, ca.cells):
                         alt_out.append(ca)
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
