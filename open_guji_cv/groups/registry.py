@@ -719,8 +719,22 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
         note="按文意定（L1 规则，弃权查 L2 表）：逄 只作姓，其余是 逢；补放，也复核，文意 strong 才改字（同 日曰）。"),
 }
 
+#: 需点名才开的字组（A31 2026-11-12，GUJI-767 发 v0.7.11 时定）：**不进 `GROUPS`**（`GROUPS` 成员在 `glyph_match`（弱命中）、
+#: `glyph_rules`、`seed_admit.rare_ref_coord` 里当全局字组集合用，加进去会改所有含该字的书的这几处行为），**也不进缺省 `group_flow`**
+#: （`generic_flow_names` 不含），所以没点名的册产物逐字节不变；要用的书在册配置 `group_flow` 里显式写上。字组流程只认 `FLOW_GROUPS`。
+OPT_IN_GROUPS: dict[str, GroupSpec] = {
+    # 丈文（2026-11-11，A24，史記 SJ 来信 GUJI-750）：手写本里 丈＝大＋右上一点、文＝一点一横＋乂，库里个别形似丈的文刻例经 glyph_match same
+    #   把丈放成文（r38 vol08:40:3:20b，参校本作丈）。不硬拦 NEVER_MATCH（会拦掉 r36 五册文 450 格、丈 27 格）：按文意 L1 规则定字，
+    #   并要求放行字与整理本（参校本）同字——补放须同字（`lift_ref_agree`），复核时放行字≠整理本字且方法没给出整理本字就降审（`review_ref_agree`）。
+    "zw": GroupSpec(
+        id="zw", name="丈文", members=frozenset("丈文"), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/zw",
+        flow=FlowSpec((CTX,), review=True, lift_ref_agree=True, review_ref_agree=True),
+        note="形近不同义，按文意定（L1 规则，弃权查 L2 表）；放行字须与整理本（参校本）同字：补放要同字，复核时与整理本不同又没有文意给出整理本字的降审（不改字）。"),
+}
+
 #: 字组流程可点名的全部组。
-FLOW_GROUPS: dict[str, GroupSpec] = {**GROUPS, **CODEPOINT_GROUPS, **SHAPE_GROUPS}
+FLOW_GROUPS: dict[str, GroupSpec] = {**GROUPS, **CODEPOINT_GROUPS, **SHAPE_GROUPS, **OPT_IN_GROUPS}
 
 
 @dataclass(frozen=True)
@@ -812,8 +826,9 @@ RENAMED: dict[str, str] = {"qg": "zy"}
 
 def generic_flow_names() -> tuple:
     """新书缺省跑的字组：不含码位组 ``cp_*``。码位组是殿本逐对看图定的码位结论（书级事实，多书设计 A3，sheldon 11-04 定），
-    别的书要用得在本书重新核过、显式写进 `group_flow`；殿本的基础配置本来就显式写了全集。"""
-    return tuple(g for g in FLOW_GROUPS if not g.startswith("cp_"))
+    别的书要用得在本书重新核过、显式写进 `group_flow`；殿本的基础配置本来就显式写了全集。
+    也不含 `OPT_IN_GROUPS`（需点名才开的组，如 zw 丈文）。"""
+    return tuple(g for g in FLOW_GROUPS if not g.startswith("cp_") and g not in OPT_IN_GROUPS)
 
 
 def flow_names(names) -> tuple:

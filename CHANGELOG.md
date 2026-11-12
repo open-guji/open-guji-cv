@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.7.11] - 2026-11-12
+
+- 发版说明（A31 11-12，SJ 要）：基于 v0.7.10，只多 #1413（字组 zw 丈文：文意规则＋参校本同字才放行），**但 zw 改成需点名才开**：放进新表 `registry.OPT_IN_GROUPS`，不进 `GROUPS`（否则会改 `glyph_match` 弱命中等全书行为）、不进缺省 `group_flow`（`generic_flow_names` 不含）。没点名 zw 的册产物逐字节不变，`code_equiv` 已登记 `groups.registry`（SJ 11-12 在史記 03/09/02 各 7 页上证 seed_admit 在 zw 未点名时逐字节相同），殿本、全唐文不会因此过期。要用 zw 的书（史記）在册配置 `group_flow` 里显式写缺省名单＋zw。不含 dev 上的 #1394、#1429–#1431。**注意：#1413 新增底库登记文件 `config/groups/zw/rules.yaml`（corpus-registry），钉了语料总号的册在 v0.7.11 上起跑前要配新底库 b<M+1>（`guji corpus build-base`，需写令牌）后再 `guji corpus pin`。底库 b22 已由 Ops 出（比 b21 只多 config/groups/zw/rules.yaml）。**
+
 ## [0.7.10] - 2026-11-12
 
 - 发版说明（A31 11-12，SJ 要）：基于 v0.7.9，只多 coord_ref_hint（GUJI-767 第二步，#1426，不含 dev 上的 #1413 字组 zw 规则与 #1394）。PATCH。缺省关，各书产物不过期、不用重跑。
