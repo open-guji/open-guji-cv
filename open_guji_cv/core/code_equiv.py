@@ -1486,7 +1486,7 @@ ENTRIES: tuple[Equiv, ...] = (
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='fb82c05c52f83d8ecec06a697a5fad987eee0c2e6df3991f25b508f2f12259c8',
           old='141fc62a87fd6382410b8292375de282add7000fedc256c03eab39e6fc8ad465',
-          evidence='按代码论证、未做逐页产物比对（本环境无书数据）：新分支要求 vmap 非空（只在 _follow_variants() 时才传）且整理本形在 follow_ref 表里；'
+          evidence='seed_admit 在殿本 vol01 12 页（5,22,48,61,75,87,100,119,135,150,170,190，含正文、职名、门目）上与 v0.7.11 产物逐字节相同（ZM，scripts/code_equiv.py check --base v0.7.11 --step seed_admit --always，11-12）；另按代码论证：新分支要求 vmap 非空（只在 _follow_variants() 时才传）且整理本形在 follow_ref 表里；'
                    '没开 follow_ref_variants、或表空的书走的分支与 v0.7.11 逐字相同，dump 不变（tests/test_seed_admit_follow_ref.py 守 dump）'),
 )
 
