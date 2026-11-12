@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- 5a 精验可选度量学习 CNN（`glyph_match.sim_model`，缺省关；A23，Sheldon 11-10 同意接进 pipeline 按书测）：新模块 `clustering/sim_cnn.py`（`SimNet`、`CnnVerifier`，整库嵌入算一次，逐对分＝余弦），训练脚本 `scripts/train_glyph_sim_cnn.py`。全唐文端到端（同一 kNN 粗排与护栏）首位命中 99.41→99.74%、精度 99.9% 下 same 放行 74.3→78.7%、每格 28→14 ms。关着时 `sim_model`／`sim_model_sha` 不进参数 dump，glyph_match 代码等价已登记（keben 3 页逐字节相同），**各书产物不过期**；开着时权重 sha256＋sim_cnn 代码哈希进参数指纹。开了要按书重标 `consensus_cov`／`consensus_margin`、`font_tier.cov`。
+
 ## [0.7.9] - 2026-11-12
 
 - 发版说明（A31 11-12，SJ 要）：基于 v0.7.8，只多 #1421（不含 dev 上的 #1413 字组 zw 规则）。PATCH。缺省关，各书产物不过期、不用重跑；史記 r4x 要开才用 `coord_relaxed`＋`coord_circle_ext`。
