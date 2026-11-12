@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 切分筛查新判据 `eval/seg_screen.odd_cell_heights`（表 `cell_size`）：一列里格高 ≥1.7 倍中位（多半两字并一格）或 ≤0.5 倍（一字拆两格）。在殿本 vol01 旧包（11-09）上量召回时发现：ZM 11-12 钉的职名页并格四列格高都是中位的 1.8–1.9 倍，原有判据只靠成串 FOR 抓到；整册 1724 列只有 6 列命中。不进指纹。
 - `eval/seg_screen_run`：钉子列按产物的 `manual_cells` 旗认（产物早于钉子的列照普通列查），新表 `pin_stale` 列出「有 active 钉子、本页产物没用上」的列（要从 row_segment 重跑）。不进指纹。
 - 切分筛查并进史記快筛的格级判据（`guji seg check` 用，《切分三方向》第 2 步）：`eval/seg_screen` 加 `ink_ledger`／`ledger_flags`（FOR、Lh、Lv）、`end_frame_hits`（Fend）、`patch_edge_lines`（Fpatch）、`jiazhu_wide`（JZW）、`pin_slots_diff`（钉子列只比格号）、`layout_slots_diff`（版式对格号，同数判过）；跑法搬进 `eval/seg_screen_run.py`（`scripts/seg_screen.py` 变薄壳，多出 cell_flags／pin_slots／layout_slots 三张表，缓存缺图现算）。原语 `seg/rules` 加 `vertical_rule_mask`／`horizontal_rule_mask`。殿本 vol01 6 页非钉子列格级 flags 与 SJ `tools/seg_check/seg_detect.py` 逐格相同。不进指纹，产物不变。
 - 新原语 `seg/rules.py`：`long_rule_mask`／`strip_long_rules` 剥长直线（界行竖 200px、版框横线 0.85 列宽且至少 40px，参数在签名上）。史記 patch_clean、史記快筛、`eval/seg_screen` 原先各抄一份；`eval/seg_screen.strip_long_lines` 改调它（逐像素同，有单测）。不进任何 Step 指纹，产物不变。
