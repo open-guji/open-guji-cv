@@ -1433,6 +1433,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='d349110272246e70d060055b7589da62484a9ddd4a19f3bb4675fee6de44e42d',
           old='862f2f24da84debb2ce702f244115285de7de8d22adea085ec69b9fbdcba7e9f',
           evidence='同上'),
+    # align_ref 加 coord_ref_hint（缺省关；GUJI-767 第二步，2026-11-12）
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='6afd38325a5f4060b74ddf7f8bfe1a316505479e420899a059fd648182cf4ad6',
+          old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
+          evidence='align_ref 在 03/09/02 各 7 页（03: 99,103,117,122,208,2,40；09: 167,170,172,176,187,193,194；02: 88,90,165,166,168,171,204）上，coord_relaxed 开、coord_circle_ext／coord_ref_hint 关，与 origin/dev c16d142 产物逐字节相同；SJ 史記文淵閣 r42，scripts/code_equiv.py check，11-12'),
 )
 
 
