@@ -79,7 +79,8 @@ def test_split_collapses_back_to_old_module_while_parts_unchanged(monkeypatch):
 def test_split_parts_listed_together_in_every_step():
     """拆分登记的几块：哪个 Step 用了其中一块，就得把几块都列进 code_deps（否则合不回去，产物白白过期）。"""
     for old, (old_h, parts) in code_equiv.SPLITS.items():
-        names = {p for p, _ in parts}
+        # 书仓模块（guji_book.*）由 seg_set.resolve 换进模块表，不在 code_deps 里，不查
+        names = {p for p, _ in parts if not p.startswith("guji_book.")}
         for sid, st in STEPS.items():
             mods = {type(st).__module__, *st.spec.code_deps}
             assert not (mods & names) or names <= mods, f"{sid} 只列了 {old} 拆出来的一部分：{sorted(mods & names)}"

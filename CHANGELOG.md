@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 切分人定覆盖统一读取入口 `feedback/seg_overrides.SegOverrides`（列级 manual-cells／抬头／column-slots／cuts／pins／solo／forced 一处读，`blocks_layout` 定哪些屏蔽格位表），row_segment 改用；row_segment 新书级钩子 `impl/keben/row_hooks`（`grid_adjust`／`jiazhu_heads`／`half_a_left`，缺省 None），全唐文可不再复制整份 row_boundaries。code_equiv 已登记（殿本 vol01 11 页、vol28 10 页逐字节同），**各书产物不过期**。
 - row_segment `alt_cut` 备选与主切法有字格（框、种类、半边）全同、只差空格框或格号的不再出（SJ r43 09:194:5 闸判抬头一格、表是 0，备选格号 -1..14 被 seed_admit 选中、整列格号减一）。开了 `alt_cut` 的书参数 dump 加 `alt_cut_rev`，**只有史記 row_segment 起过期**；关着的书 code_equiv 已登记（殿本 vol28 15 页、全唐文 001 13 页逐字节同），殿本、全唐文不过期。
 - strokes `ClassStats` 加各类自己的标准差（`sds`）与似然比判 `llr_decide`：两类散布差很多（木 紧、本 散）时合并方差会判错；全唐文已放行 15,477 格按册留出（别册放行格学类分布），木本 不一致 23→5、人入 29→6、未末 25→0。不被 Step 引用，产物不变。
 - 5a 精验可选度量学习 CNN（`glyph_match.sim_model`，缺省关；A23，Sheldon 11-10 同意接进 pipeline 按书测）：新模块 `clustering/sim_cnn.py`（`SimNet`、`CnnVerifier`，整库嵌入算一次，逐对分＝余弦），训练脚本 `scripts/train_glyph_sim_cnn.py`。全唐文端到端（同一 kNN 粗排与护栏）首位命中 99.41→99.74%、精度 99.9% 下 same 放行 74.3→78.7%、每格 28→14 ms。关着时 `sim_model`／`sim_model_sha` 不进参数 dump，glyph_match 代码等价已登记（keben 3 页逐字节相同），**各书产物不过期**；开着时权重 sha256＋sim_cnn 代码哈希进参数指纹。开了要按书重标 `consensus_cov`／`consensus_margin`、`font_tier.cov`。
