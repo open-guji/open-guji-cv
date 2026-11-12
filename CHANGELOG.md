@@ -5,7 +5,10 @@
 
 ## [未发版]
 
-- PATCH（A31 11-12，GUJI-767）：align_ref 加通用开关 `coord_circle_ext`（缺省关、关时逻辑不变、不进参数 dump，要 `coord_relaxed` 开着）：圈号「○」认定放宽到字形库前 3 名、夹注 a/b 全圈号的整格算圈号格、`coord_dp`／`coord_dp_flat` 跳过圈号格并补记空格位、有圈号而几何拟不上时按格号配。史記 r41 因 ○ 对位错开的 56 列用。**改了 align_ref 模块，`code_hash` 变（align_ref、align_ref_coord），code_equiv 未登记（云端没有产物可比，需有产物的机器跑 `scripts/code_equiv.py check` 证关着时逐字节相同后再登）**。小圆环形状判据待 A22 出原语。
+## [0.7.9] - 2026-11-12
+
+- 发版说明（A31 11-12，SJ 要）：基于 v0.7.8，只多 #1421（不含 dev 上的 #1413 字组 zw 规则）。PATCH。缺省关，各书产物不过期、不用重跑；史記 r4x 要开才用 `coord_relaxed`＋`coord_circle_ext`。
+- PATCH（A31 11-12，GUJI-767）：align_ref 加通用开关 `coord_circle_ext`（缺省关、关时逻辑不变、不进参数 dump，要 `coord_relaxed` 开着）：圈号「○」认定放宽到字形库前 3 名、夹注 a/b 全圈号的整格算圈号格、`coord_dp`／`coord_dp_flat` 跳过圈号格并补记空格位、有圈号而几何拟不上时按格号配。史記 r41 因 ○ 对位错开的 56 列用。align_ref、align_ref_coord 的 code_hash 变，两条 code_equiv 已登记（SJ 11-12 在史記 03/09/02 各 7 页上证关着时逐字节相同）。小圆环形状判据待 A22 出原语。
 
 ## [0.7.8] - 2026-11-11
 
