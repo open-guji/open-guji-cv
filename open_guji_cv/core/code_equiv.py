@@ -1482,7 +1482,8 @@ ENTRIES: tuple[Equiv, ...] = (
           old='a865a98d5e9c2d961ae6090971dc7790a8d3108ee67ae292e6406638ca3e3d27',
           evidence='seed_admit 在 03/09/02 各 7 页（03: 99,103,117,122,208,2,40；09: 167,170,172,176,187,193,194；02: 88,90,165,166,168,171,204）上，zw 未点名，与 v0.7.10 产物逐字节相同；SJ 史記文淵閣 r43，scripts/code_equiv.py check，11-12'),
     # follow_ref 表项不再接管 follow_ref_variants 路径（cv#1438，史記 r45 嵗=歳；2026-11-12，A24）：
-    # 开着 follow_ref＋按参校本取异体的书 dump 加 follow_ref_variants_rev，只让这类书过期；别的书走的分支与 v0.7.11 逐字相同
+    # 开着 follow_ref＋按参校本取异体的书 dump 加 follow_ref_variants_rev，**这类书 seed_admit 一律过期**（不只表里那几对：表里的整理本形
+    # 此后都会走 variants，带出此前不改的同义异体改字，史記 r47 实测 04/08/09 册 吳→呉 6 格，整书 11-12）；别的书走的分支与 v0.7.11 逐字相同，不过期
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='fb82c05c52f83d8ecec06a697a5fad987eee0c2e6df3991f25b508f2f12259c8',
           old='141fc62a87fd6382410b8292375de282add7000fedc256c03eab39e6fc8ad465',
