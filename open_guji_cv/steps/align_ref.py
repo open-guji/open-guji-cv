@@ -518,6 +518,11 @@ class AlignRefParams(BaseModel):
     180 列是目录、卷端题列、职名页字距不匀，几何行号拟不上；这些格因此没有整理本字，只能人审。
     配上的列照旧过 `_coord_conflict` 与错位闸。False＝关（缺省，不进参数哈希）。"""
 
+    coord_ref_hint: bool = False
+    """`coord_dp`／`coord_dp_flat` 的只读提示（2026-11-12，GUJI-767；通用：任何书都可开）：对位得出、但没有字形证据
+    （载体字≠整理本字，整理本字也不在这一格候选前 5 名）所以不进 `coord` 的整理本字，记进 `PageAlignRef.ref_hint`
+    {格 id → 整理本字}，供点校当候选。**不是放行证据**：`coord`、放行、待审结果都不变。False＝关（缺省，不进参数哈希）。"""
+
     coord_circle_ext: bool = False
     """圈号「○」对位补强（2026-11-12，GUJI-767；要 `coord_relaxed` 开着；通用：任何整理本不录圈号的书都可开）：
     史記 r41 有 56 列因 ○ 对位错开。四处补口：①圈号认定放宽到字形库前 3 名（`_is_circle(ext)`）；
@@ -600,6 +605,8 @@ class AlignRefParams(BaseModel):
             d.pop("coord_relaxed", None)
         if isinstance(d, dict) and not self.coord_circle_ext:
             d.pop("coord_circle_ext", None)
+        if isinstance(d, dict) and not self.coord_ref_hint:
+            d.pop("coord_ref_hint", None)
         if isinstance(d, dict) and not self.coord_dp:
             d.pop("coord_dp", None)
         if isinstance(d, dict) and not self.coord_title_trust:
@@ -819,6 +826,7 @@ class AlignRefStep(Step):
                          relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
                          dp_flat=p.coord_dp_flat,
                          **({"circle_ext": True} if p.coord_circle_ext else {}),
+                         **({"ref_hint": True} if p.coord_ref_hint else {}),
                          **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
                          **({"pair_no_sub": True} if p.coord_pair_no_sub else {}),
                          **({"pair_only": True} if p.coord_conflict_pair_only else {}),
@@ -1523,6 +1531,7 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
                  relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
                  dp_flat=p.coord_dp_flat,
                  **({"circle_ext": True} if p.coord_circle_ext else {}),
+                 **({"ref_hint": True} if p.coord_ref_hint else {}),
                  **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
                          **({"pair_no_sub": True} if p.coord_pair_no_sub else {}),
                          **({"pair_only": True} if p.coord_conflict_pair_only else {}),
@@ -1572,7 +1581,7 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  title_trust: bool = False, dp_flat: bool = False,
                  shift_needs_pair: bool = False, pair_no_sub: bool = False,
                  pair_only: bool = False, blank_ink: bool = False, consensus_not_same: bool = False,
-                 circle_ext: bool = False) -> None:
+                 circle_ext: bool = False, ref_hint: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1662,6 +1671,9 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         recs = [r for r in d.recs if r[3] and (carrier(r[0]) == r[3] or r[3] in cand_top.get(r[0], ()))]
         if not recs:
             return False
+        if ref_hint:      # `coord_ref_hint`：没有字形证据而被筛掉的整理本字只记提示，不进 coord
+            kept = {r[0] for r in recs}
+            res.ref_hint.update({r[0]: r[3] for r in d.recs if r[3] and r[0] not in kept})
         res.coord_conflict_ids.extend(_coord_conflict_ids(recs, legacy))
         recs = recs + C.sym_recs(syms)
         res.coord_cols.append(cc.col)
