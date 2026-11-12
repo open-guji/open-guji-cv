@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+## [0.7.10] - 2026-11-12
+
+- 发版说明（A31 11-12，SJ 要）：基于 v0.7.9，只多 coord_ref_hint（GUJI-767 第二步，#1426，不含 dev 上的 #1413 字组 zw 规则与 #1394）。PATCH。缺省关，各书产物不过期、不用重跑。
 - PATCH（A31 11-12，GUJI-767 第二步）：align_ref 加通用开关 `coord_ref_hint`（缺省关、不进参数 dump；要 `coord_dp` 开着）：`coord_dp`／`coord_dp_flat` 对位得出但无字形证据所以不进 `coord` 的整理本字，记进 `PageAlignRef.ref_hint`（{格 id→整理本字}，空不落盘），只供点校当候选，不是放行证据，`coord`／`chars`／放行结果都不变。史記 r42 圈号邻字 A9 45 格（整理本有字而字形库误读）用。align_ref、align_ref_coord 的 code_hash 变，code_equiv 已登记（SJ 11-12 在史記 03/09/02 各 7 页上证关着时逐字节相同）。
 
 ## [0.7.9] - 2026-11-12
