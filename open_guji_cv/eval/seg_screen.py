@@ -268,3 +268,195 @@ def orphan_ink(gray: np.ndarray, boxes, ink_threshold: int = 128) -> list[dict]:
         out.append({"bbox": [x, y, x + bw, y + bh], "ink": real, "ratio": round(real / max(med, 1.0), 2),
                     "where": where})
     return out
+
+
+# ── 史記切分快筛的格级判据（SJ `guji-manager/tools/seg_check`，2026-11-12 搬进来，《切分三方向》第 2 步） ─────
+# 判据与参数照 SJ 原样（史記 r35／r41 十册验过）；SJ 要保留的几条见各函数说明。
+
+LEDGER_MIN_PX = 8          # 连通块小于这么多像素不记账
+LEDGER_SIDE = 0.15         # 贴列图左右边、占本格墨 < 这么多的小块：邻列字／界行残墨，不算
+LEDGER_OWN = 0.35          # 别格为主的块占本格墨 > 这么多也算本格的（字身跨缝）
+LEDGER_LINE_PX = 20        # 剥出来的长直线落进格框 ≥ 这么多像素才记 line
+FOR_FRAC_LO, FOR_FRAC_HI, FOR_MIN_PX = 0.05, 1.5, 100   # FOR：别格墨占本格 5%–150% 且 ≥100px
+
+
+def ink_ledger(gray: np.ndarray, cells, ink_threshold: int = 128) -> dict[str, dict]:
+    """列图＋字格框墨账（SJ `ctx2.analyze_col`）：逐格量 own（本格字的墨）、foreign（别格的字墨进了本格框）、
+    cut（本格字的墨落在所有框外）、line（剥出来的长直线落进框：('v'|'h', 像素)）。
+
+    `cells`：[(id, (x0, y0, x1, y1), slot, sub)]，只给判字的格。先剥长直线（`seg.rules`，SJ 第 1 条：不剥的话写本连笔
+    加界行整列连成一块）。夹注同号另半（a↔b）的墨不算 foreign（发前会抹白）。"""
+    import cv2
+
+    from ..seg.rules import horizontal_rule_mask, vertical_rule_mask
+    raw = (gray < ink_threshold).astype(np.uint8)
+    h, w = raw.shape
+    vl, hl = vertical_rule_mask(raw), horizontal_rule_mask(raw)
+    ink = ((raw > 0) & ~((vl | hl) > 0)).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    boxes = []
+    for _id, b, _s, _sub in cells:
+        x0, y0, x1, y1 = (int(round(v)) for v in b)
+        boxes.append((max(0, x0), max(0, y0), min(w, x1), min(h, y1)))
+    comp_in: dict[int, dict[int, int]] = {}
+    for k, (x0, y0, x1, y1) in enumerate(boxes):
+        sub = lab[y0:y1, x0:x1]
+        ids, cnt = np.unique(sub[sub > 0], return_counts=True)
+        for i, c in zip(ids, cnt):
+            comp_in.setdefault(int(i), {})[k] = int(c)
+    area = st[:, 4]
+    union = np.zeros_like(ink)
+    for x0, y0, x1, y1 in boxes:
+        union[y0:y1, x0:x1] = 1
+    outside = np.bincount(lab[(union == 0) & (ink > 0)].ravel(), minlength=n)
+    owner = {i: max(ins.items(), key=lambda t: t[1])[0] for i, ins in comp_in.items()}
+    out = {}
+    for k, (x0, y0, x1, y1) in enumerate(boxes):
+        own = foreign = cut = side = 0
+        pieces = [(i, ins[k]) for i, ins in comp_in.items() if k in ins and area[i] >= LEDGER_MIN_PX]
+        box_ink = sum(c for _i, c in pieces)
+        for i, c in pieces:
+            x, _y, bw, _bh, _a = st[i]
+            if owner[i] == k and (x <= 1 or x + bw >= w - 1) and c < LEDGER_SIDE * box_ink:
+                side += c
+                continue
+            ok = owner[i]
+            if ok == k or c > LEDGER_OWN * box_ink:
+                own += c
+                if ok == k:
+                    cut += int(outside[i])
+                continue
+            if cells[ok][2] == cells[k][2] and (cells[ok][3] or "") != (cells[k][3] or ""):
+                continue                                                   # 夹注同号另半
+            foreign += c
+        line = []
+        lv, lh = int(vl[y0:y1, x0:x1].sum()), int(hl[y0:y1, x0:x1].sum())
+        if lv >= LEDGER_LINE_PX:
+            line.append(("v", lv))
+        if lh >= LEDGER_LINE_PX:
+            line.append(("h", lh))
+        out[cells[k][0]] = {"own": own, "foreign": foreign, "cut": cut, "side": side, "line": line,
+                            "fr": foreign / max(own, 1)}
+    return out
+
+
+def ledger_flags(rec: dict) -> list[str]:
+    """墨账 → flags：FOR（别格墨进框）、Lh／Lv（长直线进框）。"""
+    fl = []
+    if any(t == "h" for t, _ in rec["line"]):
+        fl.append("Lh")
+    if any(t == "v" for t, _ in rec["line"]):
+        fl.append("Lv")
+    if rec["own"] > 0 and FOR_FRAC_LO <= rec["fr"] <= FOR_FRAC_HI and rec["foreign"] >= FOR_MIN_PX:
+        fl.append("FOR")
+    return fl
+
+
+def end_frame_hits(gray: np.ndarray, boxes, border_top: float, border_bottom: float, *, ink_threshold: int = 128,
+                   near: int = 4, cov: float = 0.45, band: int = 12) -> dict[int, list[tuple[str, float]]]:
+    """列端版框（SJ `frame_end`，flag Fend）：格框伸到列图上／下版框线 `near` px 内，且格内贴该边 `band` 行里有一行墨
+    覆盖 ≥ `cov` 格宽。返回 {格序号: [(top|bot, 覆盖)]}。"""
+    ink = None
+    out: dict[int, list] = {}
+    for k, (x0, y0, x1, y1) in enumerate(boxes):
+        hit = [s for s, ok in (("top", y0 <= border_top + near), ("bot", y1 >= border_bottom - near)) if ok]
+        if not hit:
+            continue
+        if ink is None:
+            ink = gray < ink_threshold
+        sub = ink[int(y0):int(y1), int(x0):int(x1)]
+        if sub.size == 0:
+            continue
+        r = sub.mean(1)
+        for s in hit:
+            rr = r[:band] if s == "top" else r[-band:]
+            if len(rr) and rr.max() >= cov:
+                out.setdefault(k, []).append((s, float(rr.max())))
+    return out
+
+
+def _runs_max(v) -> int:
+    best = cur = 0
+    for x in v:
+        cur = cur + 1 if x else 0
+        best = max(best, cur)
+    return best
+
+
+def patch_edge_lines(patch: np.ndarray, *, ink_threshold: int = 128, frac_w: float = 0.5, max_thick: float = 0.08,
+                     min_gap: int = 2, gap_ink: float = 0.03) -> dict[str, dict]:
+    """字块四边与字身隔开的薄直带（SJ `segqc.edge_lines`）：上下边的叫 Fpatch（版框／界栏横线），左右边的叫 Lv。
+    带在边上 10% 内、厚 ≤ max(3, max_thick×边长)、与字身隔 ≥ min_gap 行空白、最长连续段 ≥ frac_w 宽。"""
+    ink = patch < ink_threshold
+    res = {}
+    for side in ("top", "bot", "left", "right"):
+        b = ink if side in ("top", "bot") else ink.T
+        if side in ("bot", "right"):
+            b = b[::-1]
+        hh, ww = b.shape
+        if hh == 0 or ww == 0:
+            continue
+        occ = b.sum(1) / ww > gap_ink
+        if not occ.any():
+            continue
+        y0 = int(np.argmax(occ))
+        if y0 > 0.1 * hh:
+            continue
+        y = y0
+        while y < hh and occ[y]:
+            y += 1
+        y1 = y
+        while y < hh and not occ[y]:
+            y += 1
+        gap = y - y1
+        if y >= hh or gap < min_gap:
+            continue
+        thick = y1 - y0
+        if thick > max(3, max_thick * hh):
+            continue
+        span = _runs_max(b[y0:y1].any(0)) / ww
+        if span < frac_w:
+            continue
+        res[side] = {"thick": thick, "gap": gap, "span": span, "off": y0}
+    return res
+
+
+def jiazhu_wide(bbox, col_w: float, sub: str | None, frac: float = 0.7) -> bool:
+    """夹注半格（a／b）框宽 ≥ 列宽 `frac`（SJ flag JZW：左右两字并一格）。"""
+    return sub in ("a", "b") and (bbox[2] - bbox[0]) / max(col_w, 1.0) >= frac
+
+
+def _slot_key(s: str):
+    n = "".join(ch for ch in s if ch.isdigit() or ch == "-")
+    try:
+        return (int(n), s)
+    except ValueError:
+        return (0, s)
+
+
+def pin_slots_diff(have: set[str], pin_cells) -> str:
+    """钉子列（manual-cells）：cell_shrink 实出格号集合（"3"、"5a"…）对钉子格号集合，不一致返回说明，一致返回 ""。
+    钉子列只比这个、不跑墨账判据（SJ 第 5 条）；slot 可以是 -1（按版式表抬头编号），照常比。"""
+    want = {f"{c['slot']}{c.get('sub') or ''}" for c in pin_cells if c.get("kind", "char") != "blank"}
+    miss, extra = sorted(want - have, key=_slot_key), sorted(have - want, key=_slot_key)
+    if not (miss or extra):
+        return ""
+    return f"钉子有产物无 {','.join(miss) or '-'}；产物有钉子无 {','.join(extra) or '-'}"
+
+
+def layout_slots_diff(have: set[str], row: dict) -> str | None:
+    """版式对格号（SJ 第 4 条）：格位表一行（slots／notes／half）对实出格号。大字 N、小注 Na＋Nb、半格 Na（只切出 Nb
+    也算对上）。对上 → None；格数相同只是编号不同（题署列大间距不留空位号）→ "同数"（判过、只计数）；格数不同 → 说明。"""
+    notes, half = {int(x) for x in row.get("notes") or []}, {int(x) for x in row.get("half") or []}
+    ids: set[str] = set()
+    for n in row.get("slots") or []:
+        n = int(n)
+        ids |= {f"{n}a"} if n in half else {f"{n}a", f"{n}b"} if n in notes else {str(n)}
+    halfa = {f"{n}a" for n in half}
+    have = {h[:-1] + "a" if h.endswith("b") and h[:-1] + "a" in halfa and h[:-1] + "a" not in have else h for h in have}
+    miss, extra = sorted(ids - have, key=_slot_key), sorted(have - ids, key=_slot_key)
+    if not (miss or extra):
+        return None
+    if len(miss) == len(extra):
+        return "同数"
+    return f"异数：版式有产物无 {','.join(miss) or '-'}；产物有版式无 {','.join(extra) or '-'}"
