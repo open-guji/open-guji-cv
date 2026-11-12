@@ -96,10 +96,24 @@ def _halves():
 _SRC_SHA: dict[tuple, str] = {}
 
 
-def _halves_sha() -> str:
-    """daizhige 源文件内容 sha（`pins` 档用，不建半叶占格矩阵）。"""
+def book_source_files(book: str, pins_path: str) -> list[Path]:
+    """本册钉位（`pins_path` 里 `book` 的行）的 `head`（`0244-0100 …`）点名的 daizhige 源文件，升序。
+
+    2026-11-12（史記 18–20 册要入 0244.jsonl）：`pins` 档的指纹只看本册用到的源文件，往 `corpus/daizhige/` 加
+    别的册用的文件（0243→0244）不牵连已有册。本册没有钉位行（或没有点名）时给空表，调用方退回全部源文件。"""
     from ..utils.daizhige import source_files
-    files = source_files(_dz_dir())
+    try:
+        lines = _pin_lines(pins_path, book)
+    except (OSError, ValueError):
+        return []
+    ids = {str(r["head"]).split("-", 1)[0] for r in lines if r.get("head")}
+    return [f for f in source_files(_dz_dir()) if f.stem in ids]
+
+
+def _halves_sha(files=None) -> str:
+    """daizhige 源文件内容 sha（`pins` 档用，不建半叶占格矩阵）。`files` 缺省＝全部源文件。"""
+    from ..utils.daizhige import source_files
+    files = list(files) if files else source_files(_dz_dir())
     key = _file_sig(files)
     if key not in _SRC_SHA:
         sha = hashlib.sha256()
@@ -187,7 +201,7 @@ def _fingerprint(book: str, pins_path: str = "", ref: dict | None = None) -> str
         return ""
     if pins_path:
         sha = hashlib.sha256()
-        sha.update(f"pins-v{ALGO_VERSION}|{_halves_sha()}|".encode())
+        sha.update(f"pins-v{ALGO_VERSION}|{_halves_sha(book_source_files(book, pins_path))}|".encode())
         sha.update(json.dumps(_pin_lines(pins_path, book), ensure_ascii=False, sort_keys=True).encode())
         return sha.hexdigest()[:16]
     sha = hashlib.sha256()
