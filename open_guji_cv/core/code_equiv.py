@@ -1481,6 +1481,13 @@ ENTRIES: tuple[Equiv, ...] = (
           new='c07ffe446c652c68fbb2cdc7590fa15a60ea54c839f089662db48ef0a4c0344b',
           old='a865a98d5e9c2d961ae6090971dc7790a8d3108ee67ae292e6406638ca3e3d27',
           evidence='seed_admit 在 03/09/02 各 7 页（03: 99,103,117,122,208,2,40；09: 167,170,172,176,187,193,194；02: 88,90,165,166,168,171,204）上，zw 未点名，与 v0.7.10 产物逐字节相同；SJ 史記文淵閣 r43，scripts/code_equiv.py check，11-12'),
+    # follow_ref 表项不再接管 follow_ref_variants 路径（cv#1438，史記 r45 嵗=歳；2026-11-12，A24）：
+    # 开着 follow_ref＋按参校本取异体的书 dump 加 follow_ref_variants_rev，只让这类书过期；别的书走的分支与 v0.7.11 逐字相同
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='fb82c05c52f83d8ecec06a697a5fad987eee0c2e6df3991f25b508f2f12259c8',
+          old='141fc62a87fd6382410b8292375de282add7000fedc256c03eab39e6fc8ad465',
+          evidence='按代码论证、未做逐页产物比对（本环境无书数据）：新分支要求 vmap 非空（只在 _follow_variants() 时才传）且整理本形在 follow_ref 表里；'
+                   '没开 follow_ref_variants、或表空的书走的分支与 v0.7.11 逐字相同，dump 不变（tests/test_seed_admit_follow_ref.py 守 dump）'),
 )
 
 
