@@ -1446,6 +1446,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new='6afd38325a5f4060b74ddf7f8bfe1a316505479e420899a059fd648182cf4ad6',
           old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
           evidence='align_ref 在 03/09/02 各 7 页（03: 99,103,117,122,208,2,40；09: 167,170,172,176,187,193,194；02: 88,90,165,166,168,171,204）上，coord_relaxed 开、coord_circle_ext／coord_ref_hint 关，与 origin/dev c16d142 产物逐字节相同；SJ 史記文淵閣 r42，scripts/code_equiv.py check，11-12'),
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='f5124151f3aa1576d4a166cd73e3a0752358f1a5f29219e866ffb209a4850e67',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence='按页列数 expected_cols_pages（缺省空、不进参数 dump；殿本 vol01 p100 图上 10 列、版框探出 9 列，参校本质检）：border_detect 在殿本 vol01 9 页（--pages 1,22,45,48,88,100,105,130,150，含职名页 p100、p48/88/105）上与 origin/dev 62cc5009 产物逐字节相同；scripts/code_equiv.py check，2026-11-12（ZM-切分）'),
+    Equiv(module='open_guji_cv.gates.border_detect_gate',
+          new='2b85d40c19387689e50dbf66e94cd21adde6c854af262576fc2fb5599bcd931e',
+          old='803fcffb9dfc915e1ba80512694639857ebd6fb9c7ef6610f5143e4c30d800a8',
+          evidence='按页列数 expected_cols_pages（缺省空、不进参数 dump；殿本 vol01 p100 图上 10 列、版框探出 9 列，参校本质检）：border_detect 与 border_detect_gate 在殿本 vol01 9 页（--pages 1,22,45,48,88,100,105,130,150，含职名页 p100、p48/88/105）上与 origin/dev 62cc5009 产物逐字节相同；scripts/code_equiv.py check，2026-11-12（ZM-切分）'),
+    Equiv(module='open_guji_cv.gates.column_gate',
+          new='d572284813e4fded87ab399e69fd3c79edd7152c5d6ee95c29bcd1ef4c98ad82',
+          old='bc4749f1f07753e004d84b5006ec4cfbdf1af23383c457f085475acc05063b22',
+          evidence='按页列数 expected_cols_pages（缺省空、不进参数 dump；殿本 vol01 p100 图上 10 列、版框探出 9 列，参校本质检）：column_warp 与 column_gate 在殿本 vol01 9 页（--pages 1,22,45,48,88,100,105,130,150，含职名页 p100、p48/88/105）上与 origin/dev 62cc5009 产物逐字节相同；scripts/code_equiv.py check，2026-11-12（ZM-切分）'),
 )
 
 
