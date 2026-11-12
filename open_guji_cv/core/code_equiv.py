@@ -1465,6 +1465,11 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence='alt_cut 关着时：row_segment 在殿本 vol28 新图 15 页（1,2,3,5,8,12,20,30,45,60,80,100,130,160,190，main 包）、'
                    '全唐文 001 13 页（1,3,10,20,35,40,50,64,65,80,100,140,190）上与 origin/dev ba636a6 产物逐字节相同；'
                    '开着的书（史記）参数 dump 多 alt_cut_rev，照常过期；scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn（全唐文），2026-11-12（A22）'),
+    # groups.registry 加 OPT_IN_GROUPS（zw 丈文，需点名才开；GUJI-767／#1413，2026-11-12）
+    Equiv(module='open_guji_cv.groups.registry',
+          new='c07ffe446c652c68fbb2cdc7590fa15a60ea54c839f089662db48ef0a4c0344b',
+          old='a865a98d5e9c2d961ae6090971dc7790a8d3108ee67ae292e6406638ca3e3d27',
+          evidence='seed_admit 在 03/09/02 各 7 页（03: 99,103,117,122,208,2,40；09: 167,170,172,176,187,193,194；02: 88,90,165,166,168,171,204）上，zw 未点名，与 v0.7.10 产物逐字节相同；SJ 史記文淵閣 r43，scripts/code_equiv.py check，11-12'),
 )
 
 

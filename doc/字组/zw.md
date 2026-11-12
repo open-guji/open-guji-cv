@@ -21,3 +21,8 @@
 - r38 包（01、03–10 册，02 册包未出）：放行字为 丈／文 且与参校本不同的格仅 1 个——08:40:3:20b（match_solo 放 文，cov 0.9969，参校本 丈）；新组复核会把它降审，其余 656 格不动。
 - 上线：默认缺省 `generic_flow_names` 含 zw；史記册配置若显式写了 group_flow，要加 zw（史記现无显式 group_flow，随缺省）。殿本等显式写全集的书不受影响。
 - 没做按册留出 0 错的字形判法：丈文刻形差一点，史記目前样本（丈 3、文 12）不足训；本组只做「文意＋参校本同意」。
+
+## 需点名才开（A31 2026-11-12，v0.7.11）
+
+zw 放在 `registry.OPT_IN_GROUPS`，**不进 `GROUPS`、不进缺省 `group_flow`**：没在册配置 `group_flow` 里点名 zw 的书，产物逐字节不变（`GROUPS` 成员会改 `glyph_match` 弱命中、`glyph_rules`、`seed_admit.rare_ref_coord`，所以不放进去）。
+要用的书：`group_flow` 写成「缺省名单＋`zw`」，如 `group_flow: [*generic_flow_names, zw]`（展开成显式列表）。
