@@ -2,6 +2,8 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+
+- PATCH：row_segment 的 pins 档格位表指纹与夹注参照指纹只算本册钉位点名的 daizhige 源文件（史記 0244.jsonl 入库不让 01–17 册过期；#1463）。row_segment、row_segment_pagemap 的 code_hash 变，已登记 code_equiv（指纹值不变）。
 - 切分筛查加 page_pitch（正文格高对本页中位：整列偏 >10%、单格 ≥1.5／≤0.6 倍）、half_width（夹注半格宽对本册中位 0.7–1.4、同号 a/b 宽差 >30%），只读产物、不进指纹（A22 11-12）。
 - scripts/seg_fork_drift.py 加 `--ws <书仓>`：比书仓 code/ 覆盖模块与 cv 缺省实现（分叉点取书仓文件首次提交时刻），整份同缺省时提示可去掉覆盖。` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
