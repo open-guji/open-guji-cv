@@ -175,3 +175,12 @@ def test_variants_not_taken_over_by_table_entry():
     assert r[1].char == "隱" and r[1].evidence["follow_ref"]["via"] == "variants"
     assert r[2].char == "隱" and "via" not in r[2].evidence["follow_ref"]   # 表路
     assert r[3].admit and r[3].char == "隱" and r[3].evidence["lane"]["via"] == "variants"
+
+
+def test_follow_ref_variants_rev_in_dump_only_when_both_on():
+    """`follow_ref_variants_rev`：只有「表非空＋按参校本取异体」的书才进 dump（只让它们过期，cv#1438）。"""
+    k = "follow_ref_variants_rev"
+    assert k not in SeedAdmitParams(db_path="x").model_dump()
+    assert k not in SeedAdmitParams(db_path="x", follow_ref="嵗=歳").model_dump()
+    assert k not in SeedAdmitParams(db_path="x", follow_ref_variants=True).model_dump()
+    assert SeedAdmitParams(db_path="x", follow_ref="嵗=歳", follow_ref_variants=True).model_dump()[k] == 1
