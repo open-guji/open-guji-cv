@@ -63,8 +63,8 @@ KINDS: tuple[Kind, ...] = (
     Kind("shadow_gate", "repo", "models/shadow_admit/shadow_gate_v*.*", "book", DIANBEN,
          ("seed_admit",), "殿本 vol02/03 人裁训的（见 shadow_gate_v2.json train_books）"),
     # 5a 精验的度量学习 CNN（`clustering/sim_cnn.py`，`glyph_match.sim_model` 开关）：每本书用本书库刻例各训一份
-    Kind("glyph_sim", "repo", "models/glyph_sim_qtw/model.pt", "book", QUANTANGWEN,
-         ("glyph_match",), "全唐文字形库刻例训的 5a 相似度 CNN；换了要按书重标 same／共识门槛"),
+    Kind("glyph_sim", "repo", "models/glyph_sim_qtw/*", "book", QUANTANGWEN,
+         ("glyph_match",), "全唐文字形库刻例训的 5a 相似度 CNN（model.pt）＋分数校准表（calib.json）；换权重要重拟校准表"),
     # 字组 IDS 切分 U-Net：原先算在语料底库（config/groups/<组>/），11-04 挪进模型系统
     Kind("ids_unet", "repo", "config/groups/*/unet.npz", "book", DIANBEN,
          ("seed_admit",), "殿本本组人标切线训的三段切分 U-Net（纯 numpy）"),

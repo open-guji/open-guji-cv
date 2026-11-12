@@ -82,3 +82,49 @@ def test_config_parsing():
     assert (c.same, c.low) == (0.8, 0.4)
     with pytest.raises(ValueError):
         SimModelConfig.from_any({"same": 0.8})
+
+
+def test_calib_maps_scores_and_fingerprint(tmp_path, weights):
+    """权重旁有 calib.json：分数按节点分段线性映射到 cov 尺度，same／low 缺省 0.996／0.85，表进指纹。"""
+    import json
+    from open_guji_cv.clustering.sim_cnn import CnnVerifier, SimModelConfig, embed, sim_fingerprint
+    fp0 = sim_fingerprint(str(weights))
+    (weights.parent / "calib.json").write_text(json.dumps({"knots": [[-1, 0], [0.5, 0.9], [1, 1]]}), encoding="utf-8")
+    fp1 = sim_fingerprint(str(weights))
+    assert fp1.startswith(fp0 + ":") and len(fp1.split(":")) == 3
+    a, b = _glyph(0), _glyph(1)
+    v = CnnVerifier(SimModelConfig(str(weights)), [b])
+    assert (v.same, v.low) == (0.996, 0.85)
+    e = embed(v.net, [a, b])
+    raw = float(e[0] @ e[1])
+    assert v.score(a, b) == pytest.approx(float(np.interp(raw, [-1, 0.5, 1], [0, 0.9, 1])), abs=1e-5)
+    (weights.parent / "calib.json").write_text(json.dumps({"knots": [[0, 1], [1, 0.5]]}), encoding="utf-8")
+    with pytest.raises(ValueError):
+        CnnVerifier(SimModelConfig(str(weights)), [b])
+
+
+def test_no_calib_defaults(weights):
+    from open_guji_cv.clustering.sim_cnn import CnnVerifier, SimModelConfig
+    v = CnnVerifier(SimModelConfig(str(weights)), [_glyph(1)])
+    assert v.calib is None and (v.same, v.low) == (0.90, 0.50)
+    v = CnnVerifier(SimModelConfig(str(weights), same=0.7, low=0.3), [_glyph(1)])
+    assert (v.same, v.low) == (0.7, 0.3)
+
+
+def test_fuse_mean_averages_with_cov(tmp_path, weights):
+    """fuse: mean：逐对分＝（校准后 CNN 分＋覆盖分）/2；没校准表拒绝。"""
+    import json
+    from open_guji_cv.clustering.sim_cnn import CnnVerifier, SimModelConfig
+    from open_guji_cv.clustering.verify import verify_pair_elastic
+    a, b = _glyph(0), _glyph(1)
+    with pytest.raises(ValueError):
+        CnnVerifier(SimModelConfig(str(weights), fuse="mean"), [b])
+    (weights.parent / "calib.json").write_text(json.dumps({"knots": [[-1, 0], [1, 1]]}), encoding="utf-8")
+    v = CnnVerifier(SimModelConfig.from_any({"path": str(weights), "fuse": "mean"}), [b])
+    r = v(a, b, cov_high=0.996, miss_wmax=12.0, wmax_floor=0.5)
+    cov = verify_pair_elastic(a, b, cov_high=0.996, miss_wmax=12.0).f1
+    assert r.f1 == pytest.approx((v.score(a, b) + cov) / 2, abs=1e-6)
+    s = v(a, a.copy(), cov_high=0.996, miss_wmax=12.0)
+    assert s.f1 == pytest.approx(1.0, abs=1e-5) and s.verdict == "same"
+    with pytest.raises(ValueError):
+        SimModelConfig.from_any({"path": "x.pt", "fuse": "max"})

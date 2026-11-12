@@ -32,6 +32,7 @@
 - strokes `ClassStats` 加各类自己的标准差（`sds`）与似然比判 `llr_decide`：两类散布差很多（木 紧、本 散）时合并方差会判错；全唐文已放行 15,477 格按册留出（别册放行格学类分布），木本 不一致 23→5、人入 29→6、未末 25→0。不被 Step 引用，产物不变。
 - 5a 精验可选度量学习 CNN（`glyph_match.sim_model`，缺省关；A23，Sheldon 11-10 同意接进 pipeline 按书测）：新模块 `clustering/sim_cnn.py`（`SimNet`、`CnnVerifier`，整库嵌入算一次，逐对分＝余弦），训练脚本 `scripts/train_glyph_sim_cnn.py`。全唐文端到端（同一 kNN 粗排与护栏）首位命中 99.41→99.74%、精度 99.9% 下 same 放行 74.3→78.7%、每格 28→14 ms。关着时 `sim_model`／`sim_model_sha` 不进参数 dump，glyph_match 代码等价已登记（keben 3 页逐字节相同），**各书产物不过期**；开着时权重 sha256＋sim_cnn 代码哈希进参数指纹。开了要按书重标 `consensus_cov`／`consensus_margin`、`font_tier.cov`。
 - 模型表登记全唐文 5a 相似度 CNN `models/glyph_sim_qtw/model.pt`（新种类 `glyph_sim`，owner 全唐文 995ejelvk0，消费者 glyph_match；已传 R2，sha 289fdf56…；Sheldon 11-12 同意）。出处进 `config/model-provenance.json`。只是登记，不开开关、不改 Step，各书产物不过期。
+- 5a 相似度 CNN 分数校准与平均分（`glyph_match.sim_model` 仍缺省关）：权重旁 `calib.json`（`sim-calib/1`，`scripts/fit_glyph_sim_calib.py` 按同等误配率拟合）把 CNN 分映射到 cov 尺度，seed_admit／align_ref 约 30 个 cov 门槛不用逐个重标；`fuse: mean` 再与覆盖分取平均。全唐文 006 册 A/B：只用 CNN 送审 31→28 但库外字被认成形近字（廬→盧、樹→榭）约 4 格；fuse mean 送审 31→22、新放行 9 格看图无明确错。训练脚本加 `--init`／`--lr`（库小的书拿别书权重起步微调）。模型表登记 `models/glyph_sim_qtw/calib.json`。sim_cnn 不进 code_deps，**各书产物不过期**。
 
 ## [0.7.13] - 2026-11-12
 
