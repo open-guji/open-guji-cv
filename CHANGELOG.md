@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+## [0.7.15] - 2026-11-12
+
+- 发版说明（A31 11-12，SJ 史記整书线要）：基于 v0.7.13，只多 #1452 `vis_ruling_half` 与 #1456 `solo_coord_dissent`（均缺省关、不进 dump），**不含 #1432／#1437**（史記开着 alt_cut，#1432 会让 row_segment 过期）。PATCH。seed_admit 的 code_hash 变化，缺省关的书靠 code_equiv 登记（整册产物证明）保持不过期。
 - seed_admit `vis_ruling_half`（书级，缺省关、不进 dump；A31 11-12，SJ 史記）：`group_flow_llm_skip_half` 开着时，有放行型看图裁定的夹注半格也能放行（裁定 cell＝当前格号、字＝整理本字、无 clipped／frame_residue／jiazhu_*／split_* 疑点；evidence.half=True）。金标 3 格 0 错。PATCH。
 - 切分筛查新判据 `eval/seg_screen.odd_cell_heights`（表 `cell_size`）：一列里格高 ≥1.7 倍中位（多半两字并一格）或 ≤0.5 倍（一字拆两格）。在殿本 vol01 旧包（11-09）上量召回时发现：ZM 11-12 钉的职名页并格四列格高都是中位的 1.8–1.9 倍，原有判据只靠成串 FOR 抓到；整册 1724 列只有 6 列命中。不进指纹。
 - `eval/seg_screen_run`：钉子列按产物的 `manual_cells` 旗认（产物早于钉子的列照普通列查），新表 `pin_stale` 列出「有 active 钉子、本页产物没用上」的列（要从 row_segment 重跑）。不进指纹。
