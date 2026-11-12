@@ -460,3 +460,31 @@ def layout_slots_diff(have: set[str], row: dict) -> str | None:
     if len(miss) == len(extra):
         return "同数"
     return f"异数：版式有产物无 {','.join(miss) or '-'}；产物有版式无 {','.join(extra) or '-'}"
+
+
+# ── 并格／拆格：一列里格高离群（2026-11-12，召回尺子上发现的缺口） ──────────────────────────────
+
+CELL_TALL = 1.7            # 格高 ≥ 本列有字格中位 × 这么多：多半两字并一格
+CELL_SHORT = 0.5           # 格高 ≤ 本列中位 × 这么多：多半一字拆两格
+CELL_MIN = 4               # 本列有字格少于这么多不查（中位不稳）
+
+
+def odd_cell_heights(col_cells, *, tall: float = CELL_TALL, short: float = CELL_SHORT,
+                     min_cells: int = CELL_MIN) -> list[dict]:
+    """一列（row_segment 的 `ColumnCells`）里格高离群的格：[{slot, sub, ratio, kind: tall|short}]。
+
+    殿本 vol01 职名页 ZM 11-12 钉的四列（88:1、88:4、88:6、105:4「講起」「閣領」两字一格）在旧包里格高都是本列中位的
+    1.8–1.9 倍；整册 1724 列只有 6 列有 ≥1.7 倍的格，另两列（46:2、117:1）待看。"""
+    cells = [c for c in col_cells.cells if c.kind != "blank"]
+    if len(cells) < min_cells:
+        return []
+    hs = sorted(c.y1 - c.y0 for c in cells)
+    m = hs[len(hs) // 2] if len(hs) % 2 else (hs[len(hs) // 2 - 1] + hs[len(hs) // 2]) / 2
+    if m <= 0:
+        return []
+    out = []
+    for c in cells:
+        r = (c.y1 - c.y0) / m
+        if r >= tall or r <= short:
+            out.append({"slot": c.slot, "sub": c.sub, "ratio": round(r, 2), "kind": "tall" if r >= tall else "short"})
+    return out

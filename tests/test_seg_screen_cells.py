@@ -64,3 +64,12 @@ def test_pin_and_layout_slots():
     assert ss.layout_slots_diff({"1", "2b", "3a", "3b"}, row) is None          # 半格只切出 b 也算对上
     assert ss.layout_slots_diff({"2", "3a", "3b", "4"}, row) == "同数"
     assert ss.layout_slots_diff({"1", "2a"}, row).startswith("异数")
+
+
+def test_odd_cell_heights():
+    from types import SimpleNamespace as N
+    cells = [N(kind="char", slot=i, sub=None, y0=i * 100.0, y1=i * 100.0 + h)
+             for i, h in enumerate([90, 95, 100, 180, 92, 40], 1)]
+    odd = ss.odd_cell_heights(N(cells=cells))
+    assert [(o["slot"], o["kind"]) for o in odd] == [(4, "tall"), (6, "short")]
+    assert ss.odd_cell_heights(N(cells=cells[:3])) == []

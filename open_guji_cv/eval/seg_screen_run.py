@@ -7,6 +7,7 @@
   layout_fallback、pitch_free_ignored、seal_blank；
 - 格级（SJ 史記快筛，2026-11-12 并进来）：cell_flags（FOR／Lh／Lv／Fend／Fpatch／JZW，一格一行，value＝flags）；
 - 列级对格号：pin_slots（钉子列 cell_shrink 格号≠钉子）、layout_slots（非钉子列对格位表：「同数」判过只计数，异数要看）；
+- cell_size：一列里格高离群（≥1.7 倍中位多半两字并一格、≤0.5 倍多半一字拆两格），按列一行；
 - pin_stale：中心库有 active 钉子、本页产物却没用上（产物早于钉子，要从 row_segment 重跑）。
 
 钉子列（产物带 `manual_cells` 旗）只比格号、不跑墨账与端外墨（SJ 第 5 条）；有钉子而产物没用上的列照普通列查；职名列不跑端外墨。`skip` 点名的页整页不查（书配置
@@ -17,7 +18,7 @@ from __future__ import annotations
 import sys
 
 CHECKS = ("edge_ink", "orphan", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
-          "pitch_free_ignored", "cell_flags", "pin_slots", "pin_stale", "layout_slots", "seal_blank")
+          "pitch_free_ignored", "cell_flags", "cell_size", "pin_slots", "pin_stale", "layout_slots", "seal_blank")
 
 
 def _engine(book: str):
@@ -141,6 +142,11 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
                     c["orphan"] += 1
             if pinned:
                 continue                  # 钉子列只比格号（SJ 第 5 条）
+            odd = ss.odd_cell_heights(cc)
+            if odd:
+                rows["cell_size"].append((book, page, cc.col, ",".join(sorted({o["kind"] for o in odd})),
+                                          " ".join(f"{o['slot']}{o['sub'] or ''}×{o['ratio']}" for o in odd)))
+                c["cell_size"] += 1
             if cell_checks and chars:
                 _cell_flags(book, page, cc.col, gray, chars, win_by_col.get(cc.col), ctx, rows, c)
             if "roster" in cc.flags:
@@ -217,7 +223,7 @@ def write_report(rows: dict[str, list], counts: dict, out, seal_blank: bool = Fa
     for b, c in counts.items():
         lines.append("| " + " | ".join([b, str(c["pages"]), *[str(c[k]) for k in hdr[2:]]]) + " |")
     same = sum(c.get("layout_same_count", 0) for c in counts.values())
-    lines += ["", "edge_ink、pitch_free_ignored、pin_slots、pin_stale、layout_slots 按列计；colnet_page、frame_margin、layout_col_shift、"
+    lines += ["", "edge_ink、pitch_free_ignored、cell_size、pin_slots、pin_stale、layout_slots 按列计；colnet_page、frame_margin、layout_col_shift、"
               "layout_fallback 按页计；edge_frame_only、cell_flags、seal_blank 按格计；orphan 按块计。"
               f"版式对格号「同数」（只编号不同，判过）{same} 列，只计数不出行。"]
     text = "\n".join(lines) + "\n"
