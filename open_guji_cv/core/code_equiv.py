@@ -1424,6 +1424,15 @@ ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.steps.cell_shrink",
           new="0d920c95deb46011204479d86cd85122a98a463341fc45f8b989dae5afdbb5b6",
           old="94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e", evidence=_PCLEAN_1110),
+    # align_ref 加 coord_circle_ext（缺省关；GUJI-767，史記圈号 ○ 对位，2026-11-12）
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='92f9e07ef18267c074789a9a74b012c45181301e3210b91096e9d9666f9eccaa',
+          old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
+          evidence='align_ref 在史記 03/09/02 各 7 页（○列、夹注、职名杂页）上，两开关（coord_circle_ext、coord_relaxed 之外的新分支）关着，与 3d94f3a9 产物逐字节相同；SJ 11-12，scripts/code_equiv.py check'),
+    Equiv(module='open_guji_cv.steps.align_ref_coord',
+          new='d349110272246e70d060055b7589da62484a9ddd4a19f3bb4675fee6de44e42d',
+          old='862f2f24da84debb2ce702f244115285de7de8d22adea085ec69b9fbdcba7e9f',
+          evidence='同上'),
 )
 
 
