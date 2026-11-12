@@ -4476,13 +4476,18 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
                     continue
             m = mmap.get(rec.id)
             here, via = rules, None
-            if ref not in rules:
+            if ref not in rules or (vmap is not None and ref != "〓"):
+                # 表里没有这个整理本形：按参校本取异体（`follow_ref_variants`）。表里有、但本格的字不是表里那一形
+                # （史記 r45：表加了 嵗=歳，嵗 的格放行字是 歲，表路只认 歳 不改）时同样走这条路，别让表项接管。
                 if vmap is None or not ref or ref == "〓":
                     continue
                 other = rec.char if rec.admit else ((m.candidates or [(None,)])[0][0] if m else None)
-                if not other or other == ref or vmap.semantic(other) != vmap.semantic(ref):
+                if ref in rules and (not other or other == rules[ref]):
+                    pass                                   # 就是表里那一形：表路照旧
+                elif not other or other == ref or vmap.semantic(other) != vmap.semantic(ref):
                     continue
-                here, via = {ref: other}, "variants"
+                else:
+                    here, via = {ref: other}, "variants"
             d = dmap.get(rec.id)
             cov_min, gap_min = p.follow_ref_cov, p.follow_ref_gap
             if via == "variants" and p.follow_ref_variants_gap is not None and not rec.admit:
