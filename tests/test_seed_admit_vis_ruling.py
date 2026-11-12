@@ -143,6 +143,19 @@ def test_skip_half_blocks_ruling_on_half_cells(tmp_path):
     assert run(False) == 1 and recs[1].admit
 
 
+def test_vis_ruling_half_lets_ruled_half_cells_through(tmp_path):
+    """vis_ruling_half：skip_half 开着也放行有裁定事件的半格；缺省关、不进 dump。"""
+    st = _store(tmp_path, "甲", "乙")
+    recs = [AdmitRec(id=f"{B}:1:{s}", slot=1, admit=a, char=c, doubts=[], channel=None, provenance="match" if a else "", evidence={})
+            for s, a, c in (("1", True, "甲"), ("2a", False, "誤"), ("3", True, "乙"))]
+    amap = {f"{B}:1:{s}": (c, None) for s, c in (("1", "甲"), ("2a", "說"), ("3", "乙"))}
+    run = lambda **k: _vis_ruling_pass(SeedAdmitParams(db_path="x", group_flow_llm_skip_half=True, **k), [ColumnAdmit(col=1, chars=recs)], amap, st)  # noqa: E731
+    assert run() == 0 and not recs[1].admit
+    assert run(vis_ruling_half=True) == 1 and recs[1].admit
+    assert "vis_ruling_half" not in SeedAdmitParams(db_path="x").model_dump()
+    assert SeedAdmitParams(db_path="x", vis_ruling_half=True).model_dump()["vis_ruling_half"] is True
+
+
 def test_ref_lead_via_kept_and_fail_recorded(tmp_path):
     """终审 ref_lead：放行格证据带 via=ref_lead；没过的格（gate=ref_lead_fail）留审，证据记 ref_lead_fail。"""
     st = RulingStore(tmp_path / "ok")

@@ -270,6 +270,10 @@ class SeedAdmitParams(BaseModel):
     """夹注 a/b 半格不走 L3（`Llm` 答案表、`CtxOnline` 在线、二审小组；A24 第 5 轮，SJ 史記 L3 放行核对 14 格错 1 格是 men 组 06:12:5:12a）。
     半格窄、字块切分不稳，文意读出的字常错；A31 11-04 定殿本半格归 S 档不由终审判。缺省关（不进 dump，`params_hash` 不变）。
     只管 L3 与终审裁定放行（`vis_ruling` 通道）；规则层（`CtxRule`）、L2 模型、字形解法不受影响。"""
+    vis_ruling_half: bool = False
+    """`group_flow_llm_skip_half` 开着时，仍让**有看图裁定事件**（`vis_ruling` 通道，两路对话盲读 high、与整理本对位字同格）的夹注半格按裁定放行；
+    没有裁定的半格照旧受保护（本就不放行）。书级，缺省关、关时不进参数 dump、行为不变（SJ 史記 11-12：必 04:26:1:13b、解 03:46:1:4a、遲 等半格裁定放不出，半格是形近待审大头）。
+    起因的错放（men 组 06:12:5:12a）是旧在线 L3，不是现在的对话双路裁定；放行前须金标验证 0 错。"""
     group_flow_llm_half_groups: list[str] = Field(default_factory=list)
     """`group_flow_llm_skip_half` 的例外（书级，缺省空、不进参数 dump；A24 11-08，SJ 史記 H01 89 格半格没有 L3 问、写不了裁定键）：
     这几组的夹注半格照样走 L3（答案表、裁定库、记 `llm_pending` 问），由 `feedback/llm_queue` 导出、对话判读后导入。
@@ -1392,6 +1396,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("pua_code_admit_cov", None)
         if isinstance(d, dict) and not self.group_flow_llm_skip_half:
             d.pop("group_flow_llm_skip_half", None)
+        if isinstance(d, dict) and not self.vis_ruling_half:
+            d.pop("vis_ruling_half", None)
         if isinstance(d, dict) and not self.group_flow_llm_half_groups:
             d.pop("group_flow_llm_half_groups", None)
         if isinstance(d, dict) and self.group_flow_form_open:
@@ -5233,7 +5239,7 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
         r.doubts = list(dict.fromkeys(list(r.doubts or []) + ["src_code_conflict"]))
         n -= 1
     ovr = p.ruling_override_groups
-    skip_half = getattr(p, "group_flow_llm_skip_half", False)
+    skip_half = getattr(p, "group_flow_llm_skip_half", False) and not getattr(p, "vis_ruling_half", False)
     for r, left, right in todo:
         if skip_half and (r.id or "")[-1:] in ("a", "b"):
             continue                                 # 夹注半格不靠终审裁定放行（等金标证据再开）
