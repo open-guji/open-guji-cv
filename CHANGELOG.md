@@ -2,13 +2,20 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+- 切分筛查加 page_pitch（正文格高对本页中位：整列偏 >10%、单格 ≥1.5／≤0.6 倍）、half_width（夹注半格宽对本册中位 0.7–1.4、同号 a/b 宽差 >30%），只读产物、不进指纹（A22 11-12）。
 - scripts/seg_fork_drift.py 加 `--ws <书仓>`：比书仓 code/ 覆盖模块与 cv 缺省实现（分叉点取书仓文件首次提交时刻），整份同缺省时提示可去掉覆盖。` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
 ## [未发版]
 
+## [0.7.16] - 2026-11-12
+
+- 发版说明（A31 11-12）：v0.7.14 的后继，PATCH。v0.7.14 漏登 seed_admit code_equiv（#1452 改了 seed_admit 代码），已补（v0.7.14 与本版两条登记，A22 在史記 01 册 23 页验）；另含 #1456 `solo_coord_dissent`（缺省关）。含 #1432（alt_cut 备选格全同不出），钉本版的书若开着 alt_cut，row_segment 会过期。史記整书线钉 v0.7.15（v0.7.13 + #1452 + #1456，不含 #1432）。
 ## [0.7.14] - 2026-11-12
 
 - 发版说明（A31 11-12）：dev 上 v0.7.13 之后的全部改动，PATCH；含 seed_admit `vis_ruling_half`（缺省关）。
+## [0.7.15] - 2026-11-12
+
+- 发版说明（A31 11-12，SJ 史記整书线要）：基于 v0.7.13，只多 #1452 `vis_ruling_half` 与 #1456 `solo_coord_dissent`（均缺省关、不进 dump），**不含 #1432／#1437**（史記开着 alt_cut，#1432 会让 row_segment 过期）。PATCH。seed_admit 的 code_hash 变化，缺省关的书已登记 code_equiv（史記 9 页逐字节相同），缺省关的书 seed_admit 不过期。
 - seed_admit `vis_ruling_half`（书级，缺省关、不进 dump；A31 11-12，SJ 史記）：`group_flow_llm_skip_half` 开着时，有放行型看图裁定的夹注半格也能放行（裁定 cell＝当前格号、字＝整理本字、无 clipped／frame_residue／jiazhu_*／split_* 疑点；evidence.half=True）。金标 3 格 0 错。PATCH。
 - 切分筛查新判据 `eval/seg_screen.odd_cell_heights`（表 `cell_size`）：一列里格高 ≥1.7 倍中位（多半两字并一格）或 ≤0.5 倍（一字拆两格）。在殿本 vol01 旧包（11-09）上量召回时发现：ZM 11-12 钉的职名页并格四列格高都是中位的 1.8–1.9 倍，原有判据只靠成串 FOR 抓到；整册 1724 列只有 6 列命中。不进指纹。
 - `eval/seg_screen_run`：钉子列按产物的 `manual_cells` 旗认（产物早于钉子的列照普通列查），新表 `pin_stale` 列出「有 active 钉子、本页产物没用上」的列（要从 row_segment 重跑）。不进指纹。
