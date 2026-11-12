@@ -273,6 +273,7 @@ class SeedAdmitParams(BaseModel):
     vis_ruling_half: bool = False
     """`group_flow_llm_skip_half` 开着时，仍让**有看图裁定事件**（`vis_ruling` 通道，两路对话盲读 high、与整理本对位字同格）的夹注半格按裁定放行；
     没有裁定的半格照旧受保护（本就不放行）。书级，缺省关、关时不进参数 dump、行为不变（SJ 史記 11-12：必 04:26:1:13b、解 03:46:1:4a、遲 等半格裁定放不出，半格是形近待审大头）。
+    放行条件（A22 评估 11-12）：裁定记的 cell＝当前格号、裁定字＝整理本字（不走白名单）、本格无 clipped／frame_residue／jiazhu_*／split_* 疑点；放行格 evidence.half=True。
     起因的错放（men 组 06:12:5:12a）是旧在线 L3，不是现在的对话双路裁定；放行前须金标验证 0 错。"""
     group_flow_llm_half_groups: list[str] = Field(default_factory=list)
     """`group_flow_llm_skip_half` 的例外（书级，缺省空、不进参数 dump；A24 11-08，SJ 史記 H01 89 格半格没有 L3 问、写不了裁定键）：
@@ -5088,6 +5089,7 @@ _VIS_RULING_SUBCLASSES = frozenset({"A68", "B99", "D130", "L04"})
 #: ctx-m1＝只读文意终审（A24 2026-11-04，两路独立会话双 high＋字形分或≥2 来源，按组定越不越过整理本；`admit_ok` 写入时已判），Z＝字组格、N＝形近护栏格
 _VIS_RULING_SPECS = ((_VIS_RULING_VER, _VIS_RULING_SUBCLASSES), ("src-1", frozenset({"PUA", "GB"})), ("ctx-m1", frozenset({"Z", "N"})))
 _VIS_RULING_HARD = frozenset({"occluded", "excluded", "glyph_timeout"})
+_VIS_HALF_BAD = frozenset({"clipped", "frame_residue"})   # vis_ruling_half 下带这些切分疑点的半格不放
 
 
 def _ruling_han(c) -> bool:
@@ -5240,7 +5242,12 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
         n -= 1
     ovr = p.ruling_override_groups
     skip_half = getattr(p, "group_flow_llm_skip_half", False) and not getattr(p, "vis_ruling_half", False)
+    half_ok = getattr(p, "group_flow_llm_skip_half", False) and getattr(p, "vis_ruling_half", False)
     for r, left, right in todo:
+        is_half = (r.id or "")[-1:] in ("a", "b")
+        if half_ok and is_half and any(isinstance(d, str) and (d in _VIS_HALF_BAD or d.startswith(("jiazhu_", "split_")))
+                                        for d in (r.doubts or [])):
+            continue                                 # 半格本身带切分疑点：不放（A22 评估 11-12）
         if skip_half and (r.id or "")[-1:] in ("a", "b"):
             continue                                 # 夹注半格不靠终审裁定放行（等金标证据再开）
         v = next((x for ver, subs in _VIS_RULING_SPECS
@@ -5255,6 +5262,8 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
             continue
         if (v.get("ref") or "") != (ref_ or ""):
             continue                                 # 整理本对位字变了：不是当初看的那一格
+        if half_ok and is_half and (v.get("cell") != r.id or v["char"] != ref_):
+            continue                                 # 半格：裁定的格号须＝当前格号（重切后不落到别的图），且字＝整理本字（不走白名单越过）
         if ovr is not None and v.get("prompt_ver") == "ctx-m1" and ref_ and v["char"] != ref_ and not _override_ok(ovr, v["char"], ref_):
             continue                                 # 越过整理本：字与整理本字不同属白名单字组 → 留审
         ds = list(r.doubts or [])
@@ -5262,6 +5271,8 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
         vr.update({k: v[k] for k in ("via", "ref_lead") if v.get(k)})   # 终审 ref_lead 证人放行：via=ref_lead（层、领先量）
         r.evidence = {**(r.evidence or {}), "vis_ruling": vr,
                       "lifted_from": {"char": r.char, "doubts": ds}}
+        if half_ok and is_half:
+            r.evidence["half"] = True                # 统计用，字形库可据此排除
         r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "vis_ruling", "match", []
         n += 1
     return n

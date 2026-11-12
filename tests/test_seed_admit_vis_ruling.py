@@ -144,14 +144,21 @@ def test_skip_half_blocks_ruling_on_half_cells(tmp_path):
 
 
 def test_vis_ruling_half_lets_ruled_half_cells_through(tmp_path):
-    """vis_ruling_half：skip_half 开着也放行有裁定事件的半格；缺省关、不进 dump。"""
-    st = _store(tmp_path, "甲", "乙")
-    recs = [AdmitRec(id=f"{B}:1:{s}", slot=1, admit=a, char=c, doubts=[], channel=None, provenance="match" if a else "", evidence={})
-            for s, a, c in (("1", True, "甲"), ("2a", False, "誤"), ("3", True, "乙"))]
-    amap = {f"{B}:1:{s}": (c, None) for s, c in (("1", "甲"), ("2a", "說"), ("3", "乙"))}
-    run = lambda **k: _vis_ruling_pass(SeedAdmitParams(db_path="x", group_flow_llm_skip_half=True, **k), [ColumnAdmit(col=1, chars=recs)], amap, st)  # noqa: E731
-    assert run() == 0 and not recs[1].admit
-    assert run(vis_ruling_half=True) == 1 and recs[1].admit
+    """vis_ruling_half：skip_half 开着也放行有裁定事件的半格（格号须一致、字＝整理本字、无切分疑点）；缺省关、不进 dump。"""
+    def go(sub, cell=f"{B}:1:2a", doubts=(), **kw):
+        st = _store(tmp_path / sub, "甲", "乙", cell=cell)
+        recs = [AdmitRec(id=f"{B}:1:{s}", slot=1, admit=a, char=c, doubts=list(doubts) if s == "2a" else [], channel=None,
+                         provenance="match" if a else "", evidence={})
+                for s, a, c in (("1", True, "甲"), ("2a", False, "誤"), ("3", True, "乙"))]
+        amap = {f"{B}:1:{s}": (c, None) for s, c in (("1", "甲"), ("2a", "說"), ("3", "乙"))}
+        p = SeedAdmitParams(db_path="x", group_flow_llm_skip_half=True, **kw)
+        return _vis_ruling_pass(p, [ColumnAdmit(col=1, chars=recs)], amap, st), recs[1]
+    assert go("a")[0] == 0
+    n, r = go("b", vis_ruling_half=True)
+    assert n == 1 and r.admit and r.evidence["half"] is True
+    assert go("c", cell=f"{B}:1:2", vis_ruling_half=True)[0] == 0          # 格号对不上
+    assert go("d", doubts=["clipped"], vis_ruling_half=True)[0] == 0       # 切分疑点
+    assert go("e", doubts=["jiazhu_uneven"], vis_ruling_half=True)[0] == 0
     assert "vis_ruling_half" not in SeedAdmitParams(db_path="x").model_dump()
     assert SeedAdmitParams(db_path="x", vis_ruling_half=True).model_dump()["vis_ruling_half"] is True
 
