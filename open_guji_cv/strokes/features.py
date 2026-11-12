@@ -36,16 +36,36 @@ def geometry(fit: Fit, strokes=(), feats=FEATS) -> np.ndarray:
 
 @dataclass
 class ClassStats:
-    """一组字（如 土士）在同一模板下的本书类中心。sd 用各类合并的标准差。"""
+    """一组字（如 土士）在同一模板下的本书类中心。sd 用各类合并的标准差；
+    `sds` 是各类自己的标准差（`llr_decide` 用：两类散布差很多时——木 的底横位置几乎不落墨、本 有长有短——
+    合并标准差会把 本 的短底横判成 木；全唐文 已放行 15,477 格按册留出，木本 不一致 23→5、人入 29→6）。"""
     means: dict            # {字: np.ndarray}
     sd: np.ndarray
     n: dict                # {字: 例数}
+    sds: dict | None = None  # {字: np.ndarray}
 
     @classmethod
-    def from_samples(cls, samples: dict, eps: float = 1e-3) -> "ClassStats":
+    def from_samples(cls, samples: dict, eps: float = 1e-3, floor: float = 0.02) -> "ClassStats":
+        """floor：各类标准差的下限（特征是 0–1 的比例；刻例一律很像时别让方差趋零）。"""
         allx = np.vstack([np.vstack(v) for v in samples.values() if len(v)])
         return cls(means={c: np.mean(v, 0) for c, v in samples.items() if len(v)},
-                   sd=allx.std(0) + eps, n={c: len(v) for c, v in samples.items()})
+                   sd=allx.std(0) + eps, n={c: len(v) for c, v in samples.items()},
+                   sds={c: np.std(v, 0) + floor for c, v in samples.items() if len(v)})
+
+    def loglik(self, x: np.ndarray) -> dict:
+        """各类对角高斯的对数似然（用各类自己的标准差）。"""
+        sds = self.sds or {c: self.sd for c in self.means}
+        return {c: float(-0.5 * (((x - m) / sds[c]) ** 2).sum() - np.log(sds[c]).sum())
+                for c, m in self.means.items()}
+
+    def llr_decide(self, x: np.ndarray, t: float = 5.0):
+        """似然比判：最像的类比次像的对数似然高出 ≥ t 才判，否则弃权。返回 (字或 None, 对数似然表)。
+        t 按书按组定（全唐文 15,477 格：t=5 时 木本／目自／人入 不一致 5／9／1，全为方法错；t 越大越保守）。"""
+        ll = self.loglik(x)
+        order = sorted(ll, key=ll.get, reverse=True)
+        if len(order) < 2:
+            return (order[0] if order else None), ll
+        return (order[0] if ll[order[0]] - ll[order[1]] >= t else None), ll
 
     def distances(self, x: np.ndarray) -> dict:
         return {c: float(np.linalg.norm((x - m) / self.sd)) for c, m in self.means.items()}
@@ -61,13 +81,17 @@ class ClassStats:
         return (order[0] if rel >= margin else None), d
 
     def to_json(self) -> dict:
-        return {"means": {c: np.round(m, 5).tolist() for c, m in self.means.items()},
-                "sd": np.round(self.sd, 5).tolist(), "n": self.n}
+        d = {"means": {c: np.round(m, 5).tolist() for c, m in self.means.items()},
+             "sd": np.round(self.sd, 5).tolist(), "n": self.n}
+        if self.sds:
+            d["sds"] = {c: np.round(v, 5).tolist() for c, v in self.sds.items()}
+        return d
 
     @classmethod
     def from_json(cls, d: dict) -> "ClassStats":
         return cls(means={c: np.asarray(m, float) for c, m in d["means"].items()},
-                   sd=np.asarray(d["sd"], float), n=d["n"])
+                   sd=np.asarray(d["sd"], float), n=d["n"],
+                   sds={c: np.asarray(v, float) for c, v in d["sds"].items()} if d.get("sds") else None)
 
 
 def bad_fit(fit: Fit, stroke: int, min_cover: float = 0.85, min_on_ink: float = 0.7,
