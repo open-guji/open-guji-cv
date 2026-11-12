@@ -382,12 +382,15 @@ class PageAlignRef(BaseModel):
     # `"text"`（不分行全文，不做坐标对位）；column 与未声明为空、不落盘（旧书产物逐字节不变）。
     # 下游（seed_admit、manager）认这个字段，不认 note 文字。
     ref_kind: str = ""
+    # `AlignRefParams.coord_ref_hint`（GUJI-767）：`coord_dp*` 对位得出、但没有字形证据所以不给 `coord` 的整理本字
+    # {格 id → 整理本字}。只作点校候选，不是放行证据（下游不得据此放行）；关着或空不落盘。
+    ref_hint: dict[str, str] = Field(default_factory=dict)
 
     @model_serializer(mode="wrap")
     def _drop_empty_alt(self, handler):
         d = handler(self)
         if isinstance(d, dict):
-            for k in ("alt_cols", "alt_cand", "alt_draft", "ref_kind"):
+            for k in ("alt_cols", "alt_cand", "alt_draft", "ref_kind", "ref_hint"):
                 if not d.get(k):
                     d.pop(k, None)
         return d
