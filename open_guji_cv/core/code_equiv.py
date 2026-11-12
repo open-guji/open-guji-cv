@@ -1458,7 +1458,7 @@ ENTRIES: tuple[Equiv, ...] = (
                    '没开 follow_ref_variants、或表空的书走的分支与 v0.7.11 逐字相同，dump 不变（tests/test_seed_admit_follow_ref.py 守 dump）'),
     # row_segment／pagemap：pins 档与夹注参照的语料指纹只看本册钉位点名的源文件（2026-11-12，史記 18–20 册要入 0244.jsonl）
     Equiv(module='open_guji_cv.steps.row_segment',
-          new='6dde638e3511de593834b9ca0a69e4142491c04bb405fe4e5a3a1ea6eb5ef57b',
+          new='fb60a8eb7ebe1c84d7468f301d18e2b0f42b3da5fa2f78b9e22f6f5e6579cb93',
           old='1c2b138a859640333b390aad62c037e99a2d4eaf968754e402d12b65aeddd8b2',
           evidence=_PINS_SRC_1112),
     Equiv(module='open_guji_cv.steps.row_segment_pagemap',
