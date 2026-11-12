@@ -890,6 +890,7 @@ def _has_jiazhu(cells) -> bool:
 
 _JZ_STEP = "open_guji_cv.impl.keben.jiazhu_step"
 _SEAL_INK = "open_guji_cv.impl.keben.seal_ink"
+_ROW_HOOKS = "open_guji_cv.impl.keben.row_hooks"
 #: 已搬进书级代码的旧书级开关 → 接手它的缺省模块（2026-11-10，Sheldon 定「先搬自成一块的」）。缺省模块什么都不做，
 #: 书仓 `code/` 覆盖它才生效（史記：`code/jiazhu_step.py`、`code/seal_ink.py`）。书配置里还写着 true、而本工作区
 #: `code/` 没覆盖那个模块（比如还钉着搬家前的 k1）就拒跑——悄悄当关，这本书的切法变了没人知道。写 false 或删掉照常。
@@ -1264,7 +1265,8 @@ class RowSegmentStep(Step):
                    "open_guji_cv.impl.keben.roster_glyph", "open_guji_cv.impl.keben.yolo_tool_infer", "open_guji_cv.steps.occlusion",
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",
                    "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige",
-                   "open_guji_cv.impl.keben.jiazhu_step", "open_guji_cv.impl.keben.seal_ink"),
+                   "open_guji_cv.impl.keben.jiazhu_step", "open_guji_cv.impl.keben.seal_ink",
+                   "open_guji_cv.impl.keben.row_hooks"),
         soft_params=("roster_glyph_fingerprint", "manual_cells_fingerprint"),
         path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins", "page_map_pins",
                      "page_map_ref_file", "page_map_overrides"),
@@ -1309,12 +1311,23 @@ class RowSegmentStep(Step):
         RB = _row_boundaries(ctx.book)
         segment_column, effective_body_slots = RB.segment_column, RB.effective_body_slots
         reading_order, NONUNIFORM_LAM = RB.reading_order, RB.NONUNIFORM_LAM
-        if p.jiazhu_single_head and "jiazhu_single_head" not in inspect.signature(segment_column).parameters:
-            raise ValueError("row_segment.jiazhu_single_head 是全唐文套书的开关：册配置要写 seg_set: quantangwen"
-                             f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
-        if p.jiazhu_half_a and "jiazhu_half_a" not in inspect.signature(segment_column).parameters:
-            raise ValueError("row_segment.jiazhu_half_a 是全唐文套书的开关：册配置要写 seg_set: quantangwen"
-                             f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
+        # Step3 行切分书级钩子（impl/keben/row_hooks，2026-11-12）。全唐文 k4 及以前整份复制了 row_boundaries、开关是它的
+        # segment_column 自己的参数（legacy）；搬成钩子之后开关开着而本书没给钩子就拒跑。
+        import importlib
+        from ..core.seg_set import resolve as _resolve_mod
+        _sig = inspect.signature(segment_column).parameters
+        _legacy_qtw = "jiazhu_single_head" in _sig
+        _hooks = None if _legacy_qtw else importlib.import_module(_resolve_mod(ctx.book, _ROW_HOOKS))
+        hook_kw: dict = {}
+        if not _legacy_qtw:
+            for flag, name in (("jiazhu_single_head", "jiazhu_heads"), ("jiazhu_half_a", "half_a_left")):
+                if getattr(p, flag) and getattr(_hooks, name, None) is None:
+                    raise ValueError(f"row_segment.{flag} 要本书书仓 code/ 覆盖 keben.row_hooks 给出 {name}"
+                                     "（全唐文：seg_set: quantangwen）")
+                if getattr(p, flag):
+                    hook_kw[name] = getattr(_hooks, name)
+            if getattr(_hooks, "grid_adjust", None) is not None:
+                hook_kw["grid_adjust"] = _hooks.grid_adjust
         if p.grid_end_fit and "grid_end_fit" not in inspect.signature(segment_column).parameters:
             raise ValueError("row_segment.grid_end_fit 是殿本套书（siku_zongmu）的开关"
                              f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
@@ -1488,8 +1501,9 @@ class RowSegmentStep(Step):
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({"jiazhu_rows": True} if p.jiazhu_rows and final else {}),
                     **({"free_split": free_split} if p.jiazhu_rows and free_split is not None and final else {}),
-                    **({"jiazhu_single_head": True} if p.jiazhu_single_head else {}),
-                    **({"jiazhu_half_a": True} if p.jiazhu_half_a else {}),
+                    **({"jiazhu_single_head": True} if p.jiazhu_single_head and _legacy_qtw else {}),
+                    **({"jiazhu_half_a": True} if p.jiazhu_half_a and _legacy_qtw else {}),
+                    **hook_kw,
                     **({"grid_end_fit": True} if p.grid_end_fit and final else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
