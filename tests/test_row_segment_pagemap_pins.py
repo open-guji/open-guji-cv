@@ -68,3 +68,21 @@ def test_pins_params_need_pins_path_and_dump_only_when_on():
     assert d["page_map_pins"] == "page_pins.jsonl" and on.layout_prior == ""
     assert "page_map_pins" not in RowSegmentParams().model_dump()
     assert "page_map_pins" not in RowSegmentParams(page_map="strict").model_dump()
+
+
+def test_fingerprint_ignores_source_files_the_book_does_not_pin(corpus):
+    """往 daizhige 目录加别的册用的源文件（史記 0243→0244，2026-11-12）不牵连没钉它的册；钉了的册要变。"""
+    dz = corpus / "daizhige"
+    a4, a5 = pm.fingerprint("04", "page_pins.jsonl"), pm.fingerprint("05", "page_pins.jsonl")
+    assert [f.name for f in pm.book_source_files("04", "page_pins.jsonl")] == ["0243.jsonl"]
+    (dz / "0244.jsonl").write_text(json.dumps(_rec("0244-0001", [_col(0, 0, "日月")]), ensure_ascii=False) + "\n",
+                                   encoding="utf-8")
+    pm._SRC_SHA.clear()
+    assert pm.fingerprint("04", "page_pins.jsonl") == a4
+    assert pm.fingerprint("05", "page_pins.jsonl") == a5
+    p = corpus / "page_pins.jsonl"
+    p.write_text(p.read_text(encoding="utf-8") + json.dumps({"book": "18", "page": 1, "head": "0244-0001 244-1a h0"}) + "\n",
+                 encoding="utf-8")
+    assert [f.name for f in pm.book_source_files("18", "page_pins.jsonl")] == ["0244.jsonl"]
+    assert pm.fingerprint("04", "page_pins.jsonl") == a4
+    assert pm.book_source_files("99", "page_pins.jsonl") == []

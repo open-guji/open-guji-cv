@@ -297,6 +297,12 @@ _PCLEAN_1110 = ("cell_shrink 加书级钩子「发前清格」（impl/keben/patc
                 "缺省时 `_extract_column` 原样返回；史記文淵閣本 02 册 12 页（p2 卷端＋正文每 20 页取 1）与 origin/dev df08209 "
                 "产物逐字节相同，scripts/code_equiv.py check，书仓 k2（无覆盖）")
 
+_PINS_SRC_1112 = ("row_segment 的 pins 档格位表指纹（page_map_fingerprint）与夹注参照指纹（roster_ref_fingerprint）改为只算本册钉位点名的 daizhige 源文件"
+                  "（原先算 corpus/daizhige/ 下全部 4 位数 jsonl），好让 0244.jsonl 入库不让 0243 册过期。等价性按真数据证明而不是跑产物："
+                  "用中心库 988g3f0wsu 的 page_pins.jsonl（rev 346019，sha a433e753…）与 0243.jsonl（sha 13fca24f…），01 册 pins 指纹 8b867fc8b4dcc0d2、17 册 8ff8527b6f73d615、"
+                  "夹注参照指纹 f2d6945a67503581，与改前代码在只有 0243 时算出的值逐位相同，加入 0244.jsonl 后仍相同（改前会变）；"
+                  "指纹值不变、其余代码路径未动，故产物不变；2026-11-12（A31，史記 0244 入库）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1455,6 +1461,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='60563a317cd208ccda0c8804d69f03d2e2b31b8c4936c9eb258ca0598f0e35f8',
           old='fb82c05c52f83d8ecec06a697a5fad987eee0c2e6df3991f25b508f2f12259c8',
           evidence='seed_admit 在史記 r49 包 03/04/05 共 9 页（03:46,84,96；04:26,35,39；05:21,27,75，含半格与 match_solo 放行多的页）上与 v0.7.13 产物逐字节相同（SJ，scripts/code_equiv.py check --base v0.7.13 --step seed_admit，rc/v0.7.15，11-12）；两开关缺省关、不进参数 dump'),
+    # row_segment／pagemap：pins 档与夹注参照的语料指纹只看本册钉位点名的源文件（2026-11-12，史記 18–20 册要入 0244.jsonl）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='fb60a8eb7ebe1c84d7468f301d18e2b0f42b3da5fa2f78b9e22f6f5e6579cb93',
+          old='1c2b138a859640333b390aad62c037e99a2d4eaf968754e402d12b65aeddd8b2',
+          evidence=_PINS_SRC_1112),
+    Equiv(module='open_guji_cv.steps.row_segment_pagemap',
+          new='a71017d111945b477cb9f65b464ea8e277b998a552688559ed7c96a182ef228a',
+          old='65ed80d08f58bd97393f955bc71e43a5f380eb735cb3f1a3df3a97232fddc6ef',
+          evidence=_PINS_SRC_1112),
 )
 
 

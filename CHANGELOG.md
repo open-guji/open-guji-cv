@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.7.17] - 2026-11-12
+
+- 发版说明（A31 11-12）：v0.7.15 + #1463，PATCH，**不含** #1432/#1437。row_segment 的 pins 档格位表指纹与夹注参照指纹只算本册钉位点名的 daizhige 源文件（史記 0244.jsonl 入库不让 01–17 册过期）。row_segment、row_segment_pagemap 的 code_hash 变，已登记 code_equiv（指纹值不变）。
+
 ## [0.7.15] - 2026-11-12
 
 - 发版说明（A31 11-12，SJ 史記整书线要）：基于 v0.7.13，只多 #1452 `vis_ruling_half` 与 #1456 `solo_coord_dissent`（均缺省关、不进 dump），**不含 #1432／#1437**（史記开着 alt_cut，#1432 会让 row_segment 过期）。PATCH。seed_admit 的 code_hash 变化，缺省关的书已登记 code_equiv（史記 9 页逐字节相同），缺省关的书 seed_admit 不过期。

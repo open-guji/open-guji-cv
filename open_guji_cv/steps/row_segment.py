@@ -1265,6 +1265,17 @@ class RowSegmentStep(Step):
                 blob = json.dumps(sorted((f"{pg}:{c}", v) for (pg, c), v in pins.items()), sort_keys=True,
                                   ensure_ascii=False)
                 upd["manual_cells_fingerprint"] = hashlib.sha256(blob.encode()).hexdigest()[:16]
+        if p.roster_ref_corpus and p.roster_ref_pins:
+            # 夹注参照指纹按本册钉位点名的源文件算（2026-11-12）：往 daizhige 目录加别的册用的 0244.jsonl 不让已有册过期；
+            # 本册没有钉位行时退回目录里全部源文件（与校验器填的值相同）
+            from ..core.workspace import corpus_path
+            from .context_decide import corpus_fingerprint
+            from .row_segment_pagemap import book_source_files
+            files = book_source_files(ctx.book.id, p.roster_ref_pins) if corpus_path(p.roster_ref_corpus).is_dir() else []
+            if files:
+                fp = corpus_fingerprint([*map(str, files), str(corpus_path(p.roster_ref_pins))])
+                if fp != p.roster_ref_fingerprint:
+                    upd["roster_ref_fingerprint"] = fp
         if p.page_map != "off" and not p.page_map_fingerprint:
             from .row_segment_pagemap import fingerprint, skip_pages
             upd["page_map_fingerprint"] = fingerprint(ctx.book.id, _pm_pins(p), _pm_ref(p), skip=skip_pages(ctx.book))
