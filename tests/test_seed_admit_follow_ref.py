@@ -163,3 +163,15 @@ def test_variants_gap_not_dumped_by_default():
     assert "follow_ref_variants_gap" not in d and "follow_ref_variants_cov" not in d
     d = SeedAdmitParams(db_path="x", follow_ref_variants=True, follow_ref_variants_gap=0.002).model_dump()
     assert d["follow_ref_variants_gap"] == 0.002
+
+
+def test_variants_not_taken_over_by_table_entry():
+    """史記 r45：`follow_ref` 表加了 隱=𨼆（整理本形 隱）后，隱 的格放行字是表外的另一同义形 隠，表路只认 𨼆、不改，
+    本该走 `follow_ref_variants` 改回整理本形 隱。表里那一形（𨼆）照旧走表路。"""
+    n, r = _run_v({1: {"admit": True, "char": "隠", "channel": "group_flow"},
+                   2: {"admit": True, "char": "𨼆", "channel": "group_flow"},
+                   3: {}},
+                  {3: ([("隠", 0.97)],)}, coord={1: "隱", 2: "隱", 3: "隱"}, follow_ref="隱=𨼆")
+    assert r[1].char == "隱" and r[1].evidence["follow_ref"]["via"] == "variants"
+    assert r[2].char == "隱" and "via" not in r[2].evidence["follow_ref"]   # 表路
+    assert r[3].admit and r[3].char == "隱" and r[3].evidence["lane"]["via"] == "variants"
