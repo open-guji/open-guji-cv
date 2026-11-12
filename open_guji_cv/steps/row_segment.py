@@ -1266,7 +1266,7 @@ class RowSegmentStep(Step):
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",
                    "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige",
                    "open_guji_cv.impl.keben.jiazhu_step", "open_guji_cv.impl.keben.seal_ink",
-                   "open_guji_cv.impl.keben.row_hooks"),
+                   "open_guji_cv.impl.keben.row_hooks", "open_guji_cv.feedback.seg_overrides"),
         soft_params=("roster_glyph_fingerprint", "manual_cells_fingerprint"),
         path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins", "page_map_pins",
                      "page_map_ref_file", "page_map_overrides"),

@@ -4,9 +4,10 @@
 
 1. 一处读齐本册的列级／格级人定切分（`feedback/lookup.py` 的各个 `resolved_*`），**按需读**：
    哪一项第一次被问到才去读那张表，所以职名页（只问 manual-cells）不会去读切线、事件日志，与改前同；
-2. 把「同一列上几条都写了谁说了算」写在一处（`ColumnOverrides`），`row_segment` 与书仓代码（经 `book_api`）共用。
+2. 把「同一列上几条都写了谁说了算」写在一处（`ColumnOverrides.blocks_layout`），`row_segment` 用。
 
-和 `lookup` 一样：裁决不进产物指纹，靠交单从对应步骤重跑生效；本模块不在任何 Step 的 `code_deps` 里。
+和 `lookup` 一样：裁决内容不进产物指纹，靠交单从对应步骤重跑生效；但本模块的**代码**进 `row_segment` 的
+`code_deps`（谁说了算的规则改了，产物要过期）。
 页级的几何覆盖（`vline_overrides`、`hline_hints`、`page_kinds`…）是册配置参数，走参数层，不在这里。
 """
 from __future__ import annotations
