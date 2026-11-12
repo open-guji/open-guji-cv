@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 新原语 `seg/rules.py`：`long_rule_mask`／`strip_long_rules` 剥长直线（界行竖 200px、版框横线 0.85 列宽且至少 40px，参数在签名上）。史記 patch_clean、史記快筛、`eval/seg_screen` 原先各抄一份；`eval/seg_screen.strip_long_lines` 改调它（逐像素同，有单测）。不进任何 Step 指纹，产物不变。
 - 切分人定覆盖统一读取入口 `feedback/seg_overrides.SegOverrides`（列级 manual-cells／抬头／column-slots／cuts／pins／solo／forced 一处读，`blocks_layout` 定哪些屏蔽格位表），row_segment 改用；row_segment 新书级钩子 `impl/keben/row_hooks`（`grid_adjust`／`jiazhu_heads`／`half_a_left`，缺省 None），全唐文可不再复制整份 row_boundaries。code_equiv 已登记（殿本 vol01 11 页、vol28 10 页逐字节同），**各书产物不过期**。
 - row_segment `alt_cut` 备选与主切法有字格（框、种类、半边）全同、只差空格框或格号的不再出（SJ r43 09:194:5 闸判抬头一格、表是 0，备选格号 -1..14 被 seed_admit 选中、整列格号减一）。开了 `alt_cut` 的书参数 dump 加 `alt_cut_rev`，**只有史記 row_segment 起过期**；关着的书 code_equiv 已登记（殿本 vol28 15 页、全唐文 001 13 页逐字节同），殿本、全唐文不过期。
 - strokes `ClassStats` 加各类自己的标准差（`sds`）与似然比判 `llr_decide`：两类散布差很多（木 紧、本 散）时合并方差会判错；全唐文已放行 15,477 格按册留出（别册放行格学类分布），木本 不一致 23→5、人入 29→6、未末 25→0。不被 Step 引用，产物不变。
