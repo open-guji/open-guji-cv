@@ -1489,6 +1489,16 @@ ENTRIES: tuple[Equiv, ...] = (
           old='141fc62a87fd6382410b8292375de282add7000fedc256c03eab39e6fc8ad465',
           evidence='seed_admit 在殿本 vol01 12 页（5,22,48,61,75,87,100,119,135,150,170,190，含正文、职名、门目）上与 v0.7.11 产物逐字节相同（ZM，scripts/code_equiv.py check --base v0.7.11 --step seed_admit --always，11-12）；另按代码论证：新分支要求 vmap 非空（只在 _follow_variants() 时才传）且整理本形在 follow_ref 表里；'
                    '没开 follow_ref_variants、或表空的书走的分支与 v0.7.11 逐字相同，dump 不变（tests/test_seed_admit_follow_ref.py 守 dump）'),
+    # v0.7.14（含 #1452 未登记）补登：vis_ruling_half 缺省关（A22 在史記 01 册 23 页验，11-12）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='019b9281f94f024b5325a4871f8c70c506a9ca308d5d4c1cd59ce36ad53f336c',
+          old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
+          evidence='v0.7.14 seed_admit 在史記 01 册 23 页上与 v0.7.12 产物逐字节相同（A22，scripts/code_equiv.py check --base v0.7.12 --step seed_admit，11-12）；vis_ruling_half 缺省关、不进参数 dump'),
+    # vis_ruling_half／solo_coord_dissent 书级开关（缺省关，cv#1452／#1456，2026-11-12，SJ 史記）：关时不进 dump、行为不变
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='60563a317cd208ccda0c8804d69f03d2e2b31b8c4936c9eb258ca0598f0e35f8',
+          old='fb82c05c52f83d8ecec06a697a5fad987eee0c2e6df3991f25b508f2f12259c8',
+          evidence='seed_admit 在史記 r49 包 03/04/05 共 9 页（03:46,84,96；04:26,35,39；05:21,27,75，含半格与 match_solo 放行多的页）上与 v0.7.13 产物逐字节相同（SJ，scripts/code_equiv.py check --base v0.7.13 --step seed_admit，rc/v0.7.15，11-12）；两开关缺省关、不进参数 dump'),
 )
 
 
