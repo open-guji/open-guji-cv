@@ -1321,46 +1321,23 @@ class RowSegmentStep(Step):
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
-        from ..feedback.lookup import resolved_manual_cells as _resolved_manual
-        manual = {k[1]: v for k, v in _resolved_manual(ctx.book.id).items() if k[0] == page}
+        # 列级／格级人定切分一处读（feedback/seg_overrides.py；总表与优先级见 doc/切分覆盖.md）。按需读：职名页只读整列钉子。
+        # 裁决不进指纹，该页下次重跑才生效（见 lookup 注）。
+        from ..feedback.seg_overrides import SegOverrides
+        ov = SegOverrides(ctx.book.id, store=ctx.store)
+        manual = ov.page_manual(page)
         if p.roster_pages and page in set(_expand_pages(p.roster_pages)):
             pc = self._run_roster(ctx, p, page, gate, wins)
             return {"cells": _apply_manual_cells(pc, manual, gate, wins)}
-        # 人裁回流：workspace 裁决表里这本书已裁决的切点（feedback/lookup.py，
-        # **不读 open-guji-dataset**），按 (页,列) 筛出 slot_above → kind 传给
-        # segment_column 收敛候选。裁决不进指纹，该页下次重跑才生效（见 lookup 注）。
-        from ..feedback.lookup import resolved_cuts as _resolved_cuts
-        from ..feedback.lookup import resolved_slots as _resolved_slots
-        book_resolved = _resolved_cuts(ctx.book.id)
-        # 同一条回流路径的兄弟：逐列字数覆盖（`review/slot_count_cards.py`）。
-        # `chars_per_line` 是页级版式常量，DP 硬切；少数列真的比常量多/少刻了
-        # 一个字时（bxgb p33c19 实测 22 字 vs 常量 21），没有可靠的几何信号能
-        # 自动探测（格高/period 比值测过，两个方向都不可靠，见
-        # feedback_cell_height_not_merge_signal），只能人核对后写回。
-        #
-        # 同一条裁决还带 `uniform`（2026-09-20）：字数对了不等于**字距**均匀。
-        # p33c19 就是字数 22 给对了、DP 仍把首字「尉」劈成两格——等距先验比
-        # 墨量判据贵五倍（账见 row_boundaries.NONUNIFORM_LAM）。标了非均匀的列
-        # 把 lam 降下来，其余列一字不动。
-        book_slots = _resolved_slots(ctx.book.id)
-        # 第三个兄弟：人指认的單行小注格（判据落空的那一型，见 lookup.resolved_solo_notes）
-        from ..feedback.lookup import resolved_solo_notes as _resolved_solo
-        book_solo = _resolved_solo(ctx.book.id)
-        # 第四个兄弟（2026-09-30）：人指认的雙行小注格（判据没认出的短版本小注），不看判据从中间拆
-        from ..feedback.lookup import resolved_forced_jiazhu as _resolved_forced_jz
-        book_forced_jz = _resolved_forced_jz(ctx.book.id)
-        # 第五个兄弟（2026-10-06，overview#415/#436）：反向——人指认的整宽正文格，Step3 别把它劈成 a/b
-        from ..feedback.lookup import resolved_forced_main as _resolved_forced_main
-        book_forced_main = _resolved_forced_main(ctx.book.id)
-        # 第六个兄弟（2026-10-27）：人裁逐列抬头级数。Step1 按同一张表补了抬头框、列窗已往上开；这里级数听裁决，
-        # 表和闸都不再改（不出「抬头按闸」候选）。表的级数与裁决不同时，表的字按先后挪到裁决的格号上（_reraise）
-        from ..feedback.lookup import resolved_head_raise as _resolved_head_raise
-        book_head_raise = _resolved_head_raise(ctx.book.id)
+        book_resolved = ov.cuts          # 人裁回流的切点：slot_above → kind，给 segment_column 收敛候选
+        book_slots = ov.slots            # 逐列字数＋字距匀不匀（`review/slot_count_cards.py`；p33c19 22 字 vs 常量 21）
+        book_solo = ov.solo              # 人指认的單行小注格
+        book_forced_jz = ov.forced_jiazhu    # 「小注当正文」：从中间拆
+        book_forced_main = ov.forced_main    # 「正文当小注」：别拆
+        book_head_raise = ov.head_raise      # 逐列抬头级数（Step1 按同一张表补框；表级数不同时 _reraise）
         # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
         judge = get_judge(f64=p.cut_judge == "unet_f64") if p.cut_judge in ("unet", "unet_f64") else None
-        # 人拖过的切线钉住（lookup.resolved_pins，只收带页面坐标的裁决；生效时机同 resolved_cuts）
-        from ..feedback.lookup import resolved_pins as _resolved_pins
-        book_pins = _resolved_pins(ctx.book.id, ctx.store)
+        book_pins = ov.pins              # 人拖过的切线钉住（只收带页面坐标的裁决）
         colgold = load_colgold(p.colgold_prior, ctx.book.id) if p.colgold_prior else {}
         yolo_boxes: list = []
         if p.yolo_merge:
@@ -1433,10 +1410,7 @@ class RowSegmentStep(Step):
                             if pg == page and col == gc.col}
             # 带任何人裁（逐列字数、切点、钉线、强制正文/小注）的列：人裁都按格号记，下面三个结构先验
             # 一改格数或抬头级数，格号就对不上，所以一律不动（人裁为终裁）
-            human_col = (slot_override is not None or bool(col_resolved)
-                         or any(pg_ == page and c_ == gc.col for (pg_, c_, _s) in book_pins)
-                         or (page, gc.col) in book_solo or (page, gc.col) in book_forced_jz
-                         or (page, gc.col) in book_forced_main)
+            human_col = ov.column(page, gc.col).blocks_layout
             # 逐列格位先验（layout_prior）：抬头级数按表定（不只往上补——闸给书名列多加的那格
             # 抬头余量会让书名首字编成 -1、整列格号差一格），DP 加逐格掩码，夹注 / 正文格强制
             lay = _layout_row(layout, page, gc.col, p.layout_gap_cols_empty, p.layout_tail_empty) if not human_col else None
