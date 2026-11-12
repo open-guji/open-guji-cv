@@ -1665,6 +1665,10 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and (self.follow_ref_variants_gap is None or not self.follow_ref_variants):
             d.pop("follow_ref_variants_gap", None)
             d.pop("follow_ref_variants_cov", None)
+        if isinstance(d, dict) and self.follow_ref and self._follow_variants():
+            # 表项不再接管 variants 路径（史記 r45 嵗=歳，cv#1438）：只有「表非空且按参校本取异体」的书输出会变，
+            # 修订号进 dump 只让它们过期（别的书 dump 不变，代码改动登 code_equiv）。
+            d["follow_ref_variants_rev"] = FOLLOW_REF_VARIANTS_REV
         if isinstance(d, dict):
             if self.edge_pair:
                 d.pop("edge_pair", None)        # 缺省值不进 dump（缺省开；关了才写 edge_pair: false）
@@ -4363,6 +4367,10 @@ def _ref_lib_coord_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict,
     return n
 
 
+#: 1：`follow_ref` 表里有整理本形、本格字不是表里那一形时，仍按参校本取异体（cv#1438）。
+FOLLOW_REF_VARIANTS_REV = 1
+
+
 def _parse_follow_ref(spec: str) -> dict[str, str]:
     """`follow_ref` → {整理本形: 库里另一形}。纯函数；空项、不是「单字=单字」的项跳过。"""
     out: dict[str, str] = {}
@@ -4476,13 +4484,18 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
                     continue
             m = mmap.get(rec.id)
             here, via = rules, None
-            if ref not in rules:
+            if ref not in rules or (vmap is not None and ref != "〓"):
+                # 表里没有这个整理本形：按参校本取异体（`follow_ref_variants`）。表里有、但本格的字不是表里那一形
+                # （史記 r45：表加了 嵗=歳，嵗 的格放行字是 歲，表路只认 歳 不改）时同样走这条路，别让表项接管。
                 if vmap is None or not ref or ref == "〓":
                     continue
                 other = rec.char if rec.admit else ((m.candidates or [(None,)])[0][0] if m else None)
-                if not other or other == ref or vmap.semantic(other) != vmap.semantic(ref):
+                if ref in rules and (not other or other == rules[ref]):
+                    pass                                   # 就是表里那一形：表路照旧
+                elif not other or other == ref or vmap.semantic(other) != vmap.semantic(ref):
                     continue
-                here, via = {ref: other}, "variants"
+                else:
+                    here, via = {ref: other}, "variants"
             d = dmap.get(rec.id)
             cov_min, gap_min = p.follow_ref_cov, p.follow_ref_gap
             if via == "variants" and p.follow_ref_variants_gap is not None and not rec.admit:

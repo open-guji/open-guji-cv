@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.7.12] - 2026-11-12
+
+- 发版说明（A24 11-12，SJ 要）：基于 v0.7.11，只多 #1438（`follow_ref` 表项不再接管 `follow_ref_variants` 路径）。PATCH。史記 r45 给 follow_ref 追加 嵗=歳 后，嵗 的格 ids 判 歲，原来靠 variants 改回整理本 嵗，表里有了 嵗 这一项后表路接管、只认 歳，歲 就留下来了。修：整理本形在表里、本格字不是表里那一形时，只要开了 `follow_ref_variants` 且同义异体，仍按参校本取异体改回整理本形。**受影响面：开了 `follow_ref_variants` 且 `follow_ref` 表非空的书（目前只有史記），seed_admit 起过期，要从 seed_admit 重跑；其它书 dump 不变，`code_equiv` 已登记 seed_admit（按代码论证，未做逐页比对），不过期。** `seed_admit` 参数 dump 对这类书加 `follow_ref_variants_rev: 1`。不含 dev 上的 #1394、#1429–#1437。无底库变更。
+
 ## [0.7.11] - 2026-11-12
 
 - 发版说明（A31 11-12，SJ 要）：基于 v0.7.10，只多 #1413（字组 zw 丈文：文意规则＋参校本同字才放行），**但 zw 改成需点名才开**：放进新表 `registry.OPT_IN_GROUPS`，不进 `GROUPS`（否则会改 `glyph_match` 弱命中等全书行为）、不进缺省 `group_flow`（`generic_flow_names` 不含）。没点名 zw 的册产物逐字节不变，`code_equiv` 已登记 `groups.registry`（SJ 11-12 在史記 03/09/02 各 7 页上证 seed_admit 在 zw 未点名时逐字节相同），殿本、全唐文不会因此过期。要用 zw 的书（史記）在册配置 `group_flow` 里显式写缺省名单＋zw。不含 dev 上的 #1394、#1429–#1431。**注意：#1413 新增底库登记文件 `config/groups/zw/rules.yaml`（corpus-registry），钉了语料总号的册在 v0.7.11 上起跑前要配新底库 b<M+1>（`guji corpus build-base`，需写令牌）后再 `guji corpus pin`。底库 b22 已由 Ops 出（比 b21 只多 config/groups/zw/rules.yaml）。**
