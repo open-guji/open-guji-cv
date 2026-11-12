@@ -1476,6 +1476,11 @@ ENTRIES: tuple[Equiv, ...] = (
           "588e6994117894060ff913b1c2fd76a0ff4bcce8806715de4eca0da14b27b0a1",
           "4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
           "同上（segment_column 加三个缺省 None 的钩子参数）"),
+    # groups.registry 加 OPT_IN_GROUPS（zw 丈文，需点名才开；GUJI-767／#1413，2026-11-12）
+    Equiv(module='open_guji_cv.groups.registry',
+          new='c07ffe446c652c68fbb2cdc7590fa15a60ea54c839f089662db48ef0a4c0344b',
+          old='a865a98d5e9c2d961ae6090971dc7790a8d3108ee67ae292e6406638ca3e3d27',
+          evidence='seed_admit 在 03/09/02 各 7 页（03: 99,103,117,122,208,2,40；09: 167,170,172,176,187,193,194；02: 88,90,165,166,168,171,204）上，zw 未点名，与 v0.7.10 产物逐字节相同；SJ 史記文淵閣 r43，scripts/code_equiv.py check，11-12'),
 )
 
 
