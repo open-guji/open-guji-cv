@@ -528,3 +528,27 @@ def test_structure_changed_only_on_cell_add_del(tmp_path):
     a, b, c = char(tmp_path / "a.json", "語子"), char(tmp_path / "b.json", "語孟子"), char(tmp_path / "c.json", "論子")
     assert rp._structure_changed(a, b)
     assert not rp._structure_changed(a, c)
+
+
+def test_add_del_chars_route_to_cellmap(tmp_path, monkeypatch):
+    """格号没变但有增删字（一边是空）：也走格级对照表，不再报「推分支等 A33」（ZM 11-10 单一路径）。"""
+    import subprocess
+    repo = tmp_path / "bt"
+    d = repo / "Book" / "x" / "default"
+    d.mkdir(parents=True)
+    ex = tmp_path / "ex"
+    ex.mkdir()
+    def char(p, s):
+        doc = {"pages": [{"page": 1, "columns": [{"cells": [{"a": f"1:1:{i + 1}", "c": c} for i, c in enumerate(s)]}]}]}
+        p.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    char(d / "001.char.json", "甲乙")
+    char(ex / "001.char.json", "甲乙")
+    (d / "001.punct.json").write_text('{"punctuations": []}', encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    monkeypatch.setattr(rp, "book_text_to_dev", lambda r: None)
+    monkeypatch.setattr(rp, "book_text_dir", lambda r, t: d)
+    monkeypatch.setattr(rp, "hold_pending_current", lambda *a, **k: None)
+    monkeypatch.setattr(rp, "punct_stale_update", lambda *a, **k: (None, ["1:1:2 乙→"]))
+    monkeypatch.setattr(rp, "_bump_book_text_cellmap", lambda r, plan, note, base: "cellmap")
+    plan = {"text_id": "x", "chapter": "001", "export_dir": str(ex)}
+    assert rp.bump_book_text(repo, plan, "t") == "cellmap"

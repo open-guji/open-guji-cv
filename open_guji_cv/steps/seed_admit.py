@@ -253,6 +253,9 @@ class SeedAdmitParams(BaseModel):
                                               # 全唐文 大太／王玉／還遺 2026-11-07）。补放规则同 group_flow_pair_shape；空＝不跑、不进参数 dump，行为不变
     group_flow_pair_shape_veto: bool = False  # 已放行格（非人裁）刻形强烈反对放行字（模型 veto_thr，分值＋组外判别都过）→ 降回待审，doubt pair_shape_veto。
                                               # 只看 group_flow_pair_shapes 里带 veto_thr 的模型；缺省关、关时不进参数 dump
+    group_flow_pair_shape_nm_5b: bool = False  # 匹配器护栏 never_match 的待审格，5-b 首位落在这一对里时也交两字刻形判（原先一律不碰）。
+                                              # 全唐文 001–003 目录页 王 50 格（无整理本对位）：离线判 50 对 0 错；5-b 首位是土的那格挡掉（形近字线 11-10）。
+                                              # 缺省关、关时不进参数 dump、行为不变
     group_flow_llm_model: str = "claude-opus-5-5"   # 文意 L3 在线（`groups/ctx_llm`）用的模型；空＝不问。密钥只从环境变量 GUJI_ANTHROPIC_API_KEY 读，没有就弃权
     group_flow_llm_groups: tuple[str, ...] = ("ry", "rm", "mz", "jys", "zy", "yz", "xz", "rr", "guan", "men", "wj", "chuo", "yh", "kgc", "tsh",
                                                "yr", "ly", "dt", "mb", "fc", "ts", "zh", "yt", "em", "wm", "sb", "feng", "liang", "wxs", "hou", "js")   # 哪些组问 L3 在线（要有 config/groups/<组>/prompt.md）
@@ -513,6 +516,14 @@ class SeedAdmitParams(BaseModel):
     库字与对位整理本字不同（或这一位没有整理本字）时，本步把它按升档前的样子看（`verdict=unsure`、`char`／`via` 空，
     与没开共识时逐字节相同），走原通道；库字与整理本字相同的共识 same 照旧。全唐文 r15 这类 46 格 r14 原放行字
     看图全对，其中 35 格共识字与原放行字相同。"""
+    consensus_lib_cov: float | None = None
+    """共识升档 same 的库字放行（全唐文 f4 字形线，2026-11-11；书级，缺省关，`None`＝关、关时逐字节不变、不进 dump）。
+    5a 共识升档（`via="consensus:<n>"`，多条刻例同意）判 same 的格，若库字与整理本对位字不同（或没有对位），
+    `consensus_fallback` 会把它退回 unsure，常落进待审。本支只看**仍待审**、非人裁的格：退档前记录是共识 same、
+    判的字就是库首位、cov ≥ 本值、无护栏、无硬疑问（`_hard_blocked`）、字不是 己已巳／〓／非汉字 → 放库字，
+    通道 `consensus_lib`，evidence `consensus_lib`（cov、via、整理本字）；不入字形库（C4）。只升不降。
+    依据：f4 016–030 待审里这类 88 格，cov≥0.97 的 78 格（𥳑19 刺8 珏8 𠋫6…，其中 35 格整理本是另一个字如 剌）
+    逐格看图 0 错、存疑 1；同一门槛下普通库 unsure（非共识）错率 35%，故只认共识升档。"""
     blank_ink_nonchar: bool = False
     """整理本空格位上有墨、库又认不出的格判非字放行（A22 S02 深挖 11-06，Sheldon 定「这几列没有必要完全挡住」；
     缺省关、关时不进参数 dump；配 align_ref `coord_blank_ink`）。条件：坐标对位说这一位是空格（`ref_char=""`）、
@@ -921,6 +932,9 @@ class SeedAdmitParams(BaseModel):
     列在这里的字即使在字组、形近表或 `solo_cal_skip` 里也可放，但只走 5-b 档（库首位＝5-b 首位、cov ≥ `solo_cal_5b_cov`），
     并多认一条 near_form 疑问。依据：front9 待审里「字组成员」「形近字」两类库首位＝5-b 首位的 737 格逐格看图，
     按字分组，整组 0 错的字才进白名单（一／入／木／王／匕／聞／又 有错不进；說 刻作説、交码位线）。"""
+    solo_cal_5b_canon: bool = False
+    """`solo_cal` 5-b 档比「库首位＝5-b 首位」时先按本书码位表归一（5-b 给 慎、库给 愼 算一致）。2026-11-10 形近字线，
+    全唐文 001–003 c38 第三层 愼 5、吕 2 格（看图全对）因此没放。缺省关、关时不进 dump；书没有码位表时不起作用。"""
     lead_5b: bool = False
     """无参照格「库与 5-b 不一致时听 5-b」（2026-11-09 形近字线，全唐文 001–003 册级；缺省关、关时 `lead_5b*` 都不进 dump）。
     仍待审、没有整理本对位、匹配器护栏为空、疑问只有「库 unsure」「上下文 margin 不足」、不是拆分子格（格号不带字母）的格，
@@ -1478,6 +1492,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and self.solo_5b_cov is None:
             for k in ("solo_5b_cov", "solo_5b_gap", "solo_5b_min_n"):
                 d.pop(k, None)
+        if isinstance(d, dict) and self.consensus_lib_cov is None:
+            d.pop("consensus_lib_cov", None)
         if isinstance(d, dict) and self.solo_adapt_pct is None:
             for k in ("solo_adapt_pct", "solo_adapt_floor", "solo_adapt_gap", "solo_adapt_min_n", "solo_adapt_window",
                       "solo_adapt_profile", "solo_adapt_fingerprint"):
@@ -1499,6 +1515,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("solo_cal_5b_cov", None)
         if isinstance(d, dict) and not self.solo_cal_allow:
             d.pop("solo_cal_allow", None)
+        if isinstance(d, dict) and not self.solo_cal_5b_canon:
+            d.pop("solo_cal_5b_canon", None)
         if isinstance(d, dict) and not self.lead_5b:
             for k in ("lead_5b", "lead_5b_gap_out", "lead_5b_gap_in", "lead_5b_lib_min"):
                 d.pop(k, None)
@@ -1605,6 +1623,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_pair_shapes", None)
         if isinstance(d, dict) and not self.group_flow_pair_shape_veto:
             d.pop("group_flow_pair_shape_veto", None)
+        if isinstance(d, dict) and not self.group_flow_pair_shape_nm_5b:
+            d.pop("group_flow_pair_shape_nm_5b", None)
         if isinstance(d, dict) and not self.group_flow_near_knn:
             d.pop("group_flow_near_knn", None)
         if isinstance(d, dict) and not self.match_ref_diff_guard:
@@ -2540,9 +2560,14 @@ class SeedAdmitStep(Step):
                 d_ps = _pair_shape_pass(p, out, amap, ctx, page, patch_missing, _coord_refs(ctx, page, coord_cache))
                 n_auto += d_ps
                 n_review -= d_ps
+            _nm5 = None
+            if p.group_flow_pair_shape_nm_5b and p.group_flow_pair_shapes:
+                from .align_ref import rare_topk_map
+                _nm5 = {k: v[0] for k, v in rare_topk_map(_opt(ctx, "rare_candidates", page), 1).items() if v}
             for _pair in sorted(p.group_flow_pair_shapes):      # 多对两字刻形（墨量图），逐对补放；开 veto 时再降刻形强烈反对的已放行格
                 d_ps = _pair_shape_pass(p, out, amap, ctx, page, patch_missing, _coord_refs(ctx, page, coord_cache),
-                                        model_path=p.group_flow_pair_shapes[_pair], veto=p.group_flow_pair_shape_veto)
+                                        model_path=p.group_flow_pair_shapes[_pair], veto=p.group_flow_pair_shape_veto,
+                                        nm_5b=_nm5)
                 n_auto += d_ps
                 n_review -= d_ps
             if p.group_flow_book_knn:
@@ -2668,7 +2693,9 @@ class SeedAdmitStep(Step):
             # 5b-c solo_cal（升）：无参照格 5a 校准直放（cov／gap 两档，排在各补放通道最后，缺省关）
             d_sc = _solo_cal_pass(p, out, mmap, amap,
                                   _opt(ctx, "rare_candidates", page) if p.solo_cal_5b_cov is not None else None,
-                                  _coord_refs(ctx, page, coord_cache))
+                                  _coord_refs(ctx, page, coord_cache),
+                                  canon=(ctx.book.canonical_char if (p.solo_cal_5b_canon and ctx is not None
+                                                                     and ctx.book.codepoints) else None))
             n_auto += d_sc
             n_review -= d_sc
         if p.lead_5b:
@@ -2711,6 +2738,12 @@ class SeedAdmitStep(Step):
             d_ng = _near_knn_pass(p, out, amap, mmap, ctx, page, patch_missing, stage="gap")
             n_auto += d_ng
             n_review -= d_ng
+        if p.consensus_lib_cov is not None:
+            # 5b-c consensus_lib（升）：共识升档 same、库字＝库首位、cov 够、无护栏、字组没留审 → 放库字
+            # （字形线 f4，缺省关；排在各补放通道与 near_knn_gap 之后，只收它们都没放的格）
+            d_cl = _consensus_lib_pass(p, out, mmap_raw, amap, _coord_refs(ctx, page, coord_cache))
+            n_auto += d_cl
+            n_review -= d_cl
         if human_lost:
             # 顺移豁免对位表：现役对位为主，缺格的补坐标对位字（coord_fallback 放行的格没有现役对位；史記 2026-11-03）
             d_hu = _human_unbound_pass(ctx, page, out, human_lost,
@@ -3174,6 +3207,48 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
     return n
 
 
+def consensus_lib_decide(*, raw, doubts, cov_min: float, group_review: bool = False) -> str | None:
+    """`SeedAdmitParams.consensus_lib_cov` 的判据，纯函数。`raw`：共识退档前的 glyph_match 记录；
+    `group_review`：形近字组已判留审（如 一/二 组弃权，f4 027:154:6:1 是黑条）→ 不放。
+    不要求整理本字＝库字：f4 实放 81 格里 55 格整理本是别字（剌/刺、寖/寢 等整理本错）、23 格无整理本字，看图都是库对。→ 放行字或 None。"""
+    if group_review:
+        return None
+    if raw is None or not _is_consensus_same(raw) or not raw.char or not raw.candidates:
+        return None
+    top, cov1 = max(raw.candidates, key=lambda t: t[1])
+    ch = raw.char
+    if top != ch or float(cov1) < cov_min or float(raw.cov or 0.0) < cov_min:
+        return None
+    if ch == "〓" or ch in _JYS or not _is_hanzi(ch):
+        return None
+    if raw.guard is not None or _hard_blocked(doubts or [], raw.guard):
+        return None
+    return ch
+
+
+def _consensus_lib_pass(p: "SeedAdmitParams", out: list, mmap_raw: dict, amap: dict | None = None,
+                        coord: dict | None = None) -> int:
+    """共识升档 same 的库字放行：只把**仍待审**的格升为放行。→ 升级格数。见 `SeedAdmitParams.consensus_lib_cov`。"""
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if rec.admit or rec.provenance == "human" or rec.channel == "human":
+                continue
+            raw = mmap_raw.get(rec.id)
+            ref = ((amap or {}).get(rec.id) or (None, None))[0] or (coord or {}).get(rec.id)
+            grp = (rec.evidence or {}).get("group")
+            ch = consensus_lib_decide(raw=raw, doubts=rec.doubts, cov_min=p.consensus_lib_cov,
+                                      group_review=isinstance(grp, dict) and grp.get("decision") == "review")
+            if ch is None:
+                continue
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "consensus_lib", "consensus_lib", ch
+            rec.doubts = []
+            rec.evidence = {**rec.evidence, "no_glyph_lib": True, "consensus_lib": {
+                "lib": ch, "ref": ref, "cov": round(float(raw.cov or 0.0), 4), "via": raw.via}}
+            n += 1
+    return n
+
+
 def _resolve_adapt_profile(v: str) -> str:
     """`solo_adapt_profile` 解析成绝对路径：给了相对路径按数据目录、再按工作区找；没给找 `config/groups/char_cov_profile.json`。找不到＝空。"""
     from pathlib import Path
@@ -3445,8 +3520,10 @@ def _solo_cal_plain(c, v, ranked, *, doubts, tiers, skip, group_chars, near_form
     return None
 
 
-def _solo_cal_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare, coord: dict[str, str]) -> int:
-    """无参照格 5a 校准直放。→ 升级格数。见 `SeedAdmitParams.solo_cal`。"""
+def _solo_cal_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare, coord: dict[str, str],
+                   canon=None) -> int:
+    """无参照格 5a 校准直放。→ 升级格数。见 `SeedAdmitParams.solo_cal`。
+    `canon`：本书码位归一（`solo_cal_5b_canon` 开时给）；5-b 首位与库首位归一后同字，就把 5-b 首位当库首位比。"""
     from ..clustering.seeding import NEAR_FORM_CHARS
     from ..groups.registry import GROUPS
     group_chars = frozenset(c for g in GROUPS.values() for c in g.members)
@@ -3463,9 +3540,14 @@ def _solo_cal_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare
             m = mmap.get(rec.id)
             if m is None or not m.candidates:
                 continue
+            rt = rmap.get(rec.id)
+            if canon is not None and rt:
+                lt = max(m.candidates, key=lambda t: t[1])[0]
+                if lt and rt != lt and canon(rt) == canon(lt):
+                    rt = lt
             got = solo_cal_decide(cands=list(m.candidates), guard=m.guard, doubts=rec.doubts, tiers=tiers,
                                   skip=p.solo_cal_skip, group_chars=group_chars, near_form_chars=NEAR_FORM_CHARS,
-                                  rare_top=rmap.get(rec.id), cov_5b=p.solo_cal_5b_cov, allow=p.solo_cal_allow)
+                                  rare_top=rt, cov_5b=p.solo_cal_5b_cov, allow=p.solo_cal_allow)
             if got is None:
                 continue
             ch, cov1, gap, how = got
@@ -5471,7 +5553,8 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
 
 
 def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None,
-                     coord: dict | None = None, model_path: str | None = None, veto: bool = False) -> int:
+                     coord: dict | None = None, model_path: str | None = None, veto: bool = False,
+                     nm_5b: dict | None = None) -> int:
     """书级两字刻形二选一（`groups.pair_shape`，`SeedAdmitParams.group_flow_pair_shape`）。紧接 rr_shape。→ 放行数净增。
 
     只补放待审格：库首位或整理本字是模型两个字之一；模型给的字必须＝整理本字或＝库首位（不引入第三个字、不单凭整理本）。
@@ -5481,7 +5564,9 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
 
     `model_path`：多对模型（`group_flow_pair_shapes`）逐对调用时给；缺省读 `group_flow_pair_shape`。
     `veto`：已放行（非人裁）且放行字是这两字之一的格，模型（带 `veto_thr`）以 |分值|≥veto_thr 判成另一字、组外判别也过 →
-    降回待审，doubt `pair_shape_veto`（全唐文 r15：库＋整理本一起把「荆山之玉」「衞伯玉」放成王）。→ 放行数净增（降的算负）。"""
+    降回待审，doubt `pair_shape_veto`（全唐文 r15：库＋整理本一起把「荆山之玉」「衞伯玉」放成王）。→ 放行数净增（降的算负）。
+    `nm_5b`：{字位: 5-b 首位}（`group_flow_pair_shape_nm_5b` 开时给）。护栏 never_match 的格 5-b 首位落在这一对里也判，
+    `evidence.pair_shape.nm_5b` 留 5-b 首位；None＝never_match 格照旧不碰。"""
     from ..groups import pair_shape
     model = pair_shape.load(model_path or p.group_flow_pair_shape)
     pair = frozenset(model["chars"])
@@ -5513,8 +5598,11 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             ev = r.evidence or {}
             ds = list(r.doubts or [])
             # 形近护栏 conflict（库首位与整理本两字相冲）正是本解法要判的格，放开；never_match／timeout 及其他硬疑问不碰
-            if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") and d != "护栏:conflict" for d in ds) \
-                    or ev.get("guard") in ("never_match", "timeout"):
+            # （`nm_5b` 给了且 5-b 首位落在这一对里时 never_match 也判）
+            nm = nm_5b is not None and ev.get("guard") == "never_match" and nm_5b.get(r.id) in pair
+            if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") and d != "护栏:conflict"
+                   and not (nm and d == "护栏:never_match") for d in ds) \
+                    or (ev.get("guard") in ("never_match", "timeout") and not nm):
                 continue
             if "human_unbound" in ev or "human_unbound" in ds:      # 人裁绑丢的格不碰（人裁与对位的冲突交人审）
                 continue
@@ -5535,6 +5623,8 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
                 continue
             v = pair_shape.judge(img, model)
             trail = {k: v[k] for k in ("char", "why", "nn", "score", "other", "margin", "top") if k in v}
+            if nm:
+                trail["nm_5b"] = nm_5b.get(r.id)
             if v["char"] is None or v["char"] not in (ref, r.char):
                 r.evidence = {**ev, "pair_shape": trail}
                 continue

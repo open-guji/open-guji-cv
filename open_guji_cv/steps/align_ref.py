@@ -518,6 +518,13 @@ class AlignRefParams(BaseModel):
     180 列是目录、卷端题列、职名页字距不匀，几何行号拟不上；这些格因此没有整理本字，只能人审。
     配上的列照旧过 `_coord_conflict` 与错位闸。False＝关（缺省，不进参数哈希）。"""
 
+    coord_circle_ext: bool = False
+    """圈号「○」对位补强（2026-11-12，GUJI-767；要 `coord_relaxed` 开着；通用：任何整理本不录圈号的书都可开）：
+    史記 r41 有 56 列因 ○ 对位错开。四处补口：①圈号认定放宽到字形库前 3 名（`_is_circle(ext)`）；
+    ②夹注 a/b 都是圈号的整格也算圈号格；③`coord_dp`／`coord_dp_flat` 保底对位把圈号格当可跳单元（不配字，
+    记空格位，让 `symbol_ref_blank` 能放行）；④有圈号而几何拟不上时按格号配（格号差计入前面的圈号格数）。
+    False＝关（缺省，不进参数哈希）。"""
+
     coord_dp: bool = False
     """坐标对位的载体字保底（2026-11-02，史記文淵閣本；见 `align_ref_coord.coord_dp`）：几何配不上
     （格数对不上／有歧义／错位）或被「与现役对位冲突」整列退回的列，改用格序列与整理本单元序列的单调对齐，
@@ -591,6 +598,8 @@ class AlignRefParams(BaseModel):
             d.pop("replace_max_len", None)
         if isinstance(d, dict) and not self.coord_relaxed:
             d.pop("coord_relaxed", None)
+        if isinstance(d, dict) and not self.coord_circle_ext:
+            d.pop("coord_circle_ext", None)
         if isinstance(d, dict) and not self.coord_dp:
             d.pop("coord_dp", None)
         if isinstance(d, dict) and not self.coord_title_trust:
@@ -809,6 +818,7 @@ class AlignRefStep(Step):
                          pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1],
                          relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
                          dp_flat=p.coord_dp_flat,
+                         **({"circle_ext": True} if p.coord_circle_ext else {}),
                          **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
                          **({"pair_no_sub": True} if p.coord_pair_no_sub else {}),
                          **({"pair_only": True} if p.coord_conflict_pair_only else {}),
@@ -1512,6 +1522,7 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
                  pin_line=(page_pin(p, book, page) or (None, None))[1],
                  relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
                  dp_flat=p.coord_dp_flat,
+                 **({"circle_ext": True} if p.coord_circle_ext else {}),
                  **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
                          **({"pair_no_sub": True} if p.coord_pair_no_sub else {}),
                          **({"pair_only": True} if p.coord_conflict_pair_only else {}),
@@ -1560,7 +1571,8 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  pin_line: int | None = None, relaxed: bool = False, dp: bool = False,
                  title_trust: bool = False, dp_flat: bool = False,
                  shift_needs_pair: bool = False, pair_no_sub: bool = False,
-                 pair_only: bool = False, blank_ink: bool = False, consensus_not_same: bool = False) -> None:
+                 pair_only: bool = False, blank_ink: bool = False, consensus_not_same: bool = False,
+                 circle_ext: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1603,14 +1615,15 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                                                else "列行对应不成立")
             continue
         ccells = cells.column(cc.col)
-        units = C.column_units(book, page, cc.col, cc, ccells, carrier, symbols=relaxed)
+        units = C.column_units(book, page, cc.col, cc, ccells, carrier, symbols=relaxed, circle_ext=circle_ext and relaxed)
         if not units:
             res.coord_fallback[str(cc.col)] = "缺几何（cells 查不到这一列的格）"
             continue
         if relaxed and ccells is not None and "roster" in ccells.flags:
             roster_cols.add(cc.col)          # 职名分支切的列：`coord_relaxed` 可按次序配
         work.append((cc, units, lines[li], C.coord_column(units, lines[li], relaxed=relaxed,
-                                                          order_ok=cc.col in roster_cols, gap=blank_ink)))
+                                                          order_ok=cc.col in roster_cols, gap=blank_ink,
+                                                          circle_ext=circle_ext)))
     # 逐列本的格位是绝对值：几何上只有一种配法的列量出页级「格位 → 行号」偏移，
     # 拿它去分有歧义的列（印章假格与字格混在一起时常见）。光盘版没有格位，不做。
     title_re = re.compile(title_formula) if title_formula else None
@@ -1618,7 +1631,8 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
     if grid and bs:
         b_page = bs[len(bs) // 2]
         work = [(cc, u, ln, r if r.ok else C.coord_column(u, ln, b_hint=b_page, relaxed=relaxed,
-                                                          order_ok=cc.col in roster_cols, gap=blank_ink))
+                                                          order_ok=cc.col in roster_cols, gap=blank_ink,
+                                                          circle_ext=circle_ext))
                 for cc, u, ln, r in work]
     dp_cols: list[int] = []
     pair_cols: list[int] = []
@@ -1634,6 +1648,10 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         if empty_hit and not dp_flat:
             return False          # 整理本这一位是空而库认出了字：页与整理本对不上，不拿载体字硬配
         # `coord_dp_flat`：空格位上认出了字的列（字距拉开的题署行，空格位里是印泥）只走逐字字序对齐，那里门槛按字算
+        # `coord_circle_ext`：圈号格整理本不录，对齐时先剔掉，配完再给它们记空格位（让 symbol_ref_blank 认）
+        syms = [u for u in units if u.sym] if circle_ext else []
+        if syms:
+            units = [u for u in units if not u.sym]
         d = None if empty_hit else C.coord_dp(units, ln.text_units())
         if d is None and dp_flat:
             d = C.coord_dp_flat(units, ln.text_units(), cand_top)
@@ -1645,6 +1663,7 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         if not recs:
             return False
         res.coord_conflict_ids.extend(_coord_conflict_ids(recs, legacy))
+        recs = recs + C.sym_recs(syms)
         res.coord_cols.append(cc.col)
         res.coord.extend(CoordRec(id=i, col=cc.col, slot=sl, sub=sub, ref_char=ch, row=round(g, 2))
                          for i, sl, sub, ch, g in recs)

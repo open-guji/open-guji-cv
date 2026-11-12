@@ -6,7 +6,50 @@
 ## [未发版]
 
 - 5a 精验可选度量学习 CNN（`glyph_match.sim_model`，缺省关；A23，Sheldon 11-10 同意接进 pipeline 按书测）：新模块 `clustering/sim_cnn.py`（`SimNet`、`CnnVerifier`，整库嵌入算一次，逐对分＝余弦），训练脚本 `scripts/train_glyph_sim_cnn.py`。全唐文端到端（同一 kNN 粗排与护栏）首位命中 99.41→99.74%、精度 99.9% 下 same 放行 74.3→78.7%、每格 28→14 ms。关着时 `sim_model`／`sim_model_sha` 不进参数 dump，glyph_match 代码等价已登记（keben 3 页逐字节相同），**各书产物不过期**；开着时权重 sha256＋sim_cnn 代码哈希进参数指纹。开了要按书重标 `consensus_cov`／`consensus_margin`、`font_tier.cov`。
+
+## [0.7.9] - 2026-11-12
+
+- 发版说明（A31 11-12，SJ 要）：基于 v0.7.8，只多 #1421（不含 dev 上的 #1413 字组 zw 规则）。PATCH。缺省关，各书产物不过期、不用重跑；史記 r4x 要开才用 `coord_relaxed`＋`coord_circle_ext`。
+- PATCH（A31 11-12，GUJI-767）：align_ref 加通用开关 `coord_circle_ext`（缺省关、关时逻辑不变、不进参数 dump，要 `coord_relaxed` 开着）：圈号「○」认定放宽到字形库前 3 名、夹注 a/b 全圈号的整格算圈号格、`coord_dp`／`coord_dp_flat` 跳过圈号格并补记空格位、有圈号而几何拟不上时按格号配。史記 r41 因 ○ 对位错开的 56 列用。align_ref、align_ref_coord 的 code_hash 变，两条 code_equiv 已登记（SJ 11-12 在史記 03/09/02 各 7 页上证关着时逐字节相同）。小圆环形状判据待 A22 出原语。
+
+## [0.7.8] - 2026-11-11
+
+- 发版说明（A31 11-11，QTW 要）：基于 v0.7.7，只多 #1418（不含 dev 上的 #1413 字组 zw 规则，它会改识别结果，留下一版）。PATCH。缺省关，各书产物不过期、不用重跑；全唐文 016–030 要开才钉。
+- seed_admit 书级开关 `consensus_lib_cov`，缺省关、关时逐字节不变、不进参数 dump，code_equiv 已登记：5a 共识升档判 same、库字就是库首位、cov ≥ 本值、无护栏／硬疑问、不是 己已巳 的仍待审格，放库字（通道 `consensus_lib`，不入字形库）。`consensus_fallback` 把库字≠整理本字的共识 same 退回 unsure 后，这批格常卡在准入。全唐文 f4 016–030 这类 88 格，cov≥0.97 的 78 格看图 0 错；同门槛普通 unsure 错率 35%，所以只认共识升档。排在各补放通道与 near_knn_gap 之后，形近字组判留审的格不碰。本机开 0.97 实跑 016–030 放 81 格：55 格整理本是别字（剌/刺、寖/寢 等）、23 格无整理本字，看图 79 对、1 存疑；唯一错格（028:29:7:12 百→白）和一/二 组的黑条格已由这两条闸挡掉。字形线 11-11。
+## [0.7.7] - 2026-11-11
+
+- 发版说明（A31 11-11，A22 要）：基于 v0.7.6，只多 #1414（不含 dev 上的 #1413 字组 zw 规则）。PATCH。code_hash 不变、各书产物不过期、不用重跑。只影响缓存再生，史記本机旧缓存要清。
+- 不经 Engine 直接建的 RunContext（`guji cache get／warm`、控制台、审阅卡）补上书仓 `code/defaults.yaml` 套书缺省参数层，再生的列图、字块与跑步时一致（#1414，A22；SJ r39 03:177:8:21b「約」丢糸旁）。PATCH，23 步 code_hash 不变，各书产物不过期。
+
+## [0.7.6] - 2026-11-11
+
+- 发版说明（A31 11-11，SJ 要）：基于 v0.7.5，只多 #1410。PATCH。
+- cell_shrink：`manual_ink_fit` 不抹本格跨框笔画（#1410，SJ）。只有开了 manual_ink_fit 的书（史記）cell_shrink 起过期；殿本、全唐文已登 code_equiv `_MF_1111`，不过期。
+
+## [0.7.5] - 2026-11-10
+
+- 发版说明（A31 11-10，史記 GUJI-750 要）：基于 v0.7.4 + #1403–#1406、#1408。PATCH。
+- seg_pins_check（#1403–#1406，SJ）：沙箱失败判不通过、补锚按旧绑定位置取框、缺切点裁判权重或字形库拒跑；沙箱模式也认 `--base-items` 当基线；老失锚不计入结论；补锚草稿已有锚行的事件原地替换（出 `anchors_merged.jsonl`），第四节补锚档 (event,key) 重复判不通过。只动 scripts/ 与 feedback/pins_check.py。
+- cell_shrink 加书级钩子「发前清格」（#1408，impl/keben/patch_clean，缺省不清；SJ 要，史記书仓 k4 需 cv ≥0.7.5）。
+- cell_shrink 人工定框列加书级开关 `manual_ink_fit`（#1405，A22，缺省关、关时逐字节不变，不进 dump；code_equiv 已登记）。
+
+## [0.7.4] - 2026-11-10
+
+- 出单门：复审格旧人裁与现行字套码位归一后相同就不上单（#1397，ZM；pending_route --codepoints，republish 传本册表）。只动 scripts/，不改 Step code_hash。PATCH。
+
+- auto_cycle 加 `--ack-unlanded-votes <原因>`，透传给 proof_cycle apply → republish issue（ZM 提，ai-team 字的等价与归一审视陷阱 4；`guji swap run` 同名参数透传到这里）。只动 `scripts/zhengli/`，PATCH。
+
+- republish.py 三处文案「文本线升 minor」改 patch（纯文案，用户 11-10 定小改动一律 patch；ZM 提）。L0。
+
+- 格号变动单一路径收尾（ZM 11-10）：republish 遇「格号没变但有增删字」也走格级对照表（`swap.booktext`），不再退出叫人推 a32 分支等 A33；auto_cycle 的 book-text 失败结论改叫 `guard-stop`，提示切坏交切分线、锚点交 A33、修好后 `guji swap book-text --sheet`。只动 `scripts/zhengli/`，PATCH。
+- rerun_prep.sh 切到 cv 版本后先从 R2 取回 models/、fonts/、底库语料大文件（PATCH，A30 11-10；SJ r32 的 #1833/#1835/#1839 三单 prep 在「模板索引」段失败）：v0.7 起 cv 仓不带这些文件，从 v0.6.x 切过来时检出把它们删了，`pull-rare-index` 算出的 checkpoint 指纹是 `nockpt`，对不上已发布的向量包（`d2ce8bab0fd0`）。调 `ensure_repo_models()` 取回后指纹为 d2ce8bab0fd0，对得上。只改准备脚本，不动产物、指纹（L0）。
 - strokes 差一笔「学门槛」：`verify_learned`（多出那一笔的独占率、落墨率按本书两字刻例类中心判）、`extra_feats`、`bad_fit`。多出那一笔与别的笔交叉的组（木本、目自、十士）固定门槛弃权太多，殿本库留一 木本 弃权 99→2。不被 Step 引用，产物不变。
+
+## [0.7.3] - 2026-11-10
+
+- 发版说明（A31 11-10，QTW 要）：基于 v0.7.2，只多 #1388。PATCH。
+
+- seed_admit 两个书级开关，缺省关、关时逐字节不变、不进参数 dump，code_equiv 已登记：`group_flow_pair_shape_nm_5b`（匹配器护栏 never_match 的待审格，5-b 首位落在两字对里也交 `group_flow_pair_shapes` 刻形判；全唐文 001–003 目录页 王 50 格看图全对，5-b 首位是土的那格挡掉）、`solo_cal_5b_canon`（solo_cal 5-b 档按本书码位表归一后比，5-b 给 慎、库给 愼 算一致；愼 5、吕 2 格）。形近字线 11-10。
 
 ## [0.7.2] - 2026-11-10
 

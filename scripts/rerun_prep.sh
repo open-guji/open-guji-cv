@@ -71,6 +71,9 @@ if [ -n "$CV" ]; then
   git -C $SEED checkout -q "$CV" 2>/dev/null || git -C $SEED checkout -q FETCH_HEAD
 fi
 ensure_manager
+# v0.7 起 cv 仓不带 models/、fonts/ 和底库语料大文件（走 R2）：切到新版后这些文件已被检出删掉，要在「模板索引」等用到 checkpoint 的段之前取回，
+# 否则 checkpoint 指纹是 nockpt，对不上已发布的向量包（2026-11-10 SJ r32 #1833/#1835/#1839 三单 prep 失败）。取不到只提醒，后面的段会报具体缺什么。
+t 取回模型字体 /opt/guji-venv/bin/python -c "from open_guji_cv.manager_api import ensure_repo_models; ensure_repo_models()" || echo "⚠️ 从 R2 取回 models/fonts 失败（看上面；查 GUJI_DATA_TOKEN／_READ）" >&2
 echo "cv $(git -C $SEED rev-parse --short HEAD) $(git -C $SEED describe --tags 2>/dev/null || true)"
 if [ -n "$WSREPO" ]; then
   case "${WSREPO##*/}" in ""|.|..|*[!A-Za-z0-9._-]*) echo "⚠️ 工作区仓名不合规：$WSREPO" >&2; exit 1;; esac

@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from . import perf as _perf
 from .book import BookSpec
-from .pipeline import Pipeline, _produces, base_params
+from .pipeline import Pipeline, _produces, resolve_params
 from .parallel import effective_jobs, is_parallel_safe, warm_first, worker_threads
 from .spec import gated_optional_on, live_optional_consumes, page_key
 from .step import STEPS, RunContext, Step, kind_of
@@ -374,21 +374,7 @@ class Engine:
         # （管线 yaml）的值、回到 Step 默认（doc/design/册配置分层与运行覆盖.md 3.2）。
         # 2026-11-03 起册配置在字典层面叠在管线 yaml 之上：以前册配置靠 `_with_book_params` 事后补，
         # 管线 yaml 写过的字段算「显式」被跳过，管线反倒压过册配置（与文档顺序相反）。
-        resolved: dict[str, BaseModel] = {}
-        merged: dict[str, dict] = base_params(pipeline, book)
-        for sid, kv in (getattr(book, "params", None) or {}).items():
-            if sid not in STEPS:        # 册配置点名了没注册的 Step：同以前 `_with_book_params`，不报错、不生效
-                continue
-            tgt = merged.setdefault(sid, {})
-            for k, v in kv.items():
-                if v is None:
-                    tgt.pop(k, None)
-                else:
-                    tgt[k] = v
-        for sid, override in (params or {}).items():
-            merged.setdefault(sid, {}).update(override)
-        for sid, kv in merged.items():
-            resolved[sid] = STEPS[sid].spec.params(**kv)
+        resolved = resolve_params(pipeline, book, params)
         self.ctx = RunContext(book, self.store, self.cache, resolved, self.log, pipeline=pipeline)
         self._rev = git_rev()
         from .cv_version import manifest_fields

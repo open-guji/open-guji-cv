@@ -22,7 +22,7 @@ def patch_events() -> dict[str, int]:
     known = set(typing.get_args(ev.Kind))
     skipped: dict[str, int] = {}
 
-    def read(self, batch):
+    def read(self, batch, raw=False):
         path = self.batch_path(batch)
         if not path.exists():
             return []

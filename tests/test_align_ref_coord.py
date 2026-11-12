@@ -395,3 +395,45 @@ def test_pair_only_drops_only_conflicting_cell():
     assert _pair_only_recs(recs, leg({})) is None                                  # 没有冲突
     assert "coord_conflict_pair_only" not in AlignRefParams().model_dump()
     assert AlignRefParams(coord_conflict_pair_only=True).model_dump()["coord_conflict_pair_only"] is True
+
+
+# ── coord_circle_ext（2026-11-12，GUJI-767：史記 ○ 对位补强）──────────────────
+class _R:
+    def __init__(self, cands, slot=1, sub=None, id_="x"):
+        self.candidates, self.slot, self.sub, self.id = cands, slot, sub, id_
+
+
+def test_is_circle_ext_accepts_circle_in_top3_close_to_first():
+    near = _R([("口", 0.95), ("○", 0.94), ("日", 0.90)])
+    far = _R([("口", 0.99), ("○", 0.92)])
+    assert not C._is_circle(near) and C._is_circle(near, True)
+    assert not C._is_circle(far, True)                       # 与首位差 > 0.03 不认
+    assert not C._is_circle(_R([("口", 0.95), ("日", 0.94), ("目", 0.93), ("○", 0.94)]), True)   # 第 4 名不认
+    assert C._is_circle(_R([("○", 0.95)])) and not C._is_circle(_R([]), True)
+
+
+def test_relaxed_slot_fit_skips_circle_only_with_ext():
+    """有圈号而字距不匀、几何拟不上：旧法放弃，`ext` 按格号配（格号差计入前面的圈号格）。"""
+    (ln,) = C.parse_lines("#@ h\n　　范睢　　　　　　　　蔡澤")
+    units = [_cu(3, 2.4, "范"), _cu(4, 3.1, "雅"), _sym(5, 4.0), _cu(14, 11.2, "察"), _cu(15, 12.6, "澤")]
+    assert not C.coord_column(units, ln, relaxed=True).ok
+    r = C.coord_column(units, ln, relaxed=True, circle_ext=True)
+    assert r.ok
+    got = {t[0]: t[3] for t in r.recs}
+    assert got["id5"] == "" and [got[f"id{s}"] for s in (3, 4, 14, 15)] == list("范睢蔡澤")
+
+
+def test_column_units_marks_note_cell_with_two_circles():
+    ccol = type("CC", (), {"period": 10.0, "border_top": 0.0,
+                           "cells": [type("C", (), {"slot": s, "sub": sb, "y0": s * 10.0 - 10, "y1": s * 10.0})()
+                                     for s, sb in ((1, "a"), (1, "b"), (2, "a"), (2, "b"))]})()
+    match = type("M", (), {"chars": [_R([("○", .95)], 1, "a", "i1a"), _R([("○", .95)], 1, "b", "i1b"),
+                                      _R([("○", .95)], 2, "a", "i2a"), _R([("字", .95)], 2, "b", "i2b")]})()
+    us = C.column_units("b", 1, 1, match, ccol, lambda i: "", symbols=True, circle_ext=True)
+    assert [u.sym for u in us] == [True, False]
+    assert not any(u.sym for u in C.column_units("b", 1, 1, match, ccol, lambda i: "", symbols=True))
+
+
+def test_circle_ext_off_not_in_params_dump():
+    assert "coord_circle_ext" not in AlignRefParams(corpus="x").model_dump()
+    assert AlignRefParams(corpus="x", coord_circle_ext=True).model_dump()["coord_circle_ext"] is True

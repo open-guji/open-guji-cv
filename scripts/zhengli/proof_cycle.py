@@ -303,7 +303,10 @@ def cmd_apply(a) -> int:
     if not a.dry_run:
         old_char = rp.book_text_dir(Path(a.book_text), plan["text_id"]) / f"{plan['chapter']}.char.json"
         new_char = export / f"{plan['chapter']}.char.json"
-        sp = split_changes(old_char, new_char, human_chars_of(ws, book))
+        sp = split_changes(old_char, new_char, human_chars_of(ws, book), codepoint_map(ws, book))
+        if sp["norm"] and list(_cells(old_char)) == list(_cells(new_char)):
+            revert_cells(new_char, {a_: o for a_, o, _ in sp["norm"]})   # 只差码位归一的格，文本留旧字
+            log.note(f"只差码位归一（不算改字、不算推翻人裁）{len(sp['norm'])} 格，文本留旧字")
         if list(_cells(old_char)) != list(_cells(new_char)) and sp["overrule"]:
             # 格号变了（增删格、改号）：按格号比的「推翻人裁」会把别的块图的字当旧字退回；交 republish 按格级对照表处理（ZM 11-10）
             log.note(f"格号有变：按格号比出的「机器推翻人裁」{len(sp['overrule'])} 格不按格号退回，交格级对照表与新单复审")
@@ -387,17 +390,41 @@ def human_chars_of(ws: Path, book: str) -> dict[str, str]:
     return {c: ch for c, (_, ch) in last.items()}
 
 
-def split_changes(old_char: Path, new_char: Path, human: dict[str, str]) -> dict:
-    """新导出对 book-text 现文逐格比，变了的格分三种：最新人裁就是新字＝human（人裁改字）；
-    旧字正是最新人裁、机器改成别的＝overrule（机器推翻人裁，留人裁的字、复审）；其余＝machine（机器改字，按新结果）。
+def codepoint_map(ws: Path, book: str) -> dict[str, str]:
+    """本册的码位归一表 `{另一码位: 本书码位}`：`config/codepoints.yaml` < `book_defaults.yaml` 的 codepoints < 册 yaml
+    （同 cv `core.book` 的优先级）。机器导出的字在 seed_admit 里已按它归一，所以比对「机器推翻人裁」前两边要先套一遍。"""
+    import yaml
+    d = rp.data_dir(ws)
+    out: dict[str, str] = {}
+    for f, key in ((d / "config" / "codepoints.yaml", "codepoints"),
+                   (d / "config" / "book_defaults.yaml", "codepoints"),
+                   (d / "books" / f"{book}.yaml", "codepoints")):
+        if f.exists():
+            y = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+            out.update({str(k): str(v) for k, v in (y.get(key) or {}).items()})
+    return out
+
+
+def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: dict[str, str] | None = None) -> dict:
+    """新导出对 book-text 现文逐格比，变了的格分四种：最新人裁就是新字＝human（人裁改字）；
+    旧字正是最新人裁、机器改成别的＝overrule（机器推翻人裁，留人裁的字、复审）；两边只差一个码位归一（`norm`，
+    如 别→別）＝norm（不算改字、不算推翻，文本留旧字、不上单）；其余＝machine（机器改字，按新结果）。
     格号两边对不上的（重切）不在这里管，交 republish 的差异单。"""
+    nm = norm or {}
+
+    def u(c: str) -> str:
+        return nm.get(c, c)
+
     o, n = _cells(old_char), _cells(new_char)
-    out = {"human": [], "machine": [], "overrule": []}
+    out = {"human": [], "machine": [], "overrule": [], "norm": []}
     for a_ in sorted(set(o) & set(n), key=rp._key):
         if o[a_] == n[a_]:
             continue
+        if o[a_] and n[a_] and u(o[a_]) == u(n[a_]):
+            out["norm"].append((a_, o[a_], n[a_]))
+            continue
         h = human.get(a_)
-        k = "human" if h and h == n[a_] else ("overrule" if h and h == o[a_] else "machine")
+        k = "human" if h and u(h) == u(n[a_]) else ("overrule" if h and u(h) == u(o[a_]) else "machine")
         out[k].append((a_, o[a_], n[a_]))
     return out
 

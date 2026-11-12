@@ -759,6 +759,12 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
         cmd += ["--db-rev", str(st["rev"])]
     if old and old.get("routed_as_of"):           # 复审格放上线之后用户投过票的，不再放回（2026-11-10）
         cmd += ["--recheck-since", str(old["routed_as_of"])]
+    from proof_cycle import codepoint_map
+    cpm = codepoint_map(ws, book)
+    if cpm:                                       # 出单门：复审格旧人裁与现行字归一后相同，不上单
+        cpf = out / "codepoints.json"
+        cpf.write_text(json.dumps(cpm, ensure_ascii=False), encoding="utf-8")
+        cmd += ["--codepoints", cpf]
     if a.team_pages:
         cmd += ["--team-pages", a.team_pages]
     if a.page_types:
@@ -1639,7 +1645,7 @@ def closeout_derive(repo: Path, plan: dict, base: str | None) -> None:
 
 
 def bump_book_text(repo: Path, plan: dict, note: str) -> str:
-    """同一次导出的 char／cord／norm 拷进 book-text 的 dev、文本线升 minor、本地校验（--dev），提交并推 dev。
+    """同一次导出的 char／cord／norm 拷进 book-text 的 dev、文本线升 patch、本地校验（--dev），提交并推 dev。
     返回改动前 dev 的提交号（锚点漂移 A03 以它为基准）。
 
     2026-10-24 用户定：流程化小改直接提交 dev，不开 PR；`index/texts` 不在 dev 上提交，版本记录行写进提交信息（book-text 不再有 CHANGES.md），
@@ -1667,9 +1673,9 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
         stale_doc, others = punct_stale_update(cur, _char_cells(old_char), _char_cells(new_char),
                                                volume=int(ch), base_commit=head, base_text_version=tv)
-        if others:
-            sys.exit("✗ 本轮有增删字（标点锚点会错位，不能走待重标清单）：" + "、".join(others[:12])
-                     + "\n  把改字推到分支 a32-<册号>-<主题>，通知 A33 在分支上重标，不要推 dev")
+        if others:      # 有增删字（一边是空）：同样按格级对照表走（ZM 11-10 单一路径），不再推分支等 A33
+            print("ⓘ 本轮有增删字，按格级对照表落 book-text：" + "、".join(others[:12]))
+            return _bump_book_text_cellmap(repo, plan, note, base)
     for t in ("char", "cord", "norm"):
         src = Path(plan["export_dir"]) / f"{ch}.{t}.json"
         if src.exists() and t == "cord":
@@ -1722,7 +1728,7 @@ def _structure_changed(old_char: Path, new_char: Path) -> bool:
 def _bump_book_text_cellmap(repo: Path, plan: dict, note: str, base: str) -> str:
     """格号变了（增删格、改号）：交 guji-manager `swap.booktext.remap_in_repo` 按格级对照表（新旧 cord 框 IoU）落 book-text——
     逐块图判字（□ 不覆盖现字、待审保持现字、改出重复字回退）、按表挪标点专名、守卫（专名挂法与条数、标点条数不变）。
-    不再按格号比、不再走待重标清单，也不再报 need-A33（守卫不过才报）。ZM 11-10，sheldon 同意。"""
+    不再按格号比、不再走待重标清单；守卫不过时 auto_cycle 报 guard-stop。ZM 11-10，sheldon 同意。"""
     try:
         from guji_manager.swap.booktext import remap_in_repo
     except ImportError:
@@ -1902,7 +1908,7 @@ def main(argv=None) -> int:
         if name in ("from-pack", "issue"):
             p.add_argument("--label", required=name == "from-pack",
                            help="产物包标签（guji products pack list <册>）" + ("；issue 给了就走 from-pack，不给就要 --export-dir" if name == "issue" else ""))
-            p.add_argument("--book-text", help="book-text 仓：读线上文本版本" + ("；issue 还会拷同一次导出、文本线升 minor、提交到新分支" if name == "issue" else ""))
+            p.add_argument("--book-text", help="book-text 仓：读线上文本版本" + ("；issue 还会拷同一次导出、文本线升 patch、提交到新分支" if name == "issue" else ""))
             p.add_argument("--text-version", help="不给 --book-text 时手给线上文本版本")
             p.add_argument("--no-pull", action="store_true", help="不先 guji db pull")
             p.add_argument("--out-root", help="缺省 <工作区>/reports/<册>/_publish")
@@ -1938,7 +1944,7 @@ def main(argv=None) -> int:
             p.add_argument("--old-source-rev", type=int, help="换单门：线上旧单是在哪一版页表上出的（缺省看单子的 source_rev／出单时刻）")
         if name == "push":
             p.add_argument("--yes", action="store_true", help="看过差异单、确认推")
-            p.add_argument("--book-text", help="book-text 仓：拷同一次导出、文本线升 minor、提交到新分支")
+            p.add_argument("--book-text", help="book-text 仓：拷同一次导出、文本线升 patch、提交到新分支")
             p.add_argument("--note", help="book-text 版本记录一行的说明")
             p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库，并触发网站 proofing-sync")
             p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")

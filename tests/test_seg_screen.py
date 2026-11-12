@@ -135,3 +135,47 @@ def test_seg_primitive_frame_only_edge_cells():
     spans = [(100, 200), (200, 300), (300, 400)]
     assert frame_only_edge_cells(g, spans, (0, 100), 100.0, 400.0, 100.0) == [2]
     assert frame_only_edge_cells(g, spans, (0, 100), 100.0, None, 100.0) == []
+
+
+# ── ①c 漏切块 ────────────────────────────────────────────────────────────
+
+def _orph_col():
+    """列宽 100，四个字格（y 100–200、200–300、400–500、500–600），300–400 那个字没切进任何格。"""
+    g = _img(800)
+    boxes = [(20, y, 80, y + 100) for y in (100, 200, 400, 500)]
+    for y in (100, 200, 300, 400, 500):
+        g[y + 20:y + 80, 30:70] = 0
+    return g, boxes
+
+
+def test_orphan_reports_char_outside_boxes():
+    g, boxes = _orph_col()
+    hits = ss.orphan_ink(g, boxes)
+    assert len(hits) == 1
+    h = hits[0]
+    assert h["where"] == "mid" and h["bbox"][1] == 320 and h["ratio"] == 1.0
+
+
+def test_orphan_clean_column_and_no_boxes():
+    g, boxes = _orph_col()
+    g[300:400] = 255                                   # 中间那字擦掉
+    assert ss.orphan_ink(g, boxes) == []
+    assert ss.orphan_ink(g, []) == []
+
+
+def test_orphan_strips_ruling_and_frame_lines():
+    """界行（贯穿整列的竖线）把各字连成一块、版框横线落在格外：剥掉后都不报。"""
+    g, boxes = _orph_col()
+    g[300:400] = 255
+    g[:, 48:51] = 0                                    # 界行穿过所有字
+    g[30:36, :] = 0                                    # 上版框
+    g[700:706, :] = 0                                  # 下版框
+    assert ss.orphan_ink(g, boxes) == []
+
+
+def test_orphan_ignores_small_specks_and_side_edges():
+    g, boxes = _orph_col()
+    g[300:400] = 255
+    g[340:346, 40:46] = 0                              # 小墨点（< 150px）
+    g[320:380, 0:15] = 0                               # 贴左边的邻列字边
+    assert ss.orphan_ink(g, boxes) == []
