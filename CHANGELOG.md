@@ -6,6 +6,7 @@
 ## [未发版]
 
 - PATCH（A31 11-12，GUJI-767 第二步）：align_ref 加通用开关 `coord_ref_hint`（缺省关、不进参数 dump；要 `coord_dp` 开着）：`coord_dp`／`coord_dp_flat` 对位得出但无字形证据所以不进 `coord` 的整理本字，记进 `PageAlignRef.ref_hint`（{格 id→整理本字}，空不落盘），只供点校当候选，不是放行证据，`coord`／`chars`／放行结果都不变。史記 r42 圈号邻字 A9 45 格（整理本有字而字形库误读）用。align_ref、align_ref_coord 的 code_hash 变，code_equiv 已登记（SJ 11-12 在史記 03/09/02 各 7 页上证关着时逐字节相同）。
+- 5a 精验可选度量学习 CNN（`glyph_match.sim_model`，缺省关；A23，Sheldon 11-10 同意接进 pipeline 按书测）：新模块 `clustering/sim_cnn.py`（`SimNet`、`CnnVerifier`，整库嵌入算一次，逐对分＝余弦），训练脚本 `scripts/train_glyph_sim_cnn.py`。全唐文端到端（同一 kNN 粗排与护栏）首位命中 99.41→99.74%、精度 99.9% 下 same 放行 74.3→78.7%、每格 28→14 ms。关着时 `sim_model`／`sim_model_sha` 不进参数 dump，glyph_match 代码等价已登记（keben 3 页逐字节相同），**各书产物不过期**；开着时权重 sha256＋sim_cnn 代码哈希进参数指纹。开了要按书重标 `consensus_cov`／`consensus_margin`、`font_tier.cov`。
 
 ## [0.7.9] - 2026-11-12
 
