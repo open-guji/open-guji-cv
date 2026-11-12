@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- `eval/seg_screen_run`：钉子列按产物的 `manual_cells` 旗认（产物早于钉子的列照普通列查），新表 `pin_stale` 列出「有 active 钉子、本页产物没用上」的列（要从 row_segment 重跑）。不进指纹。
 - 切分筛查并进史記快筛的格级判据（`guji seg check` 用，《切分三方向》第 2 步）：`eval/seg_screen` 加 `ink_ledger`／`ledger_flags`（FOR、Lh、Lv）、`end_frame_hits`（Fend）、`patch_edge_lines`（Fpatch）、`jiazhu_wide`（JZW）、`pin_slots_diff`（钉子列只比格号）、`layout_slots_diff`（版式对格号，同数判过）；跑法搬进 `eval/seg_screen_run.py`（`scripts/seg_screen.py` 变薄壳，多出 cell_flags／pin_slots／layout_slots 三张表，缓存缺图现算）。原语 `seg/rules` 加 `vertical_rule_mask`／`horizontal_rule_mask`。殿本 vol01 6 页非钉子列格级 flags 与 SJ `tools/seg_check/seg_detect.py` 逐格相同。不进指纹，产物不变。
 - 新原语 `seg/rules.py`：`long_rule_mask`／`strip_long_rules` 剥长直线（界行竖 200px、版框横线 0.85 列宽且至少 40px，参数在签名上）。史記 patch_clean、史記快筛、`eval/seg_screen` 原先各抄一份；`eval/seg_screen.strip_long_lines` 改调它（逐像素同，有单测）。不进任何 Step 指纹，产物不变。
 - 切分人定覆盖统一读取入口 `feedback/seg_overrides.SegOverrides`（列级 manual-cells／抬头／column-slots／cuts／pins／solo／forced 一处读，`blocks_layout` 定哪些屏蔽格位表），row_segment 改用；row_segment 新书级钩子 `impl/keben/row_hooks`（`grid_adjust`／`jiazhu_heads`／`half_a_left`，缺省 None），全唐文可不再复制整份 row_boundaries。code_equiv 已登记（殿本 vol01 11 页、vol28 10 页逐字节同），**各书产物不过期**。
