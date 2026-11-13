@@ -16,6 +16,8 @@
 
 ## [未发版]
 
+- PATCH（改产物）：`rebind_library_shapes`（字形库人裁重绑）尊重作废标记：字形库 `human_stale_*`／`stale_verdicts.tsv` 撤下之后没有再裁的格，库里那份不再顶上。此前重绑只看该格号最新事件的锚，误锚的人裁（vol01 182:9:15a「宅」）撤下后仍会在重绑时落回去。（ZM，11-13）
+
 - PATCH：republish from-pack/issue 出单前查原图在不在（`need_source_images`）：人裁绑定要现切字块图比像不像，原图没拉时 vol04 682 条只绑上 51（拉了原图后 570），老人裁被静默判成 unanchored。现在没原图直接停并提示 `guji source pull`。读者侧冒烟的 HEAD 请求带 Referer（data.openguji.com 图防盗链，无 Referer 一律 403，云端容器里必误报）。（ZM，11-13）
 
 - PATCH：seg check `cut_through` 的「挪得开」从降到原位 1/10 放到 1/4（`CUT_KEEP` 0.1→0.25，A22 11-13）。史記人裁格框尺子（37 册 116 列，去掉人裁重切 1,855 条格线；人挪过且原线劈字 58 条）：报出 23→33 条，报出的里头人也挪过的 86%→81%。顺带量了 U-Net 裁判：58 条里认人线 46（门槛 0）→54（0.05），#1496 的护栏门槛有独立佐证。只读产物，不进指纹。

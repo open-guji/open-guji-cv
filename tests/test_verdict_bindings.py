@@ -135,3 +135,19 @@ def test_compute_page_passes_patch_stamp_to_cache(monkeypatch):
     ev = _ev("v:1:1:1", 1, anchor={"bbox": [0, 0, 10, 10], "evidence": {"fp": "x"}})
     B.compute_page("v", 1, [ev], store=object(), cache=cache, glyph_db=None, patch_stamp="S")
     assert got and set(got) == {"S"}
+
+
+def test_rebind_library_shapes_respects_stale_marks(monkeypatch):
+    """字形库里被撤下（human_stale）的人裁，重绑时不再顶上；撤下之后再裁的照常生效（vol01 182:9:15a，11-13）。"""
+    import open_guji_cv.feedback.lookup as L
+    rows = {
+        "e1": {"event": "e1", "key": "v:1:1:1", "ts": "2026-10-01T00:00:00Z", "shape": "宅", "status": "valid", "bound": "v:1:1:1"},
+        "e2": {"event": "e2", "key": "v:1:1:2", "ts": "2026-11-12T00:00:00Z", "shape": "宇", "status": "valid", "bound": "v:1:1:2"},
+        "e3": {"event": "e3", "key": "v:1:1:3", "ts": "2026-10-01T00:00:00Z", "shape": "字", "status": "valid", "bound": "v:1:1:3"},
+    }
+    monkeypatch.setattr(B, "book_bindings", lambda book, log=None: rows)
+    monkeypatch.setattr(L, "stale_human_marks", lambda book: {"v:1:1:1": "20261105", "v:1:1:2": "20261105"})
+    out = B.rebind_library_shapes("v", {"v:1:1:1": "宅", "v:1:1:2": "宇", "v:1:1:3": "字"})
+    assert "v:1:1:1" not in out          # 撤下在最新裁决之后：作废
+    assert out["v:1:1:2"] == "宇"        # 撤下之后又裁了：有效
+    assert out["v:1:1:3"] == "字"        # 没撤下：原样
