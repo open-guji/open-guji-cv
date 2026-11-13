@@ -448,6 +448,7 @@
 ## [0.6.3] - 2026-11-05
 
 ### Changed
+- 页型老写法改报错（A20 11-13）：册 yaml／基础配置里的 `border_detect_gate.body_pages`／`table_pages`／`row_segment.roster_pages` 读配置时抛 `BookConfigError`（11-04 起警告）；运行覆盖不管；`GUJI_ALLOW_OLD_PAGE_SYNTAX=1` 放行。中心库 391 册已扫过没有在用的；迁移脚本（guji-manager #548）核指纹时自动放行。只改配置读取，不动 Step、`code_hash` 不变。
 - seed_admit `iron_ex_from_store` 改缺省开（2026-11-05，用户定）：铁证刻例图一律从字形库取，产物不再随执行机缓存变。**各书 seed_admit 判过期、要重跑**；史記 01 上 3 格待审转放行（都合坐标对位字）。
 - 管线缺省不调 Anthropic API（2026-11-05，用户定；#1071、#1072）：文意 L3／二审小组／看图判只读裁定库，没命中弃权 `abstain:llm_pending` 并在产物留下问题；`python -m open_guji_cv.feedback.llm_queue export/import` 导出待裁清单、把对话统一审的答案写回裁定库。`GUJI_LLM_ONLINE=1` 才在线问。
 - seed_admit 页头计数：src_code_conflict 降审计入 n_auto/n_review（#1046）。
