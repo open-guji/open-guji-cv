@@ -5,6 +5,12 @@
 
 ## [未发版]
 
+
+## [0.7.33] - 2026-11-13
+
+- 发版说明（A31 11-13，SJ 史記 patch 线）：v0.7.32 + #1523（align_ref `coord_legacy_line_guard`，缺省关），PATCH，**不含** #1432/#1437、#1497 及 dev 上其他改动。#1523 在 dev 上叠在 #1497（coord_conflict_drop_bad）之后，本线没有 #1497，移植时去掉了与 drop_bad 相关的字段、参数和测试，line_guard 部分自成一体（不依赖 _use_coord_char）。
+- PATCH：align_ref 书级开关 `coord_legacy_line_guard`（缺省关，A22 11-13，史記 r60 37:2:6）：参校本一列缺字时现役 difflib 按整页字流把图上多出的字配到别行同字、下一列整段错配，坐标对位被冲突闸整列退回。开了以后列↔行已定的列里，现役 equal 字不在本列整理本行里的格不当现役证据，坐标给了字的改坐标字。关时殿本 vol60、史記 37 全册逐字节同（code_equiv 已登记）。
+
 ## [0.7.32] - 2026-11-13
 
 - 发版说明（A31 11-13，SJ 史記 patch 线）：v0.7.27 + #1517（seed_admit follow_ref 领先差书级钩子 `follow_ref_hooks.rival_skip`），PATCH，**不含** #1432/#1437 及 dev 上其他改动（v0.7.28–v0.7.31 是 ZM／QTW 线，本线不带）。钩子缺省 None 不调；seed_admit 的 Step code_hash 经 SPLITS 合回 pua_v2_codes 不变，code_equiv 登记（哈希按本线重算，#1517 的逐字节同证据是 dev 上殿本 vol28 16 页）。
