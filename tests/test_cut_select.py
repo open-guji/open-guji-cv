@@ -475,6 +475,8 @@ def test_move_keeps_glyphs_rules():
     assert move_keeps_glyphs(_ScoreJudge((0.90, 0.99)), img, 5, 55, 100, 120, 0, 250)   # 挪后更像两个整字
     assert move_keeps_glyphs(_ScoreJudge((0.95, 0.95)), img, 5, 55, 100, 120, 0, 250)   # 打平也许
     assert not move_keeps_glyphs(_ScoreJudge((0.99, 0.82)), img, 5, 55, 100, 120, 0, 250)
+    assert move_keeps_glyphs(_ScoreJudge((0.99, 0.95)), img, 5, 55, 100, 120, 0, 250)    # 只动钩尖：掉一点也许
+    assert not move_keeps_glyphs(_ScoreJudge((0.99, 0.93)), img, 5, 55, 100, 120, 0, 250)  # 整块部件划过去：掉 ≥0.055
     assert move_keeps_glyphs(_ScoreJudge((0.99, 0.95)), img, 5, 55, 100, 120, 0, 250, tol=0.05)
     j = _ScoreJudge((0.9, 0.9))
     move_keeps_glyphs(j, img, 5, 55, 100.4, 120.6, 10.2, 250.7)
