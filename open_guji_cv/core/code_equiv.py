@@ -1349,7 +1349,7 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence=_GLYPH_GUARD),
     Equiv(module='open_guji_cv.seg.cut_select',
           new='1a505f0d68bdb696936b4f89af83ad7f99d82fbd92712bfe26a401a171b56713',
-          old='fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b',
+          old='a32630fc154efa51ff9e8f734b257fbe09a5c51729501b5de9679032be2be6f2',
           evidence=_GUARD_TOL),
     # grid_end_fit 书级开关（缺省关，2026-11-09，殿本 vol28 列尾下溢）
     Equiv(module="open_guji_cv.steps.row_segment",

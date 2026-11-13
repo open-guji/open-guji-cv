@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.7.27] - 2026-11-13
+
+- 发版说明（A31 11-13，SJ 史記 patch 线）：v0.7.26 + #1496（snap_cut 整字护栏门槛 MOVE_TOL 0→0.05），PATCH，**不含** #1432/#1437。**#1495 未带**：它改的 `eval/seg_screen.cut_through` 是 #1494 才有的（`guji seg check` F6，依赖 #1447/#1449/#1453 等一串 seg_screen 改动，且那串里有 #1437），本线没有。snap_cut 关着时逐字节不变，seg.cut_select 登记 code_equiv（哈希按本线重算）。
+
 ## [0.7.26] - 2026-11-13
 
 - 发版说明（A31 11-13，SJ 史記 patch 线）：v0.7.25 + #1492（snap_cut 整字护栏，开 snap_cut 且有 cut_judge 时自动带上），PATCH，**不含** #1432/#1437。snap_cut 关着时逐字节不变，row_boundaries、seg.cut_select 登记 code_equiv（哈希按本线重算）。
