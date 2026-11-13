@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH：seg check 新增 `block_tall`（殿本 vol06 147:3:3「也」，ZM 11-13）：cell_shrink 字块高 ≥ 本格 row_segment 格高 1.35 倍（且多 24px 以上）的格单独报（列末格不查）。cell_size／page_pitch 只比格线高度，格线对而字块连上贯穿长竖线时都不报；原先只有 `Lv` 被归「公用清格」漏掉。殿本 vol06–10 现行包扫出 06:147:3:3（格高 128、字块 427）、07:133:7:3（印章压空列）、07:5:2:1（1.36）。只读工具，不进产物指纹。
+
 - PATCH：新增 `scripts/orphan_rulings.py` 孤儿人裁普查（ZM 11-13）：human_chars 的「N 条页表 rev 不符不采信」把旧代迁移事件、有现行孪生的原始事件、**迁移时对不到新格的原始事件**混在一起；脚本只列最后一类（换源前的定字人裁、没有现行代孪生），按册出 TSV 交册线复核。仅维护脚本，不进产物指纹。
 
 - PATCH：seg check 格高／夹注宽离群按参校字证实豁免（史記台账 R011／R013，A22 11-13）：`eval/seg_screen` 的 cell_size、page_pitch、half_width 离群格，参校字落在字形匹配前 3 名、邻格无反证的不报，记 `geo_ref_ok` 表；Step3 挪过格位表的列不豁免。只读工具，不进产物指纹。
