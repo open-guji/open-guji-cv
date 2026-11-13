@@ -385,6 +385,24 @@ def test_in_seal_counts_ink_on_the_small_seal_strokes_even_at_the_box_edge():
     assert not f(cell)
 
 
+def test_in_seal_stain_ink_counts_seal_edge_ink_in_a_neighbour_column():
+    """大印（无掩码）的印边压着相邻空列的一窄条：格与印框重叠不到一半，按框不算；`stain_ink` 时格里的墨（按连通块）
+    映回原图都在印框里 → 算印；格里另有框外的墨（字）→ 不算（史記 r53）。"""
+    import numpy as np
+    from types import SimpleNamespace as C
+    from open_guji_cv.steps.row_segment import _in_seal
+    tr = lambda x, y: (1000 + x, y)                              # 列图 (x, y) → 规范空间（右上原点）
+    mapper = C(quad_tr=lambda x0, y0, x1, y1: [tr(x0, y0), tr(x1, y0), tr(x1, y1), tr(x0, y1)], to_page_tr=tr)
+    seals = [(1070, 0, 1500, 300, None)]                         # 印框只盖住列图 x 70..100（三成列宽）
+    img = np.full((100, 100), 255, np.uint8)
+    img[20:80, 75:95] = 0                                        # 印边的墨，全在框里
+    cell = C(x0=0, x1=100, y0=0, y1=100)
+    assert not _in_seal(seals, mapper, img)(cell)                # 只按框：重叠 0.3
+    assert _in_seal(seals, mapper, img, stain_ink=True)(cell)
+    img[30:70, 10:50] = 0                                        # 框外再加一块字的墨（比印边墨多）
+    assert not _in_seal(seals, mapper, img, stain_ink=True)(cell)
+
+
 def test_page_seals_reads_every_seal_from_the_seals_product():
     """印只来自印章定位 `seals` 产物（大印、小印都算）；大印没有笔画掩码；没有产物就是空表。"""
     from types import SimpleNamespace as C
