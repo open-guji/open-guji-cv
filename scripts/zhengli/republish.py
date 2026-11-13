@@ -505,6 +505,18 @@ def add_anchor_reasons(pending: Path, export: Path, text_vdir: Path | None, chap
     if n:
         print(f"  锚点类待审原因（{pending.name}）：现算 {n['items']} 条，新增待审格 {n['new']}，并进已有格 {n['appended']}"
               f"（anchor_miss {n['anchor_miss']}、add_del {n['add_del']}）")
+        # 用户 11-13：只因「标点专名要重挂」进来的格，字本身没问题，不该上人审判字单（线上单问「为什么要重新判字」）。
+        # 新增的纯锚点格（src=closeout_anchor）从单子拿掉，另存 <单>.anchor-deferred.json 交实体线重挂；并进已有待审格的原因照旧留。
+        doc = json.loads(pending.read_text(encoding="utf-8"))
+        keep, drop = [], []
+        for c in doc.get("cells", []):
+            (drop if c.get("src") == "closeout_anchor" else keep).append(c)
+        if drop:
+            doc["cells"] = keep
+            pending.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+            side = pending.with_name(pending.stem + ".anchor-deferred.json")
+            side.write_text(json.dumps({"cells": drop}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+            print(f"  → 纯锚点格 {len(drop)} 个不上人审单，另存 {side.name}（实体线重挂）")
 
 
 def run(cmd, **kw) -> subprocess.CompletedProcess:
