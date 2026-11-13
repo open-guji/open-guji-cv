@@ -215,8 +215,8 @@ def test_cut_through_judge_gates_report():
     assert len(ss.cut_through(g, cc, judge=ok)) == 1
     _y0, _y1, y_line, seams = ok.calls[0]
     assert y_line == 200 and seams[0] is None and int(seams[1][0]) >= 236
-    assert ss.cut_through(g, cc, judge=_Judge([0.99, 0.90])) == []      # 原位更对（字内白缝）：不报
-    assert ss.cut_through(g, cc, judge=_Judge([0.95, 0.96])) == []      # 差不到 CUT_JUDGE：不报
+    assert ss.cut_through(g, cc, judge=_Judge([0.99, 0.85])) == []      # 挪后掉太多（挪进字内白缝）：不报
+    assert len(ss.cut_through(g, cc, judge=_Judge([0.99, 0.93]))) == 1  # 掉不到 CUT_JUDGE（只动钩尖）：报
 
 
 def test_cut_through_follows_seam_and_skips_blank_pairs():
