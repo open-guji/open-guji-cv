@@ -1595,6 +1595,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new='5983f2059782aa6f4de8ea1c0197e2c892fd550eb324f994994c1aa1936613f9',
           old='a7f43f47126728c8e206bd016cbffdc8e692ea52e32cc74e42312fd602d8c04a',
           evidence=_GLYPH_GUARD),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="cace3586ccc86342ae513b2a1365813db22dfe8fc6d8a2e8c285bc1e726d3397",
+          old="06fe196f9b2a44cf4ab61d09dc8ace5ef4f13b80ed9ff69a0d6def2a5d983443",
+          evidence="align_ref coord_conflict_drop_bad 丢掉的冲突格现役字改成坐标字（vol05 1:4:1）：新增 _use_coord_char 只在该开关开且 _drop_bad_recs 成功时调用，关时控制流与改前相同（代码核对＋tests/test_align_ref_coord.py）；★未在有产物的机器跑 scripts/code_equiv.py check，2026-11-13"),
 )
 
 
