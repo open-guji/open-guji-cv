@@ -1127,6 +1127,11 @@ class RowSegmentParams(BaseModel):
     #: 框线上沿（版框内、≤0.35 格）。只动等距格网（含表挪一格的派生）的末线；首线、DP 格网、中间格线、格号不变。
     #: 书级开关；False＝关（缺省，不进参数哈希）。
     grid_end_fit: bool = False
+    #: **按墨块切割量补挪格线**（2026-11-13，史記 r54 少见字页劈字，`row_boundaries.snap_by_cut`）：等距格网的格线只在 ±0.2 格内
+    #: 按行墨落缝（`snap_to_gaps`），写本字距不匀、真字缝离名义格线 0.2–0.45 格又常没有干净白行，格线停在字中间（DP 格网同样）。
+    #: 给个格高倍数（史記 0.4）就在格线定下后把仍劈着字（切割量 ≥0.025 格高²）的格线在 ±这么多格内挪到切割量最小处（≤原位 1/4 才挪），
+    #: 格数、格号不变，首末线不动。只在挑定格网后的最终那遍切用（同 grid_end_fit，不影响挑格网）。书级参数；0＝关（缺省，不进参数哈希）。
+    snap_cut: float = 0.0
     #: 原 `seal_gap_slots_empty`、`seal_inkcut`（大印下表中间空格位记空、剔印泥再切）两个书级开关 2026-11-10 搬进书级代码：
     #: 缺省实现 `impl/keben/seal_ink`（不做），史記书仓 `code/seal_ink.py` 覆盖。见 `_RETIRED`。
     #: **备选切法**（2026-11-03，史記文淵閣本第 7 轮，设计稿 https://claude.ai/artifact/NVqgK8BS2GietVShFnoqUU）：
@@ -1238,6 +1243,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("row_pitch", None)
             if not self.grid_end_fit:
                 d.pop("grid_end_fit", None)
+            if not self.snap_cut:
+                d.pop("snap_cut", None)
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
@@ -1357,6 +1364,8 @@ class RowSegmentStep(Step):
         if p.grid_end_fit and "grid_end_fit" not in inspect.signature(segment_column).parameters:
             raise ValueError("row_segment.grid_end_fit 是殿本套书（siku_zongmu）的开关"
                              f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
+        if p.snap_cut and "snap_cut" not in inspect.signature(segment_column).parameters:
+            raise ValueError(f"row_segment.snap_cut：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
@@ -1531,6 +1540,7 @@ class RowSegmentStep(Step):
                     **({"jiazhu_half_a": True} if p.jiazhu_half_a and _legacy_qtw else {}),
                     **hook_kw,
                     **({"grid_end_fit": True} if p.grid_end_fit and final else {}),
+                    **({"snap_cut": p.snap_cut} if p.snap_cut and final else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:

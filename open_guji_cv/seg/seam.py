@@ -171,3 +171,71 @@ def fit_row_cuts(ink_rows: np.ndarray, top: int, bottom: int, n: int, *,
     if y != 0:
         return None
     return [float(top + v) for v in reversed(ys_out)]
+
+
+# ── 墨块切割量（2026-11-13，A22，史記 r54 少见字页劈字）────────────────────────────
+# 一条水平直线放在某一行，会把多少连通墨块劈成上下两半。
+#
+# 行投影（每行多少墨）只说「这一行白不白」，说不出「这一行是不是字缝」：写本字距不匀、字常伸出名义格，
+# 两字之间往往没有干净的白行，行墨最少的那一行可能正穿着上字的长捺。切割量换个量法——把列图的墨按连通块分开，
+# 一条线落在 y，每个跨过 y 的连通块被劈成上下两截，取**较小那截的墨量**求和：
+#
+# - 线落在两个不粘连的字之间：没有连通块跨线，切割量 0（哪怕这一行上有墨，那墨也整块在线的一侧）；
+# - 线擦过某字的笔尖：被劈下的那截很小，切割量小；
+# - 线劈在字中间：两截都大，切割量大。
+#
+# 史記 SJ 用同一量法查全书：强档（切割量 ≥800、挪后 ≤1/10）1,170 条，抽 12 条看图全是真劈字。
+#
+# 本原语只量，不挑线；怎么用切割量挑格线见 `impl/keben/row_boundaries.snap_by_cut`。
+
+
+def cut_cost_profile(ink: np.ndarray, max_h: float | None = None, min_area: int = 1) -> np.ndarray:
+    """ink：H×W 布尔（True＝墨）。返回长 H+1 的数组 `c`：`c[y]` 是水平线放在第 y 行**上沿**（第 0..y-1 行在线上、
+    第 y..H-1 行在线下）时的切割量＝Σ 跨线连通块 min(线上墨, 线下墨)（像素数）。`c[0]`、`c[H]` 恒为 0。
+
+    - `max_h`：纵向跨度超过它（像素）的连通块不算——贯穿整列的界行残段、版框竖线、大片墨渍不是字，
+      算进来会让整列切割量都高、高处还在列中间。None＝都算。
+    - `min_area`：面积小于它的连通块不算（墨点噪声）。
+
+    8 连通（同 Step4 归属图）。"""
+    ink = np.asarray(ink, dtype=bool)
+    h = ink.shape[0]
+    out = np.zeros(h + 1, dtype=np.float64)
+    if ink.size == 0 or not ink.any():
+        return out
+    import cv2
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
+    for k in range(1, n):
+        top, hh, area = int(stats[k, cv2.CC_STAT_TOP]), int(stats[k, cv2.CC_STAT_HEIGHT]), int(stats[k, cv2.CC_STAT_AREA])
+        if hh < 2 or area < min_area or (max_h is not None and hh > max_h):
+            continue
+        rows = (lab[top:top + hh] == k).sum(axis=1).astype(np.float64)
+        above = np.cumsum(rows)[:-1]                   # 线在 top+1..top+hh-1 时线上的墨
+        out[top + 1:top + hh] += np.minimum(above, area - above)
+    return out
+
+
+def cut_cost_sides(ink: np.ndarray, max_h: float | None = None, min_area: int = 1) -> tuple[np.ndarray, np.ndarray]:
+    """`cut_cost_profile` 按被劈下的小截在哪一边拆成两份：`(up, down)`，各长 H+1。`up[y]`＝线在 y 时小截在线**上**的那些
+    连通块的小截墨量和，`down[y]`＝小截在线**下**的。两截一样大各记一半，`up + down == cut_cost_profile(...)`。
+
+    用处：线劈着字时该往哪边挪——小截在下（`down` 大）说明线切在上字的字脚，往下挪才把字脚还给上字；往上挪
+    会把上字的大半截推给下一格（上下结构的字：「實」切在貝腿上，往上挪会落进宀与貫之间的白缝）。"""
+    ink = np.asarray(ink, dtype=bool)
+    h = ink.shape[0]
+    up = np.zeros(h + 1, dtype=np.float64)
+    down = np.zeros(h + 1, dtype=np.float64)
+    if ink.size == 0 or not ink.any():
+        return up, down
+    import cv2
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
+    for k in range(1, n):
+        top, hh, area = int(stats[k, cv2.CC_STAT_TOP]), int(stats[k, cv2.CC_STAT_HEIGHT]), int(stats[k, cv2.CC_STAT_AREA])
+        if hh < 2 or area < min_area or (max_h is not None and hh > max_h):
+            continue
+        rows = (lab[top:top + hh] == k).sum(axis=1).astype(np.float64)
+        above = np.cumsum(rows)[:-1]
+        below = area - above
+        up[top + 1:top + hh] += np.where(above < below, above, np.where(above == below, above / 2, 0.0))
+        down[top + 1:top + hh] += np.where(below < above, below, np.where(above == below, below / 2, 0.0))
+    return up, down
