@@ -11,7 +11,7 @@
 | F7 | `pitch_free_ignored` | 表行写了 `pitch: free`，最后选中的格网却是挤格补线（`layout_unmerge`），pitch 没起作用 |
 | ①c | `orphan` | 列中间整块墨不在任何字格里（先剥界行、版框长直线；判据照 SJ 快筛 ORPH，见 `orphan_ink`） |
 | F8 | `seal_blank` | seed_admit 会按印框记空的格（`occlusion.page_seal_blank`），本机跑到 cell_shrink 就能看 |
-| F6 | `cut_through` | 格线劈字：相邻两格的分界按连通块量切割量，在 ±0.4 格内挪能降到 1/10 以下、且 U-Net 归属裁判认挪后更对（`cut_through`，2026-11-13；要 torch） |
+| F6 | `cut_through` | 格线劈字：相邻两格的分界按连通块量切割量，在 ±0.4 格内挪能降到 1/4 以下、且 U-Net 归属裁判认挪后更对（`cut_through`，2026-11-13；要 torch） |
 """
 from __future__ import annotations
 
@@ -556,7 +556,7 @@ CUT_MID = 0.025            # 切割量 ≥ 格高² 的这么多才看（格高 
 CUT_STRONG = 0.066         # ≥ 格高² 的这么多算强档（格高 110 约 800px，SJ 强档抽 12 条看图 12 条真劈字）
 CUT_REACH = 0.4            # 在名义格线 ±这么多格高内找切割量最小的行
 CUT_SEP = 0.45             # 找的范围不越过相邻格线 ±这么多格高（同 row_boundaries.SNAP_CUT_MIN_SEP）
-CUT_KEEP = 0.1             # 最小处 ≤ 原位的这么多才报（挪得开，说明原位是放错了，不是两字本来粘连）
+CUT_KEEP = 0.25           # 挪开处的切割量要 ≤ 原位这么多倍才算「挪得开」（两字粘连时人裁的线也带点墨：史記人裁尺子 58 条，0.1 只报出 23 条、0.25 报 33 条，准确率 86%→81%，A22 11-13）
 CUT_MOVE = 0.07            # 且要挪 ≥ 这么多格高（格高 110 约 8px，原位旁边几行就是缝的不报）
 CUT_MAX_H = 1.6            # 纵向跨度超过这么多格高的连通块不算（界行残段、墨渍；同 row_boundaries.SNAP_CUT_MAX_H）
 CUT_JUDGE = 0.09           # U-Net 归属裁判：挪后那条线的一致率比原位低不超过这么多才报。挪进字内白缝会把整块部件（之的捺、
