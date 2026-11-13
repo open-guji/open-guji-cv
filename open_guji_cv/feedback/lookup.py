@@ -28,6 +28,8 @@ def _shard_items(shard: str, what: str) -> list:
     from ..gold.store import verdict_store
     try:
         return verdict_store().list(shard, legacy=False)
+    except FileNotFoundError:
+        return []                 # 分片还没建过 = 没有人工指定，正常，不是读失败
     except Exception as e:  # noqa: BLE001
         if _lenient():
             _logger.warning("读 %s（分片 %s）失败，按空表继续（GUJI_LOOKUP_LENIENT）：%r", what, shard, e)
