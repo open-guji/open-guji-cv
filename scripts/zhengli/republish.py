@@ -1097,8 +1097,7 @@ def bind_check(products: Path, book: str) -> dict:
     sys.path.insert(0, str(CV))
     import datetime as dt
     from collections import defaultdict
-    from guji_manager.exp.rough_bench import _NoCache, _split_key
-    from open_guji_cv.feedback.bindings import compute_page
+    from guji_manager.exp.rough_bench import _split_key
     from open_guji_cv.feedback.events import EventLog, counts_as_human, iter_events_readonly
     from open_guji_cv.products.store import ProductStore
     sys.path.insert(0, str(HERE))
@@ -1130,10 +1129,16 @@ def bind_check(products: Path, book: str) -> dict:
             by_page[pg].append(e)
     st = ProductStore(products)
     out = {"events": 0, "status": Counter(), "newer": [], "id_mismatch": [], "unbound": [], "decided_not_admitted": []}
+    # 用正式的 book_bindings（带字块缓存／现切字块图、字形库、锚框回填），不是几何口径的 compute_page：
+    # 后者没图可比，没有框的老人裁一律判 unanchored（11-13 vol04：682 条报 631 绑不上，实际 570 valid），
+    # 误把它们当「绑不上」放回单上、还拿来算 id_mismatch。
+    from open_guji_cv.feedback.bindings import book_bindings
+    rows = book_bindings(book, store=st)
     for pg, evs in sorted(by_page.items()):
-        ev = {e.id: e for e in evs}
-        for row in compute_page(book, pg, evs, store=st, cache=_NoCache(), backfill={}):
-            e = ev[row["event"]]
+        for e in evs:
+            row = rows.get(e.id)
+            if row is None:
+                continue
             out["events"] += 1
             out["status"][row["status"]] += 1
             bound = row.get("bound") if row["status"] in ("valid", "rebound") else None

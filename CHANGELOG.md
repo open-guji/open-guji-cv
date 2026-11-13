@@ -16,6 +16,8 @@
 
 ## [未发版]
 
+- PATCH：republish `bind_check`（出单时“人裁绑定：N 条 {…}”那行，也是 id_mismatch／unbound 的来源）改用正式的 `book_bindings`（带字块图缓存／现切、字形库、补锚档），不再用几何口径的 `compute_page(cache=_NoCache)`——后者没图可比，没有框的老人裁一律判 unanchored（vol04 报 631 绑不上，实际 570 valid；补上 109 条 cellvotes rebase 迁移事件的框后 679 valid）。（ZM，11-13）
+
 - PATCH：republish from-pack/issue 出单前查原图在不在（`need_source_images`）：人裁绑定要现切字块图比像不像，原图没拉时 vol04 682 条只绑上 51（拉了原图后 570），老人裁被静默判成 unanchored。现在没原图直接停并提示 `guji source pull`。读者侧冒烟的 HEAD 请求带 Referer（data.openguji.com 图防盗链，无 Referer 一律 403，云端容器里必误报）。（ZM，11-13）
 
 - PATCH：seg check `cut_through` 的「挪得开」从降到原位 1/10 放到 1/4（`CUT_KEEP` 0.1→0.25，A22 11-13）。史記人裁格框尺子（37 册 116 列，去掉人裁重切 1,855 条格线；人挪过且原线劈字 58 条）：报出 23→33 条，报出的里头人也挪过的 86%→81%。顺带量了 U-Net 裁判：58 条里认人线 46（门槛 0）→54（0.05），#1496 的护栏门槛有独立佐证。只读产物，不进指纹。
