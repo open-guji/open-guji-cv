@@ -1523,6 +1523,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new='9de0c6ed3a822acee36610bb674b84f1f70d30a7cf2cdea97fc79a7921f682cd',
           old='862f2f24da84debb2ce702f244115285de7de8d22adea085ec69b9fbdcba7e9f',
           evidence='同上'),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="1f4878abc68b1f32e7d782706830e83af80fea3588e85b95bf0385fd8f828545",
+          old="f235b50d80d8f1037bf8b7cc27e02ec84cf1d76ee4db72fe0e423388a16de866",
+          evidence="align_ref 加缺省关的书级开关 coord_conflict_drop_bad（与现役对位冲突只丢冲突格，ZM 殿本 vol05 p1 列 4／p101／p177）：新增分支只在该开关开且列将因「与现役对位冲突」退回时可达，关时控制流与改前逐句相同（代码核对＋tests/test_align_ref_coord.py）；★未在有产物的机器上跑 scripts/code_equiv.py check，请持产物者（ZM）钉前补跑，不同则撤这条，2026-11-13"),
 )
 
 
