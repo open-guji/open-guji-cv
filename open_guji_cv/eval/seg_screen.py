@@ -550,6 +550,52 @@ def half_width_outliers(col_cells, median_w: float) -> list[dict]:
     return out
 
 
+# ── 参校字证实（2026-11-13，史記 R011／R013：写本扁字、大字、夹注半格宽差都是字形本来如此，格位与参校本一致） ──────
+
+REF_OK_TOPK = 3            # 参校字落在本格字形匹配前这么多名里＝图像独立证实了这一格是这个字
+REF_OK_COL = 0.85          # 整列格高偏（只有列中位偏、没有单格离群）时，本列有参校字的格 ≥ 这么多被证实（或只差 1 格）就不报
+
+
+def ref_confirmed(glyph, aref, topk: int = REF_OK_TOPK) -> dict[tuple[int, int, str], bool | None]:
+    """一页 {(列, 格号, sub): 证实与否}：align_ref 的参校字在 glyph_match 前 topk 名候选里 → True，不在 → False，
+    这格没对上参校字 → None（无从证实，也不当反证）。
+
+    只用字形匹配（只看图）当证据，不用 seed_admit 的放行字：follow_ref／match_ref 通道的放行字本来就抄参校字，拿它比参校字是循环论证。
+    史記 r59（2 册、6 册）参校字落在前 3 名的格：整字 94%、夹注 93%。"""
+    coord = {r.id: r.ref_char for r in (aref.coord if aref is not None else [])}
+    out: dict = {}
+    for cc in (glyph.columns if glyph is not None else []):
+        for ch in cc.chars:
+            rc = coord.get(ch.id)
+            key = (cc.col, int(ch.slot), ch.sub or "")
+            if not rc:
+                out[key] = None
+                continue
+            out[key] = rc in [c[0] for c in (ch.candidates or [])[:topk]]
+    return out
+
+
+def ref_ok_cell(conf: dict, col: int, slot: int, sub: str | None) -> bool:
+    """这一格被参校字证实，且上下邻格（同号 a/b 都算）没有反证：格高或半格宽离群但字对、前后也对＝写本字形本来如此，不是切错。
+    真并格／拆格会把本格或邻格的字切坏、或让后面的格错一位，图上对不上参校字。sub＝"ab" 时 a、b 两半都要证实。"""
+    subs = ["a", "b"] if sub == "ab" else [sub or ""]
+    if not all(conf.get((col, slot, x)) for x in subs):
+        return False
+    for d in (-1, 1):
+        if any(v is False for (c, s, _x), v in conf.items() if c == col and s == slot + d):
+            return False
+    return True
+
+
+def ref_ok_col(conf: dict, col: int, frac: float = REF_OK_COL) -> bool:
+    """本列有参校字的格大多被证实（≥ frac，或只差 1 格）：整列格网缩放了却字字对得上，多半是写本这一列字距本来疏密不同。"""
+    vs = [v for (c, _s, _x), v in conf.items() if c == col and v is not None]
+    if len(vs) < PITCH_COL_MIN:
+        return False
+    bad = sum(1 for v in vs if not v)
+    return bad <= 1 or (len(vs) - bad) / len(vs) >= frac
+
+
 # ── F6 格线劈字（2026-11-13，史記 r54 少见字页 SJ 量法，Sheldon 让 A22 并进 seg check） ────────────────
 
 CUT_MID = 0.025            # 切割量 ≥ 格高² 的这么多才看（格高 110 约 300px，SJ「中档」下限）
