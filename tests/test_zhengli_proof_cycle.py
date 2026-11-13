@@ -111,7 +111,7 @@ def test_split_changes_human_vs_machine_and_revert(tmp_path):
     new = _char(tmp_path, "new.json", [("3:1:1", "官"), ("3:1:2", "論"), ("3:1:3", "彖"), ("3:1:4", "甲"), ("3:1:5", "已")])
     sp = pc.split_changes(old, new, {"3:1:2": "論", "3:1:3": "象"})
     assert sp == {"human": [("3:1:2", "", "論")], "overrule": [("3:1:3", "象", "彖")],
-                  "machine": [("3:1:1", "宫", "官"), ("3:1:5", "", "已")], "norm": []}
+                  "machine": [("3:1:1", "宫", "官"), ("3:1:5", "", "已")], "norm": [], "keep": []}
     pc.revert_cells(new, {a: o for a, o, _ in sp["overrule"]})
     assert pc._cells(new) == {"3:1:1": "官", "3:1:2": "論", "3:1:3": "象", "3:1:4": "甲", "3:1:5": "已"}
 
@@ -162,3 +162,14 @@ def test_engine_version_from_tag(tmp_path):
     assert pc.engine_version(tmp_path) is None
     g("tag", "v0.5.17")
     assert pc.engine_version(tmp_path) == "0.5.17"
+
+
+def test_split_changes_empty_new_keeps_human(tmp_path):
+    """机器无字（印章遮挡 admit=false，新字空）而旧字是人裁＝keep：留人裁字、不算推翻、不复审；旧字非人裁则走原逻辑（殿本 vol05 1:4:13）。"""
+    old = _char(tmp_path, "old.json", [("3:1:1", "象"), ("3:1:2", "甲"), ("3:1:3", "乙")])
+    new = _char(tmp_path, "new.json", [("3:1:1", ""), ("3:1:2", ""), ("3:1:3", "")])
+    sp = pc.split_changes(old, new, {"3:1:1": "象"})
+    assert sp["keep"] == [("3:1:1", "象", "")] and sp["overrule"] == []
+    assert sp["machine"] == [("3:1:2", "甲", ""), ("3:1:3", "乙", "")]
+    pc.revert_cells(new, {a: o for a, o, _ in sp["keep"]})
+    assert pc._cells(new) == {"3:1:1": "象", "3:1:2": "", "3:1:3": ""}
