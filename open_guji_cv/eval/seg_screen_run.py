@@ -10,6 +10,7 @@
 - cell_size：一列里格高离群（≥1.7 倍中位多半两字并一格、≤0.5 倍多半一字拆两格），按列一行；
 - page_pitch（2026-11-12）：正文格高对本页中位（整列偏 >10%，或单格 ≥1.5／≤0.6 倍），职名列不查；value＝列中位比；
 - half_width（2026-11-12）：夹注半格宽对本册半格宽中位出 0.7–1.4 倍，或同号 a/b 宽差 >30%；
+- cut_through（F6，2026-11-13）：格线劈字，相邻两格分界按连通块量切割量、±0.4 格内挪得开且 U-Net 裁判认挪后更对才报（没 torch 不跑，summary 注明），一条线一行，value＝强｜中；
 - pin_stale：中心库有 active 钉子、本页产物却没用上（产物早于钉子，要从 row_segment 重跑）。
 
 钉子列（产物带 `manual_cells` 旗）只比格号、不跑墨账与端外墨（SJ 第 5 条）；有钉子而产物没用上的列照普通列查；职名列不跑端外墨。`skip` 点名的页整页不查（书配置
@@ -20,7 +21,8 @@ from __future__ import annotations
 import sys
 
 CHECKS = ("edge_ink", "orphan", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
-          "pitch_free_ignored", "cell_flags", "cell_size", "page_pitch", "half_width", "pin_slots", "pin_stale", "layout_slots", "seal_blank")
+          "pitch_free_ignored", "cell_flags", "cell_size", "page_pitch", "half_width", "pin_slots", "pin_stale", "layout_slots", "seal_blank",
+          "cut_through")
 
 
 def _engine(book: str):
@@ -74,6 +76,11 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
     skip = skip or set()
     keys = sorted(p.stem for p in store.step_dir(book, "row_segment").glob("p[0-9]*.json"))
     c = counts.setdefault(book, {k: 0 for k in CHECKS} | {"pages": 0, "layout_same_count": 0})
+    from ..seg.cut_select import get_judge
+    judge = get_judge()                                            # cut_through 要 U-Net 归属裁判，没装 torch／权重就不跑这项
+    if judge is None:
+        c["cut_through_off"] = 1
+        print(f"⚠️ {book}：没有 U-Net 归属裁判（torch／权重），cut_through 不跑", file=sys.stderr)
     margins = {}
     halves = []                                                    # 本册夹注半格宽中位要全册算，先过一遍
     for key in keys:
@@ -170,6 +177,12 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
                         f"{o['slot']}{o['sub']}" + (f"×{o['ratio']}" if "ratio" in o else f" 差{o['asym']}") for o in ho)
                         + f" 本册半格宽 {half_med:.0f}px"))
                     c["half_width"] += 1
+            if judge is not None and "roster" not in cc.flags:
+                for t in ss.cut_through(gray, cc, judge=judge):
+                    rows["cut_through"].append((book, page, cc.col, t["level"],
+                                                f"{t['slot_above']}|{t['slot_below']} 切割量 {t['cost']}px，挪 {t['move']:+d}px 可降到 {t['best']}px"
+                                                + (f"，裁判 {t['agree'][0]:.2f}→{t['agree'][1]:.2f} 分歧 {t['agree'][2]}→{t['agree'][3]}px" if t["agree"] else "")))
+                    c["cut_through"] += 1
             if cell_checks and chars:
                 _cell_flags(book, page, cc.col, gray, chars, win_by_col.get(cc.col), ctx, rows, c)
             if "roster" in cc.flags:
@@ -247,8 +260,11 @@ def write_report(rows: dict[str, list], counts: dict, out, seal_blank: bool = Fa
         lines.append("| " + " | ".join([b, str(c["pages"]), *[str(c[k]) for k in hdr[2:]]]) + " |")
     same = sum(c.get("layout_same_count", 0) for c in counts.values())
     lines += ["", "edge_ink、pitch_free_ignored、cell_size、page_pitch、half_width、pin_slots、pin_stale、layout_slots 按列计；colnet_page、frame_margin、layout_col_shift、"
-              "layout_fallback 按页计；edge_frame_only、cell_flags、seal_blank 按格计；orphan 按块计。"
+              "layout_fallback 按页计；edge_frame_only、cell_flags、seal_blank 按格计；orphan 按块计；cut_through 按格线计。"
               f"版式对格号「同数」（只编号不同，判过）{same} 列，只计数不出行。"]
+    off = [b for b, c in counts.items() if c.get("cut_through_off")]
+    if off:
+        lines += ["", f"cut_through 没跑（缺 U-Net 归属裁判：torch／权重）：{'、'.join(off)}。"]
     text = "\n".join(lines) + "\n"
     (out / "summary.md").write_text(text, encoding="utf-8")
     return text

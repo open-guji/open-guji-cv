@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH：`guji seg check` 加 F6 `cut_through`（格线劈字，A22 11-13，Sheldon 同意并进；量法出自 SJ 史記 r54）：相邻两格分界按连通块量切割量（Step3 选了折线按折线量），≥0.025 格高² 且 ±0.4 格内能挪到原位 1/10 以下，再过 U-Net 归属裁判（挪后一致率比原位高 0.02）才报，一条线一行、value 强｜中；没 torch／权重不跑、summary 注明。殿本 vol30 全册不过裁判 33 条看图几乎全是两字相粘处格线本来对（最省墨处在字内白缝），过裁判剩 1 条；史記 42 册 9 页 16→3 条都真劈字；长钩尖伸进下格裁判也判归下格，查不出。只读产物，不进指纹。
 - PATCH：恢复 #1488 误删的 code_equiv 登记（align_ref f235b50d、align_ref_coord 9de0c6ed、row_segment 6dde638e、row_segment_pagemap a71017d1 四条），补入 v0.7.17 线的 row_segment fb60a8eb；新增 `scripts/check_code_equiv_monotonic.py`（登记链只增不减检查），版本号规矩加一条。只动登记表与脚本，不改任何 Step，产物指纹不变（A31 11-13）。
 
 

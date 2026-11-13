@@ -179,3 +179,53 @@ def test_orphan_ignores_small_specks_and_side_edges():
     g[340:346, 40:46] = 0                              # 小墨点（< 150px）
     g[320:380, 0:15] = 0                               # 贴左边的邻列字边
     assert ss.orphan_ink(g, boxes) == []
+
+
+def _tail_page():
+    """两格（格高 100，界线 y=200）：上格字的竖笔拖到 235，下格字从 240 起——y=200 的格线劈了竖笔尾。"""
+    cc = _col(1, [1, 2])
+    g = _img(400)
+    g[120:190, 30:70] = 0
+    g[120:236, 40:50] = 0                     # 竖笔尾伸进下格 36 行（切割量 360px ≥ 0.025×格高²）
+    g[240:290, 30:70] = 0
+    return g, cc
+
+
+class _Judge:
+    def __init__(self, scores):
+        self.scores, self.calls = scores, []
+
+    def assess(self, col_gray, x_lo, x_hi, y0, y1, y_line, seams, ink_threshold=128):
+        self.calls.append((y0, y1, y_line, seams))
+        return list(self.scores), [0, 0]
+
+
+def test_cut_through_reports_stroke_tail_cut():
+    g, cc = _tail_page()
+    hits = ss.cut_through(g, cc)
+    assert len(hits) == 1
+    h = hits[0]
+    assert (h["slot_above"], h["slot_below"]) == (1, 2) and h["cost"] == 360 and h["best"] == 0
+    assert 36 <= h["move"] <= 39 and h["level"] == "中"
+
+
+def test_cut_through_judge_gates_report():
+    g, cc = _tail_page()
+    ok = _Judge([0.90, 0.99])                 # 挪后归属更对：报
+    assert len(ss.cut_through(g, cc, judge=ok)) == 1
+    _y0, _y1, y_line, seams = ok.calls[0]
+    assert y_line == 200 and seams[0] is None and int(seams[1][0]) >= 236
+    assert ss.cut_through(g, cc, judge=_Judge([0.99, 0.90])) == []      # 原位更对（字内白缝）：不报
+    assert ss.cut_through(g, cc, judge=_Judge([0.95, 0.96])) == []      # 差不到 CUT_JUDGE：不报
+
+
+def test_cut_through_follows_seam_and_skips_blank_pairs():
+    g, cc = _tail_page()
+    seam = [200] * 100
+    seam[38:52] = [238] * 14                  # Step3 折线绕到竖笔尾下面：没劈
+    cc.cells[1].seam_top = seam
+    assert ss.cut_through(g, cc) == []
+    g2 = _img(400)
+    cc2 = _col(1, [1, 2], kinds={1: "blank", 2: "blank"})
+    g2[150:250, 40:50] = 0                    # 两格都空（墨不算字）：不看
+    assert ss.cut_through(g2, cc2) == []
