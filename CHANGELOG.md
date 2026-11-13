@@ -27,6 +27,10 @@
 
 ## [未发版]
 
+## [0.7.34] - 2026-11-13
+
+- 发版说明（A31 11-13，全唐文 QTW 要）：dev 头 `e1b1505d` 的正式版（dev 线，接 v0.7.31；v0.7.32／33 是史記 patch 线不在这条链上），PATCH。含 #1526（seed_admit 书级 `group_flow_ruling_first`：名单里的字组文意先查对话裁定库，缺省空＝关，不进参数 dump；全唐文 book_defaults 加 `group_flow_ruling_first: [jys]` 才开）、#1517（follow_ref 钩子 rival_skip，缺省不调）、#1523（align_ref `coord_legacy_line_guard`，缺省关）及 seg check／脚本类改动。缺省关的新开关都已登记 code_equiv，没点名的册产物不过期。底库文件没变（相对 v0.7.31），不用配新底库。
+
 - PATCH：align_ref 书级开关 `coord_legacy_line_guard`（缺省关，A22 11-13，史記 r60 37:2:6）：参校本一列缺字时现役 difflib 按整页字流把图上多出的字配到别行同字、下一列整段错配，坐标对位被冲突闸整列退回。开了以后列↔行已定的列里，现役 equal 字不在本列整理本行里的格不当现役证据，坐标给了字的改坐标字。关时殿本 vol60、史記 37 全册逐字节同（code_equiv 已登记）。
 
 - PATCH：seed_admit `follow_ref` 加书级钩子 `impl/keben/follow_ref_hooks.rival_skip`（缺省 None 不调）：书仓覆盖后，算领先差时指定的字不当对手（史記同族第三形 吴呉吳、嵗歳歲，SJ 请求、A24 定规则，实现进史記书仓 code/）；钩子经 `facts(a, b)` 拿关系层事实；被排除的字记 `lane.rival_skip`。cv 不加开关。code_equiv 已登记，殿本 vol28 16 页逐字节同，seed_admit code_hash 不变（A22 11-13）。
