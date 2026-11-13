@@ -450,6 +450,37 @@ class UNetJudge:
             return None
 
 
+MOVE_TOL = 0.05
+"""整字护栏（`move_keeps_glyphs`，2026-11-13）：挪后一致率至少要达到原位的一致率减这么多才许挪。
+起初取 0。史記 42 册 9 页 snap_cut 拦下 15 条，Sheldon 11-13 看图：挪进字内白缝的 6 条（之×2、帝辛、忠、魯、之士）一致率
+掉 0.055–0.18，修钩尖笔尾的 9 条只掉 0.002–0.043（武丁、殷本、屬爵、以争、釐、善、義、江夏…），放到 0.05。
+seg check `cut_through` 另有自己的门槛（eval/seg_screen.CUT_JUDGE）。"""
+
+
+def move_keeps_glyphs(judge, col_gray: np.ndarray, x_lo: int, x_hi: int, y_from: float, y_to: float,
+                      prev: float, nxt: float, tol: float = MOVE_TOL, ink_threshold: int = INK_TH) -> bool:
+    """**整字护栏**：把相邻两格的分界从 `y_from` 挪到 `y_to`，挪完是否仍是两个整字（2026-11-13，防横点字劈开）。
+
+    「一二三」「戶」「畫」「思」「魯」这类字，上下两部件之间有整行的白缝，只看行墨或连通块切割量，字内白缝和字间白缝
+    分不开（缝里都没墨），格线一放宽找缝范围就会落进去：「帝｜辛」辛的点给了帝、「思」从己与心之间劈开。
+    这里借上下文：用 U-Net 归属裁判看 `[prev, nxt)` 整个两格窗口，每个墨点归上字还是下字（它认得三横是一个字、
+    心是思的底），比较两条直线格线与它的一致率，挪后不比原位差（≥ 原位 − `tol`）才许挪。
+    裁判缺席或判不了（`judge` 为 None、窗口太小、出错）一律放行，同没有护栏。
+
+    史記 42 册 9 页实测（snap_cut 0.4）：挪 67 条，拦下 15 条看图全是挪进字内白缝的，放行 52 条都落在字缝里。"""
+    if judge is None:
+        return True
+    n = int(x_hi) - int(x_lo)
+    if n <= 0:
+        return True
+    r = judge.assess(col_gray, int(x_lo), int(x_hi), int(round(prev)), int(round(nxt)), float(y_from),
+                     [None, np.full(n, int(round(y_to)))], ink_threshold)
+    if r is None:
+        return True
+    s_from, s_to = r[0]
+    return s_to >= s_from - tol
+
+
 _JUDGE: dict[str, "UNetJudge | None"] = {}
 
 

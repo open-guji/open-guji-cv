@@ -68,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--epochs", type=int, default=15)
     ap.add_argument("--batch", type=int, default=128)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--init", help="从已训权重起步微调（库小的书，如史記：拿全唐文权重做起点、只用本书刻例训）")
+    ap.add_argument("--lr", type=float, default=3e-3, help="OneCycle 峰值学习率（微调可调小）")
     a = ap.parse_args(argv)
 
     import torch
@@ -90,9 +92,17 @@ def main(argv: list[str] | None = None) -> int:
     print(f"训练 {len(keep)} 例、{len(chars)} 类（排除评测格 {len(held)}）", flush=True)
 
     net = SimNet(n_cls=len(chars))
+    if a.init:
+        sd = {k: v for k, v in torch.load(a.init, map_location="cpu").items() if k != "W"}
+        miss = net.load_state_dict(sd, strict=False)
+        assert set(miss.missing_keys) <= {"W"} and not miss.unexpected_keys, miss
+        with torch.no_grad():                # 类中心用起点权重下各类刻例嵌入的均值，免得头几步把骨干冲坏
+            net.eval()
+            Z = torch.cat([net.embed(torch.from_numpy(X[i:i + 512])[:, None]) for i in range(0, len(X), 512)])
+            net.W.copy_(F.normalize(torch.zeros(len(chars), Z.shape[1]).index_add_(0, torch.from_numpy(Y), Z), dim=1))
     opt = torch.optim.AdamW(net.parameters(), 2e-3, weight_decay=1e-4)
     steps = a.epochs * (len(X) // a.batch)
-    sched = torch.optim.lr_scheduler.OneCycleLR(opt, 3e-3, total_steps=steps)
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, a.lr, total_steps=steps)
     t0 = time.time()
     for ep in range(a.epochs):
         net.train()

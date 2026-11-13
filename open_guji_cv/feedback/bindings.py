@@ -662,8 +662,21 @@ def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
     for r in sorted(b.values(), key=lambda r: r["ts"]):
         latest[r["key"]] = r
     out: dict[str, str] = {}
+    try:
+        from .lookup import stale_human_marks
+        stale = stale_human_marks(book)
+    except Exception:
+        stale = {}
     for k, ch in shapes.items():
         r = latest.get(k) if k.startswith(book + ":") else None
+        if k in stale:
+            # 作废标记（字形库 human_stale_* 或 stale_verdicts.tsv）：撤下时刻之后没有再裁的，库里这份不再算人裁。
+            # 否则重绑只看「该格号最新事件的锚」，误锚的人裁会在重绑后落到别的格（vol01 182:9:15a 变「宅」，11-13）。
+            st = stale[k]
+            ev_ts = ((r or {}).get("ts") or "").replace("-", "").replace(":", "")   # 20261013T231500Z
+            cut = st if "T" in st else st + "T235959"                               # 只有日期的撤下时刻：按当天末算
+            if r is None or ev_ts[:len(cut)] <= cut:
+                continue
         if r is None:
             out[k] = ch
             continue

@@ -30,7 +30,7 @@ def test_registered_path_params_exist_and_leave_hash():
     expect = {
         "glyph_match": ("db_path",),
         "seed_admit": ("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
-                       "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn", "solo_adapt_profile"),
+                       "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn", "solo_adapt_profile", "stroke_veto"),
         "context_decide": ("corpus", "general_corpus_dir", "ai_evidence", "llm_log_dir"),
         "align_ref": ("corpus",),
     }

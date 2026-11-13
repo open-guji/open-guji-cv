@@ -44,6 +44,53 @@ def test_dp_rejects_low_agreement():
     assert C.coord_dp(_units("甲乙丙丁戊己庚辛壬癸子丑寅卯"), _text(REF)) is None
 
 
+# 史記 r53 37:194:3（格线与 r52 同，换字形库 g20 后）：僮格认成「僕」、僕格认成「借」
+_R53 = "天子以自媚多從人行至長安虜賣以為僮僕取自脫"
+_R53_CARRIER = "天子以自嫄多從人行至長安虜賣以為僕借取自脫"
+
+
+def test_dp_two_skips_for_one_agree_shifts_without_cost():
+    """不扣跳过分：跳一个整理本字＋跳一格，换来僮格吻合「僕」，整理本字错开一格（原行为，留作对照）。"""
+    r = C.coord_dp(_units(_R53_CARRIER), _text(_R53))
+    got = {i: ch for i, _sl, _sub, ch, _g in r.recs}
+    assert got["p:1:17"] == "僕" and "p:1:18" not in got
+
+
+def test_dp_skip_cost_keeps_column_in_place():
+    """`skip_cost` 0.6：两次跳过只换来一处吻合时不错开，僮格配「僮」、僕格配「僕」；门槛按吻合数算。"""
+    r = C.coord_dp(_units(_R53_CARRIER), _text(_R53), skip_cost=0.6)
+    got = {i: ch for i, _sl, _sub, ch, _g in r.recs}
+    assert got["p:1:17"] == "僮" and got["p:1:18"] == "僕" and got["p:1:5"] == "媚"
+    assert r.agree == len(_R53) - 3
+
+
+def test_dp_skip_cost_still_skips_for_real_missing_cell():
+    """真少一格／多一格时，错开后吻合的是后面整段，扣分照样跳。"""
+    r = C.coord_dp(_units(REF, skip_at=5), _text(REF), skip_cost=0.6)
+    got = {i: ch for i, _sl, _sub, ch, _g in r.recs}
+    assert got["p:1:6"] == "地" and got["p:1:1"] == "山"
+    r = C.coord_dp(_units(REF, extra_at=4), _text(REF), skip_cost=0.6)
+    assert r is not None and "p:1:x" not in {i for i, *_ in r.recs}
+
+
+def test_dp_skip_cost_topk_credit_holds_place():
+    """史記 r53 35:84:2：大格认成「太」（前几名有「大」）、夫格认成「大」（前几名有「夫」）。
+    只看载体字时错开一格能多一处吻合；记上前几名候选分后原位分更高，不错开。"""
+    ref = "韓安國免詔拜為御史大夫自為吏未言案人"
+    car = "韓安國免詔拜為御史太大自為吏未言案人"
+    us = _units(car)
+    topk = {u.ids[""]: (u.carrier[""], ref[i]) for i, u in enumerate(us)}
+    r = C.coord_dp(us, _text(ref), skip_cost=0.6, topk=topk)
+    got = {i: ch for i, _sl, _sub, ch, _g in r.recs}
+    assert got["p:1:10"] == "大" and got["p:1:11"] == "夫"
+
+
+def test_dp_skip_cost_off_by_default_and_not_in_dump():
+    from open_guji_cv.steps.align_ref import AlignRefParams
+    assert "coord_dp_skip_cost" not in AlignRefParams().model_dump()
+    assert AlignRefParams(coord_dp_skip_cost=0.6).model_dump()["coord_dp_skip_cost"] == 0.6
+
+
 def test_dp_params_off_by_default_and_not_in_dump():
     from open_guji_cv.steps.align_ref import AlignRefParams
     p = AlignRefParams()

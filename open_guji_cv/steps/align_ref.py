@@ -535,6 +535,14 @@ class AlignRefParams(BaseModel):
     （格数对不上／有歧义／错位）或被「与现役对位冲突」整列退回的列，改用格序列与整理本单元序列的单调对齐，
     载体字吻合够多才认，只给配上的格字。False＝关（缺省，不进参数哈希）。"""
 
+    coord_dp_skip_cost: float = 0.0
+    """`coord_dp` 每跳过一个格或整理本单元扣的分（2026-11-13，史記 r53，A22）：0＝不扣（缺省，不进参数哈希）。
+    不扣时单调对齐会花两次跳过（跳一格＋跳一个整理本单元）去换一处载体字吻合，整列后半错开一格：
+    换字形库后某格载体字恰好等于下一格的整理本字（形近，如僮格认成「僕」），整理本字就整体错位，
+    再经 match_ref 放行成错字（r53 33:101:5、35:84:2、37:194:3）。开了以后对齐打分还给「整理本字在这一格库匹配前几名里」
+    的一对记 `COORD_DP_TOPK_CREDIT`（0.5，与收格同一份证据）。设 0.6：两次跳过（1.2）要换来比原位多 1.2 分以上才错开；
+    真有并格／印章假格时错开后吻合的是后面整段，不受影响。史記 33/35/37/41 四册对比见 PR。"""
+
     coord_dp_flat: bool = False
     """载体字按逐字字序对齐（2026-11-03，史記文淵閣本；见 `align_ref_coord.coord_dp_flat`，要 `coord_dp` 开着）：
     `coord_dp` 也配不上的列再试一次——夹注段拆成先右行后左行的逐字序列，可多跳几格（印泥假格、夹注右行多写一两字），
@@ -628,6 +636,8 @@ class AlignRefParams(BaseModel):
             d.pop("coord_pair_no_sub", None)
         if isinstance(d, dict) and not self.coord_dp_flat:
             d.pop("coord_dp_flat", None)
+        if isinstance(d, dict) and not self.coord_dp_skip_cost:
+            d.pop("coord_dp_skip_cost", None)
         if isinstance(d, dict) and not self.coord_conflict_pair_only:
             d.pop("coord_conflict_pair_only", None)
         if isinstance(d, dict) and not self.coord_conflict_drop_bad:
@@ -845,7 +855,8 @@ class AlignRefStep(Step):
                          **({"pair_only": True} if p.coord_conflict_pair_only else {}),
                          **({"drop_bad": True} if p.coord_conflict_drop_bad else {}),
                          **({"blank_ink": True} if p.coord_blank_ink else {}),
-                         **({"consensus_not_same": True} if p.coord_consensus_not_same else {}))
+                         **({"consensus_not_same": True} if p.coord_consensus_not_same else {}),
+                         **({"dp_skip_cost": p.coord_dp_skip_cost} if p.coord_dp_skip_cost else {}))
             cells = _opt(ctx, "cells", page)
             if match.alt_columns and cells is not None and cells.alt_columns:
                 _choose_alt(out["align_ref"], ctx.book.id, page, match, ocr, rare, cells, p)
@@ -1551,7 +1562,8 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
                          **({"pair_only": True} if p.coord_conflict_pair_only else {}),
                          **({"drop_bad": True} if p.coord_conflict_drop_bad else {}),
                          **({"blank_ink": True} if p.coord_blank_ink else {}),
-                         **({"consensus_not_same": True} if p.coord_consensus_not_same else {}))
+                         **({"consensus_not_same": True} if p.coord_consensus_not_same else {}),
+                         **({"dp_skip_cost": p.coord_dp_skip_cost} if p.coord_dp_skip_cost else {}))
     alt_match = match.with_alt(cols)
     car_main, car_alt = carrier_fn(match, ocr, rare), carrier_fn(alt_match, ocr, rare_alt)
     n_cells = {c.col: len(c.chars) for c in alt_match.columns if c.col in cset}
@@ -1596,7 +1608,7 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  title_trust: bool = False, dp_flat: bool = False,
                  shift_needs_pair: bool = False, pair_no_sub: bool = False,
                  pair_only: bool = False, drop_bad: bool = False, blank_ink: bool = False, consensus_not_same: bool = False,
-                 circle_ext: bool = False, ref_hint: bool = False) -> None:
+                 circle_ext: bool = False, ref_hint: bool = False, dp_skip_cost: float = 0.0) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1676,7 +1688,8 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         syms = [u for u in units if u.sym] if circle_ext else []
         if syms:
             units = [u for u in units if not u.sym]
-        d = None if empty_hit else C.coord_dp(units, ln.text_units())
+        d = None if empty_hit else C.coord_dp(units, ln.text_units(),
+                                               **({"skip_cost": dp_skip_cost, "topk": cand_top} if dp_skip_cost else {}))
         if d is None and dp_flat:
             d = C.coord_dp_flat(units, ln.text_units(), cand_top)
         if d is None:

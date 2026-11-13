@@ -1229,3 +1229,23 @@ def test_zw_lift_requires_ref_agree(monkeypatch):
     r = Rec("b")
     group_flow_pass([r], {"b": ("文", "equal")}, cands, lambda r: False, FlowConfig(groups=("zw",), provisional=False))
     assert r.admit and r.char == "文"
+
+
+# —— 嗚鳴（QTW 2026-11-13）：需点名才开，不进缺省 group_flow／GROUPS ——
+
+def test_wu_is_opt_in():
+    from open_guji_cv.groups.registry import FLOW_GROUPS, GROUPS, OPT_IN_GROUPS, generic_flow_names
+    assert "wu" in OPT_IN_GROUPS and "wu" in FLOW_GROUPS
+    assert "wu" not in GROUPS and "wu" not in generic_flow_names()
+    assert FLOW_GROUPS["wu"].flow.solvers == ("ctx",) or "ctx" in FLOW_GROUPS["wu"].flow.solvers[0]
+
+
+def test_wu_review_fix_strong(monkeypatch):
+    """库首位鳴、文意说嗚：补放给嗚（组内，文意 strong 越过整理本）。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict("嗚", via=name))
+    r = Rec("a")
+    group_flow_pass([r], {"a": ("嗚", "equal")}, lambda cid: [("鳴", 0.99), ("嗚", 0.985)], lambda r: False,
+                    FlowConfig(groups=("wu",), provisional=False))
+    assert r.admit and r.char == "嗚"

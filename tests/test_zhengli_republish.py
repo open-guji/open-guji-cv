@@ -571,3 +571,48 @@ def test_sheet_gate_blocks_false_overturn(capsys):
     assert "单子体检不过" in str(e.value)
     a.ack_sheet_audit = "测试放行"
     rp.sheet_gate(bad, ws, "vol06", a)                        # 写明原因可放行
+
+
+def test_need_source_images_stops_without_raw(monkeypatch):
+    """原图不在：绑定会把老人裁大片判成 unanchored 悄悄丢掉，出单前必须停（11-13 vol04）。"""
+    import open_guji_cv.core.book as bookmod
+
+    class FakeBook:
+        def __init__(self, pages):
+            self._p = pages
+
+        def all_pages(self):
+            return self._p
+
+    monkeypatch.setattr(bookmod, "load_book", lambda b: FakeBook([]))
+    with pytest.raises(SystemExit) as e:
+        rp.need_source_images("vol04")
+    assert "guji source pull vol04" in str(e.value)
+    monkeypatch.setattr(bookmod, "load_book", lambda b: FakeBook([1, 2]))
+    rp.need_source_images("vol04")
+
+
+def test_http_sends_referer(monkeypatch):
+    seen = {}
+
+    class R:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b""
+
+    import urllib.request
+
+    def fake(req, timeout=0):
+        seen.update(req.headers)
+        return R()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    rp._http("https://data.openguji.com/x", method="HEAD")
+    assert seen.get("Referer") == "https://www.openguji.com/"

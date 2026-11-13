@@ -358,6 +358,16 @@ def unlanded_votes(ws: Path, book: str, text_id: str, rev: str, votes: list[dict
 UNMAPPED_TSV = "旧单票无法对位.tsv"
 
 
+def need_source_images(book: str) -> None:
+    """人裁绑定要拿「当时的图 vs 现格字块图」比像不像，现切字块图要原图。
+    原图没拉（容器新开、没 `guji source pull`）时绑定会把老人裁大片判成 unanchored 静默丢掉
+    （11-13 vol04：682 条只绑上 51，拉了原图后 570）。所以出单前先查：原图不在就停。"""
+    from open_guji_cv.core.book import load_book
+    if not load_book(book).all_pages():
+        sys.exit(f"✗ {book} 的原图不在本机：先 `guji source pull {book} -w <工作区>`。"
+                 "没有原图，人裁绑定会把大批老人裁判成 unanchored 悄悄丢掉。")
+
+
 def sheet_findings(doc: dict, ws: Path, book: str) -> list:
     """单子体检（guji-manager `review.sheet_audit`，11-13 ZM）：不管单子从哪条路径出来，机械查几类「不该进判字单」的格。
     manager 太旧（没有这个模块）返回 None，调用方只提示、不拦。"""
@@ -984,7 +994,9 @@ DATA = "https://data.openguji.com"
 
 def _http(url: str, method: str = "GET", timeout: int = 30):
     import urllib.request
-    req = urllib.request.Request(url, method=method, headers={"User-Agent": "open-guji-cv/republish"})
+    # data.openguji.com 的图有防盗链（无 Referer 一律 403），读者侧冒烟要带上，否则云端容器里必误报
+    req = urllib.request.Request(url, method=method, headers={"User-Agent": "open-guji-cv/republish",
+                                                              "Referer": "https://www.openguji.com/"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.status, (r.read() if method == "GET" else b"")
 
@@ -1085,8 +1097,7 @@ def bind_check(products: Path, book: str) -> dict:
     sys.path.insert(0, str(CV))
     import datetime as dt
     from collections import defaultdict
-    from guji_manager.exp.rough_bench import _NoCache, _split_key
-    from open_guji_cv.feedback.bindings import compute_page
+    from guji_manager.exp.rough_bench import _split_key
     from open_guji_cv.feedback.events import EventLog, counts_as_human, iter_events_readonly
     from open_guji_cv.products.store import ProductStore
     sys.path.insert(0, str(HERE))
@@ -1118,10 +1129,16 @@ def bind_check(products: Path, book: str) -> dict:
             by_page[pg].append(e)
     st = ProductStore(products)
     out = {"events": 0, "status": Counter(), "newer": [], "id_mismatch": [], "unbound": [], "decided_not_admitted": []}
+    # 用正式的 book_bindings（带字块缓存／现切字块图、字形库、锚框回填），不是几何口径的 compute_page：
+    # 后者没图可比，没有框的老人裁一律判 unanchored（11-13 vol04：682 条报 631 绑不上，实际 570 valid），
+    # 误把它们当「绑不上」放回单上、还拿来算 id_mismatch。
+    from open_guji_cv.feedback.bindings import book_bindings
+    rows = book_bindings(book, store=st)
     for pg, evs in sorted(by_page.items()):
-        ev = {e.id: e for e in evs}
-        for row in compute_page(book, pg, evs, store=st, cache=_NoCache(), backfill={}):
-            e = ev[row["event"]]
+        for e in evs:
+            row = rows.get(e.id)
+            if row is None:
+                continue
             out["events"] += 1
             out["status"][row["status"]] += 1
             bound = row.get("bound") if row["status"] in ("valid", "rebound") else None
@@ -1206,6 +1223,7 @@ def cmd_from_pack(a) -> int:
             cmd += [flag, f]
     if run(cmd, cwd=CV, env=env).returncode:
         return 1
+    need_source_images(book)
     b = bind_check(products, book)
     print(f"人裁绑定：{b['events']} 条 {b['status']}；包后新到 {len(b['newer'])}、按格号会扣错 {len(b['id_mismatch'])}")
     a.export_dir = str(export)

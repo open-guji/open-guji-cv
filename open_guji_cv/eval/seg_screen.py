@@ -11,6 +11,7 @@
 | F7 | `pitch_free_ignored` | 表行写了 `pitch: free`，最后选中的格网却是挤格补线（`layout_unmerge`），pitch 没起作用 |
 | ①c | `orphan` | 列中间整块墨不在任何字格里（先剥界行、版框长直线；判据照 SJ 快筛 ORPH，见 `orphan_ink`） |
 | F8 | `seal_blank` | seed_admit 会按印框记空的格（`occlusion.page_seal_blank`），本机跑到 cell_shrink 就能看 |
+| F6 | `cut_through` | 格线劈字：相邻两格的分界按连通块量切割量，在 ±0.4 格内挪能降到 1/4 以下、且 U-Net 归属裁判认挪后更对（`cut_through`，2026-11-13；要 torch） |
 """
 from __future__ import annotations
 
@@ -546,4 +547,133 @@ def half_width_outliers(col_cells, median_w: float) -> list[dict]:
             asym = abs(d["a"] - d["b"]) / max(d["a"] + d["b"], 1.0)
             if asym > HALF_PAIR:
                 out.append({"slot": slot, "sub": "ab", "asym": round(asym, 2)})
+    return out
+
+
+# ── F6 格线劈字（2026-11-13，史記 r54 少见字页 SJ 量法，Sheldon 让 A22 并进 seg check） ────────────────
+
+CUT_MID = 0.025            # 切割量 ≥ 格高² 的这么多才看（格高 110 约 300px，SJ「中档」下限）
+CUT_STRONG = 0.066         # ≥ 格高² 的这么多算强档（格高 110 约 800px，SJ 强档抽 12 条看图 12 条真劈字）
+CUT_REACH = 0.4            # 在名义格线 ±这么多格高内找切割量最小的行
+CUT_SEP = 0.45             # 找的范围不越过相邻格线 ±这么多格高（同 row_boundaries.SNAP_CUT_MIN_SEP）
+CUT_KEEP = 0.25           # 挪开处的切割量要 ≤ 原位这么多倍才算「挪得开」（两字粘连时人裁的线也带点墨：史記人裁尺子 58 条，0.1 只报出 23 条、0.25 报 33 条，准确率 86%→81%，A22 11-13）
+CUT_MOVE = 0.07            # 且要挪 ≥ 这么多格高（格高 110 约 8px，原位旁边几行就是缝的不报）
+CUT_MAX_H = 1.6            # 纵向跨度超过这么多格高的连通块不算（界行残段、墨渍；同 row_boundaries.SNAP_CUT_MAX_H）
+CUT_JUDGE = 0.09           # U-Net 归属裁判：挪后那条线的一致率比原位低不超过这么多才报。挪进字内白缝会把整块部件（之的捺、
+                           # 忠的心、魯的日）划到邻格，一致率掉 ≥0.105；修钩尖、笔尾只动一小截，掉得少（史記 42 册 16 条 Sheldon 11-13 看图）
+
+
+def _slot_spans(col_cells) -> list[dict]:
+    """按格号合并（夹注 a/b 同格号算一格），按 y 排：[{slot, y0, y1, blank, seam_top, seam_bottom, x0}]。"""
+    by: dict = {}
+    for c in col_cells.cells:
+        d = by.setdefault(c.slot, {"slot": c.slot, "y0": c.y0, "y1": c.y1, "blank": True,
+                                   "seam_top": None, "seam_bottom": None, "x0": c.x0})
+        d["y0"], d["y1"] = min(d["y0"], c.y0), max(d["y1"], c.y1)
+        d["blank"] = d["blank"] and c.kind == "blank"
+        if c.sub is None:
+            d["seam_top"] = d["seam_top"] or c.seam_top
+            d["seam_bottom"] = d["seam_bottom"] or c.seam_bottom
+            d["x0"] = c.x0
+    return sorted(by.values(), key=lambda d: d["y0"])
+
+
+def _seam_ys(seam, sx0: int, x0: int, w: int) -> np.ndarray | None:
+    """折线（列图坐标逐 x 的 y，从 `sx0` 起）换成内容窗 [x0, x0+w) 逐 x 的 y；窗内没有点返回 None，缺的 x 补中位数。"""
+    ys = np.full(w, -1, dtype=np.int64)
+    for i, y in enumerate(seam):
+        x = sx0 + i - x0
+        if 0 <= x < w:
+            ys[x] = int(y)
+    valid = ys >= 0
+    if not valid.any():
+        return None
+    ys[~valid] = int(np.median(ys[valid]))
+    return ys
+
+
+def _seam_cut(lab: np.ndarray, keep: np.ndarray, areas: np.ndarray, ys: np.ndarray | None) -> float:
+    """折线格线（`_seam_ys` 换好的逐 x 的 y）的切割量：Σ 跨线连通块 min(线上墨, 线下墨)。"""
+    if ys is None:
+        return 0.0
+    h = lab.shape[0]
+    above = np.arange(h)[:, None] < ys[None, :]
+    up = np.bincount(lab[above & (lab > 0)], minlength=len(areas)).astype(np.float64)
+    m = keep & (up > 0) & (up < areas)
+    return float(np.minimum(up[m], areas[m] - up[m]).sum())
+
+
+def cut_through(gray: np.ndarray, col_cells, ink_threshold: int = 128, *, mid: float = CUT_MID,
+                strong: float = CUT_STRONG, judge=None) -> list[dict]:
+    """一列里**劈字的格线**：[{slot_above, slot_below, y, cost, best, move, level: 强|中}]（F6，2026-11-13）。
+
+    相邻两格（夹注 a/b 合成一格看，两格都空的不看）的分界线，按连通块量切割量（Σ 被劈的连通块 min(线上墨, 线下墨)，
+    `seg.seam.cut_cost_profile`；Step3 选了折线的按折线量）。切割量 ≥ `mid`×格高²、在 ±`CUT_REACH` 格高内（不越过相邻
+    格线 `CUT_SEP` 格高）能挪到 ≤ 原位 `CUT_KEEP` 的行、且要挪 ≥ `CUT_MOVE` 格高，就报；切割量 ≥ `strong`×格高² 是强档。
+
+    逐格的「邻字残笔」FOR 分不开「笔尖伸进来」和「格线劈在字中间」（史記全书 FOR 约 15,700 格，r53 排查时当噪声放过）；
+    这里量的是线本身劈了多少墨、挪开能不能避开：两字本来粘连的挪不开（最小处仍高），不报。
+    挪开处还要过 U-Net 归属裁判（`judge`，`seg.cut_select.get_judge()`，同 snap_cut 整字护栏）：看上下两格整个窗口，挪后
+    那条线的一致率比原位（有折线按折线）低不超过 `CUT_JUDGE` 才报。不过裁判时误报很多：殿本两字相粘处格线本来就对，最省墨处
+    却在字内白缝（vol30 全册 33 条看图几乎全是这种，裁判后剩 5 条）。史記 42 册 9 页 16 条 Sheldon 11-13 看图：挪后更好 11、
+    挪坏 5（之×2、帝、忠、魯，一致率都掉 ≥0.105）；门槛 0.09 报 9 条全对、挪坏的全拦，漏 2 条（掉 0.10、0.15）。`judge=None` 不过裁判（只给单测和诊断用）。
+    史記 r53 SJ 离线：强档全书 1,170 条，抽 12 条看图 12 条真劈字；18 格人审劈字里 A 类 12 格抓到 11 格。"""
+    from ..seg.seam import cut_cost_profile
+    import cv2
+    period = float(col_cells.period or 0.0)
+    if period <= 0 or not col_cells.cells:
+        return []
+    h, w = gray.shape[:2]
+    x0, x1 = (int(col_cells.content_x[0]), int(col_cells.content_x[1])) if col_cells.content_x else (0, w)
+    x0, x1 = max(0, x0), min(w, max(x1, x0 + 1))
+    ink = gray[:, x0:x1] < ink_threshold
+    max_h = CUT_MAX_H * period
+    prof = cut_cost_profile(ink, max_h=max_h)
+    spans = _slot_spans(col_cells)
+    if len(spans) < 2:
+        return []
+    lab = areas = keep = None
+    p2 = period * period
+    out = []
+    for i in range(1, len(spans)):
+        a, b = spans[i - 1], spans[i]
+        if a["blank"] and b["blank"]:
+            continue
+        y = b["y0"]
+        yi = int(round(min(max(y, 0.0), h)))
+        seam = b["seam_top"] or a["seam_bottom"]
+        ys0 = _seam_ys(seam, int(round(b["x0"] if b["seam_top"] else a["x0"])), x0, x1 - x0) if seam else None
+        if ys0 is not None:
+            if lab is None:
+                n, lab, st, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
+                areas = st[:, cv2.CC_STAT_AREA].astype(np.float64)
+                keep = (st[:, cv2.CC_STAT_HEIGHT] >= 2) & (st[:, cv2.CC_STAT_HEIGHT] <= max_h)
+                keep[0] = False
+            c0 = _seam_cut(lab, keep, areas, ys0)
+        else:
+            c0 = float(prof[yi])
+        if c0 < mid * p2:
+            continue
+        prev_y = a["y0"] if i >= 1 else 0.0
+        next_y = b["y1"]
+        lo = int(np.ceil(max(y - CUT_REACH * period, prev_y + CUT_SEP * period, 0)))
+        hi = int(np.floor(min(y + CUT_REACH * period, next_y - CUT_SEP * period, h)))
+        if hi < lo:
+            continue
+        k = int(np.argmin(prof[lo:hi + 1]))
+        best = float(prof[lo + k])
+        move = lo + k - y
+        if best > CUT_KEEP * c0 or abs(move) < CUT_MOVE * period:
+            continue
+        agree = None
+        if judge is not None:
+            r = judge.assess(gray, x0, x1, int(round(a["y0"])), int(round(b["y1"])), float(y),
+                             [ys0, np.full(x1 - x0, lo + k)], ink_threshold)
+            if r is not None:
+                agree = (r[0][0], r[0][1], r[1][0], r[1][1])
+                if r[0][1] < r[0][0] - CUT_JUDGE:
+                    continue
+        out.append({"slot_above": a["slot"], "slot_below": b["slot"], "y": round(float(y), 1), "cost": int(c0),
+                    "best": int(best), "move": int(round(move)), "level": "强" if c0 >= strong * p2 else "中",
+                    "agree": agree})
     return out
