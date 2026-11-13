@@ -1507,6 +1507,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="06fe196f9b2a44cf4ab61d09dc8ace5ef4f13b80ed9ff69a0d6def2a5d983443",
           old="501426bb2d5233bdcb8305fdec956f81f38c8a690fd1c85e6cbe471675545949",
           evidence="align_ref coord_conflict_drop_bad 加稀疏列例外（vol05 p1 列 4）：改动全在该开关开且列将因「与现役对位冲突」退回时才可达的 _drop_bad_recs 内，关时控制流与改前相同（代码核对＋tests/test_align_ref_coord.py）；★未在有产物的机器跑 scripts/code_equiv.py check（同上一条），2026-11-13"),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="bf9f5964d5f5eaf43e6c07fb4b9c42c4fb45e208f640f2045cf515c53c4cb857",
+          old="6b156bfcc6ec09cbfc8950cf68ea05ec633eb5ec0b48798f6bd0aed0b09ce284",
+          evidence="align_ref coord_conflict_drop_bad 丢掉的冲突格现役字改成坐标字（vol05 1:4:1）：新增 _use_coord_char 只在该开关开且 _drop_bad_recs 成功时调用，关时控制流与改前相同（代码核对＋tests/test_align_ref_coord.py）；★未在有产物的机器跑 scripts/code_equiv.py check，2026-11-13"),
 )
 
 

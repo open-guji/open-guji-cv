@@ -432,6 +432,18 @@ def test_drop_bad_keeps_column_when_many_agree():
     assert AlignRefParams(coord_conflict_drop_bad=True).model_dump()["coord_conflict_drop_bad"] is True
 
 
+def test_use_coord_char_rewrites_legacy_conflict_cell():
+    """drop_bad 丢掉的冲突格，现役记录改成坐标字＋replace（vol05 1:4:1 周／撰）。"""
+    from types import SimpleNamespace
+    from open_guji_cv.steps.align_ref import _use_coord_char
+    recs = [("x1", 1, None, "周", 1.0), ("x2", 2, None, "甲", 2.0)]
+    res = SimpleNamespace(chars=[AlignRec(id="x1", col=3, slot=1, align_char="撰", align_op="equal", ref_run=3),
+                                 AlignRec(id="x2", col=3, slot=2, align_char="甲", align_op="equal", ref_run=3)])
+    _use_coord_char(res, recs, recs[1:])
+    assert (res.chars[0].align_char, res.chars[0].align_op, res.chars[0].ref_run) == ("周", "replace", 1)
+    assert (res.chars[1].align_char, res.chars[1].align_op) == ("甲", "equal")
+
+
 # ── coord_circle_ext（2026-11-12，GUJI-767：史記 ○ 对位补强）──────────────────
 class _R:
     def __init__(self, cands, slot=1, sub=None, id_="x"):
