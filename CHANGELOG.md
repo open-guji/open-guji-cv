@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.35] - 2026-11-13
+
+- 发版说明（A31 11-13，全唐文 QTW 要）：dev 头 `c57b7968`，基于 v0.7.34，PATCH。只多 #1531（`group_flow_ruling_first` 在线模式 `GUJI_LLM_ONLINE=1` 时不先查，只给只读裁定库用；补复核按裁定改字的测试）。缺省关，code_equiv 已登记，没开名单的册产物不过期。
+
 - PATCH：seg check 新增 `block_tall`（殿本 vol06 147:3:3「也」，ZM 11-13）：cell_shrink 字块高 ≥ 本格 row_segment 格高 1.35 倍（且多 24px 以上）的格单独报（列末格不查）。cell_size／page_pitch 只比格线高度，格线对而字块连上贯穿长竖线时都不报；原先只有 `Lv` 被归「公用清格」漏掉。殿本 vol06–10 现行包扫出 06:147:3:3（格高 128、字块 427）、07:133:7:3（印章压空列）、07:5:2:1（1.36）。只读工具，不进产物指纹。
 
 - PATCH：新增 `scripts/orphan_rulings.py` 孤儿人裁普查（ZM 11-13）：human_chars 的「N 条页表 rev 不符不采信」把旧代迁移事件、有现行孪生的原始事件、**迁移时对不到新格的原始事件**混在一起；脚本只列最后一类（换源前的定字人裁、没有现行代孪生），按册出 TSV 交册线复核。仅维护脚本，不进产物指纹。
@@ -26,6 +30,8 @@
 - scripts/seg_fork_drift.py 加 `--ws <书仓>`：比书仓 code/ 覆盖模块与 cv 缺省实现（分叉点取书仓文件首次提交时刻），整份同缺省时提示可去掉覆盖。` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
 ## [未发版]
+
+- PATCH：删没书开、关时不进参数 dump 的切分开关（A22 开关收敛 L0 批，A20 11-14 定）：`border_detect.merge_narrow_pair`、`border_detect_gate.pagetype_model`（含 path、fingerprint）、`column_gate.period_edge_fallback`、`row_segment.colgold_prior`／`colgold_fingerprint`、`row_segment.yolo_merge`（含 `yolo_*` 六个）及只在开着时走的代码。四个模块登 code_equiv（殿本 vol01 13 页逐字节同），各书产物不过期。册配置里还写着这些键的会被静默忽略（没有书写）。`pagetype_model` 包、`impl/keben/column_pair_merge`、`yolo_tool_infer` 模块留着（闸认旗、研究脚本还用，且在 code_deps 里）。关时也进 dump 的另一批（page_survey_block、hint_ignore_dash、narrow_reject、dash_blank 等）随统一重跑轮删。
 
 ## [0.7.34] - 2026-11-13
 

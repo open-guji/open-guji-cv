@@ -26,7 +26,6 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.borders import Borders
 from ..products.kinds.line_index import LineIndex, LineRec
 from ..impl.keben.border import detect_borders, refit_bends
-from ..impl.keben.column_pair_merge import PAIR_MERGED_FLAG, merge_narrow_pair
 from ..impl.keben.column_types import classify_columns
 from ..impl.keben.pitch_rescue import rescue as pitch_rescue
 from ..seg.columns import COL_WIDTH_FLAG, ColumnSpec, check_columns
@@ -124,10 +123,6 @@ def _apply_vline_override(res, xs: list[float]) -> None:
 class BorderDetectParams(BaseModel):
     expected_cols: int | None = Field(default=None, description="列数先验；None = 用 Book 的 expected_cols")
     ink_threshold: int = 128
-    merge_narrow_pair: bool = False
-    """窄对合并（`impl/keben/column_pair_merge`，overview GUJI-155）：相邻两条**内部**窄列、宽度和≈一列时，
-    用 `expected_cols−1` 重探，接受条件见该模块。**缺省关**（要不要让各册 Step1 重算由 Morgan 定）；
-    关着、或页上没有窄对时，产物逐字节不变。触发页的 `expected_cols` 记成少一列，闸读它。"""
 
     column_grid_pages: list[int | str] = []
     """页级网格模式：点名的页竖线走 `column_grid`（版框定死、列距均匀），其余页照书级配置。
@@ -215,8 +210,6 @@ class BorderDetectParams(BaseModel):
     def _drop_off_merge(self, handler):
         """缺省关时不进 dump：没开的书 `params_hash` 与加这个字段之前逐位相同。"""
         d = handler(self)
-        if isinstance(d, dict) and not self.merge_narrow_pair:
-            d.pop("merge_narrow_pair", None)
         if isinstance(d, dict) and not self.column_grid_pages:
             d.pop("column_grid_pages", None)
             d.pop("grid_col_pitch", None)
@@ -326,12 +319,6 @@ class BorderDetectStep(Step):
                 # 换了线就在新的一串直线上重拟合折线（旧形状是在错的线网上拟的，vol46 p78）
                 res = refit_bends(res, gray, ink_threshold=p.ink_threshold,
                                   vline_polyline=ctx.book.vline_polyline, **bend_kw)
-        # 窄对合并（缺省关）：内部相邻两条窄列、宽度和≈一列 → 多了一条竖线，用 cols−1 重探。
-        # 没触发／重探不被接受时原样返回，下面的产物逐字节不变。
-        merged_col = None
-        if p.merge_narrow_pair:
-            res, cols, merged_col = merge_narrow_pair(res, cols, _detect,
-                                                      leaf_layout=ctx.book.leaf_layout)
         if page in p.vline_overrides:
             _apply_vline_override(res, p.vline_overrides[page])
         # 人裁逐列抬头（`lookup.resolved_head_raise`）：补 Step1 漏认的抬头框／去掉认错的。本页没有裁决时不动
@@ -359,9 +346,6 @@ class BorderDetectStep(Step):
         lines = []
         for c in classify_columns(xs, leaf_layout=ctx.book.leaf_layout):
             flags = [c.reason] if c.reason else []
-            if merged_col is not None and c.col == merged_col:
-                flags.append(f"{PAIR_MERGED_FLAG}：原相邻两条窄列（宽度和≈一列）被多余竖线劈开，"
-                             f"已用 {cols} 列重探去掉那条线")
             # 列位 col（1 起）夹在 xs[col-1] 与 xs[col] 之间；任一侧是插值线就标出来
             if filled[c.col - 1] or filled[c.col]:
                 flags.append("rule_interpolated")

@@ -124,9 +124,8 @@ def test_switches_off_keep_params_hash():
     from open_guji_cv.core.engine import params_hash
     from open_guji_cv.gates.column_gate import ColumnGateParams
     d = ColumnGateParams().model_dump(mode="json")
-    assert "period_prior_pages" not in d and "period_edge_fallback" not in d
+    assert "period_prior_pages" not in d
     assert params_hash(ColumnGateParams()) != params_hash(ColumnGateParams(period_prior_pages=[196]))
-    assert params_hash(ColumnGateParams()) != params_hash(ColumnGateParams(period_edge_fallback=True))
 
 
 def test_edge_estimate_unchanged_when_off(tmp_path, monkeypatch):
@@ -148,22 +147,6 @@ def test_unnamed_page_not_affected(tmp_path):
     base = _run(_ctx_params(tmp_path / "a", _body_page(), 115.0))
     other = _run(_ctx_params(tmp_path / "b", _body_page(), 115.0, period_prior_pages=[196]))
     assert other.model_dump() == base.model_dump()
-
-
-def test_edge_fallback_switch(tmp_path, monkeypatch):
-    _pin_estimate(monkeypatch)
-    gm = _run(_ctx_params(tmp_path, _body_page(), 115.0, period_edge_fallback=True))
-    assert gm.period == 115.0
-    assert gm.period_from_prior is True
-    assert any("贴窗口下界" in f for f in gm.flags)
-
-
-def test_edge_fallback_leaves_good_estimate(tmp_path):
-    """估值正常（不贴下界）的页，开关开着也用当场估的值。"""
-    base = _run(_ctx_params(tmp_path / "a", _body_page(), 60.0))
-    on = _run(_ctx_params(tmp_path / "b", _body_page(), 60.0, period_edge_fallback=True))
-    assert on.model_dump() == base.model_dump()
-    assert on.period_from_prior is False
 
 
 def test_prior_tol_fallback(tmp_path, monkeypatch):

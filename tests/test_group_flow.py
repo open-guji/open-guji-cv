@@ -1249,3 +1249,35 @@ def test_wu_review_fix_strong(monkeypatch):
     group_flow_pass([r], {"a": ("嗚", "equal")}, lambda cid: [("鳴", 0.99), ("嗚", 0.985)], lambda r: False,
                     FlowConfig(groups=("wu",), provisional=False))
     assert r.admit and r.char == "嗚"
+
+
+def test_ruling_first_review_fixes_released_cell(tmp_path, monkeypatch):
+    """`ruling_first`（全唐文 11-13 己已巳按文意＋AI）：已放行的 已（L1「而已」规则也说已）有对话裁定 己 → 复核改成 己；
+    不开照旧（L1 先给字、同放行字，不动）；在线模式（GUJI_LLM_ONLINE=1）不先查。"""
+    from open_guji_cv.groups import ctx_llm
+    from open_guji_cv.groups.methods import _L3C
+
+    class FC:
+        def ask(self, system, user, members, model, effort):
+            return {"char": "己", "conf": "high", "why": "x"}, {"in": 1, "out": 1, "cache_read": 0, "model": model}, None
+    monkeypatch.delenv(ctx_llm.ENV_ONLINE, raising=False)
+    cp = tmp_path / "rul.jsonl"
+    left, right = "其爲人也學而", "矣云云"
+    ctx_llm.judge("jys", "提示詞", "t", left, right, frozenset("己已巳"), model="m", effort="low",
+                  cache=ctx_llm.AnswerCache(cp), client=FC())
+    l3 = {"jys": {"system": "提示詞", "ver": "t", "cache": str(cp)}}
+
+    def run(first):
+        _L3C.clear()
+        r = Rec("a", "已", True, "match_ref", "match")
+        group_flow_pass([r], {}, lambda cid: [], lambda r: False, _cfg(l3_online=l3, l3_model="m", ruling_first=first),
+                        ctx_fn=lambda seq, i, d: left if d < 0 else right)
+        return r
+    r = run(frozenset())
+    assert r.admit and r.char == "已" and "fixed_from" not in r.evidence
+    r = run(frozenset({"jys"}))
+    assert r.admit and r.char == "己" and r.evidence["fixed_from"] == {"channel": "match_ref", "char": "已"}
+    assert r.evidence["group"]["solvers"][0]["ruling_first"]
+    monkeypatch.setenv(ctx_llm.ENV_ONLINE, "1")
+    r = run(frozenset({"jys"}))
+    assert r.char == "已"

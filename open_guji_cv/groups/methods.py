@@ -34,6 +34,8 @@
 """
 from __future__ import annotations
 
+import os
+
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -324,9 +326,14 @@ class Chain(Method):
         return v
 
     def _ruling_first(self, inp) -> tuple:
-        """`FlowConfig.ruling_first`：本组先查裁定库（对话裁定），命中就照裁定给字（留痕 `ruling_first`）。
+        """`FlowConfig.ruling_first`：本组先查裁定库（对话裁定），命中就照裁定给字（留痕 `ruling_first`）。只在管线不调 API
+        （缺省，`GUJI_LLM_ONLINE` 未设成 1）时生效：L3 是只读裁定库，先查不花钱。
         → (结论, None)；没命中 → (None, 这一问的 ask)，照常走各层（L2 小头给字时把 ask 记上，见 `_run`）；名单外 → (None, None)。"""
+        from .ctx_llm import ENV_ONLINE
         if inp.group not in (getattr(inp.cfg, "ruling_first", None) or ()) or _skip_half(inp):
+            return None, None
+        if os.environ.get(ENV_ONLINE) == "1":
+            # 只给只读裁定库用：在线模式下先查就等于组内每格先打一次 API（总览审 #1526 ①），在线时这项不生效
             return None, None
         for s in self.steps:
             if isinstance(s, CtxOnline) and s.applies(inp):

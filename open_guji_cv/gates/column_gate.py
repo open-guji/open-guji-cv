@@ -59,8 +59,7 @@ from ..products.kinds.gate import GateColumn, GateManifest
 from ..impl.keben import jiazhu_split
 from ..impl.keben.column_pair_merge import has_pair_merged
 from ..core.book import _expand_pages
-from ..impl.keben.row_boundaries import (PERIOD_WINDOW_LO, estimate_shared_period,
-                                    row_ink_projection)
+from ..impl.keben.row_boundaries import estimate_shared_period, row_ink_projection
 
 
 def jiazhu_column_frac(cleaned: np.ndarray, band: tuple[float, float],
@@ -191,11 +190,6 @@ class ColumnGateParams(BaseModel):
     #: （vol01 p196 估出 80px＝115×0.7，真值≈115），Step3 拿它当格距「弹性 DP 无解」，整列 0 格。
     #: 写法同 `row_segment.roster_pages`：`params: {column_gate: {period_prior_pages: [196]}}`。
     period_prior_pages: list[int | str] = []
-    #: **页级周期贴窗口下界时回落书级先验**（Ethan 10-15 的 column_gate_period_edge 补丁）。
-    #: 缺省关，关时不进参数指纹、产物逐字节不变。开了以后估值 ≤ int(period_prior×PERIOD_WINDOW_LO)+1
-    #: 的页改用 `period_prior`。四庫基线上命中 vol01 23 页（22 页职名页几何不变）、vol03 p57/58、
-    #: vol06 p150、vol07 p91；草稿册重跑时用，冻结册不要开（会改 period 值让下游过期）。
-    period_edge_fallback: bool = False
     #: **页级周期偏离书级先验太多时回落先验**（2026-10-21，殿本 vol04 p127 c3 整列格线错半格）。
     #: 正文页的格高是版式常量：殿本 vol04/05/09 正文页的估值都在先验 ±5% 以内。偏出 ±这么多的页，
     #: 估值是被卷末大印、整页空白带偏的（vol04 p127/128/220 估 89–95、vol05 p188 102、vol09 p162 99.5，
@@ -212,8 +206,6 @@ class ColumnGateParams(BaseModel):
                 d.pop("period_prior_pages", None)
             if not self.expected_cols_pages:
                 d.pop("expected_cols_pages", None)
-            if not self.period_edge_fallback:
-                d.pop("period_edge_fallback", None)
         return d
 
 
@@ -334,17 +326,8 @@ class ColumnGateStep(Step):
                 try:
                     period = period_est = round(float(estimate_shared_period(
                         projs, borders, dst_ws, period_prior=ctx.book.period_prior)), 2)
-                    # 窗口边缘卡死（GUJI-364）：自相关最大值落在窗口下界，说明真峰在窗外或
-                    # 本页字稀，估值不可信。开关开着时回落书级先验。
                     prior = ctx.book.period_prior
-                    if (p.period_edge_fallback and prior
-                            and period <= int(prior * PERIOD_WINDOW_LO) + 1):
-                        period = float(prior)
-                        period_from_prior = True
-                        page_flags.append(
-                            f"period_fallback：页级周期估值贴窗口下界（{period_est:g}px），"
-                            f"已用书级先验 {period:g}px 兜底")
-                    elif p.period_prior_tol and prior and abs(period / prior - 1) > p.period_prior_tol:
+                    if p.period_prior_tol and prior and abs(period / prior - 1) > p.period_prior_tol:
                         period = float(prior)
                         period_from_prior = True
                         page_flags.append(

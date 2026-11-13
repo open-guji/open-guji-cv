@@ -45,6 +45,12 @@ _FR_HOOK_1113 = ("seed_admit follow_ref 加书级钩子 impl/keben/follow_ref_ho
                  "产物逐字节相同；Step code_hash 改前改后同（babb397c0ee19af7，follow_ref_hooks 经 SPLITS 合回 pua_v2_codes）；"
                  "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-13（A22）")
 
+_DROP_L0_1114 = ("删缺省关、没书开、关时不进参数 dump 的开关（A22 开关收敛 L0 批，A20 11-14 定）：border_detect.merge_narrow_pair、"
+                 "border_detect_gate.pagetype_model 三件、column_gate.period_edge_fallback、row_segment.colgold_prior／colgold_fingerprint、"
+                 "yolo_merge 等七件及其只在开着时走的代码；关时控制流与改前相同。殿本 vol01 13 页（1,2,3,30,48,60,87,100,130,160,182,203,204，"
+                 "含卷端大印、职名页、门目页、卷末印，main 包 cv0.7.16-c16-g21-m2-p48-col9-grid-1113-a2 当上游）border_detect、border_detect_gate、"
+                 "column_gate、row_segment 与 origin/dev 84f5bc28 产物逐字节相同；scripts/code_equiv.py check，2026-11-14（A22）")
+
 _GM_1020 = ("glyph_match 提速（wmax 按需算、同格查找分桶、HOG 向量化）：vol04 46 页（每 5 页取 1，加 p17/p100/p186，含夹注与最慢页）、vol06 15 页（每 10 页取 1）与改前 529f071 产物逐字节相同，4 进程；scripts/code_equiv.py check，2026-10-20")
 
 _GM_1020_PM = ("glyph_match 加 batch_knn 开关（缺省关）、匹配器可收现成相似度、整库矩阵抽成 library_matrix（GUJI-647）："
@@ -1634,6 +1640,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='a8cdae9b8875b071d1fbdd04bb514f4be0d49ac7e3f44975ce1e6290e2755f88',
           old='45258af23d0898bfefb4957736316a953c3bdd334c3278a43aaa73fe97a5f861',
           evidence=_RF_1113),
+    # #1526 补：_ruling_first 在线模式（GUJI_LLM_ONLINE=1）不生效（总览审 ①），同 020 f5 包 40 页逐字节相同
+    Equiv(module='open_guji_cv.groups.methods',
+          new='4e6551fe7cff11bdd0a1f831eaa35db99d48019b701f0c65b84ebadc736fb722',
+          old='45258af23d0898bfefb4957736316a953c3bdd334c3278a43aaa73fe97a5f861',
+          evidence=_RF_1113),
     # align_ref coord_legacy_line_guard 现役跨行借字不算冲突（缺省关；史記 r60 37:2:6–7 参校本缺「正義」，2026-11-13，A22）
     Equiv(module='open_guji_cv.steps.align_ref',
           new='9e787a1f39ed3f7827de1e79be7b5bb543ff844415f5566c562c3665f7cdbd58',
@@ -1645,6 +1656,23 @@ ENTRIES: tuple[Equiv, ...] = (
           new='a2bc661cbb0a0cf2fb4dd998b73a935facd04c2f9419fbfb089c363cc3616a5a',
           old='f235b50d80d8f1037bf8b7cc27e02ec84cf1d76ee4db72fe0e423388a16de866',
           evidence='align_ref 加 coord_legacy_line_guard（缺省关不进参数 dump），见上一条 #1523 的证据；哈希按 v0.7.32 线重算，本线未另跑产物比对'),
+    # 开关收敛 L0 批：删没书开、关时不进 dump 的开关（A22 2026-11-14）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='bf37cedacdcefcadc09c34a4689db33918acd3893272fe114e4fdea15148e2b6',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_DROP_L0_1114),
+    Equiv(module='open_guji_cv.gates.border_detect_gate',
+          new='b36b70ceaad1c9bf19b1216e57d0c3ae3ffe8d67245200c12f4f206b6dca61b4',
+          old='803fcffb9dfc915e1ba80512694639857ebd6fb9c7ef6610f5143e4c30d800a8',
+          evidence=_DROP_L0_1114),
+    Equiv(module='open_guji_cv.gates.column_gate',
+          new='bd2821bed4e4e2b07cc5e08daec0fa219ca29ee84bc653dc5e40809c851b3c0d',
+          old='bc4749f1f07753e004d84b5006ec4cfbdf1af23383c457f085475acc05063b22',
+          evidence=_DROP_L0_1114),
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='419e5b9ed8d29be42ade1931a69531b367b49c161e9cf0ea658e72dc7c442d76',
+          old='c585153c706c21e3ddf6b131b0205098f50cb3a08be53f698d5b9e54f97e7a20',
+          evidence=_DROP_L0_1114),
 )
 
 
