@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH：新增 `scripts/orphan_rulings.py` 孤儿人裁普查（ZM 11-13）：human_chars 的「N 条页表 rev 不符不采信」把旧代迁移事件、有现行孪生的原始事件、**迁移时对不到新格的原始事件**混在一起；脚本只列最后一类（换源前的定字人裁、没有现行代孪生），按册出 TSV 交册线复核。仅维护脚本，不进产物指纹。
+
 - PATCH：seg check 格高／夹注宽离群按参校字证实豁免（史記台账 R011／R013，A22 11-13）：`eval/seg_screen` 的 cell_size、page_pitch、half_width 离群格，参校字落在字形匹配前 3 名、邻格无反证的不报，记 `geo_ref_ok` 表；Step3 挪过格位表的列不豁免。只读工具，不进产物指纹。
 
 - PATCH：换单落票核对两种票都读（ZM 11-13，第五册 005-r13 的 25 票漏落）：`republish.old_rev_votes` 原先只读按单版记的票（`?rev=`），且没令牌又没快照时静默当 0 票；现在同时读按单版票和按条目票（`?items=1`，换成现行格号），读不到来源就停。换单门 `votes_gate`、`proof_cycle`、`text_release` 都经它。脚本改动，不进产物指纹。
