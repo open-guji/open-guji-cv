@@ -120,3 +120,11 @@ def test_ref_confirmed_exempts_only_verified_cells():
     assert not ss.ref_ok_cell(conf, 1, 3, None)       # 本格对、下邻格反证
     assert ss.ref_ok_cell(conf, 1, 6, "ab")           # 夹注 a/b 两半都证实
     assert not ss.ref_ok_col(conf, 1)                 # 不到 PITCH_COL_MIN 格不判整列
+
+
+def test_block_tall():
+    # 殿本 vol06 147:3:3：格高 128，Step4 字块连上长竖线高 427
+    assert ss.block_tall(427, 128) == 3.34
+    assert ss.block_tall(150, 128) is None          # 带 padding 的人工定框格，1.2 倍
+    assert ss.block_tall(60, 40) is None            # 小格取整误差：倍数够但多出不到 24px
+    assert ss.block_tall(100, 0) is None

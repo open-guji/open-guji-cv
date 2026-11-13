@@ -491,6 +491,23 @@ def odd_cell_heights(col_cells, *, tall: float = CELL_TALL, short: float = CELL_
     return out
 
 
+# ── 字块过高：Step4 字块比自己的格高出一大截（2026-11-13，殿本 vol06 147:3:3「也」，ZM） ────────────────
+
+BLOCK_TALL = 1.35          # cell_shrink 字块高 ≥ 本格 row_segment 格高 × 这么多：字块连上了格外的墨（贯穿长竖线、印章、邻字）
+BLOCK_MIN_EXTRA = 24       # 且比格高多出至少这么多像素（小格的取整误差不报）
+
+
+def block_tall(block_h: float, cell_h: float, *, factor: float = BLOCK_TALL,
+               min_extra: float = BLOCK_MIN_EXTRA) -> float | None:
+    """字块高 ÷ 格高；不到 `factor` 倍或多出不到 `min_extra` 像素返回 None。
+
+    cell_size、page_pitch 都比 row_segment 的**格线**高度，格线对而字块连上贯穿长竖线时（殿本 vol06 147:3:3「也」，
+    格高 128、字块高 427，Step4 旗 boundary_ink）两者都不报；这里直接比字块。列末格（吃下面的空格位）由调用方不传。"""
+    if cell_h <= 0 or block_h < factor * cell_h or block_h - cell_h < min_extra:
+        return None
+    return round(block_h / cell_h, 2)
+
+
 # ── 整页均匀：正文格高、夹注半格宽（2026-11-12，Sheldon：除点名页外正文格高很均匀、双行小注宽度也均匀） ────────
 
 PITCH_COL_DEV = 0.10       # 一列整字格高中位与本页中位差 > 这么多：整列格网缩放了（挤格／漏格／格网错位）
