@@ -93,61 +93,8 @@ def test_merge_triggered_and_accepted():
     assert out is new and cols == 8 and pair == 2 and seen == [8]
 
 
-# ── Step1 整合：开关与产物字节 ────────────────────────────────────────────
-
-def _run_step(tmp_path, monkeypatch, widths, *, on, redetect=None):
-    """用桩替掉 `detect_borders`：n 列→给定线集；返回 (borders, line_index) 的 JSON 文本。"""
-    import open_guji_cv.steps.border_detect as bd
-
-    xs9 = _xs(widths)
-    table = {9: make_borders(xs=xs9).to_result()}
-    if redetect is not None:
-        table[8] = make_borders(xs=redetect).to_result()
-    seen = []
-
-    def fake(gray, expected_cols, **kw):
-        seen.append(expected_cols)
-        return table[expected_cols]
-
-    monkeypatch.setattr(bd, "detect_borders", fake)
-    book = make_book(expected_cols=9)
-    ctx = make_ctx(tmp_path, book, raw={PAGE: blank_page(1000, 1400)})
-    from open_guji_cv.steps.border_detect import BorderDetectParams
-    ctx.params["border_detect"] = BorderDetectParams(merge_narrow_pair=on, pitch_rescue=False)   # 只测窄对合并
-    out = STEPS["border_detect"].run_page(ctx, PAGE)
-    return out, seen
-
-
-def _dump(out):
-    return {k: v.model_dump_json() for k, v in out.items()}
-
-
-@pytest.mark.parametrize("widths", [P55, P123, P63, P216, [180] * 9])
-def test_untriggered_pages_are_byte_identical_with_switch_on(tmp_path, monkeypatch, widths):
-    off, _ = _run_step(tmp_path / "a", monkeypatch, widths, on=False)
-    on, seen = _run_step(tmp_path / "b", monkeypatch, widths, on=True)
-    assert _dump(on) == _dump(off)
-    assert seen == [9]                      # 没触发就没有第二次探测
-
-
-def test_switch_off_never_merges_even_on_pair_page(tmp_path, monkeypatch):
-    xs2 = [x for i, x in enumerate(_xs(P217)) if i != 2]
-    out, seen = _run_step(tmp_path, monkeypatch, P217, on=False, redetect=xs2)
-    assert seen == [9] and out["borders"].expected_cols == 9 and len(out["borders"].verticals) == 10
-
-
-def test_pair_page_merged_when_switch_on(tmp_path, monkeypatch):
-    xs2 = [x for i, x in enumerate(_xs(P217)) if i != 2]
-    out, seen = _run_step(tmp_path, monkeypatch, P217, on=True, redetect=xs2)
-    assert seen == [9, 8]
-    b = out["borders"]
-    assert b.expected_cols == 8 and len(b.verticals) == 9
-    li = out["line_index"]
-    assert len(li.lines) == 8
-    merged = [ln for ln in li.lines if any(f.startswith("pair_merged") for f in ln.flags)]
-    assert [ln.col for ln in merged] == [2]
-    assert all(not any(f.startswith("pair_merged") for f in ln.flags) for ln in li.lines if ln.col != 2)
-
+# Step1 不再调窄对合并（开关 merge_narrow_pair 缺省关、没有书开，2026-11-14 删）；模块里的判据与闸认旗照旧，
+# 有书要用时由书仓钩子在 Step1 后调 `merge_narrow_pair`。
 
 # ── 闸要认「合并后列数＝expected−1」 ──────────────────────────────────────
 
@@ -270,42 +217,3 @@ def test_pair_merged_flag_helpers_do_not_confuse_inconsistent_with_merged():
     assert not cpm.has_pair_merged([])
 
 
-# ── 端到端（Elena 评审条件 5②）：Step1 → 闸1 → Step2 → 闸2 连跑，8 列合并页放行 ──
-
-def test_end_to_end_merged_page_passes_both_gates(tmp_path, monkeypatch):
-    import open_guji_cv.steps.border_detect as bd
-    from helpers import run_steps, synth_page
-    from open_guji_cv.steps.border_detect import BorderDetectParams
-
-    xs9 = _xs(P217, 60.0)
-    xs8 = [x for i, x in enumerate(xs9) if i != 2]
-    gray, _ = synth_page(w=1900, xs=xs8)                                  # 真的是 8 列的页
-    table = {9: make_borders(w=1900, xs=xs9).to_result(), 8: make_borders(w=1900, xs=xs8).to_result()}
-    monkeypatch.setattr(bd, "detect_borders", lambda g, expected_cols, **kw: table[expected_cols])
-    ctx = make_ctx(tmp_path, make_book(expected_cols=9), raw={PAGE: gray}, monkeypatch=monkeypatch)
-    ctx.params["border_detect"] = BorderDetectParams(merge_narrow_pair=True, pitch_rescue=False)   # 只测窄对合并
-
-    out = run_steps(ctx, PAGE, ["border_detect", "border_detect_gate", "column_warp", "column_gate"])
-    g1, g2 = out["border_detect_gate_manifest"], out["gate_manifest"]
-    assert g1.admitted and g1.n_cols == 8 and g1.expected_cols == 8
-    assert "pair_merged" in [f.split("：")[0] for f in g1.flags]
-    assert len(g2.columns) == 8
-    assert not any(r.startswith("column_count") for r in g2.reject)
-    assert g2.admitted and all(c.admitted for c in g2.columns)
-
-
-# ── 缺省关时不进参数 dump：没开的册 params_hash 与加字段前逐位相同（GUJI-572 移植） ─────────
-def test_merge_narrow_pair_is_absent_from_dump_when_off():
-    from open_guji_cv.steps.border_detect import BorderDetectParams
-    assert "merge_narrow_pair" not in BorderDetectParams().model_dump()
-    assert "merge_narrow_pair" not in BorderDetectParams(merge_narrow_pair=False).model_dump()
-    assert BorderDetectParams(merge_narrow_pair=True).model_dump()["merge_narrow_pair"] is True
-
-
-def test_params_hash_unchanged_by_the_new_field_when_off():
-    from open_guji_cv.core.engine import params_hash
-    from open_guji_cv.steps.border_detect import BorderDetectParams
-    on = params_hash(BorderDetectParams(merge_narrow_pair=True))
-    off = params_hash(BorderDetectParams())
-    assert on != off
-    assert off == params_hash(BorderDetectParams(expected_cols=None, ink_threshold=128))

@@ -52,14 +52,6 @@ class BorderDetectGateParams(BaseModel):
     {page_survey_block: true}}` 才打开真拦截。开关放这道闸，不放 `page_survey`
     自己的 params：产不产异常数据是 Step0 的事，拦不拦是 Step1 出口闸的事，
     两件事分开才能做到"缺省只记待办不拦"。"""
-    pagetype_model: bool = False
-    """P1 道（2026-10-01）：用学习到的「正文/非正文」模型再拦一道。缺省关；书级 `params:
-    {border_detect_gate: {pagetype_model: true}}` 才开。只拦不放——现行规则判 skip 的页不动，
-    模型很有把握（门槛见模型文件，训练折 OOF 正文最高分）判为非正文（职名/目录等）才 reject。
-    关着时本字段不进参数 dump、manifest 不多任何键，产物与加字段前逐字节相同。
-    效果与门槛见 research/pagetype_model/README.md。"""
-    pagetype_model_path: str = ""       # 模型文件；空 = models/pagetype/pagetype_v1.joblib。路径不进指纹（path_params）
-    pagetype_model_fingerprint: str = ""  # 自动填：模型文件内容戳——换模型本步要过期
     expected_cols_pages: dict[int, int] = {}
     """按页列数（2026-11-12，殿本 vol01 p100：图上 10 列、版框只探出 9 列，参校本质检）：`{页: 本页列数}`，覆盖册级 `expected_cols`。
     职名页、个别页列数与册级不同时用；一般同 `vline_overrides` 配用（给出本页全部竖线）。border_detect、border_detect_gate、
@@ -98,9 +90,6 @@ class BorderDetectGateParams(BaseModel):
     @model_serializer(mode="wrap")
     def _drop_off_pagetype(self, handler):
         d = handler(self)
-        if isinstance(d, dict) and not self.pagetype_model:
-            for k in ("pagetype_model", "pagetype_model_path", "pagetype_model_fingerprint"):
-                d.pop(k, None)
         if isinstance(d, dict) and not self.expected_cols_pages:
             d.pop("expected_cols_pages", None)
         if isinstance(d, dict) and not self.body_pages:
@@ -111,11 +100,6 @@ class BorderDetectGateParams(BaseModel):
             d.pop("cover_pages", None)
         return d
 
-    def model_post_init(self, __context) -> None:
-        if self.pagetype_model and not self.pagetype_model_fingerprint:
-            from ..pagetype_model.model import DEFAULT_MODEL, file_fingerprint
-            object.__setattr__(self, "pagetype_model_fingerprint",
-                               file_fingerprint(self.pagetype_model_path or DEFAULT_MODEL) or "missing")
 
 
 def _full_grid(b: Borders, raw, width_tol: float, line_cover: float) -> bool:
@@ -151,19 +135,6 @@ def _full_grid(b: Borders, raw, width_tol: float, line_cover: float) -> bool:
     return True
 
 
-_PT_GATES: dict = {}
-
-
-def _pagetype_gate(p: "BorderDetectGateParams"):
-    key = (p.pagetype_model_fingerprint, p.pagetype_model_path)
-    g = _PT_GATES.get(key)
-    if g is None:
-        from ..pagetype_model.gate import PageTypeGate
-        from ..pagetype_model.model import load_model
-        g = _PT_GATES[key] = PageTypeGate(load_model(p.pagetype_model_path or None))
-    return g
-
-
 @register_step
 class BorderDetectGateStep(Step):
     spec = StepSpec(
@@ -171,7 +142,6 @@ class BorderDetectGateStep(Step):
         consumes=("borders",), optional_consumes=("page_survey", "line_index"),
         produces=("border_detect_gate_manifest",),
         params=BorderDetectGateParams,
-        path_params=("pagetype_model_path",),
         code_deps=("open_guji_cv.impl.keben.border", "open_guji_cv.seg.polyline", "open_guji_cv.seg.frame_types", "open_guji_cv.clustering.page_type",
                    "open_guji_cv.impl.keben.column_pair_merge", "open_guji_cv.seg.columns"),
     )
@@ -239,14 +209,6 @@ class BorderDetectGateStep(Step):
             flags_forced.append(f"page_type_grid：页型规则判「{grid_from}」，但探出完整等宽的 {n_cols} 列栏格，按正文走")
         if policy == "skip":
             reject.append(f"page_type_skip：页型判定为「{page_type}」，无正文栏格，不套列窗口")
-        pt_ev = None
-        if p.pagetype_model and policy != "skip":
-            gate = _pagetype_gate(p)
-            v = gate.judge(raw, b.model_dump(mode="json"))
-            pt_ev = v.evidence(gate.model)
-            if v.nonbody:
-                reject.append("page_type_model：学习模型判为非正文（职名/目录类），"
-                              f"不套正文列窗口（得分 {max(v.scores.values()):.3f}）")
         if n_cols != expected:
             reject.append(f"column_count：探出 {n_cols} 列（版式应为 {expected}）")
 
@@ -316,8 +278,7 @@ class BorderDetectGateStep(Step):
             top_frame_kind=getattr(b, "top_frame_kind", None),
             bottom_frame_kind=getattr(b, "bottom_frame_kind", None),
             n_head_raise=len(b.head_raise),
-            page_type=page_type, page_type_policy=policy or "standard",
-            pagetype_model=pt_ev)}
+            page_type=page_type, page_type_policy=policy or "standard")}
 
 
 # 挂到 Step1（border_detect）出口——levels 的 desc 只描述层次，不重复具体阈值数字

@@ -27,6 +27,8 @@
 
 ## [未发版]
 
+- PATCH：删没书开、关时不进参数 dump 的切分开关（A22 开关收敛 L0 批，A20 11-14 定）：`border_detect.merge_narrow_pair`、`border_detect_gate.pagetype_model`（含 path、fingerprint）、`column_gate.period_edge_fallback`、`row_segment.colgold_prior`／`colgold_fingerprint`、`row_segment.yolo_merge`（含 `yolo_*` 六个）及只在开着时走的代码。四个模块登 code_equiv（殿本 vol01 13 页逐字节同），各书产物不过期。册配置里还写着这些键的会被静默忽略（没有书写）。`pagetype_model` 包、`impl/keben/column_pair_merge`、`yolo_tool_infer` 模块留着（闸认旗、研究脚本还用，且在 code_deps 里）。关时也进 dump 的另一批（page_survey_block、hint_ignore_dash、narrow_reject、dash_blank 等）随统一重跑轮删。
+
 ## [0.7.34] - 2026-11-13
 
 - 发版说明（A31 11-13，全唐文 QTW 要）：dev 头 `e1b1505d` 的正式版（dev 线，接 v0.7.31；v0.7.32／33 是史記 patch 线不在这条链上），PATCH。含 #1526（seed_admit 书级 `group_flow_ruling_first`：名单里的字组文意先查对话裁定库，缺省空＝关，不进参数 dump；全唐文 book_defaults 加 `group_flow_ruling_first: [jys]` 才开）、#1517（follow_ref 钩子 rival_skip，缺省不调）、#1523（align_ref `coord_legacy_line_guard`，缺省关）及 seg check／脚本类改动。缺省关的新开关都已登记 code_equiv，没点名的册产物不过期。底库文件没变（相对 v0.7.31），不用配新底库。
