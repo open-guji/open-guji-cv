@@ -1640,6 +1640,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='a8cdae9b8875b071d1fbdd04bb514f4be0d49ac7e3f44975ce1e6290e2755f88',
           old='45258af23d0898bfefb4957736316a953c3bdd334c3278a43aaa73fe97a5f861',
           evidence=_RF_1113),
+    # #1526 补：_ruling_first 在线模式（GUJI_LLM_ONLINE=1）不生效（总览审 ①），同 020 f5 包 40 页逐字节相同
+    Equiv(module='open_guji_cv.groups.methods',
+          new='4e6551fe7cff11bdd0a1f831eaa35db99d48019b701f0c65b84ebadc736fb722',
+          old='45258af23d0898bfefb4957736316a953c3bdd334c3278a43aaa73fe97a5f861',
+          evidence=_RF_1113),
     # align_ref coord_legacy_line_guard 现役跨行借字不算冲突（缺省关；史記 r60 37:2:6–7 参校本缺「正義」，2026-11-13，A22）
     Equiv(module='open_guji_cv.steps.align_ref',
           new='9e787a1f39ed3f7827de1e79be7b5bb543ff844415f5566c562c3665f7cdbd58',
