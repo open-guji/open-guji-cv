@@ -282,6 +282,9 @@ _SNAP_CUT = ("按墨块切割量补挪格线 snap_cut（row_segment 书级参数
 _GLYPH_GUARD = ("snap_cut 整字护栏（seg.cut_select 只加 move_keeps_glyphs 新函数；row_boundaries 在 snap_cut>0 且有 U-Net 裁判时"
                  "缺省接它当 snap_gap_ok，snap_cut 关时不走）：row_segment 在殿本 vol30 10 页（--pages 2,15,30,45,60,75,90,105,120,135）"
                  "与史記 42 册 3 页（--pages 3,36,59）上与 origin/dev 4b337f0 产物逐字节相同；scripts/code_equiv.py check，A22 2026-11-13")
+_GUARD_TOL = ("snap_cut 整字护栏门槛 seg.cut_select.MOVE_TOL 0→0.05（只在 snap_cut>0 且有 U-Net 裁判时用；snap_cut 关不走）："
+              "row_segment 在殿本 vol30 6 页（--pages 2,30,60,90,120,135）与史記 42 册 3 页（--pages 3,36,59）上与 origin/dev "
+              "1244b8d 产物逐字节相同；scripts/code_equiv.py check，A22 2026-11-13")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -1344,6 +1347,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new='a32630fc154efa51ff9e8f734b257fbe09a5c51729501b5de9679032be2be6f2',
           old='fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b',
           evidence=_GLYPH_GUARD),
+    Equiv(module='open_guji_cv.seg.cut_select',
+          new='1a505f0d68bdb696936b4f89af83ad7f99d82fbd92712bfe26a401a171b56713',
+          old='fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b',
+          evidence=_GUARD_TOL),
     # grid_end_fit 书级开关（缺省关，2026-11-09，殿本 vol28 列尾下溢）
     Equiv(module="open_guji_cv.steps.row_segment",
           new="6a3617931b93c706e43d43ccd2e1b9f5d63e1307343c424637cb0ecb77b32258",
