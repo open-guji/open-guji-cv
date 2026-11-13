@@ -16,6 +16,8 @@
 
 ## [未发版]
 
+- PATCH（改产物）：`feedback/lookup.py` 读人工指定分片（抬头/列数/夹注单列/粘连列切线）和 `human_chars` 的绑定表时，读不到不再悄悄退回空表／按格号，改为报错（`GUJI_LOOKUP_LENIENT=1` 可退回旧行为并打警告）。此前这些静默回退会让人的指定在重跑里悄悄失效、之后又冒出来。（ZM，11-13）
+
 - PATCH（改产物）：`rebind_library_shapes`（字形库人裁重绑）尊重作废标记：字形库 `human_stale_*`／`stale_verdicts.tsv` 撤下之后没有再裁的格，库里那份不再顶上。此前重绑只看该格号最新事件的锚，误锚的人裁（vol01 182:9:15a「宅」）撤下后仍会在重绑时落回去。（ZM，11-13）
 - PATCH：republish `bind_check`（出单时“人裁绑定：N 条 {…}”那行，也是 id_mismatch／unbound 的来源）改用正式的 `book_bindings`（带字块图缓存／现切、字形库、补锚档），不再用几何口径的 `compute_page(cache=_NoCache)`——后者没图可比，没有框的老人裁一律判 unanchored（vol04 报 631 绑不上，实际 570 valid；补上 109 条 cellvotes rebase 迁移事件的框后 679 valid）。（ZM，11-13）
 
