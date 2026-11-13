@@ -38,6 +38,12 @@ class Equiv:
     evidence: str
 
 
+_FR_HOOK_1113 = ("seed_admit follow_ref 加书级钩子 impl/keben/follow_ref_hooks.rival_skip（缺省 None，不调；follow_ref_decide 加 rival_skip "
+                 "参数缺省空集，max 的过滤条件多一个恒真项）、新函数 _RivalFacts／_pair_facts／_follow_ref_rival_hook（只在钩子非 None 时用）："
+                 "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.6.23-c33-g19-r8 当上游）seed_admit 与 origin/dev e466f52 "
+                 "产物逐字节相同；Step code_hash 改前改后同（babb397c0ee19af7，follow_ref_hooks 经 SPLITS 合回 pua_v2_codes）；"
+                 "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-13（A22）")
+
 _GM_1020 = ("glyph_match 提速（wmax 按需算、同格查找分桶、HOG 向量化）：vol04 46 页（每 5 页取 1，加 p17/p100/p186，含夹注与最慢页）、vol06 15 页（每 10 页取 1）与改前 529f071 产物逐字节相同，4 进程；scripts/code_equiv.py check，2026-10-20")
 
 _GM_1020_PM = ("glyph_match 加 batch_knn 开关（缺省关）、匹配器可收现成相似度、整库矩阵抽成 library_matrix（GUJI-647）："
@@ -1604,6 +1610,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="cace3586ccc86342ae513b2a1365813db22dfe8fc6d8a2e8c285bc1e726d3397",
           old="06fe196f9b2a44cf4ab61d09dc8ace5ef4f13b80ed9ff69a0d6def2a5d983443",
           evidence="align_ref coord_conflict_drop_bad 丢掉的冲突格现役字改成坐标字（vol05 1:4:1）：新增 _use_coord_char 只在该开关开且 _drop_bad_recs 成功时调用，关时控制流与改前相同（代码核对＋tests/test_align_ref_coord.py）；★未在有产物的机器跑 scripts/code_equiv.py check，2026-11-13"),
+    # seed_admit follow_ref 书级钩子 follow_ref_hooks.rival_skip（缺省 None 不调；史記同族第三形不当领先差对手，SJ／A24 11-13）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='052a744b74f64b6b45c62bd6f74b5ae38220fd8d39e5a70609609983999ee25b',
+          old='527fb5aa243ccb985f570622bbd8ee7a0f4b0b94f6872dc1fd103efb0db332f6',
+          evidence=_FR_HOOK_1113),
 )
 
 
@@ -1671,6 +1682,11 @@ FORKED: dict[str, tuple[str, str]] = {
 #: 也用来登 Step 新加的 code_dep（不是拆分）：旧模块名就是 Step 模块自己，块表＝它自己＋新加的那个模块；
 #: 两块都还是登记时那一版就合回原来一项，指纹不变（row_segment＋jiazhu_step 空实现，cv#1011）。这种项不是错登，别删。
 SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
+    # 不是拆分、是 seed_admit 新加了一个 code_dep（书级钩子 follow_ref_hooks，缺省 rival_skip=None；2026-11-13 A22）：
+    # pua_v2_codes 与 follow_ref_hooks 都还是这一版时合回 pua_v2_codes 一项，指纹不变。书仓覆盖了钩子的书（史記）照常过期
+    "open_guji_cv.utils.pua_v2_codes": ("909be2f3c3054883a2666af3e775e9baaa5a6e0f9ba73f3f04f99137dffde528", (
+        ("open_guji_cv.utils.pua_v2_codes", "909be2f3c3054883a2666af3e775e9baaa5a6e0f9ba73f3f04f99137dffde528"),
+        ("open_guji_cv.impl.keben.follow_ref_hooks", "67ffed25de9e2f114bfd57a4f490d1fa5a7e162d02b1a0174d92bc45543b4895"))),
     "open_guji_cv.utils.border_geometry": ("20c5f6fde41a30ad2e22200be0a97a793ceef3492e283b0fff92cb657bb896fb", (
         ("open_guji_cv.impl.keben.border", "f4989571d81cbb4d988c77cf5e4622dd57634df0ad8dbe31ee9ec432c563d0c1"),
         ("open_guji_cv.seg.polyline", "bf94b777e8bd227b12a64916ee3a2bf7bc457163047bdc9126a3f164e52825d4"),

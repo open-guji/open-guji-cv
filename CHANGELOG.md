@@ -21,6 +21,7 @@
 
 ## [未发版]
 
+- PATCH：seed_admit `follow_ref` 加书级钩子 `impl/keben/follow_ref_hooks.rival_skip`（缺省 None 不调）：书仓覆盖后，算领先差时指定的字不当对手（史記同族第三形 吴呉吳、嵗歳歲，SJ 请求、A24 定规则，实现进史記书仓 code/）；钩子经 `facts(a, b)` 拿关系层事实；被排除的字记 `lane.rival_skip`。cv 不加开关。code_equiv 已登记，殿本 vol28 16 页逐字节同，seed_admit code_hash 不变（A22 11-13）。
 - PATCH：重生成 `doc/字组/字组总表.md`（wu 嗚鳴 那行我手写过，和注册表生成的对不上，manager 的比对测试红了）。只改文档（A31 11-13）。
 
 ## [0.7.31] - 2026-11-13
