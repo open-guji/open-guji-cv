@@ -3,10 +3,6 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
-## [0.7.29] - 2026-11-13
-
-- 发版说明（A31 11-13，覆盖逻辑线／各书要）：dev 头 `f509b605` 的正式版，PATCH，**含 #1467**（row_segment 1.50 大印印边墨，row_segment 起判过期）、#1505（字形库重绑尊重作废标记，改产物、不登等价）、#1503／#1504／#1506（republish 出单前查原图、bind_check 用正式 book_bindings、lookup 读不到分片／绑定表时报错，`GUJI_LOOKUP_LENIENT=1` 可回退），以及 snap_cut／cut_through／stroke_veto 等 dev 上已合的其余改动（均缺省关）。不是史記 patch 线（史記钉 v0.7.18），钉不钉由各书自己定。
-
 - PATCH：恢复 #1488 误删的 code_equiv 登记（align_ref f235b50d、align_ref_coord 9de0c6ed、row_segment 6dde638e、row_segment_pagemap a71017d1 四条），补入 v0.7.17 线的 row_segment fb60a8eb；新增 `scripts/check_code_equiv_monotonic.py`（登记链只增不减检查），版本号规矩加一条。只动登记表与脚本，不改任何 Step，产物指纹不变（A31 11-13）。
 
 
@@ -19,6 +15,10 @@
 - scripts/seg_fork_drift.py 加 `--ws <书仓>`：比书仓 code/ 覆盖模块与 cv 缺省实现（分叉点取书仓文件首次提交时刻），整份同缺省时提示可去掉覆盖。` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
 ## [未发版]
+
+## [0.7.29] - 2026-11-13
+
+- 发版说明（A31 11-13，覆盖逻辑线／各书要）：dev 头 `f509b605` 的正式版，PATCH，**含 #1467**（row_segment 1.50 大印印边墨，row_segment 起判过期）、#1505（字形库重绑尊重作废标记，改产物、不登等价）、#1503／#1504／#1506（republish 出单前查原图、bind_check 用正式 book_bindings、lookup 读不到分片／绑定表时报错，`GUJI_LOOKUP_LENIENT=1` 可回退），以及 snap_cut／cut_through／stroke_veto 等 dev 上已合的其余改动（均缺省关）。不是史記 patch 线（史記钉 v0.7.18），钉不钉由各书自己定。
 
 - PATCH（改产物）：`feedback/lookup.py` 读人工指定分片（抬头/列数/夹注单列/粘连列切线）和 `human_chars` 的绑定表时，读不到不再悄悄退回空表／按格号，改为报错（`GUJI_LOOKUP_LENIENT=1` 可退回旧行为并打警告）。此前这些静默回退会让人的指定在重跑里悄悄失效、之后又冒出来。（ZM，11-13）
 
