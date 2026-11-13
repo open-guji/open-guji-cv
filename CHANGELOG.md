@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.7.18] - 2026-11-13
+
+- 发版说明（A31 11-13）：v0.7.17 + #1468，PATCH，**不含** #1432/#1437（史記 patch 线）。align_ref `coord_dp` 加书级参数 `coord_dp_skip_cost`（缺省 0 不进 dump，关着时产物与 v0.7.17 逐字节相同）；align_ref、align_ref_coord 的 code_hash 变，已登记 code_equiv。
+
 ## [0.7.17] - 2026-11-12
 
 - 发版说明（A31 11-12）：v0.7.15 + #1463，PATCH，**不含** #1432/#1437。row_segment 的 pins 档格位表指纹与夹注参照指纹只算本册钉位点名的 daizhige 源文件（史記 0244.jsonl 入库不让 01–17 册过期）。row_segment、row_segment_pagemap 的 code_hash 变，已登记 code_equiv（指纹值不变）。

@@ -788,9 +788,27 @@ COORD_DP_MIN_AGREE = 6        # `coord_dp`：载体字与整理本字吻合的�
 COORD_DP_MIN_FRAC = 0.5       # `coord_dp`：吻合数 / 整理本字数 的下限
 COORD_DP_TOPK = 5             # `coord_dp`：整理本字要在这一格库匹配前几名候选里（或载体字相同）才给
 COORD_DP_MAX_SKIP = 2         # `coord_dp`：格或整理本单元最多各跳过几个（合计）
+COORD_DP_TOPK_CREDIT = 0.5    # `coord_dp` 扣跳过分时：整理本字只在前几名候选里（载体字不同）的一对记几分
 
 
-def coord_dp(units: list[CellUnit], text: list[tuple[int, Unit]]) -> ColumnCoord | None:
+def _dp_score(u: CellUnit, ref: Unit, topk: dict | None) -> float:
+    """`coord_dp` 扣跳过分时一对的得分：载体字吻合记 1；不吻合但整理本字在这一格库匹配前几名里记
+    `COORD_DP_TOPK_CREDIT`（与收格口径同一份证据，免得为一处载体字吻合把别处有候选支持的格错开）。"""
+    if u.kind == "c":
+        subs = (("", ref.a),)
+    else:
+        subs = (("a", ref.a),) + ((("b", ref.b),) if ref.b else ())
+    sc = 0.0
+    for sub, ch in subs:
+        if u.carrier.get(sub, "") == ch:
+            sc += 1
+        elif topk and ch and ch in topk.get(u.ids.get(sub, ""), ()):
+            sc += COORD_DP_TOPK_CREDIT
+    return sc
+
+
+def coord_dp(units: list[CellUnit], text: list[tuple[int, Unit]],
+             skip_cost: float = 0.0, topk: dict | None = None) -> ColumnCoord | None:
     """`coord_dp`（2026-11-02，史記文淵閣本 B 类「对位缺格」）：几何配法不成立时的**载体字**保底配法。
 
     起因：史記 01–10 册待审里 886 格没有整理本字，归因后 55% 是整列配不上——格数比整理本字数少一
@@ -799,7 +817,10 @@ def coord_dp(units: list[CellUnit], text: list[tuple[int, Unit]]) -> ColumnCoord
     做**单调对齐**（格对单元要同类，可跳过至多 `COORD_DP_MAX_SKIP` 个格或单元），分数＝载体字与整理本字
     的吻合数；吻合 ≥ `COORD_DP_MIN_AGREE` 且 ≥ 整理本字数的 `COORD_DP_MIN_FRAC` 才认。
     只给配上的格字，没配上的格不进 `recs`（不记空格位：它们的字在邻列，不是刻本空格）。
-    载体字是独立证据，所以不再过「与现役对位冲突」闸（冲突格仍由调用方记进 `coord_conflict_ids`）。"""
+    载体字是独立证据，所以不再过「与现役对位冲突」闸（冲突格仍由调用方记进 `coord_conflict_ids`）。
+
+    `skip_cost`（书级 `coord_dp_skip_cost`，2026-11-13）：每次跳过扣的分，分数＝吻合数 − 跳过数×skip_cost；
+    打平时仍先配后跳。门槛照旧按吻合数算。0＝不扣（原行为）。"""
     n, m = len(units), len(text)
     if not n or not m:
         return None
@@ -814,39 +835,50 @@ def coord_dp(units: list[CellUnit], text: list[tuple[int, Unit]]) -> ColumnCoord
                 if i == n or j == m:
                     rem = (n - i) + (m - j)
                     if k + rem <= K:
-                        f[i][j][k] = 0
+                        f[i][j][k] = -rem * skip_cost if skip_cost else 0
                         act[(i, j, k)] = "end"
                     continue
                 best, a = NEG, ""
                 if _kind_ok(units[i], text[j][1]):
                     v = f[i + 1][j + 1][k]
                     if v > NEG:
-                        v += _agree(units[i], text[j][1])
+                        v += _dp_score(units[i], text[j][1], topk) if skip_cost else _agree(units[i], text[j][1])
                         if v > best:
                             best, a = v, "pair"
                 if k < K:
                     for da, db, nm in ((1, 0, "skip_u"), (0, 1, "skip_t")):
                         v = f[i + da][j + db][k + 1]
-                        if v > best:
+                        if v > NEG and skip_cost:
+                            v -= skip_cost
+                        if v > best + (1e-9 if skip_cost else 0):
                             best, a = v, nm
                 f[i][j][k] = best
                 if a:
                     act[(i, j, k)] = a
     agree = f[0][0][0]
     nref = sum(2 if u.b else 1 for _p, u in text)
-    if agree < COORD_DP_MIN_AGREE or agree < COORD_DP_MIN_FRAC * nref:
+    if not skip_cost and (agree < COORD_DP_MIN_AGREE or agree < COORD_DP_MIN_FRAC * nref):
+        return None
+    if skip_cost and agree <= NEG:
         return None
     pairs: dict[int, Unit] = {}
+    hits = 0
     i = j = k = 0
     while (i, j, k) in act and act[(i, j, k)] != "end":
         a = act[(i, j, k)]
         if a == "pair":
             pairs[i] = text[j][1]
+            if skip_cost:
+                hits += _agree(units[i], text[j][1])
             i, j = i + 1, j + 1
         elif a == "skip_u":
             i, k = i + 1, k + 1
         else:
             j, k = j + 1, k + 1
+    if skip_cost:
+        agree = hits
+        if agree < COORD_DP_MIN_AGREE or agree < COORD_DP_MIN_FRAC * nref:
+            return None
     recs: list[tuple[str, int, str | None, str, float]] = []
     for idx, u in enumerate(units):
         ref = pairs.get(idx)
