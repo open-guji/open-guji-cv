@@ -451,3 +451,58 @@ def test_resize_linear_f64_matches_cv2():
         got = _resize_linear_f64(a, h, w)
         assert got.shape == (h, w)
         assert np.abs(got - ref).max() < 1e-4
+
+
+# ── 整字护栏 move_keeps_glyphs（2026-11-13，防横点字劈开）────────────────
+
+class _ScoreJudge:
+    """assess 按给定的两个分数回（原位、去处）；None 表示判不了。"""
+
+    def __init__(self, scores):
+        self.scores_ = scores
+        self.calls = []
+
+    def assess(self, col_gray, x_lo, x_hi, y0, y1, y_line, seams, ink_threshold=128):
+        self.calls.append((x_lo, x_hi, y0, y1, y_line, seams))
+        return None if self.scores_ is None else (list(self.scores_), [0, 0])
+
+
+def test_move_keeps_glyphs_rules():
+    from open_guji_cv.seg.cut_select import move_keeps_glyphs
+    img = np.full((300, 60), 255, np.uint8)
+    assert move_keeps_glyphs(None, img, 5, 55, 100, 120, 0, 250)                       # 没有裁判：放行
+    assert move_keeps_glyphs(_ScoreJudge(None), img, 5, 55, 100, 120, 0, 250)           # 判不了：放行
+    assert move_keeps_glyphs(_ScoreJudge((0.90, 0.99)), img, 5, 55, 100, 120, 0, 250)   # 挪后更像两个整字
+    assert move_keeps_glyphs(_ScoreJudge((0.95, 0.95)), img, 5, 55, 100, 120, 0, 250)   # 打平也许
+    assert not move_keeps_glyphs(_ScoreJudge((0.99, 0.82)), img, 5, 55, 100, 120, 0, 250)
+    assert move_keeps_glyphs(_ScoreJudge((0.99, 0.95)), img, 5, 55, 100, 120, 0, 250, tol=0.05)
+    j = _ScoreJudge((0.9, 0.9))
+    move_keeps_glyphs(j, img, 5, 55, 100.4, 120.6, 10.2, 250.7)
+    x_lo, x_hi, y0, y1, y_line, seams = j.calls[0]
+    assert (x_lo, x_hi, y0, y1, y_line) == (5, 55, 10, 251, 100.4)                      # 窗口＝相邻两条格线之间
+    assert seams[0] is None and seams[1].tolist() == [121] * 50                           # 原位直线、去处直线
+
+
+def _three_and_next():
+    """上格「三」（三道横，横间白缝 18 行）、下格一个方块字。格高 110，三在上格偏下。"""
+    img = np.full((260, 120), 255, np.uint8)
+    for y in (40, 70, 100):
+        img[y:y + 8, 20:100] = 0
+    img[140:215, 25:95] = 0
+    img[160:195, 45:75] = 255
+    return img
+
+
+def test_move_keeps_glyphs_real_unet_three():
+    """真权重冒烟：格线原在「三」与下字之间（y=124），挪进三的第二、三横之间（y=89）＝把底横分给下字，护栏要拦；
+    反过来从三的横缝里挪到字缝要放。"""
+    pytest.importorskip("torch")
+    if not DEFAULT_CKPT.exists():
+        pytest.skip("U-Net 权重不在")
+    from open_guji_cv.seg.cut_select import get_judge, move_keeps_glyphs
+    judge = get_judge()
+    if judge is None:
+        pytest.skip("裁判加载不了")
+    img = _three_and_next()
+    assert not move_keeps_glyphs(judge, img, 10, 110, 124, 89, 20, 240)
+    assert move_keeps_glyphs(judge, img, 10, 110, 89, 124, 20, 240)
