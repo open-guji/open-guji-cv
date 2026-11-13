@@ -14,6 +14,8 @@
 - geo_ref_ok（2026-11-13，史記 R011／R013）：cell_size／page_pitch／half_width 离群、但参校字落在字形匹配前 3 名且上下邻格无反证的格
   （整列偏则本列有参校字的格 ≥85% 证实），不进上面三张表，只记在这里备查——写本扁字、大字、夹注一行偏宽是字形本来如此；
   `ref_check=False` 关掉豁免（照旧全报）；
+- block_tall（2026-11-13）：cell_shrink 字块高 ≥ 本格 row_segment 格高 1.35 倍（且多 24px 以上），字块连上了格外的墨（长竖线、印章、邻字）；
+  列末格不查，一格一行，value＝倍数；
 - pin_stale：中心库有 active 钉子、本页产物却没用上（产物早于钉子，要从 row_segment 重跑）。
 
 钉子列（产物带 `manual_cells` 旗）只比格号、不跑墨账与端外墨（SJ 第 5 条）；有钉子而产物没用上的列照普通列查；职名列不跑端外墨。`skip` 点名的页整页不查（书配置
@@ -26,7 +28,7 @@ import sys
 
 CHECKS = ("edge_ink", "orphan", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
           "pitch_free_ignored", "cell_flags", "cell_size", "page_pitch", "half_width", "pin_slots", "pin_stale", "layout_slots", "seal_blank",
-          "cut_through", "geo_ref_ok")
+          "cut_through", "geo_ref_ok", "block_tall")
 
 
 def _engine(book: str):
@@ -168,6 +170,17 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
                     c["orphan"] += 1
             if pinned:
                 continue                  # 钉子列只比格号（SJ 第 5 条）
+            last = max(cc.cells, key=lambda x: (x.slot, x.sub or ""), default=None)
+            hmap = {(x.slot, x.sub): x.y1 - x.y0 for x in cc.cells}
+            for ch in chars:
+                if last is not None and (ch.slot, ch.sub) == (last.slot, last.sub):
+                    continue              # 列末字格吃下面的空格位，字块照样收墨
+                r = ss.block_tall(ch.height, hmap.get((ch.slot, ch.sub), 0.0))
+                if r:
+                    rows["block_tall"].append((book, page, cc.col, r,
+                                               f"{ch.slot}{ch.sub or ''} 字块高 {ch.height:.0f}px 格高 "
+                                               f"{hmap[(ch.slot, ch.sub)]:.0f}px {','.join(ch.flags)}".strip()))
+                    c["block_tall"] += 1
             odd = ss.odd_cell_heights(cc)
             _exempt(cc.col, "cell_size", [o for o in odd if _ref_ok(cc.col, o)])
             odd = [o for o in odd if not _ref_ok(cc.col, o)]
@@ -294,7 +307,7 @@ def write_report(rows: dict[str, list], counts: dict, out, seal_blank: bool = Fa
         lines.append("| " + " | ".join([b, str(c["pages"]), *[str(c[k]) for k in hdr[2:]]]) + " |")
     same = sum(c.get("layout_same_count", 0) for c in counts.values())
     lines += ["", "edge_ink、pitch_free_ignored、cell_size、page_pitch、half_width、pin_slots、pin_stale、layout_slots 按列计；colnet_page、frame_margin、layout_col_shift、"
-              "layout_fallback 按页计；edge_frame_only、cell_flags、seal_blank 按格计；orphan 按块计；cut_through 按格线计。"
+              "layout_fallback 按页计；edge_frame_only、cell_flags、block_tall、seal_blank 按格计；orphan 按块计；cut_through 按格线计。"
               f"版式对格号「同数」（只编号不同，判过）{same} 列，只计数不出行。"]
     off = [b for b, c in counts.items() if c.get("cut_through_off")]
     if off:

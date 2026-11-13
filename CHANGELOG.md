@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH：seg check 新增 `block_tall`（殿本 vol06 147:3:3「也」，ZM 11-13）：cell_shrink 字块高 ≥ 本格 row_segment 格高 1.35 倍（且多 24px 以上）的格单独报（列末格不查）。cell_size／page_pitch 只比格线高度，格线对而字块连上贯穿长竖线时都不报；原先只有 `Lv` 被归「公用清格」漏掉。殿本 vol06–10 现行包扫出 06:147:3:3（格高 128、字块 427）、07:133:7:3（印章压空列）、07:5:2:1（1.36）。只读工具，不进产物指纹。
+
 - PATCH：新增 `scripts/orphan_rulings.py` 孤儿人裁普查（ZM 11-13）：human_chars 的「N 条页表 rev 不符不采信」把旧代迁移事件、有现行孪生的原始事件、**迁移时对不到新格的原始事件**混在一起；脚本只列最后一类（换源前的定字人裁、没有现行代孪生），按册出 TSV 交册线复核。仅维护脚本，不进产物指纹。
 
 - PATCH：seg check 格高／夹注宽离群按参校字证实豁免（史記台账 R011／R013，A22 11-13）：`eval/seg_screen` 的 cell_size、page_pitch、half_width 离群格，参校字落在字形匹配前 3 名、邻格无反证的不报，记 `geo_ref_ok` 表；Step3 挪过格位表的列不豁免。只读工具，不进产物指纹。
@@ -24,6 +26,8 @@
 - scripts/seg_fork_drift.py 加 `--ws <书仓>`：比书仓 code/ 覆盖模块与 cv 缺省实现（分叉点取书仓文件首次提交时刻），整份同缺省时提示可去掉覆盖。` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
 ## [未发版]
+
+- PATCH：align_ref 书级开关 `coord_legacy_line_guard`（缺省关，A22 11-13，史記 r60 37:2:6）：参校本一列缺字时现役 difflib 按整页字流把图上多出的字配到别行同字、下一列整段错配，坐标对位被冲突闸整列退回。开了以后列↔行已定的列里，现役 equal 字不在本列整理本行里的格不当现役证据，坐标给了字的改坐标字。关时殿本 vol60、史記 37 全册逐字节同（code_equiv 已登记）。
 
 - PATCH：seed_admit `follow_ref` 加书级钩子 `impl/keben/follow_ref_hooks.rival_skip`（缺省 None 不调）：书仓覆盖后，算领先差时指定的字不当对手（史記同族第三形 吴呉吳、嵗歳歲，SJ 请求、A24 定规则，实现进史記书仓 code/）；钩子经 `facts(a, b)` 拿关系层事实；被排除的字记 `lane.rival_skip`。cv 不加开关。code_equiv 已登记，殿本 vol28 16 页逐字节同，seed_admit code_hash 不变（A22 11-13）。
 - PATCH：重生成 `doc/字组/字组总表.md`（wu 嗚鳴 那行我手写过，和注册表生成的对不上，manager 的比对测试红了）。只改文档（A31 11-13）。
