@@ -1499,6 +1499,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new='60563a317cd208ccda0c8804d69f03d2e2b31b8c4936c9eb258ca0598f0e35f8',
           old='fb82c05c52f83d8ecec06a697a5fad987eee0c2e6df3991f25b508f2f12259c8',
           evidence='seed_admit 在史記 r49 包 03/04/05 共 9 页（03:46,84,96；04:26,35,39；05:21,27,75，含半格与 match_solo 放行多的页）上与 v0.7.13 产物逐字节相同（SJ，scripts/code_equiv.py check --base v0.7.13 --step seed_admit，rc/v0.7.15，11-12）；两开关缺省关、不进参数 dump'),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="501426bb2d5233bdcb8305fdec956f81f38c8a690fd1c85e6cbe471675545949",
+          old="6afd38325a5f4060b74ddf7f8bfe1a316505479e420899a059fd648182cf4ad6",
+          evidence="align_ref 加缺省关的书级开关 coord_conflict_drop_bad（与现役对位冲突只丢冲突格，ZM 殿本 vol05 p1 列 4／p101／p177）：新增分支只在该开关开且列将因「与现役对位冲突」退回时可达，关时控制流与改前逐句相同（代码核对＋tests/test_align_ref_coord.py）；★未在有产物的机器上跑 scripts/code_equiv.py check，请持产物者（ZM）钉前补跑，不同则撤这条，2026-11-13"),
 )
 
 
