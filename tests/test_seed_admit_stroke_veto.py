@@ -146,3 +146,9 @@ def test_params_not_in_dump_when_off(tmp_path):
     f.write_text("{}", encoding="utf-8")
     d = SeedAdmitParams(stroke_veto=str(f)).model_dump()
     assert d["stroke_veto"] == str(f) and d["stroke_veto_fingerprint"] == sv.fingerprint(str(f))
+
+
+def test_ruling_first_not_in_dump_when_off():
+    d = SeedAdmitParams().model_dump()
+    assert "group_flow_ruling_first" not in d
+    assert SeedAdmitParams(group_flow_ruling_first=["jys"]).model_dump()["group_flow_ruling_first"] == ["jys"]
