@@ -184,13 +184,21 @@ def test_human_chars_of_uses_bound_lookup(tmp_path, monkeypatch):
         seen.update(ws=os.environ.get("GUJI_WORKSPACE"), prod=os.environ.get("GUJI_PRODUCTS_DIR"))
         return {"vol05:1:4:1": "撰", "vol05:2:1:1": "周"}
 
+    import open_guji_cv.feedback.bindings as BD
     import open_guji_cv.feedback.lookup as LK
     monkeypatch.setattr(LK, "human_chars", fake)
+    monkeypatch.setattr(BD, "book_bindings", lambda book: {})
     monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
     got = pc.human_chars_of(tmp_path, "vol05", tmp_path / "sb")
     assert got == {"1:4:1": "撰", "2:1:1": "周"}
     assert seen == {"ws": str(tmp_path), "prod": str(tmp_path / "sb")}
     assert "GUJI_PRODUCTS_DIR" not in os.environ
+
+    def boom(book):
+        raise RuntimeError("no such table: instances")
+    monkeypatch.setattr(BD, "book_bindings", boom)
+    with pytest.raises(RuntimeError, match="绑定表算不出来"):      # 不悄悄退回按格号
+        pc.human_chars_of(tmp_path, "vol05", tmp_path / "sb")
 
 
 def test_overturn_rows_carry_prior_char():
