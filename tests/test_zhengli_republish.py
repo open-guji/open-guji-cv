@@ -51,6 +51,9 @@ def _setup(tmp_path):
     online.parent.mkdir(parents=True)
     online.write_text(json.dumps({"rev": "006-r2", "cells": [{"cell": c, "review": "pending"} for c in
                                                              ("1:1:1", "1:1:2", "1:1:9")]}), encoding="utf-8")
+    web0 = ws / "feedback" / "lists" / "web" / "abc123"           # 旧单 0 票：同步下来的是空快照（读不到快照会停）
+    web0.mkdir(parents=True, exist_ok=True)
+    (web0 / "006-r2.jsonl").write_text("", encoding="utf-8")
     ev = ws / "feedback" / "events"
     ev.mkdir(parents=True)
     ev.joinpath("a.jsonl").write_text(json.dumps({"kind": "confirm", "ts": "2026-10-20T00:00:00Z",
@@ -95,7 +98,7 @@ def test_push_refuses_while_old_votes_unlanded(tmp_path, monkeypatch):
     assert rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export),
                     "--no-alt", "--no-sprite", "--cv-commit", "abc1234"]) == 0
     web = ws / "feedback" / "lists" / "web" / "abc123" / "006-r2.jsonl"
-    web.parent.mkdir(parents=True)
+    web.parent.mkdir(parents=True, exist_ok=True)
     vote = lambda a, choice, ch="": {"book": "abc123", "rev": "006-r2", "a": a, "choice": choice, "char": ch, "voter": "u1", "ts": 1}
     web.write_text("\n".join(json.dumps(v) for v in (
         vote("1:1:3", "char", "甲"),          # 已有人裁：落了
@@ -616,3 +619,22 @@ def test_http_sends_referer(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", fake)
     rp._http("https://data.openguji.com/x", method="HEAD")
     assert seen.get("Referer") == "https://www.openguji.com/"
+
+
+def test_old_rev_votes_reads_both_modes_and_refuses_when_nothing(tmp_path, monkeypatch):
+    """11-13 第五册 005-r13 的 25 票漏落：只查一种记法、读不到又当 0 票。现在两种都读，读不到就停。"""
+    monkeypatch.delenv("CELLREVIEW_TOKEN", raising=False)
+    monkeypatch.setattr(rp, "data_dir", lambda ws: tmp_path)
+    with pytest.raises(SystemExit):
+        rp.old_rev_votes(tmp_path, "bk", "005-r13")
+    wd = tmp_path / "feedback" / "lists" / "web" / "bk"
+    wd.mkdir(parents=True)
+    byrev = {"book": "bk", "rev": "005-r13", "a": "1:1:1", "choice": "char", "char": "甲", "voter": "u1", "ts": 1}
+    itemv = {"book": "bk", "vol": "005", "rev": "005-r17", "item": "pi_x", "a": "9:9:9", "choice": "char", "char": "乙", "voter": "u1", "ts": 2}
+    (wd / "005-r13.jsonl").write_text(json.dumps(byrev) + "\n", encoding="utf-8")
+    (wd / "items.jsonl").write_text(json.dumps(itemv) + "\n" + json.dumps({**itemv, "item": "pi_lost"}) + "\n", encoding="utf-8")
+    from guji_manager.review import pending_items as P
+    monkeypatch.setattr(P.ItemStore, "open", classmethod(lambda cls, d, t, c: type("S", (), {"items": {"pi_x": {"id": "pi_x", "cell": "2:2:2"}}})()))
+    votes, src = rp.old_rev_votes(tmp_path, "bk", "005-r13")
+    assert sorted((v["a"], v["rev"]) for v in votes) == [("1:1:1", "005-r13"), ("2:2:2", "005-r13")]
+    assert "按条目 1 票" in src
