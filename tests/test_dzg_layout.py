@@ -64,7 +64,7 @@ def test_row_segment_load_layout_and_fingerprint(tmp_path):
     assert set(RS.load_layout(str(p), "vol04")) == {(23, 1)}
     on = RS.RowSegmentParams(layout_prior=str(p))
     assert len(on.layout_fingerprint) == 16
-    # 表不在：开着的开关不能悄悄当空表（同 colgold_prior）
+    # 表不在：开着的开关不能悄悄当空表
     import pytest
     with pytest.raises(FileNotFoundError):
         RS.load_layout(str(tmp_path / "nope.jsonl"), "vol04")
@@ -102,8 +102,7 @@ def test_row_segment_off_switches_not_in_params_dump(tmp_path):
     from open_guji_cv.core.engine import params_hash
     from open_guji_cv.steps import row_segment as RS
     off = RS.RowSegmentParams().model_dump()
-    for k in ("colgold_prior", "colgold_fingerprint", "yolo_merge", "yolo_model_dir", "yolo_fingerprint",
-              "yolo_conf", "yolo_cover", "yolo_max_h", "layout_prior", "layout_fingerprint"):
+    for k in ("layout_prior", "layout_fingerprint"):
         assert k not in off, k
     p = tmp_path / "layout.jsonl"
     p.write_text(json.dumps({"vol": "vol04", "page": 23, "col": 1, "slots": [3], "notes": [],
