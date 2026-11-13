@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH：恢复 #1488 误删的 code_equiv 登记（align_ref f235b50d、align_ref_coord 9de0c6ed、row_segment 6dde638e、row_segment_pagemap a71017d1 四条），补入 v0.7.17 线的 row_segment fb60a8eb；新增 `scripts/check_code_equiv_monotonic.py`（登记链只增不减检查），版本号规矩加一条。只动登记表与脚本，不改任何 Step，产物指纹不变（A31 11-13）。
+
 
 - strokes 加 `ink_gap`（沿两点连线量落墨比例与最长断口，「笔画接不接」）、`ClassStats.max_z`／`llr_decide(max_z=)`（离哪一类都远就弃权）；L1 纯算法，不被 Step 引用，不动指纹。全唐文已放行 日曰／己已巳／千干 6,450 格按册留出，见 ai-team 笔画识别-研究 扩组2（A23 11-13）。
 - PATCH：重跑后覆盖逻辑清查（ZM 11-13，只动 scripts/zhengli，不进任何 Step 指纹）：①`proof_cycle.human_chars_of` 改调 `feedback.lookup.human_chars`（过绑定表，对沙箱产物算），换图源后失效的老人裁不再被当成「被机器推翻」（殿本 vol03／05／08／09／18／20 线上单有 14 条这类假复审）；机器推翻人裁的复审行第 4 列带上旧人裁的字（出单门归一比对、网站「已有判断」靠它）。②`republish.py` 加 `sheet_gate`：push 前跑 guji-manager `review.sheet_audit`，机器无字当推翻人裁、失效旧人裁当被推翻、码位归一后同字、锚点格混进判字单、重复格都拦（`--ack-sheet-audit "<原因>"` 放行）；prep 把体检写进差异单。③锚点类待审格（A01/A02）随 manager 改放待审单旁表 `anchor_cells[]`，不进判字用的 `cells[]`。需 guji-manager ≥ 0.4.46。
