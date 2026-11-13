@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.7.26] - 2026-11-13
+
+- 发版说明（A31 11-13，SJ 史記 patch 线）：v0.7.25 + #1492（snap_cut 整字护栏，开 snap_cut 且有 cut_judge 时自动带上），PATCH，**不含** #1432/#1437。snap_cut 关着时逐字节不变，row_boundaries、seg.cut_select 登记 code_equiv（哈希按本线重算）。
+
 ## [0.7.25] - 2026-11-13
 
 - 发版说明（A31 11-13，SJ 史記 patch 线）：v0.7.18 + #1467 + #1490，PATCH，**不含** #1432/#1437。#1467（row_segment 1.50 整列空的列认大印印边墨）是真行为改动、不登 code_equiv，史記 row_segment 起重跑；#1490 `snap_cut` 缺省 0 关，row_segment、row_boundaries、seg.seam 登记 code_equiv（哈希按本线重算）。

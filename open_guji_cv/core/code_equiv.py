@@ -1335,14 +1335,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='f2ac3d9708392558a9d7db889cf02a4abd90d0b02f881d41b405bd05848ee654',
           old='41fefe234ed8c27c17084a58f70d92813ae2b5c4826de5cfc418308af4511d86',
           evidence=_SNAP_CUT),
-    # snap_cut 整字护栏（2026-11-13，防横点字劈开，snap_cut 关时不走）
+    # snap_cut 整字护栏（2026-11-13，防横点字劈开，snap_cut 关时不走；v0.7.26 线 cherry-pick #1492，哈希按本线重算、证据同 dev 条）
     Equiv(module='open_guji_cv.impl.keben.row_boundaries',
-          new='09b51e79e3fbfbcf1c77407a87a224c421c7c53eb0bab4855135be6b66423589',
-          old='4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c',
+          new='5983f2059782aa6f4de8ea1c0197e2c892fd550eb324f994994c1aa1936613f9',
+          old='a7f43f47126728c8e206bd016cbffdc8e692ea52e32cc74e42312fd602d8c04a',
           evidence=_GLYPH_GUARD),
     Equiv(module='open_guji_cv.seg.cut_select',
           new='a32630fc154efa51ff9e8f734b257fbe09a5c51729501b5de9679032be2be6f2',
-          old='fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b',
+          old='d49c22c5d713e5da83827c42dc0cf2c74fe482761b47c96816a133bc42e151f7',
           evidence=_GLYPH_GUARD),
     # grid_end_fit 书级开关（缺省关，2026-11-09，殿本 vol28 列尾下溢）
     Equiv(module="open_guji_cv.steps.row_segment",
