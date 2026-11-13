@@ -93,3 +93,30 @@ def test_page_pitch_and_half_width():
                   cell(6, 50, 50, "a", 0, 80), cell(6, 50, 50, "b", 80, 100)])               # 6 号中缝切偏
     hits = ss.half_width_outliers(jz, 50)
     assert {(o["slot"], o["sub"]) for o in hits} == {(6, "a"), (6, "b"), (6, "ab")}
+
+
+def test_ref_confirmed_exempts_only_verified_cells():
+    """史記 R011／R013（2026-11-13）：格高／半格宽离群、但参校字在字形匹配前 3 名、邻格无反证的格不报。"""
+    from open_guji_cv.products.kinds.recog import ColumnMatch, MatchRec, PageMatch
+
+    def m(slot, sub, cands):
+        return MatchRec(id=f"01:5:1:{slot}{sub or ''}", slot=slot, sub=sub, verdict="unsure",
+                        candidates=[(ch, 0.9) for ch in cands])
+    glyph = PageMatch(page=5, columns=[ColumnMatch(col=1, chars=[
+        m(1, None, ["天", "夫"]), m(2, None, ["二", "一"]), m(3, None, ["人"]),
+        m(4, None, ["日", "曰"]), m(5, None, ["軍", "車"]), m(6, "a", ["集"]), m(6, "b", ["解"])])])
+
+    class R:                                          # align_ref 产物只要 coord[].id／ref_char
+        def __init__(self, i, c):
+            self.id, self.ref_char = i, c
+
+    class A:
+        coord = (R("01:5:1:1", "天"), R("01:5:1:2", "一"), R("01:5:1:3", "人"), R("01:5:1:4", "參"),
+                 R("01:5:1:5", "軍"), R("01:5:1:6a", "集"), R("01:5:1:6b", "解"))
+    conf = ss.ref_confirmed(glyph, A())
+    assert conf[(1, 2, "")] is True and conf[(1, 4, "")] is False
+    assert ss.ref_ok_cell(conf, 1, 2, None)           # 扁字「一」：本格、上下邻格都证实
+    assert not ss.ref_ok_cell(conf, 1, 4, None)       # 本格对不上参校字（拆格把「參」切成「日」）
+    assert not ss.ref_ok_cell(conf, 1, 3, None)       # 本格对、下邻格反证
+    assert ss.ref_ok_cell(conf, 1, 6, "ab")           # 夹注 a/b 两半都证实
+    assert not ss.ref_ok_col(conf, 1)                 # 不到 PITCH_COL_MIN 格不判整列

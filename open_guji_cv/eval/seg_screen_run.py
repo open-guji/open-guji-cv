@@ -11,6 +11,9 @@
 - page_pitch（2026-11-12）：正文格高对本页中位（整列偏 >10%，或单格 ≥1.5／≤0.6 倍），职名列不查；value＝列中位比；
 - half_width（2026-11-12）：夹注半格宽对本册半格宽中位出 0.7–1.4 倍，或同号 a/b 宽差 >30%；
 - cut_through（F6，2026-11-13）：格线劈字，相邻两格分界按连通块量切割量、±0.4 格内挪得开且 U-Net 裁判认挪后更对才报（没 torch 不跑，summary 注明），一条线一行，value＝强｜中；
+- geo_ref_ok（2026-11-13，史記 R011／R013）：cell_size／page_pitch／half_width 离群、但参校字落在字形匹配前 3 名且上下邻格无反证的格
+  （整列偏则本列有参校字的格 ≥85% 证实），不进上面三张表，只记在这里备查——写本扁字、大字、夹注一行偏宽是字形本来如此；
+  `ref_check=False` 关掉豁免（照旧全报）；
 - pin_stale：中心库有 active 钉子、本页产物却没用上（产物早于钉子，要从 row_segment 重跑）。
 
 钉子列（产物带 `manual_cells` 旗）只比格号、不跑墨账与端外墨（SJ 第 5 条）；有钉子而产物没用上的列照普通列查；职名列不跑端外墨。`skip` 点名的页整页不查（书配置
@@ -18,11 +21,12 @@
 """
 from __future__ import annotations
 
+import functools
 import sys
 
 CHECKS = ("edge_ink", "orphan", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
           "pitch_free_ignored", "cell_flags", "cell_size", "page_pitch", "half_width", "pin_slots", "pin_stale", "layout_slots", "seal_blank",
-          "cut_through")
+          "cut_through", "geo_ref_ok")
 
 
 def _engine(book: str):
@@ -55,7 +59,7 @@ def _img(ctx, book: str, kind: str, key: str):
 
 
 def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[str, list], counts: dict,
-                skip: set[int] | None = None, cell_checks: bool = True) -> None:
+                skip: set[int] | None = None, cell_checks: bool = True, ref_check: bool = True) -> None:
     import open_guji_cv.products.kinds  # noqa: F401
     from ..core.spec import column_key, page_key
     from ..steps.row_segment import RowSegmentStep, load_layout
@@ -118,6 +122,12 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
         win_by_col = {} if wins is None else {w.col: w for w in wins.columns}
         lay_page = {col: r for (pg, col), r in layout.items() if pg == page}
         pitch = ss.page_pitch(cells)
+        conf = ss.ref_confirmed(store.read(book, "glyph_match", key, "glyph_match"),
+                                store.read(book, "align_ref", key, "align_ref")) if ref_check else {}
+
+        shifted = {cc.col for cc in cells.columns if any(str(f).startswith("layout_shift") for f in cc.flags)}
+        _ref_ok = functools.partial(_geo_ref_ok, conf, shifted)
+        _exempt = functools.partial(_geo_exempt, rows, c, book, page)
         sh = ss.layout_col_shift(cells, lay_page)
         if sh:
             rows["layout_col_shift"].append((book, page, "", sh["shift"],
@@ -159,12 +169,22 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             if pinned:
                 continue                  # 钉子列只比格号（SJ 第 5 条）
             odd = ss.odd_cell_heights(cc)
+            _exempt(cc.col, "cell_size", [o for o in odd if _ref_ok(cc.col, o)])
+            odd = [o for o in odd if not _ref_ok(cc.col, o)]
             if odd:
                 rows["cell_size"].append((book, page, cc.col, ",".join(sorted({o["kind"] for o in odd})),
                                           " ".join(f"{o['slot']}{o['sub'] or ''}×{o['ratio']}" for o in odd)))
                 c["cell_size"] += 1
             if pitch and "roster" not in cc.flags:
                 po = ss.pitch_outliers(cc, pitch)
+                if po and conf:
+                    _exempt(cc.col, "page_pitch", [o for o in po["cells"] if _ref_ok(cc.col, o)])
+                    po["cells"] = [o for o in po["cells"] if not _ref_ok(cc.col, o)]
+                    if not po["cells"] and (abs(po["col_ratio"] - 1) <= ss.PITCH_COL_DEV
+                                             or (cc.col not in shifted and ss.ref_ok_col(conf, cc.col))):
+                        if abs(po["col_ratio"] - 1) > ss.PITCH_COL_DEV:
+                            _exempt(cc.col, "page_pitch", [{"slot": "列", "sub": "", "ratio": po["col_ratio"]}])
+                        po = None
                 if po:
                     rows["page_pitch"].append((book, page, cc.col, po["col_ratio"],
                                                " ".join(f"{o['slot']}{o['sub'] or ''}×{o['ratio']}" for o in po["cells"])
@@ -172,6 +192,8 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
                     c["page_pitch"] += 1
             if half_med and "roster" not in cc.flags:
                 ho = ss.half_width_outliers(cc, half_med)
+                _exempt(cc.col, "half_width", [o for o in ho if _ref_ok(cc.col, o)])
+                ho = [o for o in ho if not _ref_ok(cc.col, o)]
                 if ho:
                     rows["half_width"].append((book, page, cc.col, len(ho), " ".join(
                         f"{o['slot']}{o['sub']}" + (f"×{o['ratio']}" if "ratio" in o else f" 差{o['asym']}") for o in ho)
@@ -209,6 +231,18 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
         rows["frame_margin"].append((book, h["page"], h["side"], h["dev"],
                                      f"外框到页边 {h['dist']}px，同奇偶页中位 {h['median']}px"))
         c["frame_margin"] += 1
+
+
+def _geo_ref_ok(conf: dict, shifted: set, col: int, o: dict) -> bool:
+    """格高／半格宽离群的一格能不能按参校字豁免。Step3 挪过格位表的列（layout_shift）不豁免：卷首题署列这类（史記 37:2:6 人钉过）。"""
+    from . import seg_screen as ss
+    return bool(conf) and col not in shifted and ss.ref_ok_cell(conf, col, int(o["slot"]), o["sub"])
+
+
+def _geo_exempt(rows, c, book, page, col, kind, hits) -> None:
+    for o in hits:
+        rows["geo_ref_ok"].append((book, page, col, kind, f"{o['slot']}{o['sub'] or ''}×{o.get('ratio', o.get('asym'))}"))
+        c["geo_ref_ok"] += 1
 
 
 def _cell_flags(book, page, col, gray, chars, win, ctx, rows, c) -> None:
