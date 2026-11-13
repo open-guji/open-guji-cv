@@ -277,7 +277,7 @@ _HINT_1109 = ('border_detect.hline_hints 页级人给上／下版框 y（缺省�
 
 _SNAP_CUT = ("按墨块切割量补挪格线 snap_cut（row_segment 书级参数，缺省 0＝关，史記 r54 劈字，GUJI-771；seg.seam 只加 cut_cost_profile／"
              "cut_cost_sides 两个新函数，原有函数不动，cell_shrink 用的走缝函数不变）：row_segment 在史記 42 册 10 页"
-             "（--pages 27,43,64,92,137,14,36,31,33,59，SJ 强档劈字最多的页，等距＋DP 格网、夹注、alt_cut）上与 origin/dev 0422e3c 产物逐字节相同；"
+             "（--pages 27,43,64,92,137,14,36,31,33,59，SJ 强档劈字最多的页，等距＋DP 格网、夹注、alt_cut）上与 origin/dev 0422e3c 产物逐字节相同；殿本 vol58（page_map strict，--pages 1,20,40,60,80,100,120,140 中 7 页）同样逐字节相同；"
              "scripts/code_equiv.py check，2026-11-13")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
