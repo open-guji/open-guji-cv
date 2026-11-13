@@ -276,6 +276,10 @@ class SeedAdmitParams(BaseModel):
     没有裁定的半格照旧受保护（本就不放行）。书级，缺省关、关时不进参数 dump、行为不变（SJ 史記 11-12：必 04:26:1:13b、解 03:46:1:4a、遲 等半格裁定放不出，半格是形近待审大头）。
     放行条件（A22 评估 11-12）：裁定记的 cell＝当前格号、裁定字＝整理本字（不走白名单）、本格无 clipped／frame_residue／jiazhu_*／split_* 疑点；放行格 evidence.half=True。
     起因的错放（men 组 06:12:5:12a）是旧在线 L3，不是现在的对话双路裁定；放行前须金标验证 0 错。"""
+    group_flow_ruling_first: list[str] = Field(default_factory=list)
+    """这几组的文意解法先查裁定库（对话裁定，`feedback.rulings`），命中就照裁定给字，不再看 L1 规则、L2 表／小头（书级，缺省空、不进参数 dump、行为不变）。
+    没命中照旧走 L1 → L2 → L3。复核时（`review_fix` 的组，如己已巳）已放行格的上下文有裁定、字不同 → 改成裁定字。
+    全唐文 11-13 Sheldon 定：己已巳 刻形分不开、按文意＋AI 判；L2 小头放错的格（001–030 按文意核 23 格），对话裁定排在小头后面改不动。"""
     group_flow_llm_half_groups: list[str] = Field(default_factory=list)
     """`group_flow_llm_skip_half` 的例外（书级，缺省空、不进参数 dump；A24 11-08，SJ 史記 H01 89 格半格没有 L3 问、写不了裁定键）：
     这几组的夹注半格照样走 L3（答案表、裁定库、记 `llm_pending` 问），由 `feedback/llm_queue` 导出、对话判读后导入。
@@ -1417,6 +1421,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("vis_ruling_half", None)
         if isinstance(d, dict) and not self.group_flow_llm_half_groups:
             d.pop("group_flow_llm_half_groups", None)
+        if isinstance(d, dict) and not self.group_flow_ruling_first:
+            d.pop("group_flow_ruling_first", None)
         if isinstance(d, dict) and self.group_flow_form_open:
             d.pop("group_flow_form_open", None)      # 缺省值不进 dump
         if isinstance(d, dict) and not self.p_ref_admit:
@@ -5964,7 +5970,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      abstain_ref_ok=p._rt_abstain_ref_ok(),
                      shape_ref_ok=p._rt_shape_ref_ok(),
                      l3_online=_l3_online(p), l3_model=p.group_flow_llm_model, l3_effort=p.group_flow_llm_effort,
-                     l3_need_l2_agree=p.group_flow_llm_need_l2_agree, l3_skip_half=p.group_flow_llm_skip_half, l3_half_groups=frozenset(p.group_flow_llm_half_groups), l3_panel=tuple(p.group_flow_llm_panel), l3_panel_groups=tuple(p.group_flow_llm_panel_groups),
+                     l3_need_l2_agree=p.group_flow_llm_need_l2_agree, l3_skip_half=p.group_flow_llm_skip_half, l3_half_groups=frozenset(p.group_flow_llm_half_groups), ruling_first=frozenset(p.group_flow_ruling_first), l3_panel=tuple(p.group_flow_llm_panel), l3_panel_groups=tuple(p.group_flow_llm_panel_groups),
                      vis_model=(p.group_flow_llm_model if p.group_flow_vis and p.group_flow_llm_model else None),
                      vis_cache=_vis_cache(),
                      lift_ref_guard=p.group_flow_lift_ref_guard, provisional=p.group_flow_provisional,

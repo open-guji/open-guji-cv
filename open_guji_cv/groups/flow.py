@@ -79,6 +79,7 @@ class FlowConfig:
     l3_need_l2_agree: bool = False                     # L3 在线给的字须与 L2 模型弃权时的首选字相同
     l3_skip_half: bool = False                         # 夹注 a/b 半格不走 L3（答案表、在线、二审小组都不碰；SJ 史記 06:12:5:12a 错放，A31 11-04 定半格归 S）
     l3_half_groups: frozenset = frozenset()            # 书级：这几组不受 `l3_skip_half` 限制（seed_admit `group_flow_llm_half_groups`，A24 11-08）
+    ruling_first: frozenset = frozenset()              # 书级：这几组文意先查裁定库，命中就照裁定给字（L1 规则、L2 表／小头都让位；seed_admit `group_flow_ruling_first`，全唐文 11-13）
     l3_panel: tuple = ()                               # L3 二审小组 ("模型:effort", …)：首问不稳时全部同字才给字，记 strong（`ctx_llm.panel_verdict`）；空＝不开
     l3_panel_groups: tuple = ()                        # 哪些组用二审小组（其余组不问）
     canon: Callable[[str], str] | None = None          # 书级码位归一（L2 表键按它归一再比；None＝逐字比）
