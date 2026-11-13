@@ -581,6 +581,14 @@ class AlignRefParams(BaseModel):
     同列现役 equal 与坐标全同的格至少 `COORD_PAIR_MIN_AGREE`（3），列照用，冲突格不给整理本字（仍记进 coord_conflict_ids，
     seed_admit 不放 match_ref）。「空格位上库认出了字」那条不在此列。False＝关（缺省，不进参数哈希）。"""
 
+    coord_conflict_drop_bad: bool = False
+    """「与现役对位冲突」只丢冲突格、不整列退回，比 `coord_conflict_pair_only` 宽（2026-11-13，ZM 殿本 vol05 p1 列 4／p101 2:19／
+    p177 列 9：现役 ngram 把一格配到别列的字上，坐标字是对的，整列坐标参校字却全被退回，十几格变「有遮挡且参校本缺」）。
+    开了以后，冲突列只要同列现役 equal 与坐标全同的格至少 `COORD_DROP_MIN_AGREE`（3）且不少于冲突格数（整列错一位时
+    全同格近乎为零）、冲突格里现役字恰是邻格坐标字的不到一半（有两格以上才算整列错位迹象），列照用，只去冲突格
+    （冲突格不给整理本字，仍记进 coord_conflict_ids，seed_admit 不放 match_ref）。坐标判空的冲突格仍整列退回。
+    与 `coord_conflict_pair_only` 同开时先试 pair_only 的严口径，不成再试这一条。False＝关（缺省，不进参数哈希）。"""
+
     coord_blank_ink: bool = False
     """整理本空格位上有墨的列照样按格位配（2026-11-06，A22 S02 深挖，Sheldon 定「这几列没有必要完全挡住」）：
     ①整理本一行中间有空格位、图上那几位有墨（满文字母、印文、碎笔）时，不要求字位对的格连续，按格位配
@@ -629,6 +637,8 @@ class AlignRefParams(BaseModel):
             d.pop("coord_dp_skip_cost", None)
         if isinstance(d, dict) and not self.coord_conflict_pair_only:
             d.pop("coord_conflict_pair_only", None)
+        if isinstance(d, dict) and not self.coord_conflict_drop_bad:
+            d.pop("coord_conflict_drop_bad", None)
         if isinstance(d, dict) and not self.coord_consensus_not_same:
             d.pop("coord_consensus_not_same", None)
         if isinstance(d, dict) and not self.coord_blank_ink:
@@ -840,6 +850,7 @@ class AlignRefStep(Step):
                          **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
                          **({"pair_no_sub": True} if p.coord_pair_no_sub else {}),
                          **({"pair_only": True} if p.coord_conflict_pair_only else {}),
+                         **({"drop_bad": True} if p.coord_conflict_drop_bad else {}),
                          **({"blank_ink": True} if p.coord_blank_ink else {}),
                          **({"consensus_not_same": True} if p.coord_consensus_not_same else {}),
                          **({"dp_skip_cost": p.coord_dp_skip_cost} if p.coord_dp_skip_cost else {}))
@@ -1546,6 +1557,7 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
                  **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
                          **({"pair_no_sub": True} if p.coord_pair_no_sub else {}),
                          **({"pair_only": True} if p.coord_conflict_pair_only else {}),
+                         **({"drop_bad": True} if p.coord_conflict_drop_bad else {}),
                          **({"blank_ink": True} if p.coord_blank_ink else {}),
                          **({"consensus_not_same": True} if p.coord_consensus_not_same else {}),
                          **({"dp_skip_cost": p.coord_dp_skip_cost} if p.coord_dp_skip_cost else {}))
@@ -1592,7 +1604,7 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  pin_line: int | None = None, relaxed: bool = False, dp: bool = False,
                  title_trust: bool = False, dp_flat: bool = False,
                  shift_needs_pair: bool = False, pair_no_sub: bool = False,
-                 pair_only: bool = False, blank_ink: bool = False, consensus_not_same: bool = False,
+                 pair_only: bool = False, drop_bad: bool = False, blank_ink: bool = False, consensus_not_same: bool = False,
                  circle_ext: bool = False, ref_hint: bool = False, dp_skip_cost: float = 0.0) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
@@ -1708,8 +1720,10 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                               **({"pair_no_sub": True} if pair_no_sub else {}),
                               **({"blank_hits": blank_hits} if blank_ink else {}))
         if why:
-            if pair_only and why.startswith("与现役对位冲突"):
-                kept = _pair_only_recs(r.recs, legacy)
+            if (pair_only or drop_bad) and why.startswith("与现役对位冲突"):
+                kept = _pair_only_recs(r.recs, legacy) if pair_only else None
+                if kept is None and drop_bad:
+                    kept = _drop_bad_recs(r.recs, legacy)
                 if kept is not None:      # `coord_conflict_pair_only`：只退冲突的那一两格，列照用
                     res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
                     res.coord_conflict_ids.extend(blank_hits or [])
@@ -1768,6 +1782,35 @@ def _pair_only_recs(recs, legacy: dict):
         lc = legacy[recs[k][0]].align_char
         if any(0 <= j < len(chs) and chs[j] == lc for j in (k - 1, k + 1)):
             return None
+    drop = {recs[k][0] for k in bad}
+    return [r for r in recs if r[0] not in drop]
+
+
+COORD_DROP_MIN_AGREE = 3
+
+
+def _drop_bad_recs(recs, legacy: dict):
+    """`coord_conflict_drop_bad`：比 `_pair_only_recs` 宽的只丢冲突格。能 → 去掉冲突格的 recs；不能 → None（照旧整列退回）。
+    不能的情形：没有冲突格、冲突格坐标判空、同列全同格少于 `COORD_DROP_MIN_AGREE` 或少于冲突格数、
+    冲突格里现役字恰是邻格坐标字的≥2 格且占冲突格一半以上（整列错一位的迹象）。"""
+    chs = [r[3] for r in recs]
+    bad, agree = [], 0
+    for k, (i, _sl, _sub, ch, _g) in enumerate(recs):
+        lg = legacy.get(i)
+        if lg is None or lg.align_op != "equal":
+            continue
+        if lg.align_char == ch:
+            agree += 1
+        elif ch:
+            bad.append(k)
+        else:
+            return None
+    if not bad or agree < COORD_DROP_MIN_AGREE or agree < len(bad):
+        return None
+    shifted = sum(1 for k in bad
+                  if any(0 <= j < len(chs) and chs[j] == legacy[recs[k][0]].align_char for j in (k - 1, k + 1)))
+    if shifted >= 2 and shifted * 2 >= len(bad):
+        return None
     drop = {recs[k][0] for k in bad}
     return [r for r in recs if r[0] not in drop]
 
