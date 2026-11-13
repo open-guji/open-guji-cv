@@ -16,6 +16,7 @@
 
 ## [未发版]
 
+- PATCH：`guji seg check` 加 F6 `cut_through`（格线劈字，A22 11-13，Sheldon 同意并进；量法出自 SJ 史記 r54）：相邻两格分界按连通块量切割量（Step3 选了折线按折线量），≥0.025 格高² 且 ±0.4 格内能挪到原位 1/10 以下，再过 U-Net 归属裁判（挪后一致率比原位高 0.02）才报，一条线一行、value 强｜中；没 torch／权重不跑、summary 注明。殿本 vol30 全册不过裁判 33 条看图几乎全是两字相粘处格线本来对（最省墨处在字内白缝），过裁判剩 1 条；史記 42 册 9 页 16→3 条都真劈字；长钩尖伸进下格裁判也判归下格，查不出。只读产物，不进指纹。
 - PATCH：snap_cut 整字护栏（防横点字劈开，A22 11-13）：snap_cut 开着时格线的每个去处先过 U-Net 归属裁判（新原语 `seg/cut_select.move_keeps_glyphs`：看上下两格整个窗口，挪后一致率不低于原位才许挪），不再挪进「一二三」「辛」「思」「魯」「爵」这类字的上下部件之间的白缝。史記 42 册 9 页 snap_cut=0.4：原挪 67 条里 15 条挪进字内白缝，护栏拦下 14 条（剩 1 条是相邻格线后挪造成的次序差），放行的都落在字缝。snap_cut 关（殿本、全唐文）逐字节不变，row_boundaries、cut_select 的 code_hash 变，已登记 code_equiv。
 - PATCH：seed_admit 加笔画反向护栏 `stroke_veto`（书级模型路径，缺省空＝关、不进参数 dump、行为不变；新模块 `groups/stroke_veto`，用 #1474 的笔画识别）：已放行非人裁格，放行字在 己／已巳、千／干 组里而笔画判出另一类 → 降审，doubt `stroke_veto`（全唐文形近字线 11-13：扩组2 001–030 放行错 24 格笔画全判对）。
 - PATCH：row_segment 书级参数 `snap_cut`（格高倍数，缺省 0＝关、不进参数哈希；GUJI-771，史記 r54 格线劈字，A22 11-13）：格线定下后，仍劈着字的内部格线按墨块切割量（`seg/seam.cut_cost_profile`／`cut_cost_sides`，新原语）在 ±snap_cut 格内挪到切割量最小处，只往被劈小截那边挪；去处护栏 `snap_gap_ok` 留给字内白缝判据。史記 42 册 14 页 snap_cut=0.4：强档劈字 49→0、中档 247→122；37 册 12 页 45→8；格号不变。row_segment、row_boundaries、seg.seam 的 code_hash 变，已登记 code_equiv（关时逐字节同）。
