@@ -151,3 +151,14 @@ def test_route_gate_drops_norm_only_recheck(prior, ref, norm, dropped):
 def test_route_gate_ignores_non_recheck():
     c = {"cell": "1:1:1", "prior": {"c": "别"}, "ref": {"c": "別"}}
     assert len(pr.route({"cells": [c]}, {}, set(), 99, False, norm={"别": "別"})["public"]) == 1
+
+
+def test_overridden_old_ruling_is_not_counted():
+    """新人裁 payload.overrides 推翻的旧裁不再算这格「定了」（r18：旧裁绑到别格误判 id_mismatch）。"""
+    old = ev("88:4:19", "confirm", "2026-11-09T00:00:00Z", shape="甲")
+    new = ev("88:4:18", "confirm", "2026-11-13T00:00:00Z", shape="乙")
+    new["payload"]["overrides"] = old["id"]
+    assert pr.overridden_ids([new["payload"], old["payload"]]) == {old["id"]}
+    got = pr.decided_cells([old, new], "vol01", "2026-11-14T00:00:00Z")
+    assert set(got) == {"88:4:18"}
+    assert set(pr.decided_cells([old], "vol01", "2026-11-14T00:00:00Z")) == {"88:4:19"}

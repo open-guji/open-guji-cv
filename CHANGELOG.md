@@ -7,6 +7,11 @@
 
 ## [未发版]
 
+## [0.7.20] - 2026-11-13
+
+- 发版说明（A31 11-13，ZM 殿本 vol01 001-r18）：v0.7.19 + 下面一条，PATCH，同样不含 dev 上的 #1463/#1465–#1468。
+- `republish.py from-pack` 的 `bind_check` 和 `pending_route` 的「扣已裁」先剔除被后来人裁 `payload.overrides` 推翻的旧人裁：旧裁绑到别格（iou 低）或 unanchored 时，不再把新裁已生效的格误判成 id_mismatch 塞进 keep.txt、留在单上（r17 刚落的 88:4:18、117:1:8 被放回单上的真因）。只动 scripts/zhengli，不改 Step，code_hash 不变。
+
 ## [0.7.19] - 2026-11-13
 
 - 发版说明（A31 11-13，ZM 殿本要）：v0.7.16 + #1470，PATCH，不含 dev 上 v0.7.16 之后的 #1463/#1465/#1466/#1467/#1468（其中 #1467 row_segment 1.50 会让钉本版的册 row_segment 过期）。
