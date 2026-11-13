@@ -16,6 +16,10 @@
 
 ## [未发版]
 
+## [0.7.29] - 2026-11-13
+
+- 发版说明（A31 11-13，覆盖逻辑线／各书要）：dev 头 `f509b605` 的正式版，PATCH，**含 #1467**（row_segment 1.50 大印印边墨，row_segment 起判过期）、#1505（字形库重绑尊重作废标记，改产物、不登等价）、#1503／#1504／#1506（republish 出单前查原图、bind_check 用正式 book_bindings、lookup 读不到分片／绑定表时报错，`GUJI_LOOKUP_LENIENT=1` 可回退），以及 snap_cut／cut_through／stroke_veto 等 dev 上已合的其余改动（均缺省关）。不是史記 patch 线（史記钉 v0.7.18），钉不钉由各书自己定。
+
 - PATCH（改产物）：`feedback/lookup.py` 读人工指定分片（抬头/列数/夹注单列/粘连列切线）和 `human_chars` 的绑定表时，读不到不再悄悄退回空表／按格号，改为报错（`GUJI_LOOKUP_LENIENT=1` 可退回旧行为并打警告）。此前这些静默回退会让人的指定在重跑里悄悄失效、之后又冒出来。（ZM，11-13）
 
 - PATCH（改产物）：`rebind_library_shapes`（字形库人裁重绑）尊重作废标记：字形库 `human_stale_*`／`stale_verdicts.tsv` 撤下之后没有再裁的格，库里那份不再顶上。此前重绑只看该格号最新事件的锚，误锚的人裁（vol01 182:9:15a「宅」）撤下后仍会在重绑时落回去。（ZM，11-13）
