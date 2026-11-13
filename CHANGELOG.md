@@ -9,7 +9,7 @@
 
 ## [0.7.24] - 2026-11-13
 
-- 发版说明（A31 11-13，QTW 全唐文下一轮要）：v0.7.23 + #1487，PATCH，不含 dev 上的 #1463/#1465–#1468 及 dp_skip_cost（#1467 row_segment 1.50 会让钉本版的册 row_segment 过期）。
+- 发版说明（A31 11-13，QTW 全唐文下一轮要）：v0.7.23 + #1487 + #1474（#1487 依赖的笔画识别 ink_gap／max_z）+ seed_admit code_equiv 登记，PATCH，不含 dev 上的 #1463/#1465–#1468 及 dp_skip_cost（#1467 row_segment 1.50 会让钉本版的册 row_segment 过期）。
 - PATCH：seed_admit 加笔画反向护栏 `stroke_veto`（书级模型路径，缺省空＝关、不进参数 dump、行为不变；新模块 `groups/stroke_veto`，用 #1474 的笔画识别）：已放行非人裁格，放行字在 己／已巳、千／干 组里而笔画判出另一类 → 降审，doubt `stroke_veto`（全唐文形近字线 11-13：扩组2 001–030 放行错 24 格笔画全判对）。
 - strokes 加 `ink_gap`（沿两点连线量落墨比例与最长断口，「笔画接不接」）、`ClassStats.max_z`／`llr_decide(max_z=)`（离哪一类都远就弃权）；L1 纯算法，不被 Step 引用，不动指纹（#1474，#1487 的依赖，随本版带上）。全唐文已放行 日曰／己已巳／千干 6,450 格按册留出，见 ai-team 笔画识别-研究 扩组2（A23 11-13）。
 - seed_admit code_equiv 已登记（笔画护栏缺省关，关时代码路径不变）。
