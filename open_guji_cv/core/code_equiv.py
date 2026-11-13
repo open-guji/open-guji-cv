@@ -1172,7 +1172,7 @@ ENTRIES: tuple[Equiv, ...] = (
     # 共识升档退回原档（A23，全唐文 r15 回退，2026-11-07；第 7 轮）
     Equiv(module='open_guji_cv.steps.align_ref',
           new='61e396b487119919fc0c14e7455248f7e838c47ce314e4853efd17a952074f77',
-          old='6afd38325a5f4060b74ddf7f8bfe1a316505479e420899a059fd648182cf4ad6',
+          old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
           evidence='坐标对位冲突闸 coord_consensus_not_same（缺省关、不进参数 dump；A23，史記 r18 09:183 空格位「○」共识 same 整列退回）：align_ref 在测试样页 keben 3 页（--pages 1,2,3）与 origin/dev 产物逐字节相同；关时 same 表与改前同值；scripts/code_equiv.py check，2026-11-07'),
     Equiv(module='open_guji_cv.steps.context_decide',
           new='05eac4afb853e7c3530c9103430ba0267286ff5d3b45fe3cf3b1d48f8114fe40',
@@ -1259,7 +1259,7 @@ ENTRIES: tuple[Equiv, ...] = (
     # 参校本属性 B 块（A22，2026-11-08）
     Equiv(module='open_guji_cv.steps.align_ref',
           new='ff1df0dc64abf24fe7f7c4e07bb9b30f4b8db2c4fcc9e6444dd07eaaf95d81b3',
-          old='6afd38325a5f4060b74ddf7f8bfe1a316505479e420899a059fd648182cf4ad6',
+          old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
           evidence='参校本属性 B 块（reference_profile；none 页不对位、text 页不做坐标对位，未声明的册不变）：align_ref 在殿本 vol60 新图 12 页（1,2,3,10,20,30,45,60,75,90,105,120）、全唐文 006 12 页（每 20 页取 1）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-08（A22）'),
     Equiv(module='open_guji_cv.steps.row_segment',
           new='d63807f867b018129e984c563f5b7e2fcf297f1b445781938544bea102c99e5b',
@@ -1433,16 +1433,16 @@ ENTRIES: tuple[Equiv, ...] = (
     # align_ref 加 coord_circle_ext（缺省关；GUJI-767，史記圈号 ○ 对位，2026-11-12）
     Equiv(module='open_guji_cv.steps.align_ref',
           new='92f9e07ef18267c074789a9a74b012c45181301e3210b91096e9d9666f9eccaa',
-          old='6afd38325a5f4060b74ddf7f8bfe1a316505479e420899a059fd648182cf4ad6',
+          old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
           evidence='align_ref 在史記 03/09/02 各 7 页（○列、夹注、职名杂页）上，两开关（coord_circle_ext、coord_relaxed 之外的新分支）关着，与 3d94f3a9 产物逐字节相同；SJ 11-12，scripts/code_equiv.py check'),
     Equiv(module='open_guji_cv.steps.align_ref_coord',
           new='d349110272246e70d060055b7589da62484a9ddd4a19f3bb4675fee6de44e42d',
-          old='d349110272246e70d060055b7589da62484a9ddd4a19f3bb4675fee6de44e42d',
+          old='862f2f24da84debb2ce702f244115285de7de8d22adea085ec69b9fbdcba7e9f',
           evidence='同上'),
     # align_ref 加 coord_ref_hint（缺省关；GUJI-767 第二步，2026-11-12）
     Equiv(module='open_guji_cv.steps.align_ref',
           new='6afd38325a5f4060b74ddf7f8bfe1a316505479e420899a059fd648182cf4ad6',
-          old='6afd38325a5f4060b74ddf7f8bfe1a316505479e420899a059fd648182cf4ad6',
+          old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
           evidence='align_ref 在 03/09/02 各 7 页（03: 99,103,117,122,208,2,40；09: 167,170,172,176,187,193,194；02: 88,90,165,166,168,171,204）上，coord_relaxed 开、coord_circle_ext／coord_ref_hint 关，与 origin/dev c16d142 产物逐字节相同；SJ 史記文淵閣 r42，scripts/code_equiv.py check，11-12'),
     # groups.registry 加 OPT_IN_GROUPS（zw 丈文，需点名才开；GUJI-767／#1413，2026-11-12）
     Equiv(module='open_guji_cv.groups.registry',
