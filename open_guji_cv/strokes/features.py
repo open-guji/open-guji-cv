@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import cv2
 import numpy as np
 
 from .register import Fit
@@ -58,9 +59,18 @@ class ClassStats:
         return {c: float(-0.5 * (((x - m) / sds[c]) ** 2).sum() - np.log(sds[c]).sum())
                 for c, m in self.means.items()}
 
-    def llr_decide(self, x: np.ndarray, t: float = 5.0):
+    def max_z(self, x: np.ndarray) -> float:
+        """x 离最近那一类有多远：各维 |x−类中心|/类标准差 的最大值，取各类里最小的。"""
+        sds = self.sds or {c: self.sd for c in self.means}
+        return min(float(np.abs((x - m) / sds[c]).max()) for c, m in self.means.items())
+
+    def llr_decide(self, x: np.ndarray, t: float = 5.0, max_z: float | None = None):
         """似然比判：最像的类比次像的对数似然高出 ≥ t 才判，否则弃权。返回 (字或 None, 对数似然表)。
-        t 按书按组定（全唐文 15,477 格：t=5 时 木本／目自／人入 不一致 5／9／1，全为方法错；t 越大越保守）。"""
+        t 按书按组定（全唐文 15,477 格：t=5 时 木本／目自／人入 不一致 5／9／1，全为方法错；t 越大越保守）。
+        max_z：x 离哪一类都远（`max_z(x)` 超过它）就弃权——似然比只看两类谁更像，切坏的格两类都不像也会判
+        （全唐文 004:82:9:1 切成一条竖，千干 判了 千；已放行 6,450 格取 6 只多弃权 1 格）。"""
+        if max_z is not None and self.means and self.max_z(x) > max_z:
+            return None, {}
         ll = self.loglik(x)
         order = sorted(ll, key=ll.get, reverse=True)
         if len(order) < 2:
@@ -101,6 +111,25 @@ def bad_fit(fit: Fit, stroke: int, min_cover: float = 0.85, min_on_ink: float = 
     return fit.cover < min_cover or bool(others and min(others) < min_on_ink) or fit.ink_frac > max_ink_frac
 
 
+def ink_gap(ink: np.ndarray, a, b, w: float, tol: float = 0.35) -> tuple[float, float]:
+    """「笔画接不接」：沿 a→b 直线（(y, x) 原图坐标）量 (落墨比例, 最长断口长度像素)。
+    ink 是二值字图（`binarize`＋`clean_cell`，和 `register` 用的一致）；离墨 ≤ tol×笔宽 算在墨上。
+    用法：两笔该接（或该断）的地方，一头取一笔的端点（`FitStroke.start/end`），另一头取另一笔上同高／同列的点。
+    全唐文（2026-11-13）：己 对 已/巳 量「横起点直上到顶横」的最长断口，日 对 曰 量中横两头到左右竖。"""
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    L = float(np.linalg.norm(b - a))
+    n = max(2, int(round(L)) + 1)
+    q = a + (b - a) * np.linspace(0, 1, n)[:, None]
+    H, W = ink.shape
+    dt = cv2.distanceTransform((1 - (ink > 0)).astype(np.uint8), cv2.DIST_L2, 5)
+    on = dt[np.clip(np.round(q[:, 0]).astype(int), 0, H - 1), np.clip(np.round(q[:, 1]).astype(int), 0, W - 1)] <= tol * w
+    run = best = 0
+    for o in on:
+        run = 0 if o else run + 1
+        best = max(best, run)
+    return float(on.mean()), best * L / (n - 1)
+
+
 def extra_feats(fit: Fit, stroke: int) -> np.ndarray:
     """差一笔「学门槛」用的特征：验的那一笔的（独占率, 落墨率）。"""
     s = fit.strokes[stroke]
@@ -133,4 +162,4 @@ def verify_extra(fit: Fit, stroke: int, hi: float = 0.75, lo: float = 0.2, min_c
     return None, e
 
 
-__all__ = ["FEATS", "stroke_feats", "geometry", "ClassStats", "verify_extra", "verify_learned", "extra_feats", "bad_fit"]
+__all__ = ["FEATS", "stroke_feats", "geometry", "ClassStats", "verify_extra", "verify_learned", "extra_feats", "bad_fit", "ink_gap"]
