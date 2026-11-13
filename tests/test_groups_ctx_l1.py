@@ -132,6 +132,7 @@ def test_real_symbol_in_window_is_not_target(tmp_path):
 @pytest.mark.parametrize("left,right,want", [
     ("", "呼哀哉", "嗚"), ("", "乎", "嗚"), ("", "咽不能言", "嗚"), ("泣", "咽", "嗚"), ("喑", "，", "嗚"),
     ("雞", "而起", "鳴"), ("", "鑾", "鳴"), ("風自", "。", "鳴"), ("寒蟬", "樹間", "鳴"), ("", "鳥", "鳴"),
+    ("蕭瑟", "呼哀哉", "嗚"), ("之鶴", "呼衷哉", "嗚"), ("寒鐘", "乎", "嗚"),
     ("悲", "。", None), ("", "於天下", None), ("天下", "", None),
 ])
 def test_wu_ming_rules(left, right, want):
