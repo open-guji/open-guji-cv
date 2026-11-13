@@ -25,6 +25,8 @@
 
 ## [未发版]
 
+- PATCH：align_ref 书级开关 `coord_legacy_line_guard`（缺省关，A22 11-13，史記 r60 37:2:6）：参校本一列缺字时现役 difflib 按整页字流把图上多出的字配到别行同字、下一列整段错配，坐标对位被冲突闸整列退回。开了以后列↔行已定的列里，现役 equal 字不在本列整理本行里的格不当现役证据，坐标给了字的改坐标字。关时殿本 vol60、史記 37 全册逐字节同（code_equiv 已登记）。
+
 - PATCH：seed_admit `follow_ref` 加书级钩子 `impl/keben/follow_ref_hooks.rival_skip`（缺省 None 不调）：书仓覆盖后，算领先差时指定的字不当对手（史記同族第三形 吴呉吳、嵗歳歲，SJ 请求、A24 定规则，实现进史記书仓 code/）；钩子经 `facts(a, b)` 拿关系层事实；被排除的字记 `lane.rival_skip`。cv 不加开关。code_equiv 已登记，殿本 vol28 16 页逐字节同，seed_admit code_hash 不变（A22 11-13）。
 - PATCH：重生成 `doc/字组/字组总表.md`（wu 嗚鳴 那行我手写过，和注册表生成的对不上，manager 的比对测试红了）。只改文档（A31 11-13）。
 
