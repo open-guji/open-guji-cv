@@ -1787,6 +1787,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     grid_adjust=None,
                     jiazhu_heads=None,
                     half_a_left=None,
+                    jiazhu_pair_ok=None,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1880,9 +1881,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       还劈着字的格线按墨块切割量在 ±`snap_cut` 格内补挪（`snap_by_cut`；等距格网以名义格线为中心，DP 格网以 DP 格线为中心）；
       0＝关（缺省）。`snap_gap_ok` 是它的去处护栏（字内白缝不当字缝）；缺省 None 时有 `cut_judge` 就用 U-Net 整字护栏
       （`seg.cut_select.move_keeps_glyphs`，2026-11-13），没有裁判就不拦。
-    - `grid_adjust`／`jiazhu_heads`／`half_a_left`（书级钩子 `impl/keben/row_hooks`，2026-11-12）：缺省 None＝不调。
-      `grid_adjust` 在 `grid_bounds` 落缝前改格线；`jiazhu_heads` 在段端收编前补认段头；`half_a_left` 给只有一半有字的夹注格
-      定右半左缘。签名与用法见 `row_hooks` 模块头。
+    - `grid_adjust`／`jiazhu_heads`／`half_a_left`／`jiazhu_pair_ok`（书级钩子 `impl/keben/row_hooks`，2026-11-12／13）：
+      缺省 None＝不调。`grid_adjust` 在 `grid_bounds` 落缝前改格线；`jiazhu_heads` 在段端收编前补认段头；`half_a_left` 给只有
+      一半有字的夹注格定右半左缘；`jiazhu_pair_ok` 判一格是不是真并排两字。签名与用法见 `row_hooks` 模块头。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -2049,13 +2050,15 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         for pos in sorted(nonblank):
             if forced_jiazhu and _pos_to_slot(pos, n_raised) in forced_jiazhu and pos not in runs:
                 cx_forced = jiazhu_split.forced_split_center(patches[pos], ink_threshold)
-                if cx_forced is not None:
+                if cx_forced is not None and (jiazhu_pair_ok is None
+                                              or jiazhu_pair_ok(patches[pos], ink_threshold, forced=True)):
                     runs[pos] = cx_forced
         # 列中间立着一条细竖线（界行墨）= 两列正文被当成了一列（Step1 列切错，vol03 p49c3 / p107c4），
         # 不是夹注列：段端收编不做，免得把两列正文的一行行收成「小注」（用户 09-29 实审点出 49:3:15–16）。
         # 只是护栏，不改 link_runs 自己认下的段；Step1 切对之后这道闸自然不触发。
         if jiazhu_heads is not None and not _mid_rule_line(col_ink):
-            runs.update(jiazhu_heads(entries, runs, patches, eligible=nonblank, ink_threshold=ink_threshold))
+            runs.update(jiazhu_heads(entries, runs, patches, eligible=nonblank, ink_threshold=ink_threshold,
+                                     ruler=ruler))
         if not _mid_rule_line(col_ink):
             runs, tail_a = jiazhu_split.adopt_run_tails(
                 runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
@@ -2065,6 +2068,10 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         for pos in main_pos:
             runs.pop(pos, None)
             tail_a.discard(pos)
+        if jiazhu_pair_ok is not None:      # 书级：不是并排两字的格从段里摘掉（段尾收编的右半单字不查）
+            for pos in [q for q in runs if q not in tail_a]:
+                if not jiazhu_pair_ok(patches[pos], ink_threshold, forced=False):
+                    runs.pop(pos, None)
         # 表说只有一半有字的夹注格：并进段（缝取段的中位数），发格时只发墨多的一半
         if half_notes and runs:
             cx_mid = float(np.median(list(runs.values())))

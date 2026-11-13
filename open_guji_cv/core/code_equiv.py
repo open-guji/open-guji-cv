@@ -50,6 +50,10 @@ _DROP_L0_1114 = ("删缺省关、没书开、关时不进参数 dump 的开关�
                  "yolo_merge 等七件及其只在开着时走的代码；关时控制流与改前相同。殿本 vol01 13 页（1,2,3,30,48,60,87,100,130,160,182,203,204，"
                  "含卷端大印、职名页、门目页、卷末印，main 包 cv0.7.16-c16-g21-m2-p48-col9-grid-1113-a2 当上游）border_detect、border_detect_gate、"
                  "column_gate、row_segment 与 origin/dev 84f5bc28 产物逐字节相同；scripts/code_equiv.py check，2026-11-14（A22）")
+_QTW_HOOKS_1113 = ("row_hooks 加书级钩子 jiazhu_pair_ok（缺省 None，不调）、jiazhu_heads 多传 ruler（只在钩子非 None 时调）："
+                   "殿本 fixture 册 keben 冻结三页（tests/fixtures/workspace/raw/keben 1–3）row_segment 与 origin/dev 84f5bc28 产物逐字节相同；"
+                   "全唐文 k8（书仓 fork 改钩子）对 k6 fork：054 全册 row_segment→cell_shrink 产物逐字节相同（同包 cv0.7.31-c68-g-02bb02-k6-qtw054-n1 当上游）；"
+                   "2026-11-13（全唐文切分线）")
 
 _GM_1020 = ("glyph_match 提速（wmax 按需算、同格查找分桶、HOG 向量化）：vol04 46 页（每 5 页取 1，加 p17/p100/p186，含夹注与最慢页）、vol06 15 页（每 10 页取 1）与改前 529f071 产物逐字节相同，4 进程；scripts/code_equiv.py check，2026-10-20")
 
@@ -1673,6 +1677,16 @@ ENTRIES: tuple[Equiv, ...] = (
           new='419e5b9ed8d29be42ade1931a69531b367b49c161e9cf0ea658e72dc7c442d76',
           old='c585153c706c21e3ddf6b131b0205098f50cb3a08be53f698d5b9e54f97e7a20',
           evidence=_DROP_L0_1114),
+    # row_hooks 加 jiazhu_pair_ok、jiazhu_heads 传 ruler（全唐文 k8 撤掉 row_boundaries／jiazhu_split 整文件 fork，2026-11-13）
+    Equiv("open_guji_cv.steps.row_segment",
+          "b6622dfd40c6989354bb5e5338b68bb929ff4c725e8899cc3efae826870244de",
+          "419e5b9ed8d29be42ade1931a69531b367b49c161e9cf0ea658e72dc7c442d76", _QTW_HOOKS_1113),
+    Equiv("open_guji_cv.impl.keben.row_boundaries",
+          "5b0a8cc07abdcb7e35e49f691ea9433590aa8b6991e6d52bc2103f2551ba5006",
+          "09b51e79e3fbfbcf1c77407a87a224c421c7c53eb0bab4855135be6b66423589", _QTW_HOOKS_1113),
+    Equiv("open_guji_cv.impl.keben.row_hooks",
+          "929638d4bf1a4b6a3c63ad18549fbcb7af06634c4de507fdcda427e5eebba743",
+          "52ffeffbf71bc6b94a9789068b94fa5d25d5076700c2bfba730a9e1d2c6cf459", _QTW_HOOKS_1113),
 )
 
 
@@ -1801,6 +1815,17 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.steps.cell_shrink": ("94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e", (
         ("open_guji_cv.steps.cell_shrink", "94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e"),
         ("open_guji_cv.impl.keben.patch_clean", "44241a22b9f46de4a70feb68662ece757511aa86727cfe2b0034a1d8a56db16e"))),
+    # 全唐文 k8（2026-11-13 切分线）：书仓 row_boundaries、jiazhu_split 两份整文件 fork（k6 那一版）撤掉，差异挂成书级钩子
+    # guji_book.quantangwen.row_hooks。几块都还是登记时那一版时：cv jiazhu_split＋书仓 row_hooks 合回 k6 书仓 jiazhu_split 一项，
+    # cv row_boundaries＋seg_overrides 合回 k6 书仓 row_boundaries 一项，全唐文各册 row_segment 指纹不变（054 全册逐字节相同）。
+    # 书仓 row_hooks 只有全唐文有，第一项只在全唐文合；别的书 seg_overrides 已被上面 seal_ink 两项收走，第二项合不上。
+    # 两项必须排在 seal_ink 两项之后、且按这个顺序
+    "guji_book.quantangwen.jiazhu_split": ("a0bdb376848116f288d3f912c64b98d6c834ded95b28d297e5fae5ca588f26a0", (
+        ("open_guji_cv.impl.keben.jiazhu_split", "e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b"),
+        ("guji_book.quantangwen.row_hooks", "d903be4d92599f4e37c60203c4d30253b72c291f004fc094e30afc2aadcfe139"))),
+    "guji_book.quantangwen.row_boundaries": ("99682ac7af551c7f03ffc321bcfb5c8e94be249909d10f358d14527f067f43c3", (
+        ("open_guji_cv.impl.keben.row_boundaries", "4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c"),
+        ("open_guji_cv.feedback.seg_overrides", "81f5eb066e4d8fca8df69f95ef375ffb3196ccd30e850a35c099ee9648733fd0"))),
 }
 
 

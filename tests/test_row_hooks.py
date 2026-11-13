@@ -41,3 +41,51 @@ def test_grid_adjust_changes_lines():
         return [b + (8.0 if 0 < i < len(bounds) - 1 else 0.0) for i, b in enumerate(bounds)]
 
     assert repr(_seg(grid_adjust=shift)) != repr(_seg())
+
+
+
+# 雙行小注：借 test_forced_jiazhu 的合成列（人指认第 8 格是小注，从中缝拆）
+from test_forced_jiazhu import COL_W, N_SLOTS, SLOT_H, _cells, _column  # noqa: E402
+
+
+def _seg_jz(**kw):
+    return segment_column(_column(thin_seam_slots=(8,)), period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W,
+                          forced_jiazhu={8}, **kw)
+
+
+def test_pair_ok_default_none():
+    assert row_hooks.jiazhu_pair_ok is None
+
+
+def test_pair_ok_true_keeps_result_and_is_called():
+    calls = []
+
+    def ok(patch, ink_threshold, forced):
+        calls.append(forced)
+        return True
+
+    base = _seg_jz()
+    assert sorted(_cells(base)[8]) == ["a", "b"]
+    assert repr(_seg_jz(jiazhu_pair_ok=ok)) == repr(base)
+    assert True in calls and False in calls      # 人指认的格 forced=True；段里的格收编后再查一次 forced=False
+
+
+def test_pair_ok_false_on_forced_keeps_whole_char():
+    r = _seg_jz(jiazhu_pair_ok=lambda patch, ink_threshold, forced: not forced)
+    assert set(_cells(r)[8]) == {""} and _cells(r)[8][""].kind == "char"
+
+
+def test_pair_ok_false_drops_cell_from_run():
+    r = _seg_jz(jiazhu_pair_ok=lambda patch, ink_threshold, forced: forced)
+    assert set(_cells(r)[8]) == {""}
+
+
+def test_jiazhu_heads_gets_ruler():
+    got = []
+
+    def heads(entries, runs, patches, eligible=None, ink_threshold=128, ruler=None):
+        got.append(ruler)
+        return {}
+
+    assert repr(_seg_jz(jiazhu_heads=heads)) == repr(_seg_jz())
+    assert got and got[0] == float(COL_W)

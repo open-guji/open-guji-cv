@@ -8,11 +8,15 @@
 
 - `grid_adjust(row_proj, bounds, period, dst_w) -> bounds`：等距格网（格位先验的候选之一）落缝**之前**改一次格线，
   格数不变（全唐文 k4 的节末短列重定相位）。每列都调，原样返回就是不改。
-- `jiazhu_heads(entries, runs, patches, eligible, ink_threshold) -> {pos: 缝中心}`：在段端收编（`adopt_run_tails`）之前
+- `jiazhu_heads(entries, runs, patches, eligible, ink_threshold, ruler) -> {pos: 缝中心}`：在段端收编（`adopt_run_tails`）之前
   补认雙行小注段头（全唐文「字｜闕」＋「一」）；只在册配置开了 `row_segment.jiazhu_single_head` 时调。
   返回补进来的段，不改输入。列中间立着细竖线（两列正文当一列）时不调，同段端收编的护栏。
 - `half_a_left(patch, cxi, ink_threshold) -> int | None`：表说只有一半有字的夹注格，右半格的左缘（格内 x）；
   None 交回「按墨多的一半发」。只在开了 `row_segment.jiazhu_half_a` 时调。
+- `jiazhu_pair_ok(patch, ink_threshold, forced) -> bool`：这一格是不是真的并排两字（全唐文 k6：两行之间总有白缝，
+  中段没有一列空白的是左右结构的整字）。两处调：人指认雙行小注的格（`forced=True`）判 False 就不拆；段端收编、
+  摘掉人定整宽正文之后，段里除段尾收编的右半单字外判 False 的格从段里摘掉（`forced=False`）。每列都调。
+  （2026-11-13 全唐文切分线，A22《切分开关收敛》QTW 第 3 条：row_boundaries fork 改钩子。）
 
 开关开着而本书没给对应函数就拒跑（悄悄当关，这本书的切法变了没人知道）。
 """
@@ -22,3 +26,4 @@ from __future__ import annotations
 grid_adjust = None
 jiazhu_heads = None
 half_a_left = None
+jiazhu_pair_ok = None
