@@ -579,6 +579,8 @@ class AlignRefParams(BaseModel):
     开了以后，冲突列只要同列现役 equal 与坐标全同的格至少 `COORD_DROP_MIN_AGREE`（3）且不少于冲突格数（整列错一位时
     全同格近乎为零）、冲突格里现役字恰是邻格坐标字的不到一半（有两格以上才算整列错位迹象），列照用，只去冲突格
     （冲突格不给整理本字，仍记进 coord_conflict_ids，seed_admit 不放 match_ref）。坐标判空的冲突格仍整列退回。
+    稀疏列例外（vol05 p1 列 4，字形库重学后印章下首格首选变了）：同列现役 equal 只有这一个冲突格、没有任何全同格、
+    且它的现役字不是邻格坐标字时，也只丢这一格（此时全同格 ≥3 的要求不适用）。
     与 `coord_conflict_pair_only` 同开时先试 pair_only 的严口径，不成再试这一条。False＝关（缺省，不进参数哈希）。"""
 
     coord_blank_ink: bool = False
@@ -1792,11 +1794,15 @@ def _drop_bad_recs(recs, legacy: dict):
             bad.append(k)
         else:
             return None
-    if not bad or agree < COORD_DROP_MIN_AGREE or agree < len(bad):
+    if not bad:
         return None
     shifted = sum(1 for k in bad
                   if any(0 <= j < len(chs) and chs[j] == legacy[recs[k][0]].align_char for j in (k - 1, k + 1)))
-    if shifted >= 2 and shifted * 2 >= len(bad):
+    if agree == 0 and len(bad) == 1 and shifted == 0:
+        pass          # 稀疏列：整列现役 equal 只有这一格（其余没对上），孤立冲突、现役字不是邻格坐标字（vol05 p1 列 4）
+    elif agree < COORD_DROP_MIN_AGREE or agree < len(bad):
+        return None
+    elif shifted >= 2 and shifted * 2 >= len(bad):
         return None
     drop = {recs[k][0] for k in bad}
     return [r for r in recs if r[0] not in drop]
