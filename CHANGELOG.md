@@ -16,6 +16,8 @@
 
 ## [未发版]
 
+- PATCH：`lookup._shard_items` 分片文件还不存在（FileNotFoundError）按「没有人工指定」返回空表，不报错；只有真读坏了才报（接 #1506，manager CI `test_resolved_cuts_empty_when_store_unavailable` 暴露）。（ZM，11-13）
+
 ## [0.7.29] - 2026-11-13
 
 - 发版说明（A31 11-13，覆盖逻辑线／各书要）：dev 头 `f509b605` 的正式版，PATCH，**含 #1467**（row_segment 1.50 大印印边墨，row_segment 起判过期）、#1505（字形库重绑尊重作废标记，改产物、不登等价）、#1503／#1504／#1506（republish 出单前查原图、bind_check 用正式 book_bindings、lookup 读不到分片／绑定表时报错，`GUJI_LOOKUP_LENIENT=1` 可回退），以及 snap_cut／cut_through／stroke_veto 等 dev 上已合的其余改动（均缺省关）。不是史記 patch 线（史記钉 v0.7.18），钉不钉由各书自己定。
