@@ -559,7 +559,8 @@ CUT_SEP = 0.45             # 找的范围不越过相邻格线 ±这么多格高
 CUT_KEEP = 0.1             # 最小处 ≤ 原位的这么多才报（挪得开，说明原位是放错了，不是两字本来粘连）
 CUT_MOVE = 0.07            # 且要挪 ≥ 这么多格高（格高 110 约 8px，原位旁边几行就是缝的不报）
 CUT_MAX_H = 1.6            # 纵向跨度超过这么多格高的连通块不算（界行残段、墨渍；同 row_boundaries.SNAP_CUT_MAX_H）
-CUT_JUDGE = 0.02           # U-Net 归属裁判对挪后那条线的一致率要比原位高这么多才报（挪处是字缝不是字内白缝）
+CUT_JUDGE = 0.09           # U-Net 归属裁判：挪后那条线的一致率比原位低不超过这么多才报。挪进字内白缝会把整块部件（之的捺、
+                           # 忠的心、魯的日）划到邻格，一致率掉 ≥0.105；修钩尖、笔尾只动一小截，掉得少（史記 42 册 16 条 Sheldon 11-13 看图）
 
 
 def _slot_spans(col_cells) -> list[dict]:
@@ -613,9 +614,9 @@ def cut_through(gray: np.ndarray, col_cells, ink_threshold: int = 128, *, mid: f
     逐格的「邻字残笔」FOR 分不开「笔尖伸进来」和「格线劈在字中间」（史記全书 FOR 约 15,700 格，r53 排查时当噪声放过）；
     这里量的是线本身劈了多少墨、挪开能不能避开：两字本来粘连的挪不开（最小处仍高），不报。
     挪开处还要过 U-Net 归属裁判（`judge`，`seg.cut_select.get_judge()`，同 snap_cut 整字护栏）：看上下两格整个窗口，挪后
-    那条线的一致率比原位（有折线按折线）高 `CUT_JUDGE` 才报。不过裁判时误报很多：殿本两字相粘处格线本来就对，最省墨处
-    却在字内白缝（vol30 全册 33 条看图几乎全是这种，裁判后剩 1 条）；史記 42 册 9 页 16 条剩 3 条、都真劈字。代价是漏：
-    戈钩、民钩这类长钩尖伸进下格，裁判也判归下格，查不出（9 页约 4 条）。`judge=None` 不过裁判（只给单测和诊断用）。
+    那条线的一致率比原位（有折线按折线）低不超过 `CUT_JUDGE` 才报。不过裁判时误报很多：殿本两字相粘处格线本来就对，最省墨处
+    却在字内白缝（vol30 全册 33 条看图几乎全是这种，裁判后剩 5 条）。史記 42 册 9 页 16 条 Sheldon 11-13 看图：挪后更好 11、
+    挪坏 5（之×2、帝、忠、魯，一致率都掉 ≥0.105）；门槛 0.09 报 9 条全对、挪坏的全拦，漏 2 条（掉 0.10、0.15）。`judge=None` 不过裁判（只给单测和诊断用）。
     史記 r53 SJ 离线：强档全书 1,170 条，抽 12 条看图 12 条真劈字；18 格人审劈字里 A 类 12 格抓到 11 格。"""
     from ..seg.seam import cut_cost_profile
     import cv2
@@ -670,7 +671,7 @@ def cut_through(gray: np.ndarray, col_cells, ink_threshold: int = 128, *, mid: f
                              [ys0, np.full(x1 - x0, lo + k)], ink_threshold)
             if r is not None:
                 agree = (r[0][0], r[0][1], r[1][0], r[1][1])
-                if r[0][1] < r[0][0] + CUT_JUDGE:
+                if r[0][1] < r[0][0] - CUT_JUDGE:
                     continue
         out.append({"slot_above": a["slot"], "slot_below": b["slot"], "y": round(float(y), 1), "cost": int(c0),
                     "best": int(best), "move": int(round(move)), "level": "强" if c0 >= strong * p2 else "中",
