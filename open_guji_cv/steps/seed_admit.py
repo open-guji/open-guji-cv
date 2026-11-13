@@ -37,6 +37,7 @@ guji-manager `doc/01-粗校/待审原因/near_form_guard/流程.md` 第二节；
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Literal
 import re
 from contextvars import ContextVar
@@ -1899,7 +1900,9 @@ class SeedAdmitStep(Step):
                    # 待审补放三通道（overview#433）的证人逐格读法
                    "open_guji_cv.clustering.witness_cells", "open_guji_cv.report.witness",
                    # 2026-11-06 补登记（1.37 pua_code_table 起 import，当时漏列）：私用码表读法。指纹靠 code_equiv.SPLITS 不变
-                   "open_guji_cv.utils.pua_v2_codes"),
+                   "open_guji_cv.utils.pua_v2_codes",
+                   # 2026-11-13 书级钩子（follow_ref 领先差不当对手的字，缺省 None；史記书仓覆盖）。指纹靠 code_equiv.SPLITS 不变
+                   "open_guji_cv.impl.keben.follow_ref_hooks"),
         # 册配置 `iron_gate:` 开不开进指纹——同 glyph_match 的 norm_stroke 那条口子，
         # 不然开关翻了、产物没过期（书级布尔量，不是 Params 字段，走这条路）。
         # `codepoints:` 同理（2026-09-27 加，`ref_lib_variant_guard` 的可信边判据读它）。
@@ -2673,7 +2676,7 @@ class SeedAdmitStep(Step):
         if p.follow_ref or p.follow_ref_seen or p._follow_variants():
             # 5a' follow_ref（升＋改字）：照录整理本的异体对
             d_fr = _follow_ref_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), dmap,
-                                    vmap if p._follow_variants() else None)
+                                    vmap if p._follow_variants() else None, _follow_ref_rival_hook(ctx))
             n_auto += d_fr
             n_review -= d_fr
         if p.edge_pair:
@@ -4425,8 +4428,10 @@ def _parse_follow_ref(spec: str) -> dict[str, str]:
 
 
 def follow_ref_decide(*, admit: bool, channel, char, doubts, ref, cands, verdict, guard, ctx_char,
-                      rules: dict, cov_min: float, gap_min: float, allow_occluded: bool = False) -> str | None:
-    """`follow_ref` 的判据，纯函数（离线回放与线上共用）。→ "fix"（已放行格改回整理本形）、"admit"（待审格放行整理本形）或 None。"""
+                      rules: dict, cov_min: float, gap_min: float, allow_occluded: bool = False,
+                      rival_skip: frozenset = frozenset()) -> str | None:
+    """`follow_ref` 的判据，纯函数（离线回放与线上共用）。→ "fix"（已放行格改回整理本形）、"admit"（待审格放行整理本形）或 None。
+    `rival_skip`：算领先差时不当对手的字（书级钩子 `impl/keben/follow_ref_hooks.rival_skip` 给，缺省空＝只排除这一对）。"""
     other = rules.get(ref) if ref else None
     if other is None or channel == "human":
         return None
@@ -4444,7 +4449,7 @@ def follow_ref_decide(*, admit: bool, channel, char, doubts, ref, cands, verdict
     top, cov = cands[0][0], float(cands[0][1])
     if top not in pair or cov < cov_min:
         return None
-    rival = max((float(c) for ch, c in cands if ch not in pair), default=0.0)
+    rival = max((float(c) for ch, c in cands if ch not in pair and ch not in rival_skip), default=0.0)
     if cov - rival < gap_min:
         return None
     if ds & _LANE_REF_REVIEW and ctx_char not in pair:
@@ -4493,10 +4498,66 @@ def seen_pair_decide(*, admit: bool, channel, char, doubts, ref, cands, verdict,
     return "admit"
 
 
+class _RivalFacts:
+    """交给书级钩子 `follow_ref_hooks.rival_skip` 的关系层查询（书级代码不许 import cv 内部模块，事实由这里给）。
+
+    `facts(a, b)` → `_PairFacts`；`facts.semantic(ch)` → 同义归并后的字（`follow_ref_variants` 的 vmap，没开时原字）。"""
+    __slots__ = ("_vmap",)
+
+    def __init__(self, vmap):
+        self._vmap = vmap
+
+    def semantic(self, ch: str) -> str:
+        return self._vmap.semantic(ch) if self._vmap is not None else ch
+
+    def __call__(self, a: str, b: str) -> "_PairFacts":
+        return _pair_facts(a, b, self.semantic(a) == self.semantic(b))
+
+
+@dataclass(frozen=True)
+class _PairFacts:
+    """一对字的关系层事实（只读）。
+
+    - `same_semantic`：同义归并后相同（`follow_ref_variants` 的 vmap）；
+    - `tier`／`sources`／`n_bridge`／`never_only`／`is_variant`：边表 `variants.variant_edge`（T1 纯异体、T2 互通·一对多、
+      T3 通假·形近·简繁、None 无边；`n_bridge` 异体字典来源数）；
+    - `never`：人工审定永不并组（`config/variants/never_group.json`）；
+    - `edge_excluded`：本书假边表（`config/variants/edge_pair_exclude.tsv`）；
+    - `groups`：两字同在的字组 `((组 id, kind), …)`，kind＝"variant"｜"near_form"（`groups.registry.FLOW_GROUPS`）。"""
+    same_semantic: bool
+    tier: str | None
+    sources: tuple
+    n_bridge: int
+    never_only: bool
+    is_variant: bool
+    never: bool
+    edge_excluded: bool
+    groups: tuple
+
+
+@lru_cache(maxsize=65536)
+def _pair_facts(a: str, b: str, same_semantic: bool) -> _PairFacts:
+    from ..variants import variant_edge
+    from ..groups.registry import FLOW_GROUPS
+    e = variant_edge(a, b)
+    groups = tuple(sorted((gid, getattr(g, "kind", "") or "") for gid, g in FLOW_GROUPS.items()
+                          if a in g.members and b in g.members))
+    return _PairFacts(same_semantic=same_semantic, tier=e.tier, sources=tuple(e.sources), n_bridge=e.n_bridge,
+                      never_only=e.never_only, is_variant=e.is_variant, never=frozenset((a, b)) in _never_pairs(),
+                      edge_excluded=_edge_pair_excluded(a, b), groups=groups)
+
+
+@lru_cache(maxsize=1)
+def _never_pairs() -> frozenset:
+    from ..clustering.variants import never_group_pairs
+    return never_group_pairs()
+
+
 def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict, dmap: dict,
-                     vmap=None) -> int:
+                     vmap=None, rival_hook=None) -> int:
     """照录整理本的异体对（`follow_ref`）。→ 新放行格数（改字的格不计数）。判据见 `follow_ref_decide`。
-    `vmap` 给了（`follow_ref_variants`）：表里没有的整理本字，与本格字（已放行字／库首位）同义异体的也按一对处理。"""
+    `vmap` 给了（`follow_ref_variants`）：表里没有的整理本字，与本格字（已放行字／库首位）同义异体的也按一对处理。
+    `rival_hook`：书级钩子 `follow_ref_hooks.rival_skip`（缺省 None＝不调），只对待审格调，见该模块。"""
     rules = _parse_follow_ref(p.follow_ref) if p.follow_ref else {}
     seen = _parse_follow_ref_seen(p.follow_ref_seen) if p.follow_ref_seen else {}
     if not rules and not seen and vmap is None:
@@ -4544,11 +4605,16 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
                 from ..variants import variant_edge
                 if variant_edge(ref, other).is_variant:
                     cov_min, gap_min = max(cov_min, p.follow_ref_variants_cov), min(gap_min, p.follow_ref_variants_gap)
+            skip: frozenset = frozenset()
+            if rival_hook is not None and not rec.admit and m is not None and rec.channel != "human" and ref in here:
+                cands_l = [(ch, float(c)) for ch, c in (m.candidates or [])]
+                got = rival_hook(ref=ref, lib=here[ref], cands=cands_l, via=via, facts=_RivalFacts(vmap))
+                skip = frozenset(got or ()) - {ref, here[ref]}
             act = follow_ref_decide(admit=rec.admit, channel=rec.channel, char=rec.char, doubts=rec.doubts, ref=ref,
                                     cands=list(m.candidates or []) if m else [], verdict=getattr(m, "verdict", None),
                                     guard=getattr(m, "guard", None), ctx_char=getattr(d, "char", None), rules=here,
                                     cov_min=cov_min, gap_min=gap_min,
-                                    allow_occluded=p.occluded_variant_first)
+                                    allow_occluded=p.occluded_variant_first, rival_skip=skip)
             if act == "fix":
                 rec.evidence = {**(rec.evidence or {}), "follow_ref": {"from": rec.char, "ref": ref,
                                                                        **({"via": via} if via else {})}}
@@ -4559,6 +4625,8 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
                 rec.evidence = {**(rec.evidence or {}),
                                 "lane": {"lane": "follow_ref", "lib": top, "cov": round(cov, 4), "ref": ref,
                                          **({"via": via} if via else {}),
+                                         **({"rival_skip": hit} if (hit := sorted({ch for ch, _ in m.candidates or []
+                                                                                   if ch in skip})) else {}),
                                          "prev_doubts": list(rec.doubts or [])}}
                 rec.doubts = ["lane_follow_ref"]
                 n += 1
@@ -6536,6 +6604,16 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
             else:
                 out[r.id] = (dens, None, "none")
     return out
+
+
+_FOLLOW_REF_HOOKS = "open_guji_cv.impl.keben.follow_ref_hooks"
+
+
+def _follow_ref_rival_hook(ctx: RunContext):
+    """书级钩子 `impl/keben/follow_ref_hooks.rival_skip`（书仓 `code/` 覆盖才有；缺省 None）。"""
+    import importlib
+    from ..core.seg_set import resolve
+    return getattr(importlib.import_module(resolve(ctx.book, _FOLLOW_REF_HOOKS)), "rival_skip", None)
 
 
 def _edge_pair_excluded(a: str, b: str) -> bool:
