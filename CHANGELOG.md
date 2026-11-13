@@ -5,6 +5,12 @@
 
 ## [未发版]
 
+## [0.7.32] - 2026-11-13
+
+- 发版说明（A31 11-13，SJ 史記 patch 线）：v0.7.27 + #1517（seed_admit follow_ref 领先差书级钩子 `follow_ref_hooks.rival_skip`），PATCH，**不含** #1432/#1437 及 dev 上其他改动（v0.7.28–v0.7.31 是 ZM／QTW 线，本线不带）。钩子缺省 None 不调；seed_admit 的 Step code_hash 经 SPLITS 合回 pua_v2_codes 不变，code_equiv 登记（哈希按本线重算，#1517 的逐字节同证据是 dev 上殿本 vol28 16 页）。
+
+- PATCH：seed_admit `follow_ref` 加书级钩子 `impl/keben/follow_ref_hooks.rival_skip`（缺省 None 不调）：书仓覆盖后，算领先差时指定的字不当对手（史記同族第三形 吴呉吳、嵗歳歲，SJ 请求、A24 定规则，实现进史記书仓 code/）；钩子经 `facts(a, b)` 拿关系层事实；被排除的字记 `lane.rival_skip`。cv 不加开关。code_equiv 已登记，殿本 vol28 16 页逐字节同，seed_admit code_hash 不变（A22 11-13）。
+
 ## [0.7.27] - 2026-11-13
 
 - 发版说明（A31 11-13，SJ 史記 patch 线）：v0.7.26 + #1496（snap_cut 整字护栏门槛 MOVE_TOL 0→0.05），PATCH，**不含** #1432/#1437。**#1495 未带**：它改的 `eval/seg_screen.cut_through` 是 #1494 才有的（`guji seg check` F6，依赖 #1447/#1449/#1453 等一串 seg_screen 改动，且那串里有 #1437），本线没有。snap_cut 关着时逐字节不变，seg.cut_select 登记 code_equiv（哈希按本线重算）。
