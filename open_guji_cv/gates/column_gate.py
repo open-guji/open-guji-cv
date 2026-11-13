@@ -142,10 +142,6 @@ CONTRACT = [
 
 class ColumnGateParams(BaseModel):
     expected_cols: int | None = None    # None = Book.expected_cols
-    expected_cols_pages: dict[int, int] = {}
-    """按页列数（2026-11-12，殿本 vol01 p100：图上 10 列、版框只探出 9 列，参校本质检）：`{页: 本页列数}`，覆盖册级 `expected_cols`。
-    职名页、个别页列数与册级不同时用；一般同 `vline_overrides` 配用（给出本页全部竖线）。border_detect、border_detect_gate、
-    column_gate 三处都要写同一张表。缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
     count_mode: str = "exact"           # exact：列数必须等于版式列数 | detected：列数由 Step1 探出，只要求 ≥1（现代链）
     width_tol: float = 0.15
     side_floor_max: float = 0.045
@@ -210,8 +206,6 @@ class ColumnGateParams(BaseModel):
         if isinstance(d, dict):
             if not self.period_prior_pages:
                 d.pop("period_prior_pages", None)
-            if not self.expected_cols_pages:
-                d.pop("expected_cols_pages", None)
             if not self.period_edge_fallback:
                 d.pop("period_edge_fallback", None)
         return d
@@ -234,7 +228,7 @@ class ColumnGateStep(Step):
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: ColumnGateParams = ctx.params_for(self)  # type: ignore[assignment]
-        expected = p.expected_cols_pages.get(page) or p.expected_cols or ctx.book.expected_cols
+        expected = p.expected_cols or ctx.book.expected_cols
         expected_slots = p.chars_per_line or ctx.book.chars_per_line
         wins: PageWindows = ctx.product("column_windows", page)
         cols = wins.columns

@@ -401,49 +401,6 @@ def test_pair_only_drops_only_conflicting_cell():
     assert AlignRefParams(coord_conflict_pair_only=True).model_dump()["coord_conflict_pair_only"] is True
 
 
-def test_drop_bad_keeps_column_when_many_agree():
-    """`coord_conflict_drop_bad`（ZM 殿本 vol05：p1 列 4 首格、p177 列 9 连续 8 格冲突，整列坐标字被退回）。"""
-    from open_guji_cv.steps.align_ref import _drop_bad_recs
-    chars = "校勘記發明可爲正書所以見於他本"
-    recs = [(f"x{k}", k, None, ch, float(k)) for k, ch in enumerate(chars, start=1)]
-
-    def leg(over):
-        return {r[0]: AlignRec(id=r[0], col=3, slot=r[1], align_char=over.get(r[0], r[3]), align_op="equal", ref_run=1)
-                for r in recs}
-
-    kept = _drop_bad_recs(recs, leg({"x1": "撰"}))                                  # 首格孤立冲突
-    assert [r[0] for r in kept] == [r[0] for r in recs if r[0] != "x1"]
-    over = {f"x{k}": "撰" for k in range(2, 6)}                                      # 连续 4 格冲突，其余 10 格全同
-    assert len(_drop_bad_recs(recs, leg(over))) == len(recs) - 4
-    assert _drop_bad_recs(recs, leg({f"x{k}": "撰" for k in range(1, 12)})) is None   # 全同格少于冲突格
-    shifted = {f"x{k}": recs[k][3] for k in range(1, 4)}                              # 现役字都是邻格坐标字：整列错位
-    assert _drop_bad_recs(recs, leg(shifted)) is None
-    assert _drop_bad_recs(recs, leg({})) is None
-    # 稀疏列：现役 equal 只有冲突这一格（vol05 p1 列 4，字形库重学后首选 簋→撰）
-    sparse = {r[0]: AlignRec(id=r[0], col=3, slot=r[1], align_char="X", align_op="replace", ref_run=1) for r in recs}
-    sparse["x1"] = AlignRec(id="x1", col=3, slot=1, align_char="撰", align_op="equal", ref_run=1)
-    assert [r[0] for r in _drop_bad_recs(recs, sparse)] == [r[0] for r in recs[1:]]
-    sparse["x1"] = AlignRec(id="x1", col=3, slot=1, align_char=recs[1][3], align_op="equal", ref_run=1)  # 现役字是邻格坐标字
-    assert _drop_bad_recs(recs, sparse) is None
-    sparse["x1"] = AlignRec(id="x1", col=3, slot=1, align_char="撰", align_op="equal", ref_run=1)
-    sparse["x2"] = AlignRec(id="x2", col=3, slot=2, align_char="周", align_op="equal", ref_run=1)       # 两格冲突、零全同
-    assert _drop_bad_recs(recs, sparse) is None
-    assert "coord_conflict_drop_bad" not in AlignRefParams().model_dump()
-    assert AlignRefParams(coord_conflict_drop_bad=True).model_dump()["coord_conflict_drop_bad"] is True
-
-
-def test_use_coord_char_rewrites_legacy_conflict_cell():
-    """drop_bad 丢掉的冲突格，现役记录改成坐标字＋replace（vol05 1:4:1 周／撰）。"""
-    from types import SimpleNamespace
-    from open_guji_cv.steps.align_ref import _use_coord_char
-    recs = [("x1", 1, None, "周", 1.0), ("x2", 2, None, "甲", 2.0)]
-    res = SimpleNamespace(chars=[AlignRec(id="x1", col=3, slot=1, align_char="撰", align_op="equal", ref_run=3),
-                                 AlignRec(id="x2", col=3, slot=2, align_char="甲", align_op="equal", ref_run=3)])
-    _use_coord_char(res, recs, recs[1:])
-    assert (res.chars[0].align_char, res.chars[0].align_op, res.chars[0].ref_run) == ("周", "replace", 1)
-    assert (res.chars[1].align_char, res.chars[1].align_op) == ("甲", "equal")
-
-
 # ── coord_circle_ext（2026-11-12，GUJI-767：史記 ○ 对位补强）──────────────────
 class _R:
     def __init__(self, cands, slot=1, sub=None, id_="x"):

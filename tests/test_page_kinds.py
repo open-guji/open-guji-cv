@@ -82,8 +82,7 @@ def test_conflict_and_idempotence():
     assert make_book().page_kinds == {} and "border_detect_gate" not in make_book().params
 
 
-def test_load_book_both_forms_same(ws, monkeypatch):
-    monkeypatch.setenv("GUJI_ALLOW_OLD_PAGE_SYNTAX", "1")       # 老写法的册要读得进来才能对比
+def test_load_book_both_forms_same(ws):
     old = load_book(_w(ws, "old.yaml", {**BOOK, "id": "old", "params": OLD}).stem, ws / "books")
     new = load_book(_w(ws, "new.yaml", {**BOOK, "id": "new", "page_kinds": NEW}).stem, ws / "books")
     assert new.params == old.params
@@ -101,8 +100,7 @@ def test_layers_high_layer_wins_either_form(ws, monkeypatch):
     assert bc.effective_book_dict(p)["params"]["border_detect_gate"]["body_pages"] == [9]
 
 
-def test_same_layer_conflict_names_layer(ws, monkeypatch):
-    monkeypatch.setenv("GUJI_ALLOW_OLD_PAGE_SYNTAX", "1")       # 同层新老并写：先过老写法关才报冲突
+def test_same_layer_conflict_names_layer(ws):
     p = _w(ws, "v1.yaml", {**BOOK, "page_kinds": {"body": [1]}, "params": {"border_detect_gate": {"body_pages": [2]}}})
     with pytest.raises(ValueError, match="册 yaml：page_kinds.body"):
         bc.effective_book_dict(p)
@@ -123,20 +121,15 @@ def test_params_provenance_labels_page_kinds(ws):
     assert bc.params_provenance(p2, {})["border_detect_gate.table_pages"][1] == "册 yaml"
 
 
-def test_old_syntax_rejected_but_override_and_escape_hatch_ok(ws, monkeypatch):
+def test_old_syntax_warns_but_override_does_not(ws, monkeypatch):
     p = _w(ws, "v1.yaml", {**BOOK, "params": OLD})
-    monkeypatch.delenv("GUJI_ALLOW_OLD_PAGE_SYNTAX", raising=False)
-    with pytest.raises(bc.BookConfigError, match="page_kinds.body"):
-        bc.effective_book_dict(p)
-    monkeypatch.setenv("GUJI_ALLOW_OLD_PAGE_SYNTAX", "1")            # 迁移脚本核指纹要读迁移前的册
     with pytest.warns(FutureWarning, match="page_kinds.body"):
-        assert bc.effective_book_dict(p)["params"]["border_detect_gate"]["body_pages"] == [88, 90]
-    monkeypatch.delenv("GUJI_ALLOW_OLD_PAGE_SYNTAX")
+        bc.effective_book_dict(p)
     import warnings
     p2 = _w(ws, "v2.yaml", {**BOOK, "id": "v2", "page_kinds": NEW})
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        bc.effective_book_dict(p2)                               # 新写法不报
+        bc.effective_book_dict(p2)                               # 新写法不警告
         monkeypatch.setenv(bc.OVERRIDE_ENV, json.dumps({"params": {"border_detect_gate": {"body_pages": [3]}}}))
-        bc.effective_book_dict(p2)                               # 运行覆盖里的老字段不报（实验的正当用法）
+        bc.effective_book_dict(p2)                               # 运行覆盖里的老字段不警告（实验的正当用法）
     assert PK.old_syntax_in({"params": {"border_detect_gate": {"body_pages": []}}}) == []

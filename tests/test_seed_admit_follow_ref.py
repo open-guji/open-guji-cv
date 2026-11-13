@@ -184,3 +184,60 @@ def test_follow_ref_variants_rev_in_dump_only_when_both_on():
     assert k not in SeedAdmitParams(db_path="x", follow_ref="嵗=歳").model_dump()
     assert k not in SeedAdmitParams(db_path="x", follow_ref_variants=True).model_dump()
     assert SeedAdmitParams(db_path="x", follow_ref="嵗=歳", follow_ref_variants=True).model_dump()[k] == 1
+
+
+# —— 书级钩子 follow_ref_hooks.rival_skip（2026-11-13，史記同族第三形不当对手；规则在书仓，这里只测接口）——
+
+def _run_hook(cells, lib, coord, hook, **params):
+    p = SeedAdmitParams(db_path="x", follow_ref_variants=True, **params)
+    out = _page(cells)
+    n = _follow_ref_pass(p, out, _mm(lib), {}, {f"{B}:1:{s}": c for s, c in coord.items()}, {}, _VM(), hook)
+    return n, {r.slot: r for r in out[0].chars}
+
+
+def test_rival_hook_default_is_none():
+    from open_guji_cv.impl.keben import follow_ref_hooks
+    assert follow_ref_hooks.rival_skip is None
+
+
+def test_rival_hook_skips_family_member():
+    """隱族三形：整理本 𨼆、库首位 隠、第三形 隱 贴得很近——缺省算对手送审，钩子排除后放行，证据记被排除的字。"""
+    lib = {1: ([("隠", 0.970), ("隱", 0.969), ("陽", 0.90)],)}
+    n, r = _run_hook({1: {}}, lib, {1: "𨼆"}, None)
+    assert n == 0 and not r[1].admit
+    seen = []
+
+    def hook(*, ref, lib, cands, via, facts):
+        seen.append((ref, lib, via, cands[0][0], facts.semantic("隠")))
+        return [c for c, _ in cands if facts.semantic(c) == facts.semantic(ref)] + [ref, lib]
+
+    n, r = _run_hook({1: {}}, lib, {1: "𨼆"}, hook)
+    assert n == 1 and r[1].char == "𨼆"
+    assert seen == [("𨼆", "隠", "variants", "隠", "隱")]
+    assert r[1].evidence["lane"]["rival_skip"] == ["隱"]
+
+
+def test_rival_hook_keeps_other_gates_and_only_pending():
+    """钩子只管对手：别的字（陽）仍算对手；已放行格（改字路）、人裁格不调钩子。"""
+    calls = []
+
+    def hook(**kw):
+        calls.append(kw["ref"])
+        return ["隱"]
+
+    lib = {1: ([("隠", 0.970), ("隱", 0.969), ("陽", 0.968)],), 2: ([("隠", 0.97)],)}
+    n, r = _run_hook({1: {}, 2: {"admit": True, "char": "隠", "channel": "group_flow"},
+                      3: {"channel": "human", "provenance": "human"}},
+                     {**lib, 3: ([("隠", 0.97)],)}, {1: "𨼆", 2: "𨼆", 3: "𨼆"}, hook)
+    assert n == 0 and not r[1].admit                    # 陽 仍贴着
+    assert r[2].char == "𨼆"                            # 改字路照旧
+    assert calls == ["𨼆"]
+
+
+def test_rival_facts_fields():
+    from open_guji_cv.steps.seed_admit import _RivalFacts
+    f = _RivalFacts(None)("吴", "吳")
+    assert f.same_semantic is False                     # 没有 vmap：semantic 原字
+    for k in ("tier", "sources", "n_bridge", "never_only", "is_variant", "never", "edge_excluded", "groups"):
+        assert hasattr(f, k)
+    assert isinstance(f.groups, tuple)

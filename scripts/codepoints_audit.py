@@ -7,7 +7,7 @@
 
 对每条 `k: v` 给判决（证据都来自仓内已有数据，不联网）：
   REJECT  永不并组名单有这一对；或 k、v 同属某个形近不同义（near_form）字组且不是同义组；或关系层只有 NEVER 来源
-  REVIEW  同属字组总表的不同义组（混合组族内异体可进，要对照该组 md）；关系层没有异体边／只有 T3（通假、形近、简繁）／只有 yitizi 一家；要人看图或查字书后再收
+  REVIEW  关系层没有异体边／只有 T3（通假、形近、简繁）／只有 yitizi 一家；要人看图或查字书后再收
   ACCEPT  关系层 T1 且 ≥2 个异体来源，或有本书刻例手工边（local:keben）；且不在 edge_pair_exclude.tsv
   （T2「互通／只在某些义项同」不自动收：撰／𢰅、晝／畫、遍／徧、概／槪 都是 T2，字典说互通，但本书是否同词要人定）
 另报：链（v 本身也是别条的键）、环、同一目标过多、键不是单个汉字。
@@ -45,21 +45,6 @@ def exclude_pairs(path: Path = EXCLUDE_TSV) -> dict[frozenset, str]:
     return out
 
 
-GROUP_TABLE = ROOT / "doc" / "字组" / "字组总表.md"
-
-
-def doc_near_groups(path: Path = GROUP_TABLE) -> list[tuple[str, frozenset]]:
-    """字组总表里「不同义」的组（含数据驱动、不在 `registry.GROUPS` 里的，如 feng 逄逢）。"""
-    out: list[tuple[str, frozenset]] = []
-    if not path.exists():
-        return out
-    for ln in path.read_text(encoding="utf-8").splitlines():
-        c = [x.strip() for x in ln.split("|")]
-        if len(c) > 4 and c[3].startswith("不同义") and c[1] and c[2]:
-            out.append((c[1], frozenset(ch for ch in c[2] if not ch.isascii() and ch not in "／、，, ")))
-    return out
-
-
 def load_entries(path: Path) -> dict[str, str]:
     d = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return {str(k): str(v) for k, v in (d.get("codepoints") or {}).items()}
@@ -78,10 +63,6 @@ def audit_one(k: str, v: str, vg: VariantGraph, never: frozenset, table: dict[st
     ex = exclude_pairs().get(frozenset((k, v)))
     if ex is not None:
         return "REJECT", src, "边表暂归一排除对：" + ex
-    dg = [gid for gid, mem in doc_near_groups() if k in mem and v in mem]
-    if dg:
-        notes.append("同属字组总表的不同义组 " + "/".join(dg) + "（纯形近组如 feng 逄逢 不能进；混合组如 guang 賔賓、kgc 寇族族内同义异体可进，须人对照该组 md 确认）")
-        return "REVIEW", src, "；".join(notes)
     if e.never_only:
         return "REJECT", src, "关系层只有「形近易混／通假」来源"
     # 形近组里 k、v 分属不同组也要看一眼（如 k 在 near_form 组、v 是它的陪衬）

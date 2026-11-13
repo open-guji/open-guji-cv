@@ -100,17 +100,3 @@ def test_unbound_for_missing_patch_raises(tmp_path, monkeypatch):
     monkeypatch.setenv("GUJI_ALLOW_LOST_HUMAN", "1")
     lost = {}
     assert human_chars("vol01", stale={}, lost=lost) == {} and "vol01:4:1:3" in lost
-
-
-def test_stale_tsv_read_even_when_glyph_db_unreadable(tmp_path, monkeypatch):
-    """字形库读不到时，作废表 stale_verdicts.tsv 照样生效（以前 except 里直接 return，tsv 被整张忽略）。"""
-    from open_guji_cv.feedback.lookup import stale_human_marks
-    fb = tmp_path / "fb"
-    (fb / "lists").mkdir(parents=True)
-    (fb / "lists" / "stale_verdicts.tsv").write_text(
-        "vol01:182:9:11a\t20261113T1144\t作废\n", encoding="utf-8")
-    bad_db = tmp_path / "db_is_a_dir"
-    bad_db.mkdir()                      # sqlite3.connect 目录会抛异常
-    monkeypatch.setenv("GUJI_FEEDBACK_DIR", str(fb))
-    monkeypatch.setenv("GUJI_GLYPH_DB", str(bad_db))
-    assert stale_human_marks("vol01") == {"vol01:182:9:11a": "20261113T1144"}

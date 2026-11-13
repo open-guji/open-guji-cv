@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import pytest
 
-from open_guji_cv.strokes import (ink_gap, ClassStats, RegParams, TemplateBank, average, fit_to_unit, from_polylines, geometry,
+from open_guji_cv.strokes import (ClassStats, RegParams, TemplateBank, average, fit_to_unit, from_polylines, geometry,
                                   plan_pair, register, verify_extra)
 from open_guji_cv.strokes._ink import thin
 from open_guji_cv.strokes.skeleton import extract
@@ -196,42 +196,3 @@ def test_verify_learned_crossing_stroke():
     for c, s in (("木", MU), ("本", BEN)):
         got, _ = verify_learned(register(draw(s, jitter=1.0, seed=42), t, P), plan.stroke, st)
         assert got == c
-
-
-def test_class_stats_llr_uses_per_class_spread():
-    """两类散布差很多（木 的底横位置几乎不落墨，本 有长有短）：各类自己的方差判，合并方差会判错。"""
-    rng = np.random.default_rng(0)
-    tight = [np.array([0.0, 0.3]) + rng.normal(0, 0.02, 2) for _ in range(40)]       # 木
-    broad = [np.array([0.6, 0.9]) + rng.normal(0, 0.2, 2) for _ in range(40)]         # 本
-    st = ClassStats.from_samples({"木": tight, "本": broad})
-    x = np.array([0.15, 0.55])          # 短底横的 本：离 木 的中心更近，但 木 那么紧，不像 木
-    assert st.llr_decide(x, t=2.0)[0] == "本"
-    assert st.llr_decide(np.array([0.0, 0.31]), t=2.0)[0] == "木"
-    assert st.llr_decide(x, t=1e6)[0] is None          # 门槛够高就弃权
-    back = ClassStats.from_json(st.to_json())
-    assert back.llr_decide(x, t=2.0)[0] == "本"
-
-
-def test_class_stats_llr_abstains_far_from_every_class():
-    """切坏的格两类都不像：似然比照样分高下，max_z 拦下（全唐文 004:82:9:1 千干）。"""
-    rng = np.random.default_rng(1)
-    st = ClassStats.from_samples({"千": [np.array([0.3, 0.5]) + rng.normal(0, 0.03, 2) for _ in range(30)],
-                                  "干": [np.array([0.55, 0.5]) + rng.normal(0, 0.03, 2) for _ in range(30)]})
-    far = np.array([-1.0, 0.5])
-    assert st.llr_decide(far, t=3.0)[0] == "千"
-    assert st.llr_decide(far, t=3.0, max_z=6.0)[0] is None
-    assert st.llr_decide(np.array([0.31, 0.5]), t=3.0, max_z=6.0)[0] == "千"
-
-
-def test_ink_gap_joined_vs_open():
-    """左竖直上到顶横：接上（巳）断口 0，留缺口（己）量出缺口长度。"""
-    ink = np.zeros((60, 60), np.uint8)
-    ink[8:12, 8:50] = 1                       # 顶横
-    ink[30:34, 8:50] = 1                      # 中横
-    closed = ink.copy(); closed[8:34, 8:12] = 1
-    opened = ink.copy(); opened[22:34, 8:12] = 1   # 左竖只到 22，顶横下 10px 缺口
-    a, b = (31, 10), (9, 10)
-    on_c, gap_c = ink_gap(closed, a, b, w=4)
-    on_o, gap_o = ink_gap(opened, a, b, w=4)
-    assert on_c == 1.0 and gap_c == 0.0
-    assert 6 <= gap_o <= 10 and on_o < 0.7

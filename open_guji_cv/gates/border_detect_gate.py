@@ -60,10 +60,6 @@ class BorderDetectGateParams(BaseModel):
     效果与门槛见 research/pagetype_model/README.md。"""
     pagetype_model_path: str = ""       # 模型文件；空 = models/pagetype/pagetype_v1.joblib。路径不进指纹（path_params）
     pagetype_model_fingerprint: str = ""  # 自动填：模型文件内容戳——换模型本步要过期
-    expected_cols_pages: dict[int, int] = {}
-    """按页列数（2026-11-12，殿本 vol01 p100：图上 10 列、版框只探出 9 列，参校本质检）：`{页: 本页列数}`，覆盖册级 `expected_cols`。
-    职名页、个别页列数与册级不同时用；一般同 `vline_overrides` 配用（给出本页全部竖线）。border_detect、border_detect_gate、
-    column_gate 三处都要写同一张表。缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
     body_pages: list[int | str] = []
     """册配置点名的正文页：不论 `classify_page_type` 判成什么，一律按正文（body／standard）走，
     manifest 记 flag `page_type_forced`。用在页型规则误判的页，例如殿本 vol06 p88：卷末叶只有
@@ -101,8 +97,6 @@ class BorderDetectGateParams(BaseModel):
         if isinstance(d, dict) and not self.pagetype_model:
             for k in ("pagetype_model", "pagetype_model_path", "pagetype_model_fingerprint"):
                 d.pop(k, None)
-        if isinstance(d, dict) and not self.expected_cols_pages:
-            d.pop("expected_cols_pages", None)
         if isinstance(d, dict) and not self.body_pages:
             d.pop("body_pages", None)
         if isinstance(d, dict) and not self.table_pages:
@@ -178,7 +172,7 @@ class BorderDetectGateStep(Step):
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: BorderDetectGateParams = ctx.params_for(self)  # type: ignore[assignment]
-        expected = p.expected_cols_pages.get(page) or p.expected_cols or ctx.book.expected_cols
+        expected = p.expected_cols or ctx.book.expected_cols
         if not ctx.has_product("borders", page):
             # borders 缺失时不读原图判页型——上游缺产物往往就是因为原图本身
             # 缺失（`raw_page` 会抛 FileNotFoundError），这条分支要的是宽容

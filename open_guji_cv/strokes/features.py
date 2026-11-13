@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import cv2
 import numpy as np
 
 from .register import Fit
@@ -37,45 +36,16 @@ def geometry(fit: Fit, strokes=(), feats=FEATS) -> np.ndarray:
 
 @dataclass
 class ClassStats:
-    """一组字（如 土士）在同一模板下的本书类中心。sd 用各类合并的标准差；
-    `sds` 是各类自己的标准差（`llr_decide` 用：两类散布差很多时——木 的底横位置几乎不落墨、本 有长有短——
-    合并标准差会把 本 的短底横判成 木；全唐文 已放行 15,477 格按册留出，木本 不一致 23→5、人入 29→6）。"""
+    """一组字（如 土士）在同一模板下的本书类中心。sd 用各类合并的标准差。"""
     means: dict            # {字: np.ndarray}
     sd: np.ndarray
     n: dict                # {字: 例数}
-    sds: dict | None = None  # {字: np.ndarray}
 
     @classmethod
-    def from_samples(cls, samples: dict, eps: float = 1e-3, floor: float = 0.02) -> "ClassStats":
-        """floor：各类标准差的下限（特征是 0–1 的比例；刻例一律很像时别让方差趋零）。"""
+    def from_samples(cls, samples: dict, eps: float = 1e-3) -> "ClassStats":
         allx = np.vstack([np.vstack(v) for v in samples.values() if len(v)])
         return cls(means={c: np.mean(v, 0) for c, v in samples.items() if len(v)},
-                   sd=allx.std(0) + eps, n={c: len(v) for c, v in samples.items()},
-                   sds={c: np.std(v, 0) + floor for c, v in samples.items() if len(v)})
-
-    def loglik(self, x: np.ndarray) -> dict:
-        """各类对角高斯的对数似然（用各类自己的标准差）。"""
-        sds = self.sds or {c: self.sd for c in self.means}
-        return {c: float(-0.5 * (((x - m) / sds[c]) ** 2).sum() - np.log(sds[c]).sum())
-                for c, m in self.means.items()}
-
-    def max_z(self, x: np.ndarray) -> float:
-        """x 离最近那一类有多远：各维 |x−类中心|/类标准差 的最大值，取各类里最小的。"""
-        sds = self.sds or {c: self.sd for c in self.means}
-        return min(float(np.abs((x - m) / sds[c]).max()) for c, m in self.means.items())
-
-    def llr_decide(self, x: np.ndarray, t: float = 5.0, max_z: float | None = None):
-        """似然比判：最像的类比次像的对数似然高出 ≥ t 才判，否则弃权。返回 (字或 None, 对数似然表)。
-        t 按书按组定（全唐文 15,477 格：t=5 时 木本／目自／人入 不一致 5／9／1，全为方法错；t 越大越保守）。
-        max_z：x 离哪一类都远（`max_z(x)` 超过它）就弃权——似然比只看两类谁更像，切坏的格两类都不像也会判
-        （全唐文 004:82:9:1 切成一条竖，千干 判了 千；已放行 6,450 格取 6 只多弃权 1 格）。"""
-        if max_z is not None and self.means and self.max_z(x) > max_z:
-            return None, {}
-        ll = self.loglik(x)
-        order = sorted(ll, key=ll.get, reverse=True)
-        if len(order) < 2:
-            return (order[0] if order else None), ll
-        return (order[0] if ll[order[0]] - ll[order[1]] >= t else None), ll
+                   sd=allx.std(0) + eps, n={c: len(v) for c, v in samples.items()})
 
     def distances(self, x: np.ndarray) -> dict:
         return {c: float(np.linalg.norm((x - m) / self.sd)) for c, m in self.means.items()}
@@ -91,17 +61,13 @@ class ClassStats:
         return (order[0] if rel >= margin else None), d
 
     def to_json(self) -> dict:
-        d = {"means": {c: np.round(m, 5).tolist() for c, m in self.means.items()},
-             "sd": np.round(self.sd, 5).tolist(), "n": self.n}
-        if self.sds:
-            d["sds"] = {c: np.round(v, 5).tolist() for c, v in self.sds.items()}
-        return d
+        return {"means": {c: np.round(m, 5).tolist() for c, m in self.means.items()},
+                "sd": np.round(self.sd, 5).tolist(), "n": self.n}
 
     @classmethod
     def from_json(cls, d: dict) -> "ClassStats":
         return cls(means={c: np.asarray(m, float) for c, m in d["means"].items()},
-                   sd=np.asarray(d["sd"], float), n=d["n"],
-                   sds={c: np.asarray(v, float) for c, v in d["sds"].items()} if d.get("sds") else None)
+                   sd=np.asarray(d["sd"], float), n=d["n"])
 
 
 def bad_fit(fit: Fit, stroke: int, min_cover: float = 0.85, min_on_ink: float = 0.7,
@@ -109,25 +75,6 @@ def bad_fit(fit: Fit, stroke: int, min_cover: float = 0.85, min_on_ink: float = 
     """整体贴坏了：骨架被解释得少、别的笔有一笔不落墨、或墨框里墨太满（切坏的黑块）。"""
     others = [s.on_ink for j, s in enumerate(fit.strokes) if j != stroke]
     return fit.cover < min_cover or bool(others and min(others) < min_on_ink) or fit.ink_frac > max_ink_frac
-
-
-def ink_gap(ink: np.ndarray, a, b, w: float, tol: float = 0.35) -> tuple[float, float]:
-    """「笔画接不接」：沿 a→b 直线（(y, x) 原图坐标）量 (落墨比例, 最长断口长度像素)。
-    ink 是二值字图（`binarize`＋`clean_cell`，和 `register` 用的一致）；离墨 ≤ tol×笔宽 算在墨上。
-    用法：两笔该接（或该断）的地方，一头取一笔的端点（`FitStroke.start/end`），另一头取另一笔上同高／同列的点。
-    全唐文（2026-11-13）：己 对 已/巳 量「横起点直上到顶横」的最长断口，日 对 曰 量中横两头到左右竖。"""
-    a, b = np.asarray(a, float), np.asarray(b, float)
-    L = float(np.linalg.norm(b - a))
-    n = max(2, int(round(L)) + 1)
-    q = a + (b - a) * np.linspace(0, 1, n)[:, None]
-    H, W = ink.shape
-    dt = cv2.distanceTransform((1 - (ink > 0)).astype(np.uint8), cv2.DIST_L2, 5)
-    on = dt[np.clip(np.round(q[:, 0]).astype(int), 0, H - 1), np.clip(np.round(q[:, 1]).astype(int), 0, W - 1)] <= tol * w
-    run = best = 0
-    for o in on:
-        run = 0 if o else run + 1
-        best = max(best, run)
-    return float(on.mean()), best * L / (n - 1)
 
 
 def extra_feats(fit: Fit, stroke: int) -> np.ndarray:
@@ -162,4 +109,4 @@ def verify_extra(fit: Fit, stroke: int, hi: float = 0.75, lo: float = 0.2, min_c
     return None, e
 
 
-__all__ = ["FEATS", "stroke_feats", "geometry", "ClassStats", "verify_extra", "verify_learned", "extra_feats", "bad_fit", "ink_gap"]
+__all__ = ["FEATS", "stroke_feats", "geometry", "ClassStats", "verify_extra", "verify_learned", "extra_feats", "bad_fit"]
