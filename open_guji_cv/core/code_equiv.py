@@ -1560,6 +1560,16 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence='按代码论证、未做逐页产物比对（本环境无书数据）：新增的唯一执行路径是 `if p.stroke_veto:` 调 _stroke_veto_pass，缺省空串不进；'
                    '模型字段在 stroke_veto 为空时 _drop_off_rare 把两个新键从 dump 去掉（tests/test_seed_admit_stroke_veto.py::test_params_not_in_dump_when_off 守 dump、'
                    'test_default_off 守关着时放行结果不变），path_params 只多一个空串项；其余改动是新函数定义。关着的书 seed_admit 参数指纹与行为同 v0.7.23。开着的书（全唐文）按参数指纹自然过期'),
+    # v0.7.25（史記 patch 线）补记：snap_cut 在 patch 线上的哈希（dev 上不出现这两个哈希，只追加不改动 dev 已有的登记；
+    # seg.seam 的 patch 线 new 与 dev 的 new 同值但 old 不同，不追加，免得覆盖 dev 的登记）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='7fdda3460f73f1839cc1bcc84780ed73c04bad60b8b24d219154d723fc6c5ab3',
+          old='7be4d500c747cca9e214e2272caf7b248231fc70f2c336f96ae048dd6b6e9a6c',
+          evidence=_SNAP_CUT),
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='a7f43f47126728c8e206bd016cbffdc8e692ea52e32cc74e42312fd602d8c04a',
+          old='8ff128e3e27f9a0b017c49a1ffdf38a750020858e4964b21d5c4653bbeb4dc8f',
+          evidence=_SNAP_CUT),
 )
 
 
