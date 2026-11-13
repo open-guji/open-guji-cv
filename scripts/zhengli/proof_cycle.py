@@ -307,6 +307,9 @@ def cmd_apply(a) -> int:
         if sp["norm"] and list(_cells(old_char)) == list(_cells(new_char)):
             revert_cells(new_char, {a_: o for a_, o, _ in sp["norm"]})   # 只差码位归一的格，文本留旧字
             log.note(f"只差码位归一（不算改字、不算推翻人裁）{len(sp['norm'])} 格，文本留旧字")
+        if sp["keep"] and list(_cells(old_char)) == list(_cells(new_char)):
+            revert_cells(new_char, {a_: o for a_, o, _ in sp["keep"]})   # 机器无字（遮挡）而旧字是人裁：留人裁字、不复审
+            log.note(f"机器无字（印章遮挡等）而旧字是人裁 {len(sp['keep'])} 格，文本留人裁的字、不进复审")
         if list(_cells(old_char)) != list(_cells(new_char)) and sp["overrule"]:
             # 格号变了（增删格、改号）：按格号比的「推翻人裁」会把别的块图的字当旧字退回；交 republish 按格级对照表处理（ZM 11-10）
             log.note(f"格号有变：按格号比出的「机器推翻人裁」{len(sp['overrule'])} 格不按格号退回，交格级对照表与新单复审")
@@ -408,7 +411,8 @@ def codepoint_map(ws: Path, book: str) -> dict[str, str]:
 def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: dict[str, str] | None = None) -> dict:
     """新导出对 book-text 现文逐格比，变了的格分四种：最新人裁就是新字＝human（人裁改字）；
     旧字正是最新人裁、机器改成别的＝overrule（机器推翻人裁，留人裁的字、复审）；两边只差一个码位归一（`norm`，
-    如 别→別）＝norm（不算改字、不算推翻，文本留旧字、不上单）；其余＝machine（机器改字，按新结果）。
+    如 别→別）＝norm（不算改字、不算推翻，文本留旧字、不上单）；旧字是最新人裁、新字为空（机器无字，如印章遮挡 admit=false）
+    ＝keep（不是机器改判，文本留人裁字、不进复审）；其余＝machine（机器改字，按新结果）。
     格号两边对不上的（重切）不在这里管，交 republish 的差异单。"""
     nm = norm or {}
 
@@ -416,7 +420,7 @@ def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: d
         return nm.get(c, c)
 
     o, n = _cells(old_char), _cells(new_char)
-    out = {"human": [], "machine": [], "overrule": [], "norm": []}
+    out = {"human": [], "machine": [], "overrule": [], "norm": [], "keep": []}
     for a_ in sorted(set(o) & set(n), key=rp._key):
         if o[a_] == n[a_]:
             continue
@@ -424,6 +428,9 @@ def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: d
             out["norm"].append((a_, o[a_], n[a_]))
             continue
         h = human.get(a_)
+        if h and not n[a_] and u(h) == u(o[a_]):
+            out["keep"].append((a_, o[a_], n[a_]))
+            continue
         k = "human" if h and u(h) == u(n[a_]) else ("overrule" if h and u(h) == u(o[a_]) else "machine")
         out[k].append((a_, o[a_], n[a_]))
     return out
