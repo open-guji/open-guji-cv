@@ -445,8 +445,11 @@ def stale_human_marks(book: str) -> dict[str, str]:
         con = sqlite3.connect(str(glyph_db_path()))
         rows = con.execute("SELECT instance_id, provenance FROM admissions "
                            "WHERE provenance LIKE 'human_stale_%'").fetchall()
+        con.close()
     except Exception:
-        return out
+        # 库读不到（云端任务机上字形库没建好等）只是缺了库里的标记，下面的作废表 tsv 照读；
+        # 以前这里直接 return，tsv 里的作废被整张忽略（vol01 182:9 临时人裁 2026-11-13）
+        rows = []
     for iid, prov in rows:
         key = iid[3:] if iid.startswith("v2:") else iid
         if key.startswith(book + ":"):
