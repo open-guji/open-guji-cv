@@ -19,6 +19,10 @@
 
 ## [未发版]
 
+## [0.7.31] - 2026-11-13
+
+- 发版说明（A31 11-13，全唐文 QTW 要）：基于 v0.7.30，只多 #1512（wu 规则修正，只改底库文件 `config/groups/wu/rules.yaml`）。PATCH。**要配新底库（b24）后再 `guji corpus pin`。**
+
 ## [0.7.30] - 2026-11-13
 
 - 发版说明（A31 11-13，全唐文 QTW 要）：dev 头 `018f9d57` 的正式版（基于 v0.7.29，只多 #1508 lookup 分片不存在不报错、#1509 字组 wu 嗚鳴），PATCH。**wu 需点名才开**（册配置 `group_flow` 写缺省名单＋`wu`），没点名的册产物逐字节不变，code_equiv 已登记 `groups.registry`。**新增底库登记文件 `config/groups/wu/rules.yaml`，钉了语料总号的册在 v0.7.30 上起跑前要配新底库后再 `guji corpus pin`。**
