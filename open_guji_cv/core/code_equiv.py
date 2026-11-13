@@ -1507,6 +1507,13 @@ ENTRIES: tuple[Equiv, ...] = (
           new="06fe196f9b2a44cf4ab61d09dc8ace5ef4f13b80ed9ff69a0d6def2a5d983443",
           old="501426bb2d5233bdcb8305fdec956f81f38c8a690fd1c85e6cbe471675545949",
           evidence="align_ref coord_conflict_drop_bad 加稀疏列例外（vol05 p1 列 4）：改动全在该开关开且列将因「与现役对位冲突」退回时才可达的 _drop_bad_recs 内，关时控制流与改前相同（代码核对＋tests/test_align_ref_coord.py）；★未在有产物的机器跑 scripts/code_equiv.py check（同上一条），2026-11-13"),
+    # stroke_veto 笔画反向护栏（缺省关，cv#1487，2026-11-13，全唐文形近字线）：空串时整段不执行、不进 dump
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='527fb5aa243ccb985f570622bbd8ee7a0f4b0b94f6872dc1fd103efb0db332f6',
+          old='60563a317cd208ccda0c8804d69f03d2e2b31b8c4936c9eb258ca0598f0e35f8',
+          evidence='按代码论证、未做逐页产物比对（本环境无书数据）：新增的唯一执行路径是 `if p.stroke_veto:` 调 _stroke_veto_pass，缺省空串不进；'
+                   '模型字段在 stroke_veto 为空时 _drop_off_rare 把两个新键从 dump 去掉（tests/test_seed_admit_stroke_veto.py::test_params_not_in_dump_when_off 守 dump、'
+                   'test_default_off 守关着时放行结果不变），path_params 只多一个空串项；其余改动是新函数定义。关着的书 seed_admit 参数指纹与行为同 v0.7.23。开着的书（全唐文）按参数指纹自然过期'),
 )
 
 
