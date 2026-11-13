@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.7.25] - 2026-11-13
+
+- 发版说明（A31 11-13，SJ 史記 patch 线）：v0.7.18 + #1467 + #1490，PATCH，**不含** #1432/#1437。#1467（row_segment 1.50 整列空的列认大印印边墨）是真行为改动、不登 code_equiv，史記 row_segment 起重跑；#1490 `snap_cut` 缺省 0 关，row_segment、row_boundaries、seg.seam 登记 code_equiv（哈希按本线重算）。
+
 ## [0.7.18] - 2026-11-13
 
 - 发版说明（A31 11-13）：v0.7.17 + #1468，PATCH，**不含** #1432/#1437（史記 patch 线）。align_ref `coord_dp` 加书级参数 `coord_dp_skip_cost`（缺省 0 不进 dump，关着时产物与 v0.7.17 逐字节相同）；align_ref、align_ref_coord 的 code_hash 变，已登记 code_equiv。

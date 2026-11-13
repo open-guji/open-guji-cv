@@ -1947,7 +1947,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         # 还劈着字的格线按墨块切割量补挪（等距格网以名义格线、DP 格网以 DP 格线为中心 ±snap_cut 格）；在人钉切线之前，钉子照旧赢
         from ...seg.seam import cut_cost_sides
         sides = cut_cost_sides(col_gray[:, x_lo:x_hi] < ink_threshold, max_h=SNAP_CUT_MAX_H * period)
-        center = gb if grid_bounds is not None else bounds
+        center = grid_bounds if grid_bounds is not None else bounds
         bounds[:] = snap_by_cut(sides[0] + sides[1], row_proj, center, bounds, period, snap_cut, gap_ok=snap_gap_ok, sides=sides)
     # 人拖过的切线钉住（2026-09-26，feedback/lookup.resolved_pins）：slot_above 下沿那条格线换成人给的 y。
     # 只在夹在上下两条格线之间（各留 PIN_MARGIN）且离 DP 那条不超过一格时才钉，否则人裁对的
