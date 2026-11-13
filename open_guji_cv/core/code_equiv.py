@@ -275,6 +275,10 @@ _HINT_1109 = ('border_detect.hline_hints 页级人给上／下版框 y（缺省�
               'border_detect、column_warp 在殿本 vol20 新图 12 页（1,5,20,41,60,77,100,120,147,156,180,254，含上框认错页 156、'
               'vline_overrides 页 254）上与 origin/dev 5ed735d 产物逐字节相同；scripts/code_equiv.py check，2026-11-09')
 
+_SNAP_CUT = ("按墨块切割量补挪格线 snap_cut（row_segment 书级参数，缺省 0＝关，史記 r54 劈字，GUJI-771；seg.seam 只加 cut_cost_profile／"
+             "cut_cost_sides 两个新函数，原有函数不动，cell_shrink 用的走缝函数不变）：row_segment 在史記 42 册 10 页"
+             "（--pages 27,43,64,92,137,14,36,31,33,59，SJ 强档劈字最多的页，等距＋DP 格网、夹注、alt_cut）上与 origin/dev 0422e3c 产物逐字节相同；"
+             "scripts/code_equiv.py check，2026-11-13")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -1315,6 +1319,19 @@ ENTRIES: tuple[Equiv, ...] = (
           new='7fb78be931a21f6f71c24a7b69b3092cf110f52f2a395119ddfa74ab064be13c',
           old='4ebd6999371f4c921c34212cb4235e32e97bcc2b96d9ce24f06e72e952465ba6',
           evidence='seed_admit 在殿本 vol04 新图 38 页（--pages 每 6 页取 1，加 p17/p100/p186）上与 3576628（#1332 之前的 dev）产物逐字节相同；textlayer_ref_gap 缺省空＝关、参数不进 dump；用殿本新图包 cv0.6.29-c20-g21-r9c-v0629，scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-09'),
+    # snap_cut 书级参数（缺省关，2026-11-13，史記 r54 格线劈字，GUJI-771）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='5d36006bb348afaed6773ef61043835f719afc06b0b19e5a9121b90fb3dc79cd',
+          old='c585153c706c21e3ddf6b131b0205098f50cb3a08be53f698d5b9e54f97e7a20',
+          evidence=_SNAP_CUT),
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='31b1191d837245092b635fde53c40a1b5d1ebda607fb6cc9901b566148660039',
+          old='4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c',
+          evidence=_SNAP_CUT),
+    Equiv(module='open_guji_cv.seg.seam',
+          new='f2ac3d9708392558a9d7db889cf02a4abd90d0b02f881d41b405bd05848ee654',
+          old='2d3f4c680d5a1aabb68c5773ce6a2b67afe20ccbd9fe561b64c29131e1e0b671',
+          evidence=_SNAP_CUT),
     # grid_end_fit 书级开关（缺省关，2026-11-09，殿本 vol28 列尾下溢）
     Equiv(module="open_guji_cv.steps.row_segment",
           new="6a3617931b93c706e43d43ccd2e1b9f5d63e1307343c424637cb0ecb77b32258",
