@@ -279,6 +279,9 @@ _SNAP_CUT = ("按墨块切割量补挪格线 snap_cut（row_segment 书级参数
              "cut_cost_sides 两个新函数，原有函数不动，cell_shrink 用的走缝函数不变）：row_segment 在史記 42 册 10 页"
              "（--pages 27,43,64,92,137,14,36,31,33,59，SJ 强档劈字最多的页，等距＋DP 格网、夹注、alt_cut）上与 origin/dev 0422e3c 产物逐字节相同；殿本 vol58（page_map strict，--pages 1,20,40,60,80,100,120,140 中 7 页）同样逐字节相同；"
              "scripts/code_equiv.py check，2026-11-13")
+_GLYPH_GUARD = ("snap_cut 整字护栏（seg.cut_select 只加 move_keeps_glyphs 新函数；row_boundaries 在 snap_cut>0 且有 U-Net 裁判时"
+                 "缺省接它当 snap_gap_ok，snap_cut 关时不走）：row_segment 在殿本 vol30 10 页（--pages 2,15,30,45,60,75,90,105,120,135）"
+                 "与史記 42 册 3 页（--pages 3,36,59）上与 origin/dev 4b337f0 产物逐字节相同；scripts/code_equiv.py check，A22 2026-11-13")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -1332,6 +1335,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='f2ac3d9708392558a9d7db889cf02a4abd90d0b02f881d41b405bd05848ee654',
           old='2d3f4c680d5a1aabb68c5773ce6a2b67afe20ccbd9fe561b64c29131e1e0b671',
           evidence=_SNAP_CUT),
+    # snap_cut 整字护栏（2026-11-13，防横点字劈开，snap_cut 关时不走）
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='09b51e79e3fbfbcf1c77407a87a224c421c7c53eb0bab4855135be6b66423589',
+          old='4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c',
+          evidence=_GLYPH_GUARD),
+    Equiv(module='open_guji_cv.seg.cut_select',
+          new='a32630fc154efa51ff9e8f734b257fbe09a5c51729501b5de9679032be2be6f2',
+          old='fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b',
+          evidence=_GLYPH_GUARD),
     # grid_end_fit 书级开关（缺省关，2026-11-09，殿本 vol28 列尾下溢）
     Equiv(module="open_guji_cv.steps.row_segment",
           new="6a3617931b93c706e43d43ccd2e1b9f5d63e1307343c424637cb0ecb77b32258",

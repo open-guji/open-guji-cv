@@ -1279,7 +1279,7 @@ def snap_by_cut(cut: np.ndarray, row_proj: np.ndarray, bounds: Sequence[float], 
     上下结构的字就落进字内白缝（史記 42:31:8「實」切在貝腿上、往上挪进宀｜貫）。
     已知不足：上下两字粘成一个连通块时（42:36:5「思」心底粘着「其」顶横），小截那一边其实是上字的一部分，照样会挪错。
     但被挪的线可能落进别的字上下两部件之间的白缝（覀｜復、亠｜子：切割量也是 0），护栏 `gap_ok(cut, row_proj, y_from, y_to,
-    period, prev, next) -> bool`（prev／next＝上下相邻格线现在的位置） 给了就逐个去处问一次，不许的去处跳过（缺省全收；字内白缝判据由「防横点字劈开」线做）。
+    period, prev, next) -> bool`（prev／next＝上下相邻格线现在的位置） 给了就逐个去处问一次，不许的去处跳过（segment_column 缺省接 U-Net 整字护栏 `seg.cut_select.move_keeps_glyphs`）。
 
     `bounds` 找缝窗口的中心（等距格网的名义格线；DP 格网就是它自己）、`snapped` 现在的格线；格数、格号不变，
     首末线不动（列端由框线、`grid_end_fit` 管）。"""
@@ -1878,7 +1878,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       缺省 None＝不调（2026-11-10 起实现在史記书仓 `code/jiazhu_step.py`，原 `_free_split`）。
     - `snap_cut`（书级，2026-11-13，史記写本字距不匀）：格线定下后（等距格网落缝、DP 格网、下版框之后，人钉切线之前），
       还劈着字的格线按墨块切割量在 ±`snap_cut` 格内补挪（`snap_by_cut`；等距格网以名义格线为中心，DP 格网以 DP 格线为中心）；
-      0＝关（缺省）。`snap_gap_ok` 是它的去处护栏（字内白缝不当字缝），缺省 None＝不拦。
+      0＝关（缺省）。`snap_gap_ok` 是它的去处护栏（字内白缝不当字缝）；缺省 None 时有 `cut_judge` 就用 U-Net 整字护栏
+      （`seg.cut_select.move_keeps_glyphs`，2026-11-13），没有裁判就不拦。
     - `grid_adjust`／`jiazhu_heads`／`half_a_left`（书级钩子 `impl/keben/row_hooks`，2026-11-12）：缺省 None＝不调。
       `grid_adjust` 在 `grid_bounds` 落缝前改格线；`jiazhu_heads` 在段端收编前补认段头；`half_a_left` 给只有一半有字的夹注格
       定右半左缘。签名与用法见 `row_hooks` 模块头。
@@ -1955,7 +1956,15 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         from ...seg.seam import cut_cost_sides
         sides = cut_cost_sides(col_gray[:, x_lo:x_hi] < ink_threshold, max_h=SNAP_CUT_MAX_H * period)
         center = gb if grid_bounds is not None else bounds
-        bounds[:] = snap_by_cut(sides[0] + sides[1], row_proj, center, bounds, period, snap_cut, gap_ok=snap_gap_ok, sides=sides)
+        gap_ok = snap_gap_ok
+        if gap_ok is None and cut_judge is not None:
+            # 整字护栏（2026-11-13）：U-Net 归属裁判看上下两格整个窗口，挪后不比原位更不像两个整字才许挪（字内白缝不当字缝）
+            from ...seg.cut_select import move_keeps_glyphs
+
+            def gap_ok(_cut, _rp, y_from, y_to, _period, prev, nxt):
+                return move_keeps_glyphs(cut_judge, col_gray, x_lo, x_hi, y_from, y_to, prev, nxt,
+                                         ink_threshold=ink_threshold)
+        bounds[:] = snap_by_cut(sides[0] + sides[1], row_proj, center, bounds, period, snap_cut, gap_ok=gap_ok, sides=sides)
     # 人拖过的切线钉住（2026-09-26，feedback/lookup.resolved_pins）：slot_above 下沿那条格线换成人给的 y。
     # 只在夹在上下两条格线之间（各留 PIN_MARGIN）且离 DP 那条不超过一格时才钉，否则人裁对的
     # 已不是同一条格线（格数/相位变了），不套。
