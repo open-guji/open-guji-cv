@@ -388,7 +388,13 @@ def human_chars_of(ws: Path, book: str, products: Path | None = None) -> dict[st
     try:
         if str(rp.CV) not in sys.path:
             sys.path.insert(0, str(rp.CV))
+        from open_guji_cv.feedback.bindings import book_bindings
         from open_guji_cv.feedback.lookup import human_chars
+        try:
+            book_bindings(book)          # human_chars 自己算绑定表出错时会悄悄退回「按格号」（旧口径）：这里先算一遍，出错就停
+        except Exception as e:           # noqa: BLE001 —— 常见：没 guji db pull（缺 glyph.db）、产物沙箱缺 Step3
+            raise RuntimeError(f"绑定表算不出来（{type(e).__name__}: {e}）：先 `guji db pull -w {ws}`（重建 glyph.db）并确认产物根 "
+                               f"{products or rp.products_root(ws)} 有 {book} 的 Step3，再重来；不能退回按格号认人裁（会把失效的老人裁当成被机器推翻）") from e
         got = human_chars(book)
     finally:
         for k, v in old.items():
