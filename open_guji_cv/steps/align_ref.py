@@ -592,6 +592,15 @@ class AlignRefParams(BaseModel):
     且它的现役字不是邻格坐标字时，也只丢这一格（此时全同格 ≥3 的要求不适用）。
     与 `coord_conflict_pair_only` 同开时先试 pair_only 的严口径，不成再试这一条。False＝关（缺省，不进参数哈希）。"""
 
+    coord_legacy_line_guard: bool = False
+    """现役跨行借字不算冲突（2026-11-13，史記 r60 37:2:6–7，A22；通用：任何逐列本都可开）：参校本某列缺字（卷端题署
+    「唐諸王侍讀率府長史張守節」缺「正義」两字）时，现役 difflib 按整页字流对位，会把图上多出的字配到后面别的行里的同字
+    （下一列夹注开头的「正義」），整段错开，下一列「匈奴列傳第五十」的现役字跟着错配（7:8 配成夹注里的「平」）；
+    坐标对位本来配对了这一列，却因「与现役对位冲突」整列退回。开了以后，坐标对位定了列↔行的列里，现役 equal 字
+    **不在本列整理本行里**的格（跨行借来的字）不当现役证据：冲突闸、冲突格清单都不算它；本列坐标对位给了这一格字的，
+    现役字改成坐标字、op 记 replace（同 `coord_conflict_drop_bad` 的改法）；坐标没给字的格现役字不动。
+    False＝关（缺省，不进参数哈希）。"""
+
     coord_blank_ink: bool = False
     """整理本空格位上有墨的列照样按格位配（2026-11-06，A22 S02 深挖，Sheldon 定「这几列没有必要完全挡住」）：
     ①整理本一行中间有空格位、图上那几位有墨（满文字母、印文、碎笔）时，不要求字位对的格连续，按格位配
@@ -646,6 +655,8 @@ class AlignRefParams(BaseModel):
             d.pop("coord_consensus_not_same", None)
         if isinstance(d, dict) and not self.coord_blank_ink:
             d.pop("coord_blank_ink", None)
+        if isinstance(d, dict) and not self.coord_legacy_line_guard:
+            d.pop("coord_legacy_line_guard", None)
         if isinstance(d, dict) and self.alt_select == "align":
             d.pop("alt_select", None)
         return d
@@ -856,7 +867,8 @@ class AlignRefStep(Step):
                          **({"drop_bad": True} if p.coord_conflict_drop_bad else {}),
                          **({"blank_ink": True} if p.coord_blank_ink else {}),
                          **({"consensus_not_same": True} if p.coord_consensus_not_same else {}),
-                         **({"dp_skip_cost": p.coord_dp_skip_cost} if p.coord_dp_skip_cost else {}))
+                         **({"dp_skip_cost": p.coord_dp_skip_cost} if p.coord_dp_skip_cost else {}),
+                         **({"line_guard": True} if p.coord_legacy_line_guard else {}))
             cells = _opt(ctx, "cells", page)
             if match.alt_columns and cells is not None and cells.alt_columns:
                 _choose_alt(out["align_ref"], ctx.book.id, page, match, ocr, rare, cells, p)
@@ -1563,7 +1575,8 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
                          **({"drop_bad": True} if p.coord_conflict_drop_bad else {}),
                          **({"blank_ink": True} if p.coord_blank_ink else {}),
                          **({"consensus_not_same": True} if p.coord_consensus_not_same else {}),
-                         **({"dp_skip_cost": p.coord_dp_skip_cost} if p.coord_dp_skip_cost else {}))
+                         **({"dp_skip_cost": p.coord_dp_skip_cost} if p.coord_dp_skip_cost else {}),
+                         **({"line_guard": True} if p.coord_legacy_line_guard else {}))
     alt_match = match.with_alt(cols)
     car_main, car_alt = carrier_fn(match, ocr, rare), carrier_fn(alt_match, ocr, rare_alt)
     n_cells = {c.col: len(c.chars) for c in alt_match.columns if c.col in cset}
@@ -1608,7 +1621,8 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  title_trust: bool = False, dp_flat: bool = False,
                  shift_needs_pair: bool = False, pair_no_sub: bool = False,
                  pair_only: bool = False, drop_bad: bool = False, blank_ink: bool = False, consensus_not_same: bool = False,
-                 circle_ext: bool = False, ref_hint: bool = False, dp_skip_cost: float = 0.0) -> None:
+                 circle_ext: bool = False, ref_hint: bool = False, dp_skip_cost: float = 0.0,
+                 line_guard: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1640,6 +1654,9 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         return
     from ..products.kinds.recog import CoordRec
     legacy = {c.id: c for c in res.chars} if res.anchored else {}
+    borrowed = _borrowed_legacy(legacy, pm.col_line, lines) if line_guard else []
+    for i in borrowed:            # `coord_legacy_line_guard`：跨行借来的现役字不当现役证据
+        del legacy[i]
     same = {r.id: r.char for cc in cols for r in cc.chars if r.verdict == "same" and r.char
             and not (consensus_not_same and str(getattr(r, "via", None) or "").startswith("consensus"))}
     work = []
@@ -1751,12 +1768,42 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         res.coord_cols.append(cc.col)
         res.coord.extend(CoordRec(id=i, col=cc.col, slot=sl, sub=sub, ref_char=ch, row=round(g, 2))
                          for i, sl, sub, ch, g in r.recs)
+    if borrowed:
+        _fix_borrowed(res, borrowed)
     if pair_cols:
         res.coord_note = f"{res.coord_note}；pair 退冲突格 {','.join(map(str, sorted(pair_cols)))}".lstrip("；")
     if dp_cols:
         res.coord_note = f"{res.coord_note}；dp 配列 {','.join(map(str, sorted(dp_cols)))}".lstrip("；")
     if gap_cols:
         res.coord_note = f"{res.coord_note}；空格位有墨列 {','.join(map(str, sorted(gap_cols)))}".lstrip("；")
+
+
+def _borrowed_legacy(legacy: dict, col_line: dict, lines) -> list[str]:
+    """`coord_legacy_line_guard`：列↔行定了的列里，现役 equal 字不在本列整理本行（正文字与夹注两行）里的格 id。"""
+    chars: dict[int, set[str]] = {}
+    out = []
+    for i, lg in legacy.items():
+        if lg.align_op != "equal" or not lg.align_char:
+            continue
+        li = col_line.get(lg.col)
+        if li is None:
+            continue
+        if lg.col not in chars:
+            chars[lg.col] = {ch for _p, u in lines[li].text_units() for ch in (u.a, u.b) if ch}
+        if lg.align_char not in chars[lg.col]:
+            out.append(i)
+    return out
+
+
+def _fix_borrowed(res, borrowed: list[str]) -> None:
+    """`coord_legacy_line_guard`：跨行借字的格，坐标对位给了字的改成坐标字（op replace），并在 coord_note 记一笔。"""
+    coord = {r.id: r.ref_char for r in res.coord if r.ref_char}
+    fixed = 0
+    for c in res.chars:
+        if c.id in borrowed and c.id in coord and c.align_char != coord[c.id]:
+            c.align_char, c.align_op, c.ref_run = coord[c.id], "replace", 1
+            fixed += 1
+    res.coord_note = f"{res.coord_note}；现役跨行借字 {len(borrowed)} 格（改坐标字 {fixed}）".lstrip("；")
 
 
 COORD_PAIR_MAX = 2
