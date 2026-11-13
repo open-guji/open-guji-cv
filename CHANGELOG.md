@@ -17,6 +17,7 @@
 ## [未发版]
 
 - PATCH（改产物）：`rebind_library_shapes`（字形库人裁重绑）尊重作废标记：字形库 `human_stale_*`／`stale_verdicts.tsv` 撤下之后没有再裁的格，库里那份不再顶上。此前重绑只看该格号最新事件的锚，误锚的人裁（vol01 182:9:15a「宅」）撤下后仍会在重绑时落回去。（ZM，11-13）
+- PATCH：republish `bind_check`（出单时“人裁绑定：N 条 {…}”那行，也是 id_mismatch／unbound 的来源）改用正式的 `book_bindings`（带字块图缓存／现切、字形库、补锚档），不再用几何口径的 `compute_page(cache=_NoCache)`——后者没图可比，没有框的老人裁一律判 unanchored（vol04 报 631 绑不上，实际 570 valid；补上 109 条 cellvotes rebase 迁移事件的框后 679 valid）。（ZM，11-13）
 
 - PATCH：republish from-pack/issue 出单前查原图在不在（`need_source_images`）：人裁绑定要现切字块图比像不像，原图没拉时 vol04 682 条只绑上 51（拉了原图后 570），老人裁被静默判成 unanchored。现在没原图直接停并提示 `guji source pull`。读者侧冒烟的 HEAD 请求带 Referer（data.openguji.com 图防盗链，无 Referer 一律 403，云端容器里必误报）。（ZM，11-13）
 
