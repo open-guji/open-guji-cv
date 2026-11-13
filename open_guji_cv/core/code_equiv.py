@@ -1523,6 +1523,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='c07ffe446c652c68fbb2cdc7590fa15a60ea54c839f089662db48ef0a4c0344b',
           old='a865a98d5e9c2d961ae6090971dc7790a8d3108ee67ae292e6406638ca3e3d27',
           evidence='seed_admit 在 03/09/02 各 7 页（03: 99,103,117,122,208,2,40；09: 167,170,172,176,187,193,194；02: 88,90,165,166,168,171,204）上，zw 未点名，与 v0.7.10 产物逐字节相同；SJ 史記文淵閣 r43，scripts/code_equiv.py check，11-12'),
+    # groups.registry 加 OPT_IN_GROUPS 项 wu 嗚鳴（需点名才开；全唐文 QTW 经 Ops 转，2026-11-13，A31）
+    Equiv(module='open_guji_cv.groups.registry',
+          new='e7e536d72abc423a5cb9cae05d549f0dead8f2fb8f87a5a332094f562a96c340',
+          old='c07ffe446c652c68fbb2cdc7590fa15a60ea54c839f089662db48ef0a4c0344b',
+          evidence='按代码论证（同 zw／#1413）：新项只进 OPT_IN_GROUPS 与 FLOW_GROUPS，不进 GROUPS 与 generic_flow_names，没在册配置 group_flow 点名 wu 的书走的分支与旧版逐字相同，dump 不变；tests/test_group_flow.py::test_wu_is_opt_in 守；11-13'),
     # follow_ref 表项不再接管 follow_ref_variants 路径（cv#1438，史記 r45 嵗=歳；2026-11-12，A24）：
     # 开着 follow_ref＋按参校本取异体的书 dump 加 follow_ref_variants_rev，**这类书 seed_admit 一律过期**（不只表里那几对：表里的整理本形
     # 此后都会走 variants，带出此前不改的同义异体改字，史記 r47 实测 04/08/09 册 吳→呉 6 格，整书 11-12）；别的书走的分支与 v0.7.11 逐字相同，不过期
