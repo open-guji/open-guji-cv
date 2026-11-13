@@ -21,4 +21,6 @@
 - `warp`：单列射影矫正与列窗口；`profile`：列图投影、去噪、找文字带（原 `utils/column_projection` 的两段）；
 - `locate_gutter`：找书口（命令行用）；
 - `columns`：列宽均匀约束——`ColumnSpec`（各书 `columns:` 配置）、`check_columns`（出带检查）、`fit_columns`（候选线里 DP 挑一串列宽全在带里的线）与墨投影／界行残段／细峰／空白中点证据（2026-11-03，见 doc/design/列宽均匀约束.md）。
+- `seam.cut_cost_profile`：墨块切割量——水平线放在每一行会把多少连通墨块劈开（较小一截的墨量和）；等距格网补挪格线
+  （`row_segment.snap_cut`）与史記「格线切字」检测共用（2026-11-13，A22）。
 """
