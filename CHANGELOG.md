@@ -3,7 +3,6 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
-- `republish.py from-pack` 的 `bind_check` 与 `pending_route` 扣已裁先剔除被后来人裁 `payload.overrides` 推翻的旧人裁（ZM 殿本 vol01 001-r18 误判 id_mismatch；PATCH，只动 scripts/zhengli，code_hash 不变；v0.7.20 已发同一修复，从 v0.7.19 切）。
 
 - strokes 加 `ink_gap`（沿两点连线量落墨比例与最长断口，「笔画接不接」）、`ClassStats.max_z`／`llr_decide(max_z=)`（离哪一类都远就弃权）；L1 纯算法，不被 Step 引用，不动指纹。全唐文已放行 日曰／己已巳／千干 6,450 格按册留出，见 ai-team 笔画识别-研究 扩组2（A23 11-13）。
 - PATCH：align_ref `coord_dp` 加书级参数 `coord_dp_skip_cost`（缺省 0 不进 dump）：每次跳过扣分＋整理本字在前几名候选里记 0.5 分，不再为一处载体字吻合把整列整理本字错开一格（史記 r53 33:101:5、35:84:2、37:194:3 错放）。align_ref、align_ref_coord 的 code_hash 变，已登记 code_equiv（关着时指纹值不变）（A22 11-13）。
@@ -14,6 +13,11 @@
 ## [未发版]
 
 - PATCH：row_segment 1.50 表说整列空的列记空认大印印边墨（`_in_seal(stain_ink=True)`）：格与大印框重叠不到一半、但格里 ≥70% 的墨（按连通块）落在印框里也记空；有字的列、丢字、挑格网仍按框重叠。史記 r53 印边压相邻空列碎格（SJ 11-13）。row_segment code_hash 变（不能登记等价）：史記 42 册 78 个大印页 6 页变（5 页假字格改空、1 页空列格线挪）；殿本 15 册 23 个大印页逐字节同；全唐文 005–011 无大印。
+
+## [0.7.20] - 2026-11-13
+
+- 发版说明（A31 11-13，ZM 殿本 vol01 001-r18）：v0.7.19 + 下面一条，PATCH，不含 dev 上的 #1463/#1465–#1468。dev 上同一修复为 #1476。
+- `republish.py from-pack` 的 `bind_check` 和 `pending_route` 的「扣已裁」先剔除被后来人裁 `payload.overrides` 推翻的旧人裁：旧裁绑到别格（iou 低）或 unanchored 时，不再把新裁已生效的格误判成 id_mismatch 塞进 keep.txt、留在单上。只动 scripts/zhengli，不改 Step，code_hash 不变。
 
 ## [0.7.19] - 2026-11-13
 
