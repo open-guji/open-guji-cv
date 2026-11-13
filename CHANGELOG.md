@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- `republish.py from-pack` 的 `bind_check` 与 `pending_route` 扣已裁先剔除被后来人裁 `payload.overrides` 推翻的旧人裁（ZM 殿本 vol01 001-r18 误判 id_mismatch；PATCH，只动 scripts/zhengli，code_hash 不变；v0.7.20 已发同一修复，从 v0.7.19 切）。
+
 - strokes 加 `ink_gap`（沿两点连线量落墨比例与最长断口，「笔画接不接」）、`ClassStats.max_z`／`llr_decide(max_z=)`（离哪一类都远就弃权）；L1 纯算法，不被 Step 引用，不动指纹。全唐文已放行 日曰／己已巳／千干 6,450 格按册留出，见 ai-team 笔画识别-研究 扩组2（A23 11-13）。
 - PATCH：align_ref `coord_dp` 加书级参数 `coord_dp_skip_cost`（缺省 0 不进 dump）：每次跳过扣分＋整理本字在前几名候选里记 0.5 分，不再为一处载体字吻合把整列整理本字错开一格（史記 r53 33:101:5、35:84:2、37:194:3 错放）。align_ref、align_ref_coord 的 code_hash 变，已登记 code_equiv（关着时指纹值不变）（A22 11-13）。
 - PATCH：row_segment 的 pins 档格位表指纹与夹注参照指纹只算本册钉位点名的 daizhige 源文件（史記 0244.jsonl 入库不让 01–17 册过期；#1463）。row_segment、row_segment_pagemap 的 code_hash 变，已登记 code_equiv（指纹值不变）。
