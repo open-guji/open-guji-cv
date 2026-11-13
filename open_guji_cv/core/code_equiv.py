@@ -1615,6 +1615,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='052a744b74f64b6b45c62bd6f74b5ae38220fd8d39e5a70609609983999ee25b',
           old='527fb5aa243ccb985f570622bbd8ee7a0f4b0b94f6872dc1fd103efb0db332f6',
           evidence=_FR_HOOK_1113),
+    # v0.7.32（史記 patch 线）补记：#1517 在 patch 线上 seed_admit 的哈希（dev 上不出现，只追加；本线没有 stroke_veto）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='a9b84a4bb6ec9eee6d095e4919b41ea83e3e8deb86e6ee7973b386783c8d0dad',
+          old='60563a317cd208ccda0c8804d69f03d2e2b31b8c4936c9eb258ca0598f0e35f8',
+          evidence=_FR_HOOK_1113),
 )
 
 
