@@ -1054,7 +1054,7 @@ def bind_check(products: Path, book: str) -> dict:
     from open_guji_cv.feedback.events import EventLog, counts_as_human, iter_events_readonly
     from open_guji_cv.products.store import ProductStore
     sys.path.insert(0, str(HERE))
-    from pending_route import deciding
+    from pending_route import deciding, overridden_ids
 
     ran: dict[int, float] = {}
     mf = products / book / "seed_admit" / "_manifest.jsonl"
@@ -1064,6 +1064,7 @@ def bind_check(products: Path, book: str) -> dict:
         ran[pg] = max(ran.get(pg, 0), r.get("ts") or 0)
     states = {f"{book}:{k}": v[0] for k, v in cell_states(products, book).items()}
     by_page: dict[int, list] = defaultdict(list)
+    mine = []
     for e in sorted(iter_events_readonly(EventLog()), key=lambda e: (e.ts, e.batch, e.seq)):
         if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_human(e):
             continue
@@ -1074,6 +1075,10 @@ def bind_check(products: Path, book: str) -> dict:
         except ValueError:
             continue
         if b == book:
+            mine.append((pg, e))
+    gone = overridden_ids(e.payload or {} for _, e in mine)    # 被后来的人裁推翻的旧裁不参与绑定核对（r18 误判 id_mismatch）
+    for pg, e in mine:
+        if e.id not in gone:
             by_page[pg].append(e)
     st = ProductStore(products)
     out = {"events": 0, "status": Counter(), "newer": [], "id_mismatch": [], "unbound": [], "decided_not_admitted": []}

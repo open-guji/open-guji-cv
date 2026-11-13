@@ -7,6 +7,16 @@
 
 ## [未发版]
 
+## [0.7.20] - 2026-11-13
+
+- 发版说明（A31 11-13，ZM 殿本 vol01 001-r18）：v0.7.19 + 下面一条，PATCH，同样不含 dev 上的 #1463/#1465–#1468。
+- `republish.py from-pack` 的 `bind_check` 和 `pending_route` 的「扣已裁」先剔除被后来人裁 `payload.overrides` 推翻的旧人裁：旧裁绑到别格（iou 低）或 unanchored 时，不再把新裁已生效的格误判成 id_mismatch 塞进 keep.txt、留在单上（r17 刚落的 88:4:18、117:1:8 被放回单上的真因）。只动 scripts/zhengli，不改 Step，code_hash 不变。
+
+## [0.7.19] - 2026-11-13
+
+- 发版说明（A31 11-13，ZM 殿本要）：v0.7.16 + #1470，PATCH，不含 dev 上 v0.7.16 之后的 #1463/#1465/#1466/#1467/#1468（其中 #1467 row_segment 1.50 会让钉本版的册 row_segment 过期）。
+- proof_cycle `split_changes` 加 `keep` 类：机器无字（印章遮挡，新字空）而旧字是最新人裁，文本留人裁字、不进复审（殿本 vol05 1:4:13）。只动 scripts/zhengli，不改任何 Step，code_hash 不变，产物不过期。
+
 ## [0.7.16] - 2026-11-12
 
 - 发版说明（A31 11-12）：v0.7.14 的后继，PATCH。v0.7.14 漏登 seed_admit code_equiv（#1452 改了 seed_admit 代码），已补（v0.7.14 与本版两条登记，A22 在史記 01 册 23 页验）；另含 #1456 `solo_coord_dissent`（缺省关）。含 #1432（alt_cut 备选格全同不出），钉本版的书若开着 alt_cut，row_segment 会过期。史記整书线钉 v0.7.15（v0.7.13 + #1452 + #1456，不含 #1432）。
