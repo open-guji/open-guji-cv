@@ -1626,6 +1626,11 @@ ENTRIES: tuple[Equiv, ...] = (
           old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
           evidence='align_ref 加 coord_legacy_line_guard（缺省关不进参数 dump）：殿本 vol60 全册 126 页、史記 37 全册 231 页（coord_dp 等开着、开关关）'
                    '与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-13（A22）'),
+    # v0.7.33（史記 patch 线）补记：align_ref 在 patch 线上的哈希（dev 上不出现，只追加；本线无 #1497）
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='a2bc661cbb0a0cf2fb4dd998b73a935facd04c2f9419fbfb089c363cc3616a5a',
+          old='f235b50d80d8f1037bf8b7cc27e02ec84cf1d76ee4db72fe0e423388a16de866',
+          evidence='align_ref 加 coord_legacy_line_guard（缺省关不进参数 dump），见上一条 #1523 的证据；哈希按 v0.7.32 线重算，本线未另跑产物比对'),
 )
 
 
