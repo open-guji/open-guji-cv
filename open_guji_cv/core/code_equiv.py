@@ -297,6 +297,12 @@ _PCLEAN_1110 = ("cell_shrink 加书级钩子「发前清格」（impl/keben/patc
                 "缺省时 `_extract_column` 原样返回；史記文淵閣本 02 册 12 页（p2 卷端＋正文每 20 页取 1）与 origin/dev df08209 "
                 "产物逐字节相同，scripts/code_equiv.py check，书仓 k2（无覆盖）")
 
+_PINS_SRC_1112 = ("row_segment 的 pins 档格位表指纹（page_map_fingerprint）与夹注参照指纹（roster_ref_fingerprint）改为只算本册钉位点名的 daizhige 源文件"
+                  "（原先算 corpus/daizhige/ 下全部 4 位数 jsonl），好让 0244.jsonl 入库不让 0243 册过期。等价性按真数据证明而不是跑产物："
+                  "用中心库 988g3f0wsu 的 page_pins.jsonl（rev 346019，sha a433e753…）与 0243.jsonl（sha 13fca24f…），01 册 pins 指纹 8b867fc8b4dcc0d2、17 册 8ff8527b6f73d615、"
+                  "夹注参照指纹 f2d6945a67503581，与改前代码在只有 0243 时算出的值逐位相同，加入 0244.jsonl 后仍相同（改前会变）；"
+                  "指纹值不变、其余代码路径未动，故产物不变；2026-11-12（A31，史記 0244 入库）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1499,14 +1505,37 @@ ENTRIES: tuple[Equiv, ...] = (
           new='60563a317cd208ccda0c8804d69f03d2e2b31b8c4936c9eb258ca0598f0e35f8',
           old='fb82c05c52f83d8ecec06a697a5fad987eee0c2e6df3991f25b508f2f12259c8',
           evidence='seed_admit 在史記 r49 包 03/04/05 共 9 页（03:46,84,96；04:26,35,39；05:21,27,75，含半格与 match_solo 放行多的页）上与 v0.7.13 产物逐字节相同（SJ，scripts/code_equiv.py check --base v0.7.13 --step seed_admit，rc/v0.7.15，11-12）；两开关缺省关、不进参数 dump'),
+    # row_segment／pagemap：pins 档与夹注参照的语料指纹只看本册钉位点名的源文件（2026-11-12，史記 18–20 册要入 0244.jsonl）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='6dde638e3511de593834b9ca0a69e4142491c04bb405fe4e5a3a1ea6eb5ef57b',
+          old='009d4ce86488c14e378e8e56ccb0f90609ccf92b0bcd068aaaa7da894290cf1f',
+          evidence=_PINS_SRC_1112),
+    Equiv(module='open_guji_cv.steps.row_segment_pagemap',
+          new='a71017d111945b477cb9f65b464ea8e277b998a552688559ed7c96a182ef228a',
+          old='65ed80d08f58bd97393f955bc71e43a5f380eb735cb3f1a3df3a97232fddc6ef',
+          evidence=_PINS_SRC_1112),
+    # align_ref coord_dp 加跳过扣分 coord_dp_skip_cost（缺省关；史記 r53，2026-11-13，A22）
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='f235b50d80d8f1037bf8b7cc27e02ec84cf1d76ee4db72fe0e423388a16de866',
+          old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
+          evidence='align_ref 加 coord_dp_skip_cost（缺省 0 不进参数 dump；史記 r53 coord_dp 两次跳过换一处吻合致整理本字错一格）：开关关着时史記 37 册 25 页（--pages 1-20,110,127,153,170,194，coord_dp 开、含 dp 配列页）与 3f0d116 产物逐字节相同；另 33/35/37/41 四册全册 coord 逐格与 r53 包相同；scripts/code_equiv.py check，2026-11-13（A22）'),
+    Equiv(module='open_guji_cv.steps.align_ref_coord',
+          new='9de0c6ed3a822acee36610bb674b84f1f70d30a7cf2cdea97fc79a7921f682cd',
+          old='862f2f24da84debb2ce702f244115285de7de8d22adea085ec69b9fbdcba7e9f',
+          evidence='同上'),
     Equiv(module="open_guji_cv.steps.align_ref",
-          new="501426bb2d5233bdcb8305fdec956f81f38c8a690fd1c85e6cbe471675545949",
-          old="6afd38325a5f4060b74ddf7f8bfe1a316505479e420899a059fd648182cf4ad6",
+          new="1f4878abc68b1f32e7d782706830e83af80fea3588e85b95bf0385fd8f828545",
+          old="f235b50d80d8f1037bf8b7cc27e02ec84cf1d76ee4db72fe0e423388a16de866",
           evidence="align_ref 加缺省关的书级开关 coord_conflict_drop_bad（与现役对位冲突只丢冲突格，ZM 殿本 vol05 p1 列 4／p101／p177）：新增分支只在该开关开且列将因「与现役对位冲突」退回时可达，关时控制流与改前逐句相同（代码核对＋tests/test_align_ref_coord.py）；★未在有产物的机器上跑 scripts/code_equiv.py check，请持产物者（ZM）钉前补跑，不同则撤这条，2026-11-13"),
     Equiv(module="open_guji_cv.steps.align_ref",
           new="06fe196f9b2a44cf4ab61d09dc8ace5ef4f13b80ed9ff69a0d6def2a5d983443",
-          old="501426bb2d5233bdcb8305fdec956f81f38c8a690fd1c85e6cbe471675545949",
+          old="1f4878abc68b1f32e7d782706830e83af80fea3588e85b95bf0385fd8f828545",
           evidence="align_ref coord_conflict_drop_bad 加稀疏列例外（vol05 p1 列 4）：改动全在该开关开且列将因「与现役对位冲突」退回时才可达的 _drop_bad_recs 内，关时控制流与改前相同（代码核对＋tests/test_align_ref_coord.py）；★未在有产物的机器跑 scripts/code_equiv.py check（同上一条），2026-11-13"),
+    # row_segment／pagemap：pins 档与夹注参照的语料指纹只看本册钉位点名的源文件（2026-11-12，史記 18–20 册要入 0244.jsonl）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='fb60a8eb7ebe1c84d7468f301d18e2b0f42b3da5fa2f78b9e22f6f5e6579cb93',
+          old='1c2b138a859640333b390aad62c037e99a2d4eaf968754e402d12b65aeddd8b2',
+          evidence=_PINS_SRC_1112),
     # stroke_veto 笔画反向护栏（缺省关，cv#1487，2026-11-13，全唐文形近字线）：空串时整段不执行、不进 dump
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='527fb5aa243ccb985f570622bbd8ee7a0f4b0b94f6872dc1fd103efb0db332f6',
