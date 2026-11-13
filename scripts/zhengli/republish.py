@@ -358,6 +358,37 @@ def unlanded_votes(ws: Path, book: str, text_id: str, rev: str, votes: list[dict
 UNMAPPED_TSV = "旧单票无法对位.tsv"
 
 
+def sheet_findings(doc: dict, ws: Path, book: str) -> list:
+    """单子体检（guji-manager `review.sheet_audit`，11-13 ZM）：不管单子从哪条路径出来，机械查几类「不该进判字单」的格。
+    manager 太旧（没有这个模块）返回 None，调用方只提示、不拦。"""
+    try:
+        from guji_manager.review import sheet_audit
+    except ImportError:
+        return None
+    from proof_cycle import codepoint_map
+    return sheet_audit.audit_sheet(doc, codepoint_map(ws, book))
+
+
+def sheet_gate(doc: dict, ws: Path, book: str, a) -> None:
+    """出单门（11-13 ZM）：体检有「拦」的类就不上线；要照上线加 --ack-sheet-audit "<原因>"。
+    这些类对应连着出过的错：机器无字（印章遮挡）被写成「机器改判为 □，推翻人裁」、换图源后失效的老人裁被当成「被机器推翻」、
+    只因标点专名要重挂的格混进判字单。"""
+    fs = sheet_findings(doc, ws, book)
+    if fs is None:
+        print("ⓘ guji-manager 没有 review.sheet_audit（<0.4.46）：跳过单子体检")
+        return
+    bad = [f for f in fs if f.block]
+    for f in fs:
+        print("  " + f.line())
+    if not bad:
+        print(f"单子体检：通过（提示 {len(fs)} 条）" if fs else "单子体检：通过")
+        return
+    if getattr(a, "ack_sheet_audit", None):
+        print(f"⚠ 单子体检有 {len(bad)} 格不过，照上线（--ack-sheet-audit：{a.ack_sheet_audit}）")
+        return
+    sys.exit(f"✗ 单子体检不过：{len(bad)} 格不该进判字单（见上）。改出单路径（别手改单子），或确要照上线加 --ack-sheet-audit \"<原因>\"")
+
+
 def votes_gate(ws: Path, book: str, text_id: str, old_rev: str | None, new_rev: str, a,
                old_doc: dict | None = None, out: Path | None = None) -> None:
     """换单门（GUJI-730 P0-3）：旧单上的票没落完不换新单，免得格号漂（换了切分，旧票就对不上格）。
@@ -811,6 +842,10 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     md = diff_md(book, d, len(team), reflow)
     if getattr(a, "recheck", None):
         md += recheck_md(new, raw / "recheck_missing.tsv")
+    fs = sheet_findings(new, ws, book)
+    if fs:
+        md += "\n## 单子体检\n\n" + "\n".join(f"- {f.line()}" for f in fs) + "\n"
+        print("单子体检（push 时「拦」的类会停）：\n" + "\n".join("  " + f.line() for f in fs))
     if pack:
         md = md.replace("\n\n## 去掉的格", f"\n- 产物包 `{pack}`\n\n## 去掉的格", 1)
     if bind:
@@ -839,6 +874,7 @@ def cmd_push(a) -> int:
     old_rev = (old_doc or {}).get("rev")
     source_gate(ws, book, doc_new, a)                            # 三道门都在动任何东西之前
     sprites_gate(doc_new, a)
+    sheet_gate(doc_new, ws, book, a)
     votes_gate(ws, book, plan.get("text_id") or text_id_of(ws), old_rev, a.rev, a, old_doc=old_doc, out=out)
     if a.book_text:
         d = json.loads((out / "diff.json").read_text(encoding="utf-8"))
@@ -1943,6 +1979,7 @@ def main(argv=None) -> int:
             p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
             p.add_argument("--source-why", metavar="原因", help="图源门：册 yaml 没钉 source_rev、或单子出自别的页表版本也照推（写明原因）")
             p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
+            p.add_argument("--ack-sheet-audit", metavar="原因", help="单子体检（review.sheet_audit）有「拦」的类也照上线（写明原因）")
             p.add_argument("--held-file", help="cellvotes draft 的 held.tsv：里面的格已记为挂起，换单门不拦")
             p.add_argument("--cells", help="换单门：线上旧单出在换图源之前时，用这张格级对照表（old_new_cells/<册>.tsv[.gz]，"
                                            "或放各册表的目录）把旧格号的票对到新格；对不上的列清单、不拦")
@@ -1957,6 +1994,7 @@ def main(argv=None) -> int:
             p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
             p.add_argument("--source-why", metavar="原因", help="图源门：册 yaml 没钉 source_rev、或单子出自别的页表版本也照推（写明原因）")
             p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
+            p.add_argument("--ack-sheet-audit", metavar="原因", help="单子体检（review.sheet_audit）有「拦」的类也照上线（写明原因）")
             p.add_argument("--held-file", help="cellvotes draft 的 held.tsv：里面的格已记为挂起，换单门不拦")
             p.add_argument("--cells", help="换单门：线上旧单出在换图源之前时，用这张格级对照表（old_new_cells/<册>.tsv[.gz]，"
                                            "或放各册表的目录）把旧格号的票对到新格；对不上的列清单、不拦")

@@ -5,6 +5,8 @@
 
 
 - strokes 加 `ink_gap`（沿两点连线量落墨比例与最长断口，「笔画接不接」）、`ClassStats.max_z`／`llr_decide(max_z=)`（离哪一类都远就弃权）；L1 纯算法，不被 Step 引用，不动指纹。全唐文已放行 日曰／己已巳／千干 6,450 格按册留出，见 ai-team 笔画识别-研究 扩组2（A23 11-13）。
+- PATCH：重跑后覆盖逻辑清查（ZM 11-13，只动 scripts/zhengli，不进任何 Step 指纹）：①`proof_cycle.human_chars_of` 改调 `feedback.lookup.human_chars`（过绑定表，对沙箱产物算），换图源后失效的老人裁不再被当成「被机器推翻」（殿本 vol03／05／08／09／18／20 线上单有 14 条这类假复审）；机器推翻人裁的复审行第 4 列带上旧人裁的字（出单门归一比对、网站「已有判断」靠它）。②`republish.py` 加 `sheet_gate`：push 前跑 guji-manager `review.sheet_audit`，机器无字当推翻人裁、失效旧人裁当被推翻、码位归一后同字、锚点格混进判字单、重复格都拦（`--ack-sheet-audit "<原因>"` 放行）；prep 把体检写进差异单。③锚点类待审格（A01/A02）随 manager 改放待审单旁表 `anchor_cells[]`，不进判字用的 `cells[]`。需 guji-manager ≥ 0.4.46。
+
 - PATCH：align_ref `coord_dp` 加书级参数 `coord_dp_skip_cost`（缺省 0 不进 dump）：每次跳过扣分＋整理本字在前几名候选里记 0.5 分，不再为一处载体字吻合把整列整理本字错开一格（史記 r53 33:101:5、35:84:2、37:194:3 错放）。align_ref、align_ref_coord 的 code_hash 变，已登记 code_equiv（关着时指纹值不变）（A22 11-13）。
 - PATCH：row_segment 的 pins 档格位表指纹与夹注参照指纹只算本册钉位点名的 daizhige 源文件（史記 0244.jsonl 入库不让 01–17 册过期；#1463）。row_segment、row_segment_pagemap 的 code_hash 变，已登记 code_equiv（指纹值不变）。
 - 切分筛查加 page_pitch（正文格高对本页中位：整列偏 >10%、单格 ≥1.5／≤0.6 倍）、half_width（夹注半格宽对本册中位 0.7–1.4、同号 a/b 宽差 >30%），只读产物、不进指纹（A22 11-12）。
