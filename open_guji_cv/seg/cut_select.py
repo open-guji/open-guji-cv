@@ -450,8 +450,11 @@ class UNetJudge:
             return None
 
 
-MOVE_TOL = 0.0
-"""整字护栏（`move_keeps_glyphs`，2026-11-13）：挪后一致率至少要达到原位的一致率减这么多才许挪。"""
+MOVE_TOL = 0.05
+"""整字护栏（`move_keeps_glyphs`，2026-11-13）：挪后一致率至少要达到原位的一致率减这么多才许挪。
+起初取 0。史記 42 册 9 页 snap_cut 拦下 15 条，Sheldon 11-13 看图：挪进字内白缝的 6 条（之×2、帝辛、忠、魯、之士）一致率
+掉 0.055–0.18，修钩尖笔尾的 9 条只掉 0.002–0.043（武丁、殷本、屬爵、以争、釐、善、義、江夏…），放到 0.05。
+seg check `cut_through` 另有自己的门槛（eval/seg_screen.CUT_JUDGE）。"""
 
 
 def move_keeps_glyphs(judge, col_gray: np.ndarray, x_lo: int, x_hi: int, y_from: float, y_to: float,
