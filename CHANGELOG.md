@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH：换单落票核对两种票都读（ZM 11-13，第五册 005-r13 的 25 票漏落）：`republish.old_rev_votes` 原先只读按单版记的票（`?rev=`），且没令牌又没快照时静默当 0 票；现在同时读按单版票和按条目票（`?items=1`，换成现行格号），读不到来源就停。换单门 `votes_gate`、`proof_cycle`、`text_release` 都经它。脚本改动，不进产物指纹。
+
 - PATCH：wu 嗚鳴 规则修正（QTW 回测 130 格，A31 11-13）：ming-禽獸聲、ming-器聲 加 `(?![呼乎咽哉])`，「蕭瑟鳴呼」「之鶴鳴呼」不再与 wu-嗚呼 冲突，判嗚。只改 `config/groups/wu/rules.yaml`（底库文件，要出新底库）。
 
 - PATCH：字组 wu 嗚鳴（全唐文 QTW 经 Ops 转，A31 11-13）：本书嗚的刻形与库里鳴的刻例看图分不出，按文意定（L1 规则→L2 表→L3 裁定库，未决的问进 llm_queue），补放＋复核，文意 strong 才改字。**放进 `registry.OPT_IN_GROUPS`，需点名才开**（册配置 `group_flow` 写缺省名单＋`wu`），没点名的册产物逐字节不变，code_equiv 已登记 `groups.registry`。新增底库登记文件 `config/groups/wu/rules.yaml`（corpus-registry），钉了语料总号的册要配新底库后再钉。顺带修 `test_codepoint_groups_flow_only` 漏算 OPT_IN_GROUPS（zw 起就红）。

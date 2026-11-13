@@ -165,29 +165,59 @@ def web_votes(ws: Path, text_id: str, rev: str | None) -> Counter:
 SITE = "https://www.openguji.com"
 
 
+def _fetch_votes(q: dict, tok: str) -> list[dict]:
+    import urllib.parse
+    import urllib.request
+    items, cursor = [], ""
+    while True:
+        qq = {**q, "limit": "256", **({"cursor": cursor} if cursor else {})}
+        req = urllib.request.Request(f"{SITE}/api/cellreview?{urllib.parse.urlencode(qq)}",
+                                     headers={"Authorization": f"Bearer {tok}", "User-Agent": "open-guji-cv/republish"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            d = json.load(r)
+        if not d.get("success"):
+            sys.exit(f"✗ 读网站票失败：{d.get('error')}")
+        items += d.get("items") or []
+        cursor = d.get("cursor") or ""
+        if not d.get("hasMore") or not cursor:
+            return items
+
+
 def old_rev_votes(ws: Path, text_id: str, rev: str) -> tuple[list[dict], str]:
-    """旧 rev 上的全部精校票。有 CELLREVIEW_TOKEN 就直接读网站 KV（刚投的票每日同步还没并进中心库），
-    否则读数据目录里每日同步存下的 `feedback/lists/web/<书>/<rev>.jsonl`。返回 (票, 来源)。"""
+    """旧 rev 上的全部精校票，**两种记法都读**（11-13 第五册 005-r13 的 25 票因只查一种而漏落）：
+    ① 按单版记的票（`?rev=`，旧网站）；② 按条目记的票（`?items=1`，新网站，11-10 起），按条目换成该册现在的格号、rev 记成 `rev`。
+    有 CELLREVIEW_TOKEN 就直接读网站 KV（刚投的票每日同步还没并进中心库），否则读数据目录里每日同步存下的
+    `feedback/lists/web/<书>/<rev>.jsonl` 与 `items.jsonl`。**没有令牌又没有快照 → 停**（以前当成「0 票」静默放行）。
+    返回 (票, 来源)。"""
     tok = os.environ.get("CELLREVIEW_TOKEN")
+    chap = rev.split("-r")[0]
     if tok:
-        import urllib.parse
-        import urllib.request
-        items, cursor = [], ""
-        while True:
-            q = {"rev": rev, "book": text_id, "limit": "256", **({"cursor": cursor} if cursor else {})}
-            req = urllib.request.Request(f"{SITE}/api/cellreview?{urllib.parse.urlencode(q)}",
-                                         headers={"Authorization": f"Bearer {tok}", "User-Agent": "open-guji-cv/republish"})
-            with urllib.request.urlopen(req, timeout=60) as r:
-                d = json.load(r)
-            if not d.get("success"):
-                sys.exit(f"✗ 读网站票失败：{d.get('error')}")
-            items += d.get("items") or []
-            cursor = d.get("cursor") or ""
-            if not d.get("hasMore") or not cursor:
-                return items, "网站 KV"
-    f = data_dir(ws) / "feedback" / "lists" / "web" / text_id / f"{rev}.jsonl"
-    rows = [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines() if x.strip()] if f.exists() else []
-    return rows, "中心库快照（每日同步之后的票看不到，设 CELLREVIEW_TOKEN 读 KV）"
+        by_rev = _fetch_votes({"rev": rev, "book": text_id}, tok)
+        raw_items = _fetch_votes({"items": "1", "book": text_id}, tok)
+        where = "网站 KV"
+    else:
+        wd = data_dir(ws) / "feedback" / "lists" / "web" / text_id
+        f, fi = wd / f"{rev}.jsonl", wd / "items.jsonl"
+        if not f.exists() and not fi.exists():
+            sys.exit(f"✗ 读不到旧单 {rev} 的票：没设 CELLREVIEW_TOKEN，数据目录也没有 {f} 和 {fi}。"
+                     "先 guji db pull（或设令牌直读网站），别当成「0 票」往下走。")
+        rd = lambda p: [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()] if p.exists() else []
+        by_rev, raw_items = rd(f), rd(fi)
+        where = "中心库快照（每日同步之后的票看不到，设 CELLREVIEW_TOKEN 读 KV）"
+    out = list(by_rev)
+    n_item = 0
+    if raw_items:
+        from guji_manager.review import pending_items as P
+        store = P.ItemStore.open(data_dir(ws), text_id, chap)
+        for v in raw_items:
+            if str(v.get("vol") or "").zfill(3) != chap.zfill(3):
+                continue
+            it = store.items.get(v.get("item") or "")
+            if it is None:
+                continue
+            out.append({**v, "a": it["cell"], "rev": rev, "item": it["id"]})
+            n_item += 1
+    return out, f"{where}：按单版 {len(by_rev)} 票＋按条目 {n_item} 票"
 
 
 #: 单子还没记 `source_rev` 的时代（v0.5.29 之前）出的单，出单时刻早于这一刻的，在换过图源的册上一律算旧图上出的。
