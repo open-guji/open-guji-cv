@@ -38,7 +38,7 @@ class Equiv:
     evidence: str
 
 
-_RF_1113 = ("seed_admit group_flow_ruling_first（书级，缺省空不进参数 dump；Chain._ruling_first 名单外直接返回 None）：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）40 页 seed_admit 与 origin/dev 69711fa 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-13（全唐文·形近字线）")
+_RF_1113 = ("seed_admit group_flow_ruling_first（书级，缺省空不进参数 dump；Chain._ruling_first 名单外直接返回 (None, None)、ask_rf 只在名单内记）：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）40 页 seed_admit 与 origin/dev 69711fa 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-13（全唐文·形近字线）")
 _FR_HOOK_1113 = ("seed_admit follow_ref 加书级钩子 impl/keben/follow_ref_hooks.rival_skip（缺省 None，不调；follow_ref_decide 加 rival_skip "
                  "参数缺省空集，max 的过滤条件多一个恒真项）、新函数 _RivalFacts／_pair_facts／_follow_ref_rival_hook（只在钩子非 None 时用）："
                  "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.6.23-c33-g19-r8 当上游）seed_admit 与 origin/dev e466f52 "
@@ -1631,7 +1631,7 @@ ENTRIES: tuple[Equiv, ...] = (
           old='e5df695c08db5b368007b7cf69b7e3ee1dcf769fcd04028ad8253974d5a7b373',
           evidence=_RF_1113),
     Equiv(module='open_guji_cv.groups.methods',
-          new='42d019a76091849763345e9edc2b6e060ce37b78efa19bda2c10e3f0c38060d7',
+          new='a8cdae9b8875b071d1fbdd04bb514f4be0d49ac7e3f44975ce1e6290e2755f88',
           old='45258af23d0898bfefb4957736316a953c3bdd334c3278a43aaa73fe97a5f861',
           evidence=_RF_1113),
 )

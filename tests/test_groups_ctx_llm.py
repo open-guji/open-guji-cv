@@ -317,5 +317,12 @@ def test_ruling_first_overrides_lower_layers(tmp_path, monkeypatch):
     assert run(cfg(frozenset({"jys"}))).char == "曰"                            # 别的组开着不影响
     v = run(cfg(frozenset({"ry"})))
     assert v.char == "日" and v.via == "ctx:ctx_llm" and v.extra["ruling_first"]
-    v = run(cfg(frozenset({"ry"})), right="云云")                                # 没有裁定：照常 L2
+    v = run(cfg(frozenset({"ry"})), right="云云")                                # 没有裁定：照常 L2，并记下这一问交对话核
     assert v.char == "曰" and not v.extra.get("ruling_first")
+    assert v.extra["ask_rf"] and v.extra["ask"]["r"] == "云云"
+    assert "ask" not in run(cfg(frozenset()), right="云云").extra                 # 缺省不记
+    from open_guji_cv.feedback import llm_queue
+    doc = {"seed_admit": {"columns": [{"chars": [{"id": "v:1:1:1", "char": "曰", "evidence": {"group": {
+        "id": "ry", "solvers": [{"solver": "ctx", "char": "曰", "why": v.why, **v.extra}]}}}]}]}}
+    (q,) = llm_queue.questions_of_page(doc)
+    assert q["r"] == "云云" and q["cur"] == "曰"
