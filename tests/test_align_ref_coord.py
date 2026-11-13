@@ -419,6 +419,15 @@ def test_drop_bad_keeps_column_when_many_agree():
     shifted = {f"x{k}": recs[k][3] for k in range(1, 4)}                              # 现役字都是邻格坐标字：整列错位
     assert _drop_bad_recs(recs, leg(shifted)) is None
     assert _drop_bad_recs(recs, leg({})) is None
+    # 稀疏列：现役 equal 只有冲突这一格（vol05 p1 列 4，字形库重学后首选 簋→撰）
+    sparse = {r[0]: AlignRec(id=r[0], col=3, slot=r[1], align_char="X", align_op="replace", ref_run=1) for r in recs}
+    sparse["x1"] = AlignRec(id="x1", col=3, slot=1, align_char="撰", align_op="equal", ref_run=1)
+    assert [r[0] for r in _drop_bad_recs(recs, sparse)] == [r[0] for r in recs[1:]]
+    sparse["x1"] = AlignRec(id="x1", col=3, slot=1, align_char=recs[1][3], align_op="equal", ref_run=1)  # 现役字是邻格坐标字
+    assert _drop_bad_recs(recs, sparse) is None
+    sparse["x1"] = AlignRec(id="x1", col=3, slot=1, align_char="撰", align_op="equal", ref_run=1)
+    sparse["x2"] = AlignRec(id="x2", col=3, slot=2, align_char="周", align_op="equal", ref_run=1)       # 两格冲突、零全同
+    assert _drop_bad_recs(recs, sparse) is None
     assert "coord_conflict_drop_bad" not in AlignRefParams().model_dump()
     assert AlignRefParams(coord_conflict_drop_bad=True).model_dump()["coord_conflict_drop_bad"] is True
 
