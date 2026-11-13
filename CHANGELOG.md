@@ -31,6 +31,7 @@
 
 ## [未发版]
 
+- PATCH：Step3 行切分书级钩子 `row_hooks` 加 `jiazhu_pair_ok(patch, ink_threshold, forced)`（判一格是不是真并排两字；人指认小注格与段内格各查一次，判否就不拆），`jiazhu_heads` 多传 `ruler`（全唐文 k8 撤掉 row_boundaries／jiazhu_split 整文件 fork 用）。缺省 None 不调，殿本、史記产物和指纹不变；row_segment、row_boundaries、row_hooks 登 code_equiv，全唐文另登两项 SPLITS，各册 row_segment 指纹不变。
 - PATCH：删没书开、关时不进参数 dump 的切分开关（A22 开关收敛 L0 批，A20 11-14 定）：`border_detect.merge_narrow_pair`、`border_detect_gate.pagetype_model`（含 path、fingerprint）、`column_gate.period_edge_fallback`、`row_segment.colgold_prior`／`colgold_fingerprint`、`row_segment.yolo_merge`（含 `yolo_*` 六个）及只在开着时走的代码。四个模块登 code_equiv（殿本 vol01 13 页逐字节同），各书产物不过期。册配置里还写着这些键的会被静默忽略（没有书写）。`pagetype_model` 包、`impl/keben/column_pair_merge`、`yolo_tool_infer` 模块留着（闸认旗、研究脚本还用，且在 code_deps 里）。关时也进 dump 的另一批（page_survey_block、hint_ignore_dash、narrow_reject、dash_blank 等）随统一重跑轮删。
 
 ## [0.7.34] - 2026-11-13
