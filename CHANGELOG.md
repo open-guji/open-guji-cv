@@ -7,6 +7,11 @@
 
 ## [未发版]
 
+## [0.7.23] - 2026-11-13
+
+- 发版说明（A31 11-13，ZM 殿本 vol05 p1 列 4）：v0.7.22 + 下面一条，PATCH。
+-  加稀疏列例外：同列现役 equal 只有冲突这一格、没有全同格、现役字不是邻格坐标字时，也只丢该格（原口径要全同格 ≥3）。开关关着行为不变。
+
 ## [0.7.22] - 2026-11-13
 
 - PATCH：重跑后覆盖逻辑清查（ZM 11-13，只动 scripts/zhengli，不进任何 Step 指纹）：①`proof_cycle.human_chars_of` 改调 `feedback.lookup.human_chars`（过绑定表，对沙箱产物算），换图源后失效的老人裁不再被当成「被机器推翻」（殿本 vol03／05／08／09／18／20 线上单有 14 条这类假复审）；机器推翻人裁的复审行第 4 列带上旧人裁的字（出单门归一比对、网站「已有判断」靠它）。②`republish.py` 加 `sheet_gate`：push 前跑 guji-manager `review.sheet_audit`，机器无字当推翻人裁、失效旧人裁当被推翻、码位归一后同字、锚点格混进判字单、重复格都拦（`--ack-sheet-audit "<原因>"` 放行）；prep 把体检写进差异单。③锚点类待审格（A01/A02）随 manager 改放待审单旁表 `anchor_cells[]`，不进判字用的 `cells[]`。需 guji-manager ≥ 0.4.46。
