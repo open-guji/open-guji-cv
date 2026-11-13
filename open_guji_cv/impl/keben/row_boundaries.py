@@ -1279,7 +1279,7 @@ def snap_by_cut(cut: np.ndarray, row_proj: np.ndarray, bounds: Sequence[float], 
     上下结构的字就落进字内白缝（史記 42:31:8「實」切在貝腿上、往上挪进宀｜貫）。
     已知不足：上下两字粘成一个连通块时（42:36:5「思」心底粘着「其」顶横），小截那一边其实是上字的一部分，照样会挪错。
     但被挪的线可能落进别的字上下两部件之间的白缝（覀｜復、亠｜子：切割量也是 0），护栏 `gap_ok(cut, row_proj, y_from, y_to,
-    period) -> bool` 给了就逐个去处问一次，不许的去处跳过（缺省全收；字内白缝判据由「防横点字劈开」线做）。
+    period, prev, next) -> bool`（prev／next＝上下相邻格线现在的位置） 给了就逐个去处问一次，不许的去处跳过（缺省全收；字内白缝判据由「防横点字劈开」线做）。
 
     `bounds` 找缝窗口的中心（等距格网的名义格线；DP 格网就是它自己）、`snapped` 现在的格线；格数、格号不变，
     首末线不动（列端由框线、`grid_end_fit` 管）。"""
@@ -1321,7 +1321,7 @@ def snap_by_cut(cut: np.ndarray, row_proj: np.ndarray, bounds: Sequence[float], 
                 continue
         ok = [lo + i for i in np.flatnonzero(win <= cmin + SNAP_CUT_TOL * c0)]
         if gap_ok is not None:
-            ok = [y for y in ok if gap_ok(cut, row_proj, yb, y, period)]
+            ok = [y for y in ok if gap_ok(cut, row_proj, yb, y, period, out[k - 1], out[k + 1])]
         if not ok:
             continue
         best = min(ok, key=lambda y: (float(sm[min(y, len(sm) - 1)]) / full + SNAP_DIST_W * abs(y - y0) / r, abs(y - y0)))
