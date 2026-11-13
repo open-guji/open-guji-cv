@@ -1582,6 +1582,12 @@ ENTRIES: tuple[Equiv, ...] = (
           new='a7f43f47126728c8e206bd016cbffdc8e692ea52e32cc74e42312fd602d8c04a',
           old='8ff128e3e27f9a0b017c49a1ffdf38a750020858e4964b21d5c4653bbeb4dc8f',
           evidence=_SNAP_CUT),
+    # v0.7.26（史記 patch 线）补记：snap_cut 整字护栏在 patch 线上 row_boundaries 的哈希（dev 上不出现，只追加；
+    # seg.cut_select 的 patch 线 new 与 dev 同值而 old 不同，不追加，免得覆盖 dev 的登记）
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='5983f2059782aa6f4de8ea1c0197e2c892fd550eb324f994994c1aa1936613f9',
+          old='a7f43f47126728c8e206bd016cbffdc8e692ea52e32cc74e42312fd602d8c04a',
+          evidence=_GLYPH_GUARD),
 )
 
 
