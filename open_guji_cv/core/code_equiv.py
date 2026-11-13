@@ -1527,6 +1527,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='a9b84a4bb6ec9eee6d095e4919b41ea83e3e8deb86e6ee7973b386783c8d0dad',
           old='60563a317cd208ccda0c8804d69f03d2e2b31b8c4936c9eb258ca0598f0e35f8',
           evidence=_FR_HOOK_1113),
+    # v0.7.32 补丁线：#1523 coord_legacy_line_guard 移植（缺省关；史記 r61，A22 11-13；本线没有 coord_conflict_drop_bad）
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='a2bc661cbb0a0cf2fb4dd998b73a935facd04c2f9419fbfb089c363cc3616a5a',
+          old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
+          evidence='align_ref 在 37 231 页（--pages all）上与 v0.7.32 产物逐字节相同；史記 37 全册 231 页（v0.7.32 补丁线，开关关）；scripts/code_equiv.py check，2026-11-13（A22）'),
 )
 
 

@@ -465,3 +465,28 @@ def test_ref_hint_records_dp_cells_without_glyph_evidence_and_changes_nothing_el
 def test_ref_hint_off_not_in_params_dump():
     assert "coord_ref_hint" not in AlignRefParams(corpus="x").model_dump()
     assert AlignRefParams(corpus="x", coord_ref_hint=True).model_dump()["coord_ref_hint"] is True
+
+
+def test_legacy_line_guard_flags_chars_borrowed_from_other_lines():
+    """`coord_legacy_line_guard`（史記 37:2）：参校本第 6 列缺「正義」，现役把第 7 列末格配成下一列夹注里的「平」。
+    现役 equal 字不在本列整理本行里 → 跨行借字；在行里的、replace 的、列没定行的都不算。"""
+    from types import SimpleNamespace
+    from open_guji_cv.steps.align_ref import _borrowed_legacy, _fix_borrowed
+    lines = C.parse_lines("唐諸王侍讀率府長史張守節\n匈奴列傳第五十\n<正義此卷|或有本次平津侯後>\n")
+    leg = {
+        "6:16": AlignRec(id="6:16", col=6, slot=16, align_char="正", align_op="equal", ref_run=2),
+        "6:15": AlignRec(id="6:15", col=6, slot=15, align_char="節", align_op="equal", ref_run=5),
+        "7:8": AlignRec(id="7:8", col=7, slot=8, align_char="平", align_op="equal", ref_run=1),
+        "7:7": AlignRec(id="7:7", col=7, slot=7, align_char="X", align_op="replace", ref_run=1),
+        "8:4a": AlignRec(id="8:4a", col=8, slot=4, sub="a", align_char="或", align_op="equal", ref_run=3),
+        "9:1": AlignRec(id="9:1", col=9, slot=1, align_char="甲", align_op="equal", ref_run=3),
+    }
+    assert sorted(_borrowed_legacy(leg, {6: 0, 7: 1, 8: 2}, lines)) == ["6:16", "7:8"]
+    res = SimpleNamespace(chars=list(leg.values()), coord_note="dp 配列 6",
+                          coord=[SimpleNamespace(id="7:8", ref_char="十"), SimpleNamespace(id="6:16", ref_char="")])
+    _fix_borrowed(res, ["6:16", "7:8"])
+    assert (leg["7:8"].align_char, leg["7:8"].align_op, leg["7:8"].ref_run) == ("十", "replace", 1)
+    assert (leg["6:16"].align_char, leg["6:16"].align_op) == ("正", "equal")      # 坐标没给字：不动
+    assert res.coord_note.endswith("现役跨行借字 2 格（改坐标字 1）")
+    assert "coord_legacy_line_guard" not in AlignRefParams().model_dump()
+    assert AlignRefParams(coord_legacy_line_guard=True).model_dump()["coord_legacy_line_guard"] is True
