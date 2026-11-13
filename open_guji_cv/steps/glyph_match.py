@@ -269,6 +269,15 @@ class GlyphMatchParams(BaseModel):
     首位，证据落 `MatchRec.near_shape`；匹配器没判护栏的 unsure 格再升 same（`via="near_shape:<s>"`）。
     书级 yaml `params: {glyph_match: {near_shape: true}}` 可开。"""
 
+    sim_model: dict | str | None = None
+    """精验改用度量学习 CNN 的逐对相似度（2026-11-10，A23，`clustering.sim_cnn`）。None（缺省）＝照旧用覆盖分，
+    不进参数 dump，逐字节不变。`{path: models/glyph_sim_qtw/model.pt, same: 0.90, low: 0.50}`：分数 ≥ same 判 same、
+    ≥ low 判 unsure。**分数尺度与 cov 不同**，开了要按书重标 `consensus_cov`／`consensus_margin`、`font_tier.cov`。
+    书级 yaml `params: {glyph_match: {sim_model: {...}}}` 可开。"""
+    sim_model_sha: str = ""
+    """`sim_model` 开着时自动填：权重 sha256＋`clustering.sim_cnn` 代码哈希（`sim_cnn.sim_fingerprint`）。
+    硬参数：换权重或改 sim_cnn 这一步判过期；sim_cnn 不进 `code_deps`，不开的书不受它影响。"""
+
     borrow_fingerprint: str = ""
     """被借字形库的名字（`borrow_fingerprint()`，留空自动填）。硬参数：借的库换了，这一步判过期。
     没借库时是空串，不进参数 dump（参数哈希与 S6 之前逐位相同）。见模块头「借来的刻例」。"""
@@ -315,6 +324,9 @@ class GlyphMatchParams(BaseModel):
                 d.pop("cell_budget_s", None)
             if not d.get("borrow_fingerprint"):
                 d.pop("borrow_fingerprint", None)
+            if not d.get("sim_model"):
+                d.pop("sim_model", None)
+                d.pop("sim_model_sha", None)
             if not d.get("batch_knn"):
                 d.pop("batch_knn", None)
             if d.get("font_tier") in (None, False):
@@ -338,6 +350,9 @@ class GlyphMatchParams(BaseModel):
             object.__setattr__(self, "db_path", _default_db())
         if not self.db_fingerprint:
             object.__setattr__(self, "db_fingerprint", db_fingerprint(self.db_path))
+        if self.sim_model and not self.sim_model_sha:
+            from ..clustering.sim_cnn import SimModelConfig, sim_fingerprint
+            object.__setattr__(self, "sim_model_sha", sim_fingerprint(SimModelConfig.from_any(self.sim_model).path))
         if not self.borrow_fingerprint:
             object.__setattr__(self, "borrow_fingerprint", borrow_fingerprint(self.db_path))
         tier = _FontTier.rule(self.font_tier)
@@ -427,6 +442,8 @@ class GlyphMatchStep(Step):
             matcher = _with_same_gate(matcher, p.same_cov, p.same_wmax)
         if p.knn_per_char > 0:
             matcher = _with_knn_cap(matcher, p.knn_per_char, p.knn_per_char_top)
+        if p.sim_model:
+            matcher = _with_sim_model(matcher, p.sim_model)
         return matcher
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -674,6 +691,27 @@ def _with_knn_cap(matcher, per_char: int, per_char_top: int):
     g.per_char_top = int(per_char_top)
     _CAPPED.clear()
     _CAPPED[k] = (matcher, g)
+    return g
+
+
+_SIM: dict = {}
+
+
+def _with_sim_model(matcher, cfg):
+    """`sim_model`：缓存匹配器的浅拷贝，精验换成 CNN 逐对相似度（`clustering.sim_cnn.CnnVerifier`）。
+    整库嵌入只算一次（按 (原匹配器, 配置) 缓存，只留最近一份）；不改缓存里那份。"""
+    import copy
+    from ..clustering.sim_cnn import CnnVerifier, SimModelConfig
+    c = SimModelConfig.from_any(cfg)
+    k = (id(matcher), c)
+    hit = _SIM.get(k)
+    if hit is not None and hit[0] is matcher:
+        return hit[1]
+    g = copy.copy(matcher)
+    g._verify = CnnVerifier(c, matcher._patches)
+    g.verify_method = "cnn"
+    _SIM.clear()
+    _SIM[k] = (matcher, g)
     return g
 
 

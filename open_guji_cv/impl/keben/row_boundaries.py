@@ -1784,6 +1784,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     grid_end_fit: bool = False,
                     snap_cut: float = 0.0,
                     snap_gap_ok=None,
+                    grid_adjust=None,
+                    jiazhu_heads=None,
+                    half_a_left=None,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1877,6 +1880,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       还劈着字的格线按墨块切割量在 ±`snap_cut` 格内补挪（`snap_by_cut`；等距格网以名义格线为中心，DP 格网以 DP 格线为中心）；
       0＝关（缺省）。`snap_gap_ok` 是它的去处护栏（字内白缝不当字缝）；缺省 None 时有 `cut_judge` 就用 U-Net 整字护栏
       （`seg.cut_select.move_keeps_glyphs`，2026-11-13），没有裁判就不拦。
+    - `grid_adjust`／`jiazhu_heads`／`half_a_left`（书级钩子 `impl/keben/row_hooks`，2026-11-12）：缺省 None＝不调。
+      `grid_adjust` 在 `grid_bounds` 落缝前改格线；`jiazhu_heads` 在段端收编前补认段头；`half_a_left` 给只有一半有字的夹注格
+      定右半左缘。签名与用法见 `row_hooks` 模块头。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -1907,7 +1913,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     if grid_bounds is not None:
         if len(grid_bounds) != n_slots + 1:
             raise ValueError(f"grid_bounds 要 {n_slots + 1} 条格线，给了 {len(grid_bounds)}")
-        snapped = snap_to_gaps(row_proj, grid_bounds, period)
+        gb = grid_bounds if grid_adjust is None else grid_adjust(row_proj, grid_bounds, period, dst_w)
+        snapped = snap_to_gaps(row_proj, gb, period)
         if grid_end_fit:
             snapped = fit_grid_end(row_proj, snapped, period, border_bottom, dst_w)
         result = RowBoundaryResult(boundaries=snapped, blank_intervals=[], valleys=[], period=period)
@@ -1948,7 +1955,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         # 还劈着字的格线按墨块切割量补挪（等距格网以名义格线、DP 格网以 DP 格线为中心 ±snap_cut 格）；在人钉切线之前，钉子照旧赢
         from ...seg.seam import cut_cost_sides
         sides = cut_cost_sides(col_gray[:, x_lo:x_hi] < ink_threshold, max_h=SNAP_CUT_MAX_H * period)
-        center = grid_bounds if grid_bounds is not None else bounds
+        center = gb if grid_bounds is not None else bounds
         gap_ok = snap_gap_ok
         if gap_ok is None and cut_judge is not None:
             # 整字护栏（2026-11-13）：U-Net 归属裁判看上下两格整个窗口，挪后不比原位更不像两个整字才许挪（字内白缝不当字缝）
@@ -2047,6 +2054,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         # 列中间立着一条细竖线（界行墨）= 两列正文被当成了一列（Step1 列切错，vol03 p49c3 / p107c4），
         # 不是夹注列：段端收编不做，免得把两列正文的一行行收成「小注」（用户 09-29 实审点出 49:3:15–16）。
         # 只是护栏，不改 link_runs 自己认下的段；Step1 切对之后这道闸自然不触发。
+        if jiazhu_heads is not None and not _mid_rule_line(col_ink):
+            runs.update(jiazhu_heads(entries, runs, patches, eligible=nonblank, ink_threshold=ink_threshold))
         if not _mid_rule_line(col_ink):
             runs, tail_a = jiazhu_split.adopt_run_tails(
                 runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
@@ -2158,7 +2167,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if pos in half_side:
                 sides = tuple(t for t in sides if t[0] == "jiazhu_" + half_side[pos])
             elif pos in one_half:
-                sides = (max(sides, key=lambda t: int((patches[pos][:, t[1]:t[2]] < ink_threshold).sum())),)
+                x0a = half_a_left(patches[pos], cxi, ink_threshold) if half_a_left is not None else None
+                if x0a is not None:
+                    # 缝也挪到放宽后的左缘：下游（cell_shrink 的 jiazhu_cx）按缝裁右半
+                    sides, cx = (("jiazhu_a", x0a, x_hi - x_lo),), float(x_lo + x0a)
+                else:
+                    sides = (max(sides, key=lambda t: int((patches[pos][:, t[1]:t[2]] < ink_threshold).sum())),)
             for kind, xs, xe in sides:
                 if kind == "jiazhu_b" and pos in tail_a and pos not in one_half:
                     continue

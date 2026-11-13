@@ -51,6 +51,9 @@ def _setup(tmp_path):
     online.parent.mkdir(parents=True)
     online.write_text(json.dumps({"rev": "006-r2", "cells": [{"cell": c, "review": "pending"} for c in
                                                              ("1:1:1", "1:1:2", "1:1:9")]}), encoding="utf-8")
+    web0 = ws / "feedback" / "lists" / "web" / "abc123"           # 旧单 0 票：同步下来的是空快照（读不到快照会停）
+    web0.mkdir(parents=True, exist_ok=True)
+    (web0 / "006-r2.jsonl").write_text("", encoding="utf-8")
     ev = ws / "feedback" / "events"
     ev.mkdir(parents=True)
     ev.joinpath("a.jsonl").write_text(json.dumps({"kind": "confirm", "ts": "2026-10-20T00:00:00Z",
@@ -95,7 +98,7 @@ def test_push_refuses_while_old_votes_unlanded(tmp_path, monkeypatch):
     assert rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export),
                     "--no-alt", "--no-sprite", "--cv-commit", "abc1234"]) == 0
     web = ws / "feedback" / "lists" / "web" / "abc123" / "006-r2.jsonl"
-    web.parent.mkdir(parents=True)
+    web.parent.mkdir(parents=True, exist_ok=True)
     vote = lambda a, choice, ch="": {"book": "abc123", "rev": "006-r2", "a": a, "choice": choice, "char": ch, "voter": "u1", "ts": 1}
     web.write_text("\n".join(json.dumps(v) for v in (
         vote("1:1:3", "char", "甲"),          # 已有人裁：落了
@@ -405,9 +408,12 @@ def test_add_anchor_reasons(tmp_path):
     rp.add_anchor_reasons(pend, tmp_path, None, "001")                                    # 没给 book-text：不动
     assert len(json.loads(pend.read_text(encoding="utf-8"))["cells"]) == 1
     rp.add_anchor_reasons(pend, tmp_path, tmp_path, "001")
-    cells = {c["cell"]: c for c in json.loads(pend.read_text(encoding="utf-8"))["cells"]}
-    assert cells["1:1:3"]["pending_reason"] == "anchor_miss" and cells["1:1:3"]["src"] == "closeout_anchor"
-    assert cells["1:1:1"]["pending_reason"] == "group_abstain"
+    doc = json.loads(pend.read_text(encoding="utf-8"))
+    cells = {c["cell"]: c for c in doc["cells"]}
+    # 只因标点要重挂的格（字没问题）放 anchor_cells[]，不混进判字用的 cells[]（11-13）
+    assert list(cells) == ["1:1:1"] and cells["1:1:1"]["pending_reason"] == "group_abstain"
+    side = {c["cell"]: c for c in doc["anchor_cells"]}
+    assert side["1:1:3"]["pending_reason"] == "anchor_miss" and side["1:1:3"]["src"] == "closeout_anchor"
 
 
 def test_closeout_derive_after_text_push(tmp_path, monkeypatch, capsys):
@@ -552,3 +558,83 @@ def test_add_del_chars_route_to_cellmap(tmp_path, monkeypatch):
     monkeypatch.setattr(rp, "_bump_book_text_cellmap", lambda r, plan, note, base: "cellmap")
     plan = {"text_id": "x", "chapter": "001", "export_dir": str(ex)}
     assert rp.bump_book_text(repo, plan, "t") == "cellmap"
+
+
+def test_sheet_gate_blocks_false_overturn(capsys):
+    """出单门（11-13）：机器无字当「推翻人裁」、失效老人裁当「被推翻」、锚点格混进判字单，都不让上线。"""
+    pytest.importorskip("guji_manager.review.sheet_audit")
+    ws = Path("/nonexistent-ws")
+    good = {"cells": [{"cell": "1:1:1", "pending_reason": "hard_pair"}], "anchor_cells": [{"cell": "9:1:1", "src": "closeout_anchor"}]}
+    a = type("A", (), {})()
+    rp.sheet_gate(good, ws, "vol06", a)                       # 通过，不退出
+    bad = {"cells": [{"cell": "1:4:7", "recheck": True, "pending_reason": "machine_changed",
+                      "note": "机器改判「卷」→「□」，推翻人裁，请核"}]}
+    with pytest.raises(SystemExit) as e:
+        rp.sheet_gate(bad, ws, "vol06", a)
+    assert "单子体检不过" in str(e.value)
+    a.ack_sheet_audit = "测试放行"
+    rp.sheet_gate(bad, ws, "vol06", a)                        # 写明原因可放行
+
+
+def test_need_source_images_stops_without_raw(monkeypatch):
+    """原图不在：绑定会把老人裁大片判成 unanchored 悄悄丢掉，出单前必须停（11-13 vol04）。"""
+    import open_guji_cv.core.book as bookmod
+
+    class FakeBook:
+        def __init__(self, pages):
+            self._p = pages
+
+        def all_pages(self):
+            return self._p
+
+    monkeypatch.setattr(bookmod, "load_book", lambda b: FakeBook([]))
+    with pytest.raises(SystemExit) as e:
+        rp.need_source_images("vol04")
+    assert "guji source pull vol04" in str(e.value)
+    monkeypatch.setattr(bookmod, "load_book", lambda b: FakeBook([1, 2]))
+    rp.need_source_images("vol04")
+
+
+def test_http_sends_referer(monkeypatch):
+    seen = {}
+
+    class R:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b""
+
+    import urllib.request
+
+    def fake(req, timeout=0):
+        seen.update(req.headers)
+        return R()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    rp._http("https://data.openguji.com/x", method="HEAD")
+    assert seen.get("Referer") == "https://www.openguji.com/"
+
+
+def test_old_rev_votes_reads_both_modes_and_refuses_when_nothing(tmp_path, monkeypatch):
+    """11-13 第五册 005-r13 的 25 票漏落：只查一种记法、读不到又当 0 票。现在两种都读，读不到就停。"""
+    monkeypatch.delenv("CELLREVIEW_TOKEN", raising=False)
+    monkeypatch.setattr(rp, "data_dir", lambda ws: tmp_path)
+    with pytest.raises(SystemExit):
+        rp.old_rev_votes(tmp_path, "bk", "005-r13")
+    wd = tmp_path / "feedback" / "lists" / "web" / "bk"
+    wd.mkdir(parents=True)
+    byrev = {"book": "bk", "rev": "005-r13", "a": "1:1:1", "choice": "char", "char": "甲", "voter": "u1", "ts": 1}
+    itemv = {"book": "bk", "vol": "005", "rev": "005-r17", "item": "pi_x", "a": "9:9:9", "choice": "char", "char": "乙", "voter": "u1", "ts": 2}
+    (wd / "005-r13.jsonl").write_text(json.dumps(byrev) + "\n", encoding="utf-8")
+    (wd / "items.jsonl").write_text(json.dumps(itemv) + "\n" + json.dumps({**itemv, "item": "pi_lost"}) + "\n", encoding="utf-8")
+    from guji_manager.review import pending_items as P
+    monkeypatch.setattr(P.ItemStore, "open", classmethod(lambda cls, d, t, c: type("S", (), {"items": {"pi_x": {"id": "pi_x", "cell": "2:2:2"}}})()))
+    votes, src = rp.old_rev_votes(tmp_path, "bk", "005-r13")
+    assert sorted((v["a"], v["rev"]) for v in votes) == [("1:1:1", "005-r13"), ("2:2:2", "005-r13")]
+    assert "按条目 1 票" in src

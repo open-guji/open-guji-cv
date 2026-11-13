@@ -184,6 +184,10 @@ class BorderDetectParams(BaseModel):
     倾角 0.035，真框在 128–146 行），整页上框、抬头全错。开了贴图顶时在 ±0.05 各档倾角里找离开图顶的最好峰。
     缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
 
+    expected_cols_pages: dict[int, int] = {}
+    """按页列数（2026-11-12，殿本 vol01 p100：图上 10 列、版框只探出 9 列，参校本质检）：`{页: 本页列数}`，覆盖册级 `expected_cols`。
+    职名页、个别页列数与册级不同时用；一般同 `vline_overrides` 配用（给出本页全部竖线）。border_detect、border_detect_gate、
+    column_gate 三处都要写同一张表。缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
     vline_overrides: dict[int, list[float]] = {}
     """页级人核竖线（2026-11-02，史記文淵閣本 06 p63、04 p122 类）：自由／网格模式在右（左）外框被扫描裁掉、
     小注双行带内多出一条假界行的页上都挑不对界行（整列漏掉、小注缝被当成列界）。点名的页用人核给的界行
@@ -230,6 +234,8 @@ class BorderDetectParams(BaseModel):
             d.pop("bottom_lock_reslope", None)
         if isinstance(d, dict) and not self.top_edge_reslope:
             d.pop("top_edge_reslope", None)
+        if isinstance(d, dict) and not self.expected_cols_pages:
+            d.pop("expected_cols_pages", None)
         if isinstance(d, dict) and not self.vline_overrides:
             d.pop("vline_overrides", None)
         if isinstance(d, dict) and not self.hline_hints:
@@ -266,7 +272,7 @@ class BorderDetectStep(Step):
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: BorderDetectParams = ctx.params_for(self)  # type: ignore[assignment]
-        cols = p.expected_cols or ctx.book.expected_cols
+        cols = p.expected_cols_pages.get(page) or p.expected_cols or ctx.book.expected_cols
         gray = ctx.raw_page(page)
         H, W = gray.shape[:2]
         grid = ctx.book.column_grid

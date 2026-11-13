@@ -111,7 +111,7 @@ def test_split_changes_human_vs_machine_and_revert(tmp_path):
     new = _char(tmp_path, "new.json", [("3:1:1", "官"), ("3:1:2", "論"), ("3:1:3", "彖"), ("3:1:4", "甲"), ("3:1:5", "已")])
     sp = pc.split_changes(old, new, {"3:1:2": "論", "3:1:3": "象"})
     assert sp == {"human": [("3:1:2", "", "論")], "overrule": [("3:1:3", "象", "彖")],
-                  "machine": [("3:1:1", "宫", "官"), ("3:1:5", "", "已")], "norm": []}
+                  "machine": [("3:1:1", "宫", "官"), ("3:1:5", "", "已")], "norm": [], "keep": []}
     pc.revert_cells(new, {a: o for a, o, _ in sp["overrule"]})
     assert pc._cells(new) == {"3:1:1": "官", "3:1:2": "論", "3:1:3": "象", "3:1:4": "甲", "3:1:5": "已"}
 
@@ -162,3 +162,46 @@ def test_engine_version_from_tag(tmp_path):
     assert pc.engine_version(tmp_path) is None
     g("tag", "v0.5.17")
     assert pc.engine_version(tmp_path) == "0.5.17"
+
+
+def test_split_changes_empty_new_keeps_human(tmp_path):
+    """机器无字（印章遮挡 admit=false，新字空）而旧字是人裁＝keep：留人裁字、不算推翻、不复审；旧字非人裁则走原逻辑（殿本 vol05 1:4:13）。"""
+    old = _char(tmp_path, "old.json", [("3:1:1", "象"), ("3:1:2", "甲"), ("3:1:3", "乙")])
+    new = _char(tmp_path, "new.json", [("3:1:1", ""), ("3:1:2", ""), ("3:1:3", "")])
+    sp = pc.split_changes(old, new, {"3:1:1": "象"})
+    assert sp["keep"] == [("3:1:1", "象", "")] and sp["overrule"] == []
+    assert sp["machine"] == [("3:1:2", "甲", ""), ("3:1:3", "乙", "")]
+    pc.revert_cells(new, {a: o for a, o, _ in sp["keep"]})
+    assert pc._cells(new) == {"3:1:1": "象", "3:1:2": "", "3:1:3": ""}
+
+
+def test_human_chars_of_uses_bound_lookup(tmp_path, monkeypatch):
+    """人裁口径只有一个（lookup.human_chars，过绑定表）；格位去册前缀；绑定表对着沙箱产物算（env 临时设、用完还原）。"""
+    import os
+    seen = {}
+
+    def fake(book):
+        seen.update(ws=os.environ.get("GUJI_WORKSPACE"), prod=os.environ.get("GUJI_PRODUCTS_DIR"))
+        return {"vol05:1:4:1": "撰", "vol05:2:1:1": "周"}
+
+    import open_guji_cv.feedback.bindings as BD
+    import open_guji_cv.feedback.lookup as LK
+    monkeypatch.setattr(LK, "human_chars", fake)
+    monkeypatch.setattr(BD, "book_bindings", lambda book: {})
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    got = pc.human_chars_of(tmp_path, "vol05", tmp_path / "sb")
+    assert got == {"1:4:1": "撰", "2:1:1": "周"}
+    assert seen == {"ws": str(tmp_path), "prod": str(tmp_path / "sb")}
+    assert "GUJI_PRODUCTS_DIR" not in os.environ
+
+    def boom(book):
+        raise RuntimeError("no such table: instances")
+    monkeypatch.setattr(BD, "book_bindings", boom)
+    with pytest.raises(RuntimeError, match="绑定表算不出来"):      # 不悄悄退回按格号
+        pc.human_chars_of(tmp_path, "vol05", tmp_path / "sb")
+
+
+def test_overturn_rows_carry_prior_char():
+    """机器推翻人裁的复审行第 4 列要带旧人裁的字（出单门归一比对、网站「已有判断」都靠它）。"""
+    import inspect
+    assert '\\t\\t{o}\\t' in inspect.getsource(pc.cmd_apply)

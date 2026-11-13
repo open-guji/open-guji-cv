@@ -135,3 +135,97 @@ def test_seg_primitive_frame_only_edge_cells():
     spans = [(100, 200), (200, 300), (300, 400)]
     assert frame_only_edge_cells(g, spans, (0, 100), 100.0, 400.0, 100.0) == [2]
     assert frame_only_edge_cells(g, spans, (0, 100), 100.0, None, 100.0) == []
+
+
+# ── ①c 漏切块 ────────────────────────────────────────────────────────────
+
+def _orph_col():
+    """列宽 100，四个字格（y 100–200、200–300、400–500、500–600），300–400 那个字没切进任何格。"""
+    g = _img(800)
+    boxes = [(20, y, 80, y + 100) for y in (100, 200, 400, 500)]
+    for y in (100, 200, 300, 400, 500):
+        g[y + 20:y + 80, 30:70] = 0
+    return g, boxes
+
+
+def test_orphan_reports_char_outside_boxes():
+    g, boxes = _orph_col()
+    hits = ss.orphan_ink(g, boxes)
+    assert len(hits) == 1
+    h = hits[0]
+    assert h["where"] == "mid" and h["bbox"][1] == 320 and h["ratio"] == 1.0
+
+
+def test_orphan_clean_column_and_no_boxes():
+    g, boxes = _orph_col()
+    g[300:400] = 255                                   # 中间那字擦掉
+    assert ss.orphan_ink(g, boxes) == []
+    assert ss.orphan_ink(g, []) == []
+
+
+def test_orphan_strips_ruling_and_frame_lines():
+    """界行（贯穿整列的竖线）把各字连成一块、版框横线落在格外：剥掉后都不报。"""
+    g, boxes = _orph_col()
+    g[300:400] = 255
+    g[:, 48:51] = 0                                    # 界行穿过所有字
+    g[30:36, :] = 0                                    # 上版框
+    g[700:706, :] = 0                                  # 下版框
+    assert ss.orphan_ink(g, boxes) == []
+
+
+def test_orphan_ignores_small_specks_and_side_edges():
+    g, boxes = _orph_col()
+    g[300:400] = 255
+    g[340:346, 40:46] = 0                              # 小墨点（< 150px）
+    g[320:380, 0:15] = 0                               # 贴左边的邻列字边
+    assert ss.orphan_ink(g, boxes) == []
+
+
+def _tail_page():
+    """两格（格高 100，界线 y=200）：上格字的竖笔拖到 235，下格字从 240 起——y=200 的格线劈了竖笔尾。"""
+    cc = _col(1, [1, 2])
+    g = _img(400)
+    g[120:190, 30:70] = 0
+    g[120:236, 40:50] = 0                     # 竖笔尾伸进下格 36 行（切割量 360px ≥ 0.025×格高²）
+    g[240:290, 30:70] = 0
+    return g, cc
+
+
+class _Judge:
+    def __init__(self, scores):
+        self.scores, self.calls = scores, []
+
+    def assess(self, col_gray, x_lo, x_hi, y0, y1, y_line, seams, ink_threshold=128):
+        self.calls.append((y0, y1, y_line, seams))
+        return list(self.scores), [0, 0]
+
+
+def test_cut_through_reports_stroke_tail_cut():
+    g, cc = _tail_page()
+    hits = ss.cut_through(g, cc)
+    assert len(hits) == 1
+    h = hits[0]
+    assert (h["slot_above"], h["slot_below"]) == (1, 2) and h["cost"] == 360 and h["best"] == 0
+    assert 36 <= h["move"] <= 39 and h["level"] == "中"
+
+
+def test_cut_through_judge_gates_report():
+    g, cc = _tail_page()
+    ok = _Judge([0.90, 0.99])                 # 挪后归属更对：报
+    assert len(ss.cut_through(g, cc, judge=ok)) == 1
+    _y0, _y1, y_line, seams = ok.calls[0]
+    assert y_line == 200 and seams[0] is None and int(seams[1][0]) >= 236
+    assert ss.cut_through(g, cc, judge=_Judge([0.99, 0.85])) == []      # 挪后掉太多（挪进字内白缝）：不报
+    assert len(ss.cut_through(g, cc, judge=_Judge([0.99, 0.93]))) == 1  # 掉不到 CUT_JUDGE（只动钩尖）：报
+
+
+def test_cut_through_follows_seam_and_skips_blank_pairs():
+    g, cc = _tail_page()
+    seam = [200] * 100
+    seam[38:52] = [238] * 14                  # Step3 折线绕到竖笔尾下面：没劈
+    cc.cells[1].seam_top = seam
+    assert ss.cut_through(g, cc) == []
+    g2 = _img(400)
+    cc2 = _col(1, [1, 2], kinds={1: "blank", 2: "blank"})
+    g2[150:250, 40:50] = 0                    # 两格都空（墨不算字）：不看
+    assert ss.cut_through(g2, cc2) == []

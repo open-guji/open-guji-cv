@@ -38,7 +38,7 @@ def questions_of_page(page_doc: dict) -> list[dict]:
         g = ((r.get("evidence") or {}).get("group") or {})
         for t in g.get("solvers") or []:
             ask = t.get("ask")
-            if not ask or t.get("why") != PENDING:
+            if not ask or (t.get("why") != PENDING and not t.get("ask_rf")):   # ask_rf：ruling_first 组 L2 小头给的字也交对话核
                 continue
             out.append({"group": g.get("id"), "ver": ask.get("ver"), "l": ask.get("l") or "", "r": ask.get("r") or "",
                         "cell": r.get("id"), "cur": r.get("char")})
