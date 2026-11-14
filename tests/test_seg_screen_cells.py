@@ -128,3 +128,24 @@ def test_block_tall():
     assert ss.block_tall(150, 128) is None          # 带 padding 的人工定框格，1.2 倍
     assert ss.block_tall(60, 40) is None            # 小格取整误差：倍数够但多出不到 24px
     assert ss.block_tall(100, 0) is None
+
+
+def test_align_drift_patterns():
+    """史記 R017（11-14）：对位串错·疑整列错位。37:170:4 釣劈成加匈、曰賞并成豆，格态 bnObOO…Obb。"""
+    assert ss.align_drift("bnObOOROOOROOROOOObb") == ["split", "unsettled"]
+    assert ss.align_drift("OObbbbbbbOOOO") == ["run", "unsettled"]
+    assert ss.align_drift("OOOBBBOOO") == []                  # 全放行的对不上（字形匹配弱）不报
+    assert ss.align_drift("OOoooooOO") == []                  # 对得上只是没放行，不算
+    assert ss.align_drift("ORRROOBOO") == []                  # 生僻字通道放行的不算
+    assert ss.align_drift("OBbBOOO") == ["run"]
+
+
+def test_cell_states_uses_glyph_not_admit_char():
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
+
+    col = ColumnAdmit(col=1, chars=[AdmitRec(id="b:1:1:1", slot=1, admit=True, channel="match_ref", char="釣"),
+                                    AdmitRec(id="b:1:1:2", slot=2, admit=False, char="匈"),
+                                    AdmitRec(id="b:1:1:3", slot=3, admit=True, channel="rare_ref", char="虛")])
+    ref = {"b:1:1:1": "釣", "b:1:1:3": "虛"}
+    glyph = {"b:1:1:1": ["加"], "b:1:1:2": ["匈"], "b:1:1:3": ["虚"]}
+    assert ss.cell_states(col, ref, glyph) == "BnR"

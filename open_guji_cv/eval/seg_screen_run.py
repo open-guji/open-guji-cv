@@ -16,6 +16,8 @@
   `ref_check=False` 关掉豁免（照旧全报）；
 - block_tall（2026-11-13）：cell_shrink 字块高 ≥ 本格 row_segment 格高 1.35 倍（且多 24px 以上），字块连上了格外的墨（长竖线、印章、邻字）；
   列末格不查，一格一行，value＝倍数；
+- align_drift（2026-11-14，史記 R017）：对位串错·疑整列错位——一列里连续 ≥3 格对不上参校字（至少一格没放行）、列中没配到参校字的格挨着没放行的对不上格（劈）、
+  或没放行且对不上的格 ≥3；value＝run／split／unsettled，note＝格态串（O 对上、B 对不上、R 生僻字通道、N 没配到参校字，小写＝没放行）；钉子列不查；
 - pin_stale：中心库有 active 钉子、本页产物却没用上（产物早于钉子，要从 row_segment 重跑）。
 
 钉子列（产物带 `manual_cells` 旗）只比格号、不跑墨账与端外墨（SJ 第 5 条）；有钉子而产物没用上的列照普通列查；职名列不跑端外墨。`skip` 点名的页整页不查（书配置
@@ -124,8 +126,11 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
         win_by_col = {} if wins is None else {w.col: w for w in wins.columns}
         lay_page = {col: r for (pg, col), r in layout.items() if pg == page}
         pitch = ss.page_pitch(cells)
-        conf = ss.ref_confirmed(store.read(book, "glyph_match", key, "glyph_match"),
-                                store.read(book, "align_ref", key, "align_ref")) if ref_check else {}
+        glyph_p, aref_p = store.read(book, "glyph_match", key, "glyph_match"), store.read(book, "align_ref", key, "align_ref")
+        conf = ss.ref_confirmed(glyph_p, aref_p) if ref_check else {}
+        adm_p = store.read(book, "seed_admit", key, "seed_admit")
+        adm_by_col = {} if adm_p is None or aref_p is None else {a.col: a for a in adm_p.columns}
+        ref_p, glyph_top = ss.page_ref_glyph(aref_p, glyph_p) if adm_by_col else ({}, {})
 
         shifted = {cc.col for cc in cells.columns if any(str(f).startswith("layout_shift") for f in cc.flags)}
         _ref_ok = functools.partial(_geo_ref_ok, conf, shifted)
@@ -159,6 +164,12 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             if ss.pitch_free_ignored(cc, lay_page.get(cc.col)):
                 rows["pitch_free_ignored"].append((book, page, cc.col, "", "表写 pitch: free，选中挤格补线格网"))
                 c["pitch_free_ignored"] += 1
+            if not pinned and cc.col in adm_by_col:     # 对位串错只读产物，不要列图；钉子列只比格号
+                st = ss.cell_states(adm_by_col[cc.col], ref_p, glyph_top)
+                dr = ss.align_drift(st)
+                if dr:
+                    rows["align_drift"].append((book, page, cc.col, ",".join(dr), st))
+                    c["align_drift"] += 1
             gray = _img(ctx, book, "column_image", column_key(page, cc.col))
             if gray is None:
                 continue
