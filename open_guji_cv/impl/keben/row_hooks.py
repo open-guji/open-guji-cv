@@ -17,6 +17,10 @@
   中段没有一列空白的是左右结构的整字）。两处调：人指认雙行小注的格（`forced=True`）判 False 就不拆；段端收编、
   摘掉人定整宽正文之后，段里除段尾收编的右半单字外判 False 的格从段里摘掉（`forced=False`）。每列都调。
   （2026-11-13 全唐文切分线，A22《切分开关收敛》QTW 第 3 条：row_boundaries fork 改钩子。）
+- `edge_frame_only(gray, spans, content_x, border_top, border_bottom, period, ink_threshold) -> list[int]`：补认
+  「列端格里只有版框线」（`row_segment` 的 P5 判据 `seg/profile.frame_only_edge_cells` 之外），返回 `spans`（一列全部格按 y
+  排好的 (y0, y1)）的下标（0 或末位），与缺省判据取并集、照样记空打 frame_line。人裁整列不调。每列都调。
+  （2026-11-14 全唐文 R018：空列首格把粗框条＋细线切成「一／幸／士」，框条离 border_top 远过缺省判据的 0.2 格高。）
 
 开关开着而本书没给对应函数就拒跑（悄悄当关，这本书的切法变了没人知道）。
 """
@@ -27,3 +31,4 @@ grid_adjust = None
 jiazhu_heads = None
 half_a_left = None
 jiazhu_pair_ok = None
+edge_frame_only = None

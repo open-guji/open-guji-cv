@@ -89,3 +89,41 @@ def test_jiazhu_heads_gets_ruler():
 
     assert repr(_seg_jz(jiazhu_heads=heads)) == repr(_seg_jz())
     assert got and got[0] == float(COL_W)
+
+
+def test_edge_frame_only_default_none():
+    assert row_hooks.edge_frame_only is None
+
+
+def _rs_cells(tmp_path, monkeypatch, book, fixture_page, hook):
+    import open_guji_cv.steps  # noqa: F401  —— 注册产物种类与步骤
+    from helpers import run_keben_from_raw
+
+    monkeypatch.setattr(row_hooks, "edge_frame_only", hook)
+    _, out = run_keben_from_raw(tmp_path, monkeypatch, book=book, gray=fixture_page,
+                                through="row_segment", memo=False)
+    return out["cells"].columns
+
+
+def test_edge_frame_only_empty_keeps_result_and_is_called(tmp_path, monkeypatch, keben_book, fixture_page):
+    """钩子返回 [] → 与不给钩子产物相同；每列都调，拿到的是按 y 排好的格。"""
+    calls = []
+
+    def hook(gray, spans, content_x, border_top, border_bottom, period, ink_threshold):
+        calls.append(spans)
+        return []
+
+    base = _rs_cells(tmp_path / "a", monkeypatch, keben_book, fixture_page, None)
+    got = _rs_cells(tmp_path / "b", monkeypatch, keben_book, fixture_page, hook)
+    assert [c.model_dump() for c in got] == [c.model_dump() for c in base]
+    assert len(calls) >= len([c for c in base if c.ok])
+    assert all(s == sorted(s) for s in calls)
+
+
+def test_edge_frame_only_marks_first_cell_blank(tmp_path, monkeypatch, keben_book, fixture_page):
+    """钩子说首格只有框线 → 首格记空、打 frame_line，列上打 edge_frame_only 旗。"""
+    got = _rs_cells(tmp_path / "c", monkeypatch, keben_book, fixture_page, lambda *a: [0])
+    col = next(c for c in got if c.ok and c.cells)
+    first = min(col.cells, key=lambda x: x.y0)
+    assert first.kind == "blank" and "frame_line" in first.flags
+    assert any(f.startswith("edge_frame_only") for f in col.flags)
