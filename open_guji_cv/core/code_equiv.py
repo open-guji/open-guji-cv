@@ -52,7 +52,7 @@ _DROP_L0_1114 = ("删缺省关、没书开、关时不进参数 dump 的开关�
                  "column_gate、row_segment 与 origin/dev 84f5bc28 产物逐字节相同；scripts/code_equiv.py check，2026-11-14（A22）")
 _QTW_HOOKS_1113 = ("row_hooks 加书级钩子 jiazhu_pair_ok（缺省 None，不调）、jiazhu_heads 多传 ruler（只在钩子非 None 时调）："
                    "殿本 fixture 册 keben 冻结三页（tests/fixtures/workspace/raw/keben 1–3）row_segment 与 origin/dev 84f5bc28 产物逐字节相同；"
-                   "全唐文 k8（书仓 fork 改钩子）对 k6 fork：054 全册 row_segment→cell_shrink 产物逐字节相同（同包 cv0.7.31-c68-g-02bb02-k6-qtw054-n1 当上游）；"
+                   "全唐文 k8（书仓 fork 改钩子，cv 本分支）对 k6 fork（cv v0.7.31）：054 全册 180 页（包 cv0.7.31-c68-g-02bb02-k6-qtw054-n1）、115 全册 208 页（判、小注密，包 cv0.7.31-c69-g-02bb02-k6-qtw115-p1）row_segment→cell_shrink 产物逐字节相同；"
                    "2026-11-13（全唐文切分线）")
 
 _GM_1020 = ("glyph_match 提速（wmax 按需算、同格查找分桶、HOG 向量化）：vol04 46 页（每 5 页取 1，加 p17/p100/p186，含夹注与最慢页）、vol06 15 页（每 10 页取 1）与改前 529f071 产物逐字节相同，4 进程；scripts/code_equiv.py check，2026-10-20")
@@ -1817,10 +1817,10 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
         ("open_guji_cv.impl.keben.patch_clean", "44241a22b9f46de4a70feb68662ece757511aa86727cfe2b0034a1d8a56db16e"))),
     # 全唐文 k8（2026-11-13 切分线）：书仓 row_boundaries、jiazhu_split 两份整文件 fork（k6 那一版）撤掉，差异挂成书级钩子
     # guji_book.quantangwen.row_hooks。几块都还是登记时那一版时：cv row_boundaries＋书仓 row_hooks 合回 k6 书仓 row_boundaries
-    # 一项，cv jiazhu_split＋seg_overrides 合回 k6 书仓 jiazhu_split 一项，全唐文各册 row_segment 指纹不变（054、013 全册逐字节相同）。
+    # 一项，cv jiazhu_split＋seg_overrides 合回 k6 书仓 jiazhu_split 一项，全唐文各册 row_segment 指纹不变（054、115 全册逐字节相同）。
     # 书仓 row_hooks 只有全唐文有，第一项只在全唐文合；别的书 seg_overrides 已被上面 seal_ink 两项收走，第二项合不上。
     # 两项必须排在 seal_ink 两项之后。column_gate 的模块表只有 row_boundaries、没有书级模块，认不出是全唐文，
-    # 全唐文 column_gate 指纹会变一次（产物不变，下游按上游产物 sha 不过期；054 四页 column_gate 逐字节相同）。
+    # 全唐文 column_gate 指纹会变一次（产物不变，下游按上游产物 sha 不过期；115 全册 208 页 column_gate 逐字节相同）。
     "guji_book.quantangwen.row_boundaries": ("99682ac7af551c7f03ffc321bcfb5c8e94be249909d10f358d14527f067f43c3", (
         ("open_guji_cv.impl.keben.row_boundaries", "4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c"),
         ("guji_book.quantangwen.row_hooks", "d903be4d92599f4e37c60203c4d30253b72c291f004fc094e30afc2aadcfe139"))),
