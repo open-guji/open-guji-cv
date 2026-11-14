@@ -16,8 +16,9 @@
   `ref_check=False` 关掉豁免（照旧全报）；
 - block_tall（2026-11-13）：cell_shrink 字块高 ≥ 本格 row_segment 格高 1.35 倍（且多 24px 以上），字块连上了格外的墨（长竖线、印章、邻字）；
   列末格不查，一格一行，value＝倍数；
-- align_drift（2026-11-14，史記 R017）：对位串错·疑整列错位——一列里连续 ≥3 格对不上参校字（至少一格没放行）、列中没配到参校字的格挨着没放行的对不上格（劈）、
-  或没放行且对不上的格 ≥3；value＝run／split／unsettled，note＝格态串（O 对上、B 对不上、R 生僻字通道、N 没配到参校字，小写＝没放行）；钉子列不查；
+- align_drift（2026-11-14，史記 R017；当天按 SJ 抽看收紧）：对位串错·疑整列错位——没配到参校字的格挨着没放行的对不上格（劈）、
+  连续 ≥2 格没放行且对不上、或连续 ≥5 格对不上；考證列不查；一页报出 ≥3 列的 value 加 `page`（整页的事，降成提示）；
+  value＝split／pair／run（＋page），note＝格态串（O 对上、B 对不上、R 生僻字通道、N 没配到参校字，小写＝没放行）；钉子列不查；
 - pin_stale：中心库有 active 钉子、本页产物却没用上（产物早于钉子，要从 row_segment 重跑）。
 
 钉子列（产物带 `manual_cells` 旗）只比格号、不跑墨账与端外墨（SJ 第 5 条）；有钉子而产物没用上的列照普通列查；职名列不跑端外墨。`skip` 点名的页整页不查（书配置
@@ -140,6 +141,7 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             rows["layout_col_shift"].append((book, page, "", sh["shift"],
                                              f"不挪对上 {sh['match0']}/{sh['cols']}，挪后 {sh['match']}"))
             c["layout_col_shift"] += 1
+        drift_page: list[list] = []
         for cc in cells.columns:
             if not cc.ok:
                 continue
@@ -166,10 +168,9 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
                 c["pitch_free_ignored"] += 1
             if not pinned and cc.col in adm_by_col:     # 对位串错只读产物，不要列图；钉子列只比格号
                 st = ss.cell_states(adm_by_col[cc.col], ref_p, glyph_top)
-                dr = ss.align_drift(st)
+                dr = ss.align_drift(st, "".join(x.char or "" for x in adm_by_col[cc.col].chars))
                 if dr:
-                    rows["align_drift"].append((book, page, cc.col, ",".join(dr), st))
-                    c["align_drift"] += 1
+                    drift_page.append([book, page, cc.col, ",".join(dr), st])
             gray = _img(ctx, book, "column_image", column_key(page, cc.col))
             if gray is None:
                 continue
@@ -243,6 +244,11 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
                 rows["edge_ink"].append((book, page, cc.col, max(e["top"], e["bottom"]),
                                          f"上 {e['top']} 行、下 {e['bottom']} 行有墨（格高 {e['period']}）"))
                 c["edge_ink"] += 1
+        for r in drift_page:              # 一页报出好几列＝整页的事（透印、版式、整页没对上），降成提示
+            if len(drift_page) >= ss.DRIFT_PAGE:
+                r[3] += ",page"
+            rows["align_drift"].append(tuple(r))
+            c["align_drift"] += 1
         if seal_blank:
             from ..steps.occlusion import page_seal_blank
             from ..steps.seed_admit import SeedAdmitStep
