@@ -19,6 +19,8 @@
 - align_drift（2026-11-14，史記 R017；当天按 SJ 抽看收紧）：对位串错·疑整列错位——没配到参校字的格挨着没放行的对不上格（劈）、
   连续 ≥2 格没放行且对不上、或连续 ≥5 格对不上；考證列不查；一页报出 ≥3 列的 value 加 `page`（整页的事，降成提示）；
   value＝split／pair／run（＋page），note＝格态串（O 对上、B 对不上、R 生僻字通道、N 没配到参校字，小写＝没放行）；钉子列不查；
+- inner_gap（2026-11-14，史記 R002）：字内落缝——格线挨着对不上参校字且没放行的格（b／n），落在窄白缝里，旁边 0.15–0.55 格高
+  另有宽得多的白缝（字间缝），一条线一行，value＝`上|下`，note＝缝宽、宽缝挪多少、格态；钉子列也查（切分线旧钉子也犯过，manager 记「已钉·复核」）；
 - pin_stale：中心库有 active 钉子、本页产物却没用上（产物早于钉子，要从 row_segment 重跑）。
 
 钉子列（产物带 `manual_cells` 旗）只比格号、不跑墨账与端外墨（SJ 第 5 条）；有钉子而产物没用上的列照普通列查；职名列不跑端外墨。`skip` 点名的页整页不查（书配置
@@ -31,7 +33,7 @@ import sys
 
 CHECKS = ("edge_ink", "orphan", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
           "pitch_free_ignored", "cell_flags", "cell_size", "page_pitch", "half_width", "pin_slots", "pin_stale", "layout_slots", "seal_blank",
-          "cut_through", "geo_ref_ok", "block_tall", "align_drift")
+          "cut_through", "geo_ref_ok", "block_tall", "align_drift", "inner_gap")
 
 
 def _engine(book: str):
@@ -166,8 +168,8 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             if ss.pitch_free_ignored(cc, lay_page.get(cc.col)):
                 rows["pitch_free_ignored"].append((book, page, cc.col, "", "表写 pitch: free，选中挤格补线格网"))
                 c["pitch_free_ignored"] += 1
-            if not pinned and cc.col in adm_by_col:     # 对位串错只读产物，不要列图；钉子列只比格号
-                st = ss.cell_states(adm_by_col[cc.col], ref_p, glyph_top)
+            st = ss.cell_states(adm_by_col[cc.col], ref_p, glyph_top) if cc.col in adm_by_col else ""
+            if not pinned and st:                       # 对位串错只读产物，不要列图；钉子列只比格号
                 dr = ss.align_drift(st, "".join(x.char or "" for x in adm_by_col[cc.col].chars))
                 if dr:
                     drift_page.append([book, page, cc.col, ",".join(dr), st])
@@ -180,6 +182,13 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
                     rows["orphan"].append((book, page, cc.col, o["ratio"],
                                            f"{o['where']} 墨 {o['ink']}px bbox {o['bbox']}"))
                     c["orphan"] += 1
+            if st and ("roster" not in cc.flags or pinned):  # 职名列（非钉子）格贴墨走 roster，字缝口径不同，不查
+                sst = ss.slot_states(adm_by_col[cc.col], st, ref_p)
+                for t in ss.inner_gap(gray, cc, sst):     # 字内落缝：钉子列也查（R002 切分线旧钉子也落进字内白缝）
+                    rows["inner_gap"].append((book, page, cc.col, f"{t['slot_above']}|{t['slot_below']}",
+                                              f"缝 {t['gap']}px，{t['move']:+d}px 处有 {t['alt_gap']}px 宽缝（线挪到 y≈{t['y'] + t['move']:.0f}），格态 "
+                                              f"{sst.get(t['slot_above'], '')}/{sst.get(t['slot_below'], '')}"))
+                    c["inner_gap"] += 1
             if pinned:
                 continue                  # 钉子列只比格号（SJ 第 5 条）
             last = max(cc.cells, key=lambda x: (x.slot, x.sub or ""), default=None)
@@ -324,7 +333,7 @@ def write_report(rows: dict[str, list], counts: dict, out, seal_blank: bool = Fa
         lines.append("| " + " | ".join([b, str(c["pages"]), *[str(c[k]) for k in hdr[2:]]]) + " |")
     same = sum(c.get("layout_same_count", 0) for c in counts.values())
     lines += ["", "edge_ink、pitch_free_ignored、cell_size、page_pitch、half_width、pin_slots、pin_stale、layout_slots 按列计；colnet_page、frame_margin、layout_col_shift、"
-              "layout_fallback 按页计；edge_frame_only、cell_flags、block_tall、seal_blank 按格计；orphan 按块计；cut_through 按格线计。"
+              "layout_fallback 按页计；edge_frame_only、cell_flags、block_tall、seal_blank 按格计；orphan 按块计；cut_through、inner_gap 按格线计。"
               f"版式对格号「同数」（只编号不同，判过）{same} 列，只计数不出行。"]
     off = [b for b, c in counts.items() if c.get("cut_through_off")]
     if off:

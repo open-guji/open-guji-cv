@@ -240,3 +240,97 @@ def test_cut_through_follows_seam_and_skips_blank_pairs():
     cc2 = _col(1, [1, 2], kinds={1: "blank", 2: "blank"})
     g2[150:250, 40:50] = 0                    # 两格都空（墨不算字）：不看
     assert ss.cut_through(g2, cc2) == []
+
+
+def _inner_gap_page():
+    """三格（100–200–300–400）。字 1 主体 120–195、底横 201–210，字内白缝 195–201 正好压着 1|2 格线（望的王底横被切到下一格）；
+    字 1 与字 2 之间的字缝 210–240 宽 30 行。"""
+    cc = _col(1, [1, 2, 3])
+    g = _img(500)
+    g[120:195, 30:70] = 0
+    g[201:210, 25:75] = 0
+    g[240:290, 30:70] = 0
+    g[320:380, 30:70] = 0
+    return g, cc
+
+
+def test_inner_gap_reports_seam_in_glyph_gap():
+    """史記 R002（11-14）：格线落在字内白缝、挨着对不上参校字的格，旁边有宽得多的字缝 → 报。"""
+    g, cc = _inner_gap_page()
+    (h,) = ss.inner_gap(g, cc, {1: "b", 2: "b", 3: "O"})
+    assert (h["slot_above"], h["slot_below"]) == (1, 2) and h["gap"] == 6 and h["alt_gap"] == 30 and h["move"] == 25
+    assert h["piece"] == 0.18                 # 底横 9×50 ÷（底横＋字 2 的 50×40）
+    assert ss.inner_gap(g, cc, {1: "O", 2: "O", 3: "O"}) == []          # 字都对得上：不看
+    assert ss.inner_gap(g, cc, {1: "B", 2: "B", 3: "O"}) == []          # 对不上但已放行：不看（形近字认错居多）
+
+
+def test_inner_gap_quiet_when_line_in_glyph_gap_is_widest():
+    g = _img(500)
+    cc = _col(1, [1, 2, 3])
+    g[120:180, 30:70] = 0                     # 线落在字间缝 180–230 里（宽 50），附近没有更宽的缝
+    g[230:290, 30:70] = 0
+    g[320:380, 30:70] = 0
+    assert ss.inner_gap(g, cc, {1: "b", 2: "b", 3: "b"}) == []
+
+
+def test_inner_gap_quiet_when_line_already_in_wide_gap_or_far_side_empty():
+    """殿本 99 册误报两类（11-14）：线已在 10px 以上的字缝里、旁边是「二」的笔间空白；宽缝外没字（列首留白）。"""
+    g = _img(500)
+    cc = _col(1, [1, 2, 3])
+    g[120:190, 30:70] = 0                     # 字 1 到 190，字缝 190–210（20 行）压着 1|2
+    g[210:215, 25:75] = 0                     # 「二」上横
+    g[245:250, 25:75] = 0                     # 「二」下横，笔间空白 215–245（30 行）
+    g[320:380, 30:70] = 0
+    assert ss.inner_gap(g, cc, {1: "O", 2: "b", 3: "O"}) == []
+    g = _img(500)
+    cc = _col(1, [1, 2, 3])
+    g[141:143, :] = 0                         # 列首框线残段
+    g[185:197, 25:75] = 0                     # 字 1 只是一截扁笔，197–203 窄缝压着 1|2
+    g[203:290, 30:70] = 0
+    g[320:380, 30:70] = 0
+    assert ss.inner_gap(g, cc, {1: "b", 2: "b", 3: "O"}) == []         # 143–185 的「宽缝」外只剩框线：是列首留白
+    g[100:141, 30:70] = 0                     # 宽缝外有字：照报
+    assert len(ss.inner_gap(g, cc, {1: "b", 2: "b", 3: "O"})) == 1
+
+
+def test_inner_gap_skips_jiazhu_and_blank():
+    g, cc = _inner_gap_page()
+    cc.cells[1].sub = "a"                     # 2 号是夹注半格：不看
+    assert ss.inner_gap(g, cc, {1: "b", 2: "b", 3: "O"}) == []
+    g, cc = _inner_gap_page()
+    cc.cells[0].kind = "blank"                # 1 号空格：不看
+    assert ss.inner_gap(g, cc, {1: "b", 2: "b", 3: "O"}) == []
+
+
+def test_slot_states_groups_halves_and_skips_circle():
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
+    col = ColumnAdmit(col=1, chars=[AdmitRec(id="b:1:1:1", slot=1, admit=False, char="曽"),
+                                    AdmitRec(id="b:1:1:2a", slot=2, admit=True, char="云"),
+                                    AdmitRec(id="b:1:1:2b", slot=2, admit=False, char="三"),
+                                    AdmitRec(id="b:1:1:3", slot=3, admit=False, char="四")])
+    assert ss.slot_states(col, "bOnn") == {1: "b", 2: "On", 3: "n"}
+    assert ss.slot_states(col, "bOnn", {"b:1:1:3": "○"}) == {1: "b", 2: "On", 3: "O"}
+
+
+def test_inner_gap_R002_sj_frozen_columns():
+    """史記 r64 main 冻结的 18 列（逐行墨宽、格、格态，`fixtures/inner_gap/R002_sj_r64.json`）：SJ 字形库线追报 15 列里
+    报得出的 9 列（`ruler`）＋同批 13 册新查出、看图属实的 9 列（`new`：主／言的点、三的上横、海的头落到上一格）。
+    各列该报的格线不能少（A22 11-14）。"""
+    import json
+    from pathlib import Path
+    data = json.loads((Path(__file__).parent / "fixtures" / "inner_gap" / "R002_sj_r64.json").read_text(encoding="utf-8"))
+    assert len(data) == 18
+    for d in data:
+        g = np.full((d["height"], d["width"]), 255, np.uint8)
+        y = 0
+        for val, n in d["ink_rle"]:
+            g[y:y + n, :val] = 0
+            y += n
+        cells = [CellRec(slot=s, pos=s, y0=y0, y1=y1, x0=0, x1=d["width"], kind=k, order=i, sub=sub,
+                         seam_top=None if st is None else [int(st)], seam_bottom=None if sb is None else [int(sb)])
+                 for i, (s, sub, y0, y1, k, st, sb) in enumerate(d["cells"])]
+        cc = ColumnCells(col=1, ok=True, n_body_slots=len(cells), cells=cells, period=d["period"],
+                         content_x=(0.0, float(d["width"])), border_top=0.0, border_bottom=float(d["height"]))
+        hits = ss.inner_gap(g, cc, {int(k): v for k, v in d["states"].items()})
+        got = [f"{h['slot_above']}|{h['slot_below']}" for h in hits]
+        assert set(d["expect"]) <= set(got), (d["col"], got)

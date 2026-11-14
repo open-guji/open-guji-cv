@@ -12,6 +12,7 @@
 | ①c | `orphan` | 列中间整块墨不在任何字格里（先剥界行、版框长直线；判据照 SJ 快筛 ORPH，见 `orphan_ink`） |
 | F8 | `seal_blank` | seed_admit 会按印框记空的格（`occlusion.page_seal_blank`），本机跑到 cell_shrink 就能看 |
 | F6 | `cut_through` | 格线劈字：相邻两格的分界按连通块量切割量，在 ±0.4 格内挪能降到 1/4 以下、且 U-Net 归属裁判认挪后更对（`cut_through`，2026-11-13；要 torch） |
+| R002 | `inner_gap` | 字内落缝：格线挨着对不上参校字的格、落在窄白缝里，旁边 0.15–0.55 格高处另有宽得多的白缝（`inner_gap`，2026-11-14） |
 """
 from __future__ import annotations
 
@@ -712,6 +713,100 @@ def page_ref_glyph(aref, glyph) -> tuple[dict, dict]:
         for ch in cc.chars:
             g[ch.id] = ([ch.char] if ch.char else []) + [c[0] for c in (ch.candidates or [])[:REF_OK_TOPK]]
     return ref, g
+
+
+# ── 字内落缝（2026-11-14，史記 R002：Sheldon 难认字页、字形库线追报 15 列，seg check／闸都没报） ─────────────
+# 格线落在一个字**里面**的白缝（宮的两口之间、望的王中横与底横之间、景的日与京之间、素的糸与小之间、主／言的点与身之间），
+# 上下两格各带半个字，后面常整列错半格。线上没墨，`cut_through`（量切割量）看不见；格高也正常，`cell_size` 也看不见。
+# 证据两条合起来：①识别——挨着这条线的格对不上参校字且没放行（格态 b／n，`cell_states`）；②几何——这条线所在的白缝窄，
+# 旁边 0.15–0.55 格高处另有一条宽得多的白缝（字间缝）。只有①是形近字认错（r59 13 册 64 列多是这种）；只有②是一二三、
+# 亠、灬这类字身里本来就有宽缝。U-Net 归属裁判试过：15 列只认出 5 列（窗口按错的格取，窗里三段字它分不清），不用。
+
+GAP_WHITE = 0.02           # 一行墨宽 ≤ 内容宽这么多（且 ≤ 2px 也算）算白行
+GAP_NEAR = (0.15, 0.55)    # 宽缝中心离原线这么多格高之间（太近＝同一条缝挪一挪；太远＝邻格的字间缝）
+GAP_WIDE = 0.08            # 宽缝至少这么多格高（格高 117 约 9px）
+GAP_MORE = 0.06            # 且比原线所在白缝宽这么多格高以上
+GAP_NARROW = 0.06          # 原线所在白缝不宽于这么多格高（史記真错最宽 0.052；殿本 99 册误报多是线已在 10–26px 的字缝里、
+                           # 旁边是一二三的笔间空白或一字上下的大片留白）
+GAP_PIECE = (0.08, 0.7)    # 线与宽缝之间那截墨占「那截＋宽缝外到格边的墨」的比例：太小是笔尖、墨点；太大是宽缝外没字了
+                           # （列首线、宽缝其实是列端留白，殿本 vol15:130、vol40:42 等）。史記真错 0.10–0.57
+GAP_SKIP_CHARS = ("○",)    # 放行字是○的格不算对不上（整理本不录○）
+
+
+def slot_states(adm_col, states: str, ref: dict | None = None) -> dict[int, str]:
+    """`cell_states` 的格态串按格号归拢（夹注 a／b 同号拼在一起）：{格号: "b"、"Oo"…}。放行字或参校字（`ref`，
+    {格 id: 参校字}）是○的格记 O（整理本录不录○对不上，不是切分）。"""
+    import re
+    out: dict[int, str] = {}
+    for x, st in zip(adm_col.chars, states):
+        m = re.match(r"-?\d+", str(x.id).split(":")[3]) if str(x.id).count(":") >= 3 else None
+        if m:
+            skip = (x.char or "") in GAP_SKIP_CHARS or (ref or {}).get(x.id, "") in GAP_SKIP_CHARS
+            out[int(m.group(0))] = out.get(int(m.group(0)), "") + ("O" if skip else st)
+    return out
+
+
+def _white_runs(white: np.ndarray) -> list[tuple[int, int]]:
+    d = np.diff(np.concatenate([[0], white.astype(np.int8), [0]]))
+    return list(zip(np.flatnonzero(d == 1).tolist(), np.flatnonzero(d == -1).tolist()))
+
+
+def inner_gap(gray: np.ndarray, col_cells, states: dict[int, str], ink_threshold: int = 128) -> list[dict]:
+    """一列里**落在字内白缝的格线**：[{slot_above, slot_below, y, gap, alt_gap, move}]（史記 R002，2026-11-14）。
+
+    看相邻两格（都不是空格、都不是夹注半格）的分界线，要两格里至少一格对不上参校字且没放行（`states` 是
+    `slot_states` 的格号→格态，含 b／n）。按内容窗逐行量墨，墨宽 ≤ `GAP_WHITE` 的行算白；原线所在的白缝宽 `gap`
+    （线上有墨＝0），离原线 `GAP_NEAR` 格高内另有一条白缝宽 `alt_gap` ≥ max(`GAP_WIDE`, gap＋`GAP_MORE`) 格高就报，
+    `move` 是那条缝中心离原线的行数（负＝往上）。Step3 走折线的取折线中位。
+
+    报出的 `move` 就是该挪到的字缝：尺子 9 列 11 条线里 10 条离 SJ 人钉的线 ≤4px（28:37:8 13|14 那条两线指向同一条缝）。
+
+    量（A22 11-14）：史記 r64 main 13 册（13 15 17 19 20 24 27 28 29 30 36 40 42，15,545 列）报 22 列：15 列尺子报出 9 列
+    （漏 13:118:4 立的点藏在議的戈旁、17:161:4 以此言→以訾 字缝本来一样窄、17:120:4／40:140:6 职名列、36:27:3 夹注没拆），
+    另 13 列看图 9 列真错（主、言的点，三的上横，海、遂、老的头落到上一格）。殿本 99 册 main 148,626 列报 19 列（未加
+    `GAP_NARROW`／`GAP_PIECE` 前 42 列，多是一二三笔间空白、一字上方留白、列首留白），剩下的多是笔尖擦线，也有真错
+    （vol46:192:5 釁头、vol64:90:8 百的上横）。全唐文 001–020 册 33,505 列报 28 列，多是整理本对不上（n/n），看图有真错
+    （002:81:4 李劈两半、017:163:2 憲的宀、020:140:4 體劈开）。"""
+    period = float(col_cells.period or 0.0)
+    if period <= 0 or not col_cells.cells:
+        return []
+    h, w = gray.shape[:2]
+    x0, x1 = (int(col_cells.content_x[0]), int(col_cells.content_x[1])) if col_cells.content_x else (0, w)
+    x0, x1 = max(0, x0), min(w, max(x1, x0 + 1))
+    ink = (gray[:, x0:x1] < ink_threshold).sum(axis=1)
+    runs = _white_runs(ink <= max(2.0, GAP_WHITE * (x1 - x0)))
+    halves = {c.slot for c in col_cells.cells if c.sub}
+    spans = _slot_spans(col_cells)
+    out = []
+    for i in range(1, len(spans)):
+        a, b = spans[i - 1], spans[i]
+        if a["blank"] or b["blank"] or a["slot"] in halves or b["slot"] in halves or min(a["slot"], b["slot"]) < 1:
+            continue
+        if not any(ch in "bn" for ch in states.get(a["slot"], "") + states.get(b["slot"], "")):
+            continue
+        seam = b["seam_top"] or a["seam_bottom"]
+        y = float(np.median(seam)) if seam else float(b["y0"])
+        yi = int(round(y))
+        cur = next(((s, e) for s, e in runs if s <= yi < e), None)
+        gap = 0 if cur is None else cur[1] - cur[0]
+        if gap > GAP_NARROW * period:
+            continue
+        alts = [(e - s, (s + e) / 2 - y, s, e) for s, e in runs if (s, e) != cur
+                and GAP_NEAR[0] * period <= abs((s + e) / 2 - y) <= GAP_NEAR[1] * period]
+        if not alts:
+            continue
+        alt, move, s, e = max(alts)
+        if alt < max(GAP_WIDE * period, gap + GAP_MORE * period):
+            continue
+        if move > 0:                  # 那截在线下、宽缝之上；宽缝外到下格底
+            piece, rest = ink[yi:s].sum(), ink[e:int(round(b["y1"]))].sum()
+        else:
+            piece, rest = ink[e:yi].sum(), ink[int(round(a["y0"])):s].sum()
+        if piece + rest <= 0 or not GAP_PIECE[0] <= piece / (piece + rest) <= GAP_PIECE[1]:
+            continue
+        out.append({"slot_above": a["slot"], "slot_below": b["slot"], "y": round(y, 1), "gap": int(gap),
+                    "alt_gap": int(alt), "move": int(round(move)), "piece": round(float(piece / (piece + rest)), 2)})
+    return out
 
 
 # ── F6 格线劈字（2026-11-13，史記 r54 少见字页 SJ 量法，Sheldon 让 A22 并进 seg check） ────────────────
