@@ -613,6 +613,60 @@ def ref_ok_col(conf: dict, col: int, frac: float = REF_OK_COL) -> bool:
     return bad <= 1 or (len(vs) - bad) / len(vs) >= frac
 
 
+# ── 对位串错·疑整列错位（2026-11-14，史記台账 R017，SJ 总览／切分线提） ──────────────────────────────────
+
+DRIFT_RUN = 3              # 连续这么多格对不上参校字（其中至少一格没放行）：一字劈两格或两字并一格后整列错一格
+DRIFT_UNSETTLED = 3        # 或一列里没放行、且对不上参校字（或没配到参校字）的格 ≥ 这么多
+
+
+def cell_states(adm_col, ref: dict, glyph: dict) -> str:
+    """一列每格一个字母（按 seed_admit 的格序）：
+    O 参校字在字形匹配前 3 名；B 有参校字、不在前 3 名、已放行；R 同上但走 rare_ref 放行（生僻字匹配本来就弱，不算串错）；
+    N 没配到参校字、已放行；b／n 同 B／N 但没放行；o 对得上但没放行（不算串错证据）。
+    `ref` 是 {格 id: 参校字}（align_ref 的 coord 加 ref_hint），`glyph` 是 {格 id: 字形匹配前 3 名（含 same 档的字）}。
+    只用字形匹配当「对得上」的证据，不用放行字（follow_ref／match_ref 抄参校字）。"""
+    out = []
+    for x in adm_col.chars:
+        r = ref.get(x.id)
+        st = "N" if not r else ("O" if r in glyph.get(x.id, ()) else "B")
+        if st == "B" and x.admit and x.channel == "rare_ref":
+            st = "R"
+        out.append(st if x.admit else st.lower())
+    return "".join(out)
+
+
+def align_drift(states: str, run: int = DRIFT_RUN, unsettled: int = DRIFT_UNSETTLED) -> list[str]:
+    """一列格态串（`cell_states`）里的整列错位迹象：
+    - run：连续 ≥ run 格对不上参校字（B／b／n），其中至少一格没放行（SJ：连续 3 格以上 replace）；
+    - split：列中（不在首末）没放行、也没配到参校字的格，紧挨着没放行的对不上格（一个参校字对两格＝劈）；
+    - unsettled：没放行且对不上（b／n）的格 ≥ unsettled（两字并一格、劈字散在一列里）。
+    史記 r59（v0.7.27 包，钉子列不查）：切分线 11-13／14 钉的 33 列报 23 列（漏的 10 列：夹注并格 5 列、卷末题列 2 列对位
+    看不出，由 MERGED／格高检查报；34:60:1 是旧钉子列；37:153:7、41:102:7 只有 1–2 格对不上），全书非钉子列共报 172 列；
+    殿本 vol01／12／28／43 共 5,851 列报 3 列。"""
+    import re
+    hits = []
+    if any(len(m.group(0)) >= run and re.search("[bn]", m.group(0)) for m in re.finditer("[BbnMF]+", states)):
+        hits.append("run")
+    if any(ch == "n" and 0 < i < len(states) - 1 and "b" in (states[i - 1], states[i + 1])
+           for i, ch in enumerate(states)):
+        hits.append("split")
+    if sum(ch in "bn" for ch in states) >= unsettled:
+        hits.append("unsettled")
+    return hits
+
+
+def page_ref_glyph(aref, glyph) -> tuple[dict, dict]:
+    """一页 ({格 id: 参校字}, {格 id: 字形匹配前 3 名})。参校字取 align_ref 的 coord，再补 ref_hint（没有字形证据被筛掉的整理本字）。"""
+    ref = {} if aref is None else {r.id: r.ref_char for r in aref.coord}
+    for k, v in ((getattr(aref, "ref_hint", None) or {}) if aref is not None else {}).items():
+        ref.setdefault(k, v)
+    g = {}
+    for cc in (glyph.columns if glyph is not None else []):
+        for ch in cc.chars:
+            g[ch.id] = ([ch.char] if ch.char else []) + [c[0] for c in (ch.candidates or [])[:REF_OK_TOPK]]
+    return ref, g
+
+
 # ── F6 格线劈字（2026-11-13，史記 r54 少见字页 SJ 量法，Sheldon 让 A22 并进 seg check） ────────────────
 
 CUT_MID = 0.025            # 切割量 ≥ 格高² 的这么多才看（格高 110 约 300px，SJ「中档」下限）
