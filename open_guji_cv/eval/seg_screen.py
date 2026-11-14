@@ -476,19 +476,60 @@ def odd_cell_heights(col_cells, *, tall: float = CELL_TALL, short: float = CELL_
 
     殿本 vol01 职名页 ZM 11-12 钉的四列（88:1、88:4、88:6、105:4「講起」「閣領」两字一格）在旧包里格高都是本列中位的
     1.8–1.9 倍；整册 1724 列只有 6 列有 ≥1.7 倍的格，另两列（46:2、117:1）待看。"""
-    cells = [c for c in col_cells.cells if c.kind != "blank"]
+    cells = sorted((c for c in col_cells.cells if c.kind != "blank"), key=lambda c: c.y0)
     if len(cells) < min_cells:
         return []
     hs = sorted(c.y1 - c.y0 for c in cells)
     m = hs[len(hs) // 2] if len(hs) % 2 else (hs[len(hs) // 2 - 1] + hs[len(hs) // 2]) / 2
     if m <= 0:
         return []
+    tight = _ink_tight(cells, m)
     out = []
-    for c in cells:
+    for i, c in enumerate(cells):
         r = (c.y1 - c.y0) / m
+        if r <= short and tight is not None and _flat_glyph(cells, i, m, *tight, short=short):
+            continue
         if r >= tall or r <= short:
             out.append({"slot": c.slot, "sub": c.sub, "ratio": round(r, 2), "kind": "tall" if r >= tall else "short"})
     return out
+
+
+# 格贴墨切的列（职名、卷端题署走 roster，没有格网）：格高是字身高，扁字（一、二、三）本来就矮（史記 r61 卷端「史記卷一百一」的「一」
+# 只有中位的 0.16–0.26，A22 11-14），要看它在列里站不站得住一个字的位置。史記 01／35／40 册 r61 这样的矮格 83 个，看图 79 个是
+# 整字扁字；4 个真错：01:93:4:4、01:94:2:4（「二」上横并进上格「卷」，上格高 1.47–1.55 倍）、01:133:8:6、35:2:3:9（矮格是
+# 残点／字的下半，离上格的留白只有中位的 0.63–0.77）。
+TIGHT_GAP = 0.1            # 相邻有字格之间留白中位 ≥ 格高中位 × 这么多，且没有相叠的格＝格贴墨切
+FLAT_PITCH = 0.5           # 矮格中心到上下邻格中心都 > 列中心距中位 × 这么多（一字拆两格，两半只隔半个字距）
+FLAT_GAP = 0.9             # 矮格上下留白都 ≥ 列留白中位 × 这么多（残点、字的一截贴着邻字）
+FLAT_NEIGHBOR = 1.35       # 上下邻格高都 < 格高中位 × 这么多（邻格吞了这个字的一笔，矮格只剩另一笔）
+
+
+def _ink_tight(cells, m: float) -> tuple[float, float] | None:
+    """格贴墨切的列返回 (相邻格中心距中位, 相邻格留白中位)，格网列（格与格相接）或有相叠格的列返回 None。"""
+    if len(cells) < 2:
+        return None
+    gaps = sorted(b.y0 - a.y1 for a, b in zip(cells, cells[1:]))
+    g = gaps[len(gaps) // 2]
+    if gaps[0] < 0 or g < TIGHT_GAP * m:
+        return None
+    ds = sorted((b.y0 + b.y1 - a.y0 - a.y1) / 2 for a, b in zip(cells, cells[1:]))
+    return ds[len(ds) // 2], g
+
+
+def _flat_glyph(cells, i: int, m: float, pitch: float, gap: float, *, short: float = CELL_SHORT) -> bool:
+    """贴墨列里第 i 个矮格是整字扁字：离上下字一个字距、上下留白不比别处窄、上下邻格高正常。"""
+    c = cells[i]
+    for j in (i - 1, i + 1):
+        if not 0 <= j < len(cells):
+            continue
+        n = cells[j]
+        if abs((n.y0 + n.y1) - (c.y0 + c.y1)) / 2 <= short * pitch:
+            return False
+        if (n.y0 - c.y1 if j > i else c.y0 - n.y1) < FLAT_GAP * gap:
+            return False
+        if (n.y1 - n.y0) >= FLAT_NEIGHBOR * m:
+            return False
+    return True
 
 
 # ── 字块过高：Step4 字块比自己的格高出一大截（2026-11-13，殿本 vol06 147:3:3「也」，ZM） ────────────────
