@@ -615,8 +615,10 @@ def ref_ok_col(conf: dict, col: int, frac: float = REF_OK_COL) -> bool:
 
 # ── 对位串错·疑整列错位（2026-11-14，史記台账 R017，SJ 总览／切分线提） ──────────────────────────────────
 
-DRIFT_RUN = 3              # 连续这么多格对不上参校字（其中至少一格没放行）：一字劈两格或两字并一格后整列错一格
-DRIFT_UNSETTLED = 3        # 或一列里没放行、且对不上参校字（或没配到参校字）的格 ≥ 这么多
+DRIFT_RUN = 5              # 连续这么多格对不上参校字（B／b／n，其中有没放行的 b）：整列错一格
+DRIFT_PAIR_TOTAL = 3       # 连续两格 b／n 之外，全列 b／n 还要 ≥ 这么多才报 pair（单处两格多是两个形近字挨着）
+DRIFT_PAGE = 3             # 一页报出 ≥ 这么多列就是整页的事（透印、版式、对位整页没对上），降成提示
+DRIFT_SKIP_TEXT = ("○", "考證")   # 考證页、考證列：整理本没有对应文字，格态全是 N／n，不查
 
 
 def cell_states(adm_col, ref: dict, glyph: dict) -> str:
@@ -635,23 +637,27 @@ def cell_states(adm_col, ref: dict, glyph: dict) -> str:
     return "".join(out)
 
 
-def align_drift(states: str, run: int = DRIFT_RUN, unsettled: int = DRIFT_UNSETTLED) -> list[str]:
+def align_drift(states: str, text: str = "", run: int = DRIFT_RUN) -> list[str]:
     """一列格态串（`cell_states`）里的整列错位迹象：
-    - run：连续 ≥ run 格对不上参校字（B／b／n），其中至少一格没放行（SJ：连续 3 格以上 replace）；
-    - split：列中（不在首末）没放行、也没配到参校字的格，紧挨着没放行的对不上格（一个参校字对两格＝劈）；
-    - unsettled：没放行且对不上（b／n）的格 ≥ unsettled（两字并一格、劈字散在一列里）。
-    史記 r59（v0.7.27 包，钉子列不查）：切分线 11-13／14 钉的 33 列报 23 列（漏的 10 列：夹注并格 5 列、卷末题列 2 列对位
-    看不出，由 MERGED／格高检查报；34:60:1 是旧钉子列；37:153:7、41:102:7 只有 1–2 格对不上），全书非钉子列共报 172 列；
-    殿本 vol01／12／28／43 共 5,851 列报 3 列。"""
+    - split：没配到参校字的格（n）挨着没放行的对不上格（b）——一个参校字跨两格（劈）；
+    - pair：连续 ≥2 格没放行且对不上（b／n），全列这种格 ≥ DRIFT_PAIR_TOTAL——劈或并之后的那一段（有 split 只记 split）；
+    - run：连续 ≥ run 格对不上（B／b／n）且其中有 b——整列错一格、放行器硬放了几格。
+    放行字 `text` 含考證标记（○、考證）的列不查（参校本没这段，SJ 11-14 抽看第 1 条）。
+    11-14 按 SJ 切分线抽看收紧（原版 run≥3／散在的 b≥3 也报，r59 报 172 列、看图 11 列全是识别认成形近字）：
+    切分线 33 列仍报 23 列；r59 非钉子列 172→87，其中同页 ≥ DRIFT_PAGE 列的 12 列降成提示（见 seg_screen_run）；
+    殿本 vol01／12／28／43 共 5,851 列 3→1。
+    SJ 建议的「劈和并同时出现才报」「全 n／N 列不报」各会漏 12／2 列真错，没用；单格形近字误认（OOObbbOOO）
+    与真劈并在格态上分不开，剩下的误报要靠看图。"""
     import re
+    if any(t in text for t in DRIFT_SKIP_TEXT):
+        return []
     hits = []
-    if any(len(m.group(0)) >= run and re.search("[bn]", m.group(0)) for m in re.finditer("[BbnMF]+", states)):
-        hits.append("run")
-    if any(ch == "n" and 0 < i < len(states) - 1 and "b" in (states[i - 1], states[i + 1])
-           for i, ch in enumerate(states)):
+    if any(ch == "n" and "b" in (states[i - 1:i] + states[i + 1:i + 2]) for i, ch in enumerate(states)):
         hits.append("split")
-    if sum(ch in "bn" for ch in states) >= unsettled:
-        hits.append("unsettled")
+    elif re.search("[bn]{2,}", states) and sum(ch in "bn" for ch in states) >= DRIFT_PAIR_TOTAL:
+        hits.append("pair")
+    if any(len(m.group(0)) >= run and "b" in m.group(0) for m in re.finditer("[Bbn]+", states)):
+        hits.append("run")
     return hits
 
 
