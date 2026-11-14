@@ -680,6 +680,9 @@ CUT_STRONG = 0.066         # ≥ 格高² 的这么多算强档（格高 110 约
 CUT_REACH = 0.4            # 在名义格线 ±这么多格高内找切割量最小的行
 CUT_SEP = 0.45             # 找的范围不越过相邻格线 ±这么多格高（同 row_boundaries.SNAP_CUT_MIN_SEP）
 CUT_KEEP = 0.25           # 挪开处的切割量要 ≤ 原位这么多倍才算「挪得开」（两字粘连时人裁的线也带点墨：史記人裁尺子 58 条，0.1 只报出 23 条、0.25 报 33 条，准确率 86%→81%，A22 11-13）
+CUT_WEAK_MOVE = 0.33       # 中档里挪不到这么多格高的记「弱」（seg check 只当提示）：史記 r59 20/37/41/42 册（A22 11-14）中档 67 条，
+                           # 挪 <0.33 格高的 49 条只有 3 条在人后来钉的列里，且那 3 列另有强档／对位串错旗；≥0.33 的 18 条里 5 条是真劈
+                           # （41:76:2、41:87:7 只有这一档）。挪得少＝原线已贴着字缝，多是上下字笔画相触（SJ 11-14 看图）
 CUT_MOVE = 0.07            # 且要挪 ≥ 这么多格高（格高 110 约 8px，原位旁边几行就是缝的不报）
 CUT_MAX_H = 1.6            # 纵向跨度超过这么多格高的连通块不算（界行残段、墨渍；同 row_boundaries.SNAP_CUT_MAX_H）
 CUT_JUDGE = 0.09           # U-Net 归属裁判：挪后那条线的一致率比原位低不超过这么多才报。挪进字内白缝会把整块部件（之的捺、
@@ -728,11 +731,12 @@ def _seam_cut(lab: np.ndarray, keep: np.ndarray, areas: np.ndarray, ys: np.ndarr
 
 def cut_through(gray: np.ndarray, col_cells, ink_threshold: int = 128, *, mid: float = CUT_MID,
                 strong: float = CUT_STRONG, judge=None) -> list[dict]:
-    """一列里**劈字的格线**：[{slot_above, slot_below, y, cost, best, move, level: 强|中}]（F6，2026-11-13）。
+    """一列里**劈字的格线**：[{slot_above, slot_below, y, cost, best, move, level: 强|中|弱}]（F6，2026-11-13）。
 
     相邻两格（夹注 a/b 合成一格看，两格都空的不看）的分界线，按连通块量切割量（Σ 被劈的连通块 min(线上墨, 线下墨)，
     `seg.seam.cut_cost_profile`；Step3 选了折线的按折线量）。切割量 ≥ `mid`×格高²、在 ±`CUT_REACH` 格高内（不越过相邻
-    格线 `CUT_SEP` 格高）能挪到 ≤ 原位 `CUT_KEEP` 的行、且要挪 ≥ `CUT_MOVE` 格高，就报；切割量 ≥ `strong`×格高² 是强档。
+    格线 `CUT_SEP` 格高）能挪到 ≤ 原位 `CUT_KEEP` 的行、且要挪 ≥ `CUT_MOVE` 格高，就报；切割量 ≥ `strong`×格高² 是强档，
+    其余挪 ≥ `CUT_WEAK_MOVE` 格高的是中档、挪得更少的是弱档（只当提示，11-14）。
 
     逐格的「邻字残笔」FOR 分不开「笔尖伸进来」和「格线劈在字中间」（史記全书 FOR 约 15,700 格，r53 排查时当噪声放过）；
     这里量的是线本身劈了多少墨、挪开能不能避开：两字本来粘连的挪不开（最小处仍高），不报。
@@ -797,6 +801,6 @@ def cut_through(gray: np.ndarray, col_cells, ink_threshold: int = 128, *, mid: f
                 if r[0][1] < r[0][0] - CUT_JUDGE:
                     continue
         out.append({"slot_above": a["slot"], "slot_below": b["slot"], "y": round(float(y), 1), "cost": int(c0),
-                    "best": int(best), "move": int(round(move)), "level": "强" if c0 >= strong * p2 else "中",
+                    "best": int(best), "move": int(round(move)), "level": "强" if c0 >= strong * p2 else "中" if abs(move) >= CUT_WEAK_MOVE * period else "弱",
                     "agree": agree})
     return out
