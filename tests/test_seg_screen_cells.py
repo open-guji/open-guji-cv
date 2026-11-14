@@ -154,3 +154,14 @@ def test_cell_states_uses_glyph_not_admit_char():
     ref = {"b:1:1:1": "釣", "b:1:1:3": "虛"}
     glyph = {"b:1:1:1": ["加"], "b:1:1:2": ["匈"], "b:1:1:3": ["虚"]}
     assert ss.cell_states(col, ref, glyph) == "BnR"
+
+
+def test_screen_run_rows_keys_are_registered():
+    """seg_screen_run 往 rows[...]／c[...] 里写的每个检查名都要在 CHECKS 里（11-14：align_drift 漏登记，有报出的册 seg check 直接 KeyError）。"""
+    import re
+    from pathlib import Path
+
+    from open_guji_cv.eval import seg_screen_run as sr
+    src = Path(sr.__file__).read_text(encoding="utf-8")
+    used = set(re.findall(r'rows\["(\w+)"\]\.append', src))
+    assert used and used <= set(sr.CHECKS), used - set(sr.CHECKS)
