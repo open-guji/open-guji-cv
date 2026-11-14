@@ -38,6 +38,10 @@ class Equiv:
     evidence: str
 
 
+_WU_1114 = ("seed_admit 嗚鳴 书级刻形判法 group_flow_wu_shape（缺省空、找不到 config/groups/wu_shape.json 就不跑；模型指纹只在有模型时进指纹）：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）20 页 seed_admit 与 origin/dev a2b61a9 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-14（全唐文·形近字线）")
+_WU_OOD_1114 = ("seed_admit _wu_shape_pass 补放护栏（总览 11-14 审 #1539）：待审格须本格字是嗚鳴或库前 3 名候选有嗚鳴，只有整理本／字组说嗚鳴的不补放；"
+                "只在 group_flow_wu_shape 开时走：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）20 页 seed_admit 与 origin/dev 0371709 产物逐字节相同；"
+                "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-14（全唐文·形近字线）")
 _RF_1113 = ("seed_admit group_flow_ruling_first（书级，缺省空不进参数 dump；Chain._ruling_first 名单外直接返回 (None, None)、ask_rf 只在名单内记）：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）40 页 seed_admit 与 origin/dev 69711fa 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-13（全唐文·形近字线）")
 _FR_HOOK_1113 = ("seed_admit follow_ref 加书级钩子 impl/keben/follow_ref_hooks.rival_skip（缺省 None，不调；follow_ref_decide 加 rival_skip "
                  "参数缺省空集，max 的过滤条件多一个恒真项）、新函数 _RivalFacts／_pair_facts／_follow_ref_rival_hook（只在钩子非 None 时用）："
@@ -50,6 +54,13 @@ _DROP_L0_1114 = ("删缺省关、没书开、关时不进参数 dump 的开关�
                  "yolo_merge 等七件及其只在开着时走的代码；关时控制流与改前相同。殿本 vol01 13 页（1,2,3,30,48,60,87,100,130,160,182,203,204，"
                  "含卷端大印、职名页、门目页、卷末印，main 包 cv0.7.16-c16-g21-m2-p48-col9-grid-1113-a2 当上游）border_detect、border_detect_gate、"
                  "column_gate、row_segment 与 origin/dev 84f5bc28 产物逐字节相同；scripts/code_equiv.py check，2026-11-14（A22）")
+_QTW_EFO_1114 = ("row_hooks 加书级钩子 edge_frame_only（缺省 None，不调；row_segment 只在钩子非 None 时多算一次列端框线格、与缺省判据取并集）："
+                 "殿本 fixture 册 keben 冻结三页（tests/fixtures/workspace/raw/keben 1–3）row_segment 与 origin/dev 5e017b52 产物逐字节相同；"
+                 "2026-11-14（全唐文切分线，台账 R018）")
+_QTW_HOOKS_1113 = ("row_hooks 加书级钩子 jiazhu_pair_ok（缺省 None，不调）、jiazhu_heads 多传 ruler（只在钩子非 None 时调）："
+                   "殿本 fixture 册 keben 冻结三页（tests/fixtures/workspace/raw/keben 1–3）row_segment 与 origin/dev 84f5bc28 产物逐字节相同；"
+                   "全唐文 k8（书仓 fork 改钩子，cv 本分支）对 k6 fork（cv v0.7.31）：054 全册 180 页（包 cv0.7.31-c68-g-02bb02-k6-qtw054-n1）、115 全册 208 页（判、小注密，包 cv0.7.31-c69-g-02bb02-k6-qtw115-p1）row_segment→cell_shrink 产物逐字节相同；"
+                   "2026-11-13（全唐文切分线）")
 
 _GM_1020 = ("glyph_match 提速（wmax 按需算、同格查找分桶、HOG 向量化）：vol04 46 页（每 5 页取 1，加 p17/p100/p186，含夹注与最慢页）、vol06 15 页（每 10 页取 1）与改前 529f071 产物逐字节相同，4 进程；scripts/code_equiv.py check，2026-10-20")
 
@@ -1645,6 +1656,16 @@ ENTRIES: tuple[Equiv, ...] = (
           new='4e6551fe7cff11bdd0a1f831eaa35db99d48019b701f0c65b84ebadc736fb722',
           old='45258af23d0898bfefb4957736316a953c3bdd334c3278a43aaa73fe97a5f861',
           evidence=_RF_1113),
+    # seed_admit group_flow_wu_shape：嗚鳴 书级刻形判法（全唐文 11-14）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='0708e0c321976a3fc3cef4a1eddf3b3ade36335ab0d6122dcae261effd9444c3',
+          old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
+          evidence=_WU_1114),
+    # seed_admit wu_shape 补放护栏：只认库字／库前 3 名是嗚鳴（全唐文 11-14）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='84e728f32f5c8ed37a5141f76b1e4cff34ba2878308c826b79573d8e515dca2b',
+          old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
+          evidence=_WU_OOD_1114),
     # align_ref coord_legacy_line_guard 现役跨行借字不算冲突（缺省关；史記 r60 37:2:6–7 参校本缺「正義」，2026-11-13，A22）
     Equiv(module='open_guji_cv.steps.align_ref',
           new='9e787a1f39ed3f7827de1e79be7b5bb543ff844415f5566c562c3665f7cdbd58',
@@ -1673,6 +1694,22 @@ ENTRIES: tuple[Equiv, ...] = (
           new='419e5b9ed8d29be42ade1931a69531b367b49c161e9cf0ea658e72dc7c442d76',
           old='c585153c706c21e3ddf6b131b0205098f50cb3a08be53f698d5b9e54f97e7a20',
           evidence=_DROP_L0_1114),
+    # row_hooks 加 jiazhu_pair_ok、jiazhu_heads 传 ruler（全唐文 k8 撤掉 row_boundaries／jiazhu_split 整文件 fork，2026-11-13）
+    Equiv("open_guji_cv.steps.row_segment",
+          "b6622dfd40c6989354bb5e5338b68bb929ff4c725e8899cc3efae826870244de",
+          "419e5b9ed8d29be42ade1931a69531b367b49c161e9cf0ea658e72dc7c442d76", _QTW_HOOKS_1113),
+    Equiv("open_guji_cv.impl.keben.row_boundaries",
+          "5b0a8cc07abdcb7e35e49f691ea9433590aa8b6991e6d52bc2103f2551ba5006",
+          "09b51e79e3fbfbcf1c77407a87a224c421c7c53eb0bab4855135be6b66423589", _QTW_HOOKS_1113),
+    Equiv("open_guji_cv.impl.keben.row_hooks",
+          "929638d4bf1a4b6a3c63ad18549fbcb7af06634c4de507fdcda427e5eebba743",
+          "52ffeffbf71bc6b94a9789068b94fa5d25d5076700c2bfba730a9e1d2c6cf459", _QTW_HOOKS_1113),
+    Equiv("open_guji_cv.steps.row_segment",
+          "e65a947c7ad603a55e0e965883728f96402d4dde2fba4422e29f27af19075bda",
+          "b6622dfd40c6989354bb5e5338b68bb929ff4c725e8899cc3efae826870244de", _QTW_EFO_1114),
+    Equiv("open_guji_cv.impl.keben.row_hooks",
+          "6e9e81b88fce18f655c3ff079f65195ee27e09bf2c00fa17e943663f3b90ed51",
+          "929638d4bf1a4b6a3c63ad18549fbcb7af06634c4de507fdcda427e5eebba743", _QTW_EFO_1114),
 )
 
 
@@ -1801,6 +1838,18 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.steps.cell_shrink": ("94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e", (
         ("open_guji_cv.steps.cell_shrink", "94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e"),
         ("open_guji_cv.impl.keben.patch_clean", "44241a22b9f46de4a70feb68662ece757511aa86727cfe2b0034a1d8a56db16e"))),
+    # 全唐文 k8（2026-11-13 切分线）：书仓 row_boundaries、jiazhu_split 两份整文件 fork（k6 那一版）撤掉，差异挂成书级钩子
+    # guji_book.quantangwen.row_hooks。几块都还是登记时那一版时：cv row_boundaries＋书仓 row_hooks 合回 k6 书仓 row_boundaries
+    # 一项，cv jiazhu_split＋seg_overrides 合回 k6 书仓 jiazhu_split 一项，全唐文各册 row_segment 指纹不变（054、115 全册逐字节相同）。
+    # 书仓 row_hooks 只有全唐文有，第一项只在全唐文合；别的书 seg_overrides 已被上面 seal_ink 两项收走，第二项合不上。
+    # 两项必须排在 seal_ink 两项之后。column_gate 的模块表只有 row_boundaries、没有书级模块，认不出是全唐文，
+    # 全唐文 column_gate 指纹会变一次（产物不变，下游按上游产物 sha 不过期；115 全册 208 页 column_gate 逐字节相同）。
+    "guji_book.quantangwen.row_boundaries": ("99682ac7af551c7f03ffc321bcfb5c8e94be249909d10f358d14527f067f43c3", (
+        ("open_guji_cv.impl.keben.row_boundaries", "4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c"),
+        ("guji_book.quantangwen.row_hooks", "d903be4d92599f4e37c60203c4d30253b72c291f004fc094e30afc2aadcfe139"))),
+    "guji_book.quantangwen.jiazhu_split": ("a0bdb376848116f288d3f912c64b98d6c834ded95b28d297e5fae5ca588f26a0", (
+        ("open_guji_cv.impl.keben.jiazhu_split", "e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b"),
+        ("open_guji_cv.feedback.seg_overrides", "81f5eb066e4d8fca8df69f95ef375ffb3196ccd30e850a35c099ee9648733fd0"))),
 }
 
 

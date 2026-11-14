@@ -128,3 +128,40 @@ def test_block_tall():
     assert ss.block_tall(150, 128) is None          # 带 padding 的人工定框格，1.2 倍
     assert ss.block_tall(60, 40) is None            # 小格取整误差：倍数够但多出不到 24px
     assert ss.block_tall(100, 0) is None
+
+
+def test_align_drift_patterns():
+    """史記 R017（11-14）：对位串错·疑整列错位。37:170:4 釣劈成加匈、曰賞并成豆，格态 bnObOO…Obb。
+    当天按 SJ 抽看收紧：散在的单格 b（形近字认错）、考證列不报。"""
+    assert ss.align_drift("bnObOOROOOROOROOOObb") == ["split"]
+    assert ss.align_drift("OObbbbbbbOOOO") == ["pair", "run"]
+    assert ss.align_drift("OOOBbBBBOOOOO") == ["run"]          # 20:108:3 剔劈成木成，后面放行器硬放了几格
+    assert ss.align_drift("OOOBBBOOO") == []                  # 全放行的对不上（字形匹配弱）不报
+    assert ss.align_drift("OOoooooOO") == []                  # 对得上只是没放行，不算
+    assert ss.align_drift("ORRROOBOO") == []                  # 生僻字通道放行的不算
+    assert ss.align_drift("OBbBOOO") == []                    # 一格没放行夹在放行的对不上之间：多是形近字
+    assert ss.align_drift("ObOOObOROObOOO") == []             # 散在的单格没放行（11-14 前 ≥3 格就报）
+    assert ss.align_drift("OOnnONOOO", "黄石公○按敢") == []    # 考證列：参校本没这段
+    assert ss.align_drift("NnNnnNNNN") == ["pair"]             # 整列没配到参校字（42:84:8 真错）照报
+
+
+def test_cell_states_uses_glyph_not_admit_char():
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
+
+    col = ColumnAdmit(col=1, chars=[AdmitRec(id="b:1:1:1", slot=1, admit=True, channel="match_ref", char="釣"),
+                                    AdmitRec(id="b:1:1:2", slot=2, admit=False, char="匈"),
+                                    AdmitRec(id="b:1:1:3", slot=3, admit=True, channel="rare_ref", char="虛")])
+    ref = {"b:1:1:1": "釣", "b:1:1:3": "虛"}
+    glyph = {"b:1:1:1": ["加"], "b:1:1:2": ["匈"], "b:1:1:3": ["虚"]}
+    assert ss.cell_states(col, ref, glyph) == "BnR"
+
+
+def test_screen_run_rows_keys_are_registered():
+    """seg_screen_run 往 rows[...]／c[...] 里写的每个检查名都要在 CHECKS 里（11-14：align_drift 漏登记，有报出的册 seg check 直接 KeyError）。"""
+    import re
+    from pathlib import Path
+
+    from open_guji_cv.eval import seg_screen_run as sr
+    src = Path(sr.__file__).read_text(encoding="utf-8")
+    used = set(re.findall(r'rows\["(\w+)"\]\.append', src))
+    assert used and used <= set(sr.CHECKS), used - set(sr.CHECKS)

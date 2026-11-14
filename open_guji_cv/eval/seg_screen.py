@@ -613,6 +613,66 @@ def ref_ok_col(conf: dict, col: int, frac: float = REF_OK_COL) -> bool:
     return bad <= 1 or (len(vs) - bad) / len(vs) >= frac
 
 
+# ── 对位串错·疑整列错位（2026-11-14，史記台账 R017，SJ 总览／切分线提） ──────────────────────────────────
+
+DRIFT_RUN = 5              # 连续这么多格对不上参校字（B／b／n，其中有没放行的 b）：整列错一格
+DRIFT_PAIR_TOTAL = 3       # 连续两格 b／n 之外，全列 b／n 还要 ≥ 这么多才报 pair（单处两格多是两个形近字挨着）
+DRIFT_PAGE = 3             # 一页报出 ≥ 这么多列就是整页的事（透印、版式、对位整页没对上），降成提示
+DRIFT_SKIP_TEXT = ("○", "考證")   # 考證页、考證列：整理本没有对应文字，格态全是 N／n，不查
+
+
+def cell_states(adm_col, ref: dict, glyph: dict) -> str:
+    """一列每格一个字母（按 seed_admit 的格序）：
+    O 参校字在字形匹配前 3 名；B 有参校字、不在前 3 名、已放行；R 同上但走 rare_ref 放行（生僻字匹配本来就弱，不算串错）；
+    N 没配到参校字、已放行；b／n 同 B／N 但没放行；o 对得上但没放行（不算串错证据）。
+    `ref` 是 {格 id: 参校字}（align_ref 的 coord 加 ref_hint），`glyph` 是 {格 id: 字形匹配前 3 名（含 same 档的字）}。
+    只用字形匹配当「对得上」的证据，不用放行字（follow_ref／match_ref 抄参校字）。"""
+    out = []
+    for x in adm_col.chars:
+        r = ref.get(x.id)
+        st = "N" if not r else ("O" if r in glyph.get(x.id, ()) else "B")
+        if st == "B" and x.admit and x.channel == "rare_ref":
+            st = "R"
+        out.append(st if x.admit else st.lower())
+    return "".join(out)
+
+
+def align_drift(states: str, text: str = "", run: int = DRIFT_RUN) -> list[str]:
+    """一列格态串（`cell_states`）里的整列错位迹象：
+    - split：没配到参校字的格（n）挨着没放行的对不上格（b）——一个参校字跨两格（劈）；
+    - pair：连续 ≥2 格没放行且对不上（b／n），全列这种格 ≥ DRIFT_PAIR_TOTAL——劈或并之后的那一段（有 split 只记 split）；
+    - run：连续 ≥ run 格对不上（B／b／n）且其中有 b——整列错一格、放行器硬放了几格。
+    放行字 `text` 含考證标记（○、考證）的列不查（参校本没这段，SJ 11-14 抽看第 1 条）。
+    11-14 按 SJ 切分线抽看收紧（原版 run≥3／散在的 b≥3 也报，r59 报 172 列、看图 11 列全是识别认成形近字）：
+    切分线 33 列仍报 23 列；r59 非钉子列 172→87，其中同页 ≥ DRIFT_PAGE 列的 12 列降成提示（见 seg_screen_run）；
+    殿本 vol01／12／28／43 共 5,851 列 3→1。
+    SJ 建议的「劈和并同时出现才报」「全 n／N 列不报」各会漏 12／2 列真错，没用；单格形近字误认（OOObbbOOO）
+    与真劈并在格态上分不开，剩下的误报要靠看图。"""
+    import re
+    if any(t in text for t in DRIFT_SKIP_TEXT):
+        return []
+    hits = []
+    if any(ch == "n" and "b" in (states[i - 1:i] + states[i + 1:i + 2]) for i, ch in enumerate(states)):
+        hits.append("split")
+    elif re.search("[bn]{2,}", states) and sum(ch in "bn" for ch in states) >= DRIFT_PAIR_TOTAL:
+        hits.append("pair")
+    if any(len(m.group(0)) >= run and "b" in m.group(0) for m in re.finditer("[Bbn]+", states)):
+        hits.append("run")
+    return hits
+
+
+def page_ref_glyph(aref, glyph) -> tuple[dict, dict]:
+    """一页 ({格 id: 参校字}, {格 id: 字形匹配前 3 名})。参校字取 align_ref 的 coord，再补 ref_hint（没有字形证据被筛掉的整理本字）。"""
+    ref = {} if aref is None else {r.id: r.ref_char for r in aref.coord}
+    for k, v in ((getattr(aref, "ref_hint", None) or {}) if aref is not None else {}).items():
+        ref.setdefault(k, v)
+    g = {}
+    for cc in (glyph.columns if glyph is not None else []):
+        for ch in cc.chars:
+            g[ch.id] = ([ch.char] if ch.char else []) + [c[0] for c in (ch.candidates or [])[:REF_OK_TOPK]]
+    return ref, g
+
+
 # ── F6 格线劈字（2026-11-13，史記 r54 少见字页 SJ 量法，Sheldon 让 A22 并进 seg check） ────────────────
 
 CUT_MID = 0.025            # 切割量 ≥ 格高² 的这么多才看（格高 110 约 300px，SJ「中档」下限）
@@ -620,6 +680,9 @@ CUT_STRONG = 0.066         # ≥ 格高² 的这么多算强档（格高 110 约
 CUT_REACH = 0.4            # 在名义格线 ±这么多格高内找切割量最小的行
 CUT_SEP = 0.45             # 找的范围不越过相邻格线 ±这么多格高（同 row_boundaries.SNAP_CUT_MIN_SEP）
 CUT_KEEP = 0.25           # 挪开处的切割量要 ≤ 原位这么多倍才算「挪得开」（两字粘连时人裁的线也带点墨：史記人裁尺子 58 条，0.1 只报出 23 条、0.25 报 33 条，准确率 86%→81%，A22 11-13）
+CUT_WEAK_MOVE = 0.33       # 中档里挪不到这么多格高的记「弱」（seg check 只当提示）：史記 r59 20/37/41/42 册（A22 11-14）中档 67 条，
+                           # 挪 <0.33 格高的 49 条只有 3 条在人后来钉的列里，且那 3 列另有强档／对位串错旗；≥0.33 的 18 条里 5 条是真劈
+                           # （41:76:2、41:87:7 只有这一档）。挪得少＝原线已贴着字缝，多是上下字笔画相触（SJ 11-14 看图）
 CUT_MOVE = 0.07            # 且要挪 ≥ 这么多格高（格高 110 约 8px，原位旁边几行就是缝的不报）
 CUT_MAX_H = 1.6            # 纵向跨度超过这么多格高的连通块不算（界行残段、墨渍；同 row_boundaries.SNAP_CUT_MAX_H）
 CUT_JUDGE = 0.09           # U-Net 归属裁判：挪后那条线的一致率比原位低不超过这么多才报。挪进字内白缝会把整块部件（之的捺、
@@ -668,11 +731,12 @@ def _seam_cut(lab: np.ndarray, keep: np.ndarray, areas: np.ndarray, ys: np.ndarr
 
 def cut_through(gray: np.ndarray, col_cells, ink_threshold: int = 128, *, mid: float = CUT_MID,
                 strong: float = CUT_STRONG, judge=None) -> list[dict]:
-    """一列里**劈字的格线**：[{slot_above, slot_below, y, cost, best, move, level: 强|中}]（F6，2026-11-13）。
+    """一列里**劈字的格线**：[{slot_above, slot_below, y, cost, best, move, level: 强|中|弱}]（F6，2026-11-13）。
 
     相邻两格（夹注 a/b 合成一格看，两格都空的不看）的分界线，按连通块量切割量（Σ 被劈的连通块 min(线上墨, 线下墨)，
     `seg.seam.cut_cost_profile`；Step3 选了折线的按折线量）。切割量 ≥ `mid`×格高²、在 ±`CUT_REACH` 格高内（不越过相邻
-    格线 `CUT_SEP` 格高）能挪到 ≤ 原位 `CUT_KEEP` 的行、且要挪 ≥ `CUT_MOVE` 格高，就报；切割量 ≥ `strong`×格高² 是强档。
+    格线 `CUT_SEP` 格高）能挪到 ≤ 原位 `CUT_KEEP` 的行、且要挪 ≥ `CUT_MOVE` 格高，就报；切割量 ≥ `strong`×格高² 是强档，
+    其余挪 ≥ `CUT_WEAK_MOVE` 格高的是中档、挪得更少的是弱档（只当提示，11-14）。
 
     逐格的「邻字残笔」FOR 分不开「笔尖伸进来」和「格线劈在字中间」（史記全书 FOR 约 15,700 格，r53 排查时当噪声放过）；
     这里量的是线本身劈了多少墨、挪开能不能避开：两字本来粘连的挪不开（最小处仍高），不报。
@@ -737,6 +801,6 @@ def cut_through(gray: np.ndarray, col_cells, ink_threshold: int = 128, *, mid: f
                 if r[0][1] < r[0][0] - CUT_JUDGE:
                     continue
         out.append({"slot_above": a["slot"], "slot_below": b["slot"], "y": round(float(y), 1), "cost": int(c0),
-                    "best": int(best), "move": int(round(move)), "level": "强" if c0 >= strong * p2 else "中",
+                    "best": int(best), "move": int(round(move)), "level": "强" if c0 >= strong * p2 else "中" if abs(move) >= CUT_WEAK_MOVE * period else "弱",
                     "agree": agree})
     return out

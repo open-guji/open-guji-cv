@@ -20,6 +20,7 @@
   "ids_model": {"script": "research/m7/train_split.py", "trained_on": "本书在线 IDS 模板库与判法（如史記 ids/rr.json）"},
   "l2_head": {"script": "research/m7/ctx/l2model_train.py", "trained_on": "殿本 L3 答案（l2m-2）；史記等书现为复制件", "base": "sikuroberta"},
   "rr_shape": {"script": "research/char_groups/rr/qtw_shape_train.py", "trained_on": "本书入人八格"},
+  "wu_shape": {"script": "research/char_groups/wu/qtw_wu_shape_train.py", "trained_on": "本书嗚鳴格（文意放行＋Sheldon 刻形点选）"},
   "pair_shape": {"script": "research/char_groups/pair_shape/train.py", "trained_on": "本书两字刻形对"},
   "book_knn": {"script": "research/char_groups/book_knn_train.py", "trained_on": "本书人裁刻形"}
  }

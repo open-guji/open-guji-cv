@@ -3,6 +3,19 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [未发版]
+
+## [0.7.36] - 2026-11-14
+
+- 发版说明（A31 11-14，全唐文 QTW 要）：dev 头 `cbd4fa8`，基于 v0.7.35，PATCH。含 dev 上已合未发的 #1534（row_hooks `jiazhu_pair_ok`、`jiazhu_heads` 传 ruler）、#1535／#1536／#1537／#1538（seg check：align_drift 及收紧、CHECKS 补登记、劈字弱档）、#1539／#1540（wu_shape 嗚鳴书级刻形判法及护栏）、#1541（row_hooks `edge_frame_only`）。row_hooks 两钩缺省不调，殿本 fixture 产物与指纹不变，code_equiv 已登记；seg check 只动 eval。全量测试 54 失败＋3 错，与 v0.7.35 基线逐条相同（缺 guji-manager）。史記 patch 线不带这些。
+
+- PATCH：Step3 行切分书级钩子 `row_hooks` 加 `edge_frame_only(gray, spans, content_x, border_top, border_bottom, period, ink_threshold)`：补认「列端格里只有版框线」，与 P5 缺省判据（`seg/profile.frame_only_edge_cells`）取并集，照样记空、打 frame_line（全唐文台账 R018：none 页空列首格把上框粗条＋细线切成「一／幸／士」，粗条离 border_top 远过 0.2 格高，或这列没有 border_top）。缺省 None 不调，殿本、史記产物和指纹不变；row_segment、row_hooks 登 code_equiv。
+
+- PATCH：seg check 劈字 `cut_through` 加弱档（A22 11-14，SJ 看图「劈字中多是笔画相触」）：中档里挪不到 `CUT_WEAK_MOVE`＝0.33 格高的记「弱」，manager 只当提示。史記 r59 20/37/41/42 整册：中档 67 条里 49 条变弱，有劈字旗（强／中）的列 71→30；r59 之后人钉的 77 列召回不变（41:76:2、41:87:7 只有中档，挪 0.35／0.39 格高，仍是中；弱档里的 37:152:3 另有对位串错）。只动 eval，不影响产物。
+- PATCH：修 #1535 漏登记：`align_drift` 没进 `seg_screen_run.CHECKS`，有对位串错报出的册 `guji seg check` 直接 KeyError（A22 11-14）；加测试守卫 rows 用到的检查名都要登记。
+- PATCH：seg check 新检查 align_drift「对位串错·疑整列错位」（史記台账 R017，A22 11-14）：一列里连续 ≥3 格对不上参校字（至少一格没放行）、劈（列中没配到参校字的格挨着没放行的对不上格）、或没放行且对不上的格 ≥3；只读 seed_admit／align_ref／glyph_match，不加步骤、不进产物指纹。史記 r59 切分线钉的 33 列报 23 列，全书非钉子列报 172 列；殿本 4 册报 3 列。
+- PATCH：seg check 对位串错 `align_drift` 按 SJ 切分线抽看收紧（A22 11-14，史記 R017）：散在单格对不上不再报，要劈（n 挨 b）、连续两格没放行对不上且全列 ≥3、或连续 ≥5 格对不上；考證列（○／考證）不查；同页报出 ≥3 列的 value 加 `page`（整页的事，manager 降成提示）。r59 172→87 列（结构 75），切分线 23 列全留；殿本 4 册 3→1。只动 eval，不影响产物。
+
 ## [0.7.35] - 2026-11-13
 
 - 发版说明（A31 11-13，全唐文 QTW 要）：dev 头 `c57b7968`，基于 v0.7.34，PATCH。只多 #1531（`group_flow_ruling_first` 在线模式 `GUJI_LLM_ONLINE=1` 时不先查，只给只读裁定库用；补复核按裁定改字的测试）。缺省关，code_equiv 已登记，没开名单的册产物不过期。
@@ -31,6 +44,7 @@
 
 ## [未发版]
 
+- PATCH：Step3 行切分书级钩子 `row_hooks` 加 `jiazhu_pair_ok(patch, ink_threshold, forced)`（判一格是不是真并排两字；人指认小注格与段内格各查一次，判否就不拆），`jiazhu_heads` 多传 `ruler`（全唐文 k8 撤掉 row_boundaries／jiazhu_split 整文件 fork 用）。缺省 None 不调，殿本、史記产物和指纹不变；row_segment、row_boundaries、row_hooks 登 code_equiv，全唐文另登两项 SPLITS，各册 row_segment 指纹不变。
 - PATCH：删没书开、关时不进参数 dump 的切分开关（A22 开关收敛 L0 批，A20 11-14 定）：`border_detect.merge_narrow_pair`、`border_detect_gate.pagetype_model`（含 path、fingerprint）、`column_gate.period_edge_fallback`、`row_segment.colgold_prior`／`colgold_fingerprint`、`row_segment.yolo_merge`（含 `yolo_*` 六个）及只在开着时走的代码。四个模块登 code_equiv（殿本 vol01 13 页逐字节同），各书产物不过期。册配置里还写着这些键的会被静默忽略（没有书写）。`pagetype_model` 包、`impl/keben/column_pair_merge`、`yolo_tool_infer` 模块留着（闸认旗、研究脚本还用，且在 code_deps 里）。关时也进 dump 的另一批（page_survey_block、hint_ignore_dash、narrow_reject、dash_blank 等）随统一重跑轮删。
 
 ## [0.7.34] - 2026-11-13
