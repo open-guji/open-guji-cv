@@ -132,6 +132,7 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
         adm_p = store.read(book, "seed_admit", key, "seed_admit")
         adm_by_col = {} if adm_p is None or aref_p is None else {a.col: a for a in adm_p.columns}
         ref_p, glyph_top = ss.page_ref_glyph(aref_p, glyph_p) if adm_by_col else ({}, {})
+        no_coord = not ss.drift_applicable(aref_p)
 
         shifted = {cc.col for cc in cells.columns if any(str(f).startswith("layout_shift") for f in cc.flags)}
         _ref_ok = functools.partial(_geo_ref_ok, conf, shifted)
@@ -166,7 +167,9 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             if ss.pitch_free_ignored(cc, lay_page.get(cc.col)):
                 rows["pitch_free_ignored"].append((book, page, cc.col, "", "表写 pitch: free，选中挤格补线格网"))
                 c["pitch_free_ignored"] += 1
-            if not pinned and cc.col in adm_by_col:     # 对位串错只读产物，不要列图；钉子列只比格号
+            # 对位串错只读产物，不要列图；钉子列只比格号。册配置声明本页参校本 text（不分列、不做坐标对位）或 none（无参照）
+            # 的不查：格态全是 N／n，pair 只是在数待审格，量不出错位（全唐文 s1 闸，2026-11-14）。整页没锚上的照查（可能是切坏了）
+            if not pinned and cc.col in adm_by_col and not no_coord:
                 st = ss.cell_states(adm_by_col[cc.col], ref_p, glyph_top)
                 dr = ss.align_drift(st, "".join(x.char or "" for x in adm_by_col[cc.col].chars))
                 if dr:

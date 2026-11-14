@@ -678,6 +678,13 @@ def cell_states(adm_col, ref: dict, glyph: dict) -> str:
     return "".join(out)
 
 
+def drift_applicable(aref) -> bool:
+    """本页查不查对位串错：册配置把本页参校本声明成 text（不分列、不做坐标对位）或 none（无参照）的不查——
+    格态全是 N／n，pair 只是在数待审格，量不出错位（全唐文 s1 闸 143 列回退里 37 列是这种页，2026-11-14）。
+    没声明、只是整页没锚上的照查（可能是切坏了）。"""
+    return getattr(aref, "ref_kind", None) not in ("text", "none")
+
+
 def align_drift(states: str, text: str = "", run: int = DRIFT_RUN) -> list[str]:
     """一列格态串（`cell_states`）里的整列错位迹象：
     - split：没配到参校字的格（n）挨着没放行的对不上格（b）——一个参校字跨两格（劈）；
