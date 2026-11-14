@@ -209,6 +209,17 @@ def test_cut_through_reports_stroke_tail_cut():
     assert 36 <= h["move"] <= 39 and h["level"] == "中"
 
 
+def test_cut_through_short_move_is_weak():
+    """挪不到 CUT_WEAK_MOVE 格高的中档记「弱」（原线已贴着字缝，多是上下字笔画相触；seg check 只当提示，11-14）。"""
+    cc = _col(1, [1, 2])
+    g = _img(400)
+    g[120:190, 30:70] = 0
+    g[120:226, 40:55] = 0                     # 竖笔尾伸进下格 26 行、宽 15（切割量 390px）
+    g[240:290, 30:70] = 0
+    (h,) = ss.cut_through(g, cc)
+    assert h["cost"] == 390 and h["move"] == 26 and h["level"] == "弱"
+
+
 def test_cut_through_judge_gates_report():
     g, cc = _tail_page()
     ok = _Judge([0.90, 0.99])                 # 挪后归属更对：报
