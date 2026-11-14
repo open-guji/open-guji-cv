@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH：Step3 行切分书级钩子 `row_hooks` 加 `edge_frame_only(gray, spans, content_x, border_top, border_bottom, period, ink_threshold)`：补认「列端格里只有版框线」，与 P5 缺省判据（`seg/profile.frame_only_edge_cells`）取并集，照样记空、打 frame_line（全唐文台账 R018：none 页空列首格把上框粗条＋细线切成「一／幸／士」，粗条离 border_top 远过 0.2 格高，或这列没有 border_top）。缺省 None 不调，殿本、史記产物和指纹不变；row_segment、row_hooks 登 code_equiv。
 ## [未发版]
 
 - PATCH：seg check 劈字 `cut_through` 加弱档（A22 11-14，SJ 看图「劈字中多是笔画相触」）：中档里挪不到 `CUT_WEAK_MOVE`＝0.33 格高的记「弱」，manager 只当提示。史記 r59 20/37/41/42 整册：中档 67 条里 49 条变弱，有劈字旗（强／中）的列 71→30；r59 之后人钉的 77 列召回不变（41:76:2、41:87:7 只有中档，挪 0.35／0.39 格高，仍是中；弱档里的 37:152:3 另有对位串错）。只动 eval，不影响产物。

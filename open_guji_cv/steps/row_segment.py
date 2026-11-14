@@ -1134,6 +1134,7 @@ class RowSegmentStep(Step):
             for name in ("grid_adjust", "jiazhu_pair_ok"):     # 不挂开关：本书给了就调
                 if getattr(_hooks, name, None) is not None:
                     hook_kw[name] = getattr(_hooks, name)
+        _edge_fo_hook = None if _hooks is None else getattr(_hooks, "edge_frame_only", None)
         if p.grid_end_fit and "grid_end_fit" not in inspect.signature(segment_column).parameters:
             raise ValueError("row_segment.grid_end_fit 是殿本套书（siku_zongmu）的开关"
                              f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
@@ -1566,6 +1567,12 @@ class RowSegmentStep(Step):
                                                  gc.content_x, base.get("border_top"),
                                                  r.bottom_bar_y if r.bottom_bar_y is not None else base.get("border_bottom"),
                                                  gate.period, p.ink_threshold)
+                    if _edge_fo_hook is not None:      # 书级补认（row_hooks.edge_frame_only），与缺省判据取并集
+                        hit = sorted(set(hit) | set(_edge_fo_hook(
+                            img if img.ndim == 2 else img.mean(axis=2), [(c.y0, c.y1) for c in byy],
+                            gc.content_x, base.get("border_top"),
+                            r.bottom_bar_y if r.bottom_bar_y is not None else base.get("border_bottom"),
+                            gate.period, p.ink_threshold)))
                     for i in hit:                      # 雙行小注两半同格号、同上下沿，一起记空
                         same = [c for c in byy if c.slot == byy[i].slot and c.kind != "blank"]
                         for c in same:

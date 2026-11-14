@@ -54,6 +54,9 @@ _DROP_L0_1114 = ("删缺省关、没书开、关时不进参数 dump 的开关�
                  "yolo_merge 等七件及其只在开着时走的代码；关时控制流与改前相同。殿本 vol01 13 页（1,2,3,30,48,60,87,100,130,160,182,203,204，"
                  "含卷端大印、职名页、门目页、卷末印，main 包 cv0.7.16-c16-g21-m2-p48-col9-grid-1113-a2 当上游）border_detect、border_detect_gate、"
                  "column_gate、row_segment 与 origin/dev 84f5bc28 产物逐字节相同；scripts/code_equiv.py check，2026-11-14（A22）")
+_QTW_EFO_1114 = ("row_hooks 加书级钩子 edge_frame_only（缺省 None，不调；row_segment 只在钩子非 None 时多算一次列端框线格、与缺省判据取并集）："
+                 "殿本 fixture 册 keben 冻结三页（tests/fixtures/workspace/raw/keben 1–3）row_segment 与 origin/dev 5e017b52 产物逐字节相同；"
+                 "2026-11-14（全唐文切分线，台账 R018）")
 _QTW_HOOKS_1113 = ("row_hooks 加书级钩子 jiazhu_pair_ok（缺省 None，不调）、jiazhu_heads 多传 ruler（只在钩子非 None 时调）："
                    "殿本 fixture 册 keben 冻结三页（tests/fixtures/workspace/raw/keben 1–3）row_segment 与 origin/dev 84f5bc28 产物逐字节相同；"
                    "全唐文 k8（书仓 fork 改钩子，cv 本分支）对 k6 fork（cv v0.7.31）：054 全册 180 页（包 cv0.7.31-c68-g-02bb02-k6-qtw054-n1）、115 全册 208 页（判、小注密，包 cv0.7.31-c69-g-02bb02-k6-qtw115-p1）row_segment→cell_shrink 产物逐字节相同；"
@@ -1701,6 +1704,12 @@ ENTRIES: tuple[Equiv, ...] = (
     Equiv("open_guji_cv.impl.keben.row_hooks",
           "929638d4bf1a4b6a3c63ad18549fbcb7af06634c4de507fdcda427e5eebba743",
           "52ffeffbf71bc6b94a9789068b94fa5d25d5076700c2bfba730a9e1d2c6cf459", _QTW_HOOKS_1113),
+    Equiv("open_guji_cv.steps.row_segment",
+          "e65a947c7ad603a55e0e965883728f96402d4dde2fba4422e29f27af19075bda",
+          "b6622dfd40c6989354bb5e5338b68bb929ff4c725e8899cc3efae826870244de", _QTW_EFO_1114),
+    Equiv("open_guji_cv.impl.keben.row_hooks",
+          "6e9e81b88fce18f655c3ff079f65195ee27e09bf2c00fa17e943663f3b90ed51",
+          "929638d4bf1a4b6a3c63ad18549fbcb7af06634c4de507fdcda427e5eebba743", _QTW_EFO_1114),
 )
 
 
