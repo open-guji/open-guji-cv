@@ -1131,8 +1131,9 @@ class RowSegmentStep(Step):
                                      "（全唐文：seg_set: quantangwen）")
                 if getattr(p, flag):
                     hook_kw[name] = getattr(_hooks, name)
-            if getattr(_hooks, "grid_adjust", None) is not None:
-                hook_kw["grid_adjust"] = _hooks.grid_adjust
+            for name in ("grid_adjust", "jiazhu_pair_ok"):     # 不挂开关：本书给了就调
+                if getattr(_hooks, name, None) is not None:
+                    hook_kw[name] = getattr(_hooks, name)
         if p.grid_end_fit and "grid_end_fit" not in inspect.signature(segment_column).parameters:
             raise ValueError("row_segment.grid_end_fit 是殿本套书（siku_zongmu）的开关"
                              f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
