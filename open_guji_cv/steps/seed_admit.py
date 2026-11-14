@@ -2609,7 +2609,7 @@ class SeedAdmitStep(Step):
                 n_auto += d_rs
                 n_review -= d_rs
             if p.group_flow_wu_shape:
-                d_ws = _wu_shape_pass(p, out, amap, ctx, page, patch_missing, mmap)
+                d_ws = _wu_shape_pass(p, out, amap, ctx, page, patch_missing)
                 n_auto += d_ws
                 n_review -= d_ws
             if p.group_flow_pair_shape:
@@ -5706,13 +5706,13 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
 _WU = frozenset("嗚鳴")
 
 
-def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None,
-                   mmap: dict | None = None) -> int:
+def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
     """嗚鳴 书级刻形判法（`groups.wu_shape`，`SeedAdmitParams.group_flow_wu_shape`）。紧接 rr_shape。→ 放行数净增。
 
     同 `_rr_shape_pass`：刻形说了算、越过整理本与文意（sheldon 11-13「嗚/鳴 归形近不同义组，拆部件 100% 自动区分」，
-    11-14 嗚鳴17格按刻形点）。待审格须本格字是 嗚鳴、或字形库前 3 名候选里有 嗚／鳴，刻形给字 → 放行（channel `wu_shape`）；
-    只是整理本／字组说是 嗚鳴 的格不补放（总览 11-14 审：对不齐时格里可能是 呼 或半个字，二分类网对没见过的字形照样高把握）；
+    11-14 嗚鳴17格按刻形点）。只判本格字（库首位）是 嗚鳴 的格：待审格刻形给字 → 放行（channel `wu_shape`）；
+    整理本／字组／库前几名里有 嗚鳴 都不算（总览 11-14 审：对不齐时格里可能是别的字；全唐文 t1 实测库前 3 名放进来的 21 格
+    全是 鴨鵝鳩塢鴟 这类右边也是 鳥／烏 的字，网只看右半、照样给 p≈1，3 格错放成 鳴）；
     已放行的 嗚鳴 格刻形给了另一个字 → 改字（`evidence.fixed_from`）；弃权不动；人裁格、硬护栏格不碰。"""
     from ..groups import wu_shape
     model = wu_shape.load(p.group_flow_wu_shape)
@@ -5726,8 +5726,7 @@ def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
             ds = list(r.doubts or [])
             if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") for d in ds) or ev.get("guard") in ("never_match", "conflict", "timeout"):
                 continue
-            if r.char not in _WU and (r.admit or not any(
-                    c[0] in _WU for c in list(getattr((mmap or {}).get(r.id), "candidates", None) or [])[:3])):
+            if r.char not in _WU:
                 continue
             try:
                 img = _page_patch(ctx, page, c.col, r.slot, r.sub)
