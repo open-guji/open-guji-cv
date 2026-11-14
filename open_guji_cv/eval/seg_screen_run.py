@@ -31,7 +31,7 @@ import sys
 
 CHECKS = ("edge_ink", "orphan", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
           "pitch_free_ignored", "cell_flags", "cell_size", "page_pitch", "half_width", "pin_slots", "pin_stale", "layout_slots", "seal_blank",
-          "cut_through", "geo_ref_ok", "block_tall")
+          "cut_through", "geo_ref_ok", "block_tall", "align_drift")
 
 
 def _engine(book: str):
