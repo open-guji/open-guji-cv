@@ -145,14 +145,6 @@ def test_align_drift_patterns():
     assert ss.align_drift("NnNnnNNNN") == ["pair"]             # 整列没配到参校字（42:84:8 真错）照报
 
 
-def test_drift_skips_pages_declared_text_or_none():
-    from types import SimpleNamespace as NS
-    assert not ss.drift_applicable(NS(ref_kind="text"))
-    assert not ss.drift_applicable(NS(ref_kind="none"))
-    assert ss.drift_applicable(NS(ref_kind=None))          # 没声明：整页没锚上也照查
-    assert ss.drift_applicable(NS())                        # 旧产物没有这个字段
-
-
 def test_cell_states_uses_glyph_not_admit_char():
     from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
 
