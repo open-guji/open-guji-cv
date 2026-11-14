@@ -1816,15 +1816,16 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
         ("open_guji_cv.steps.cell_shrink", "94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e"),
         ("open_guji_cv.impl.keben.patch_clean", "44241a22b9f46de4a70feb68662ece757511aa86727cfe2b0034a1d8a56db16e"))),
     # 全唐文 k8（2026-11-13 切分线）：书仓 row_boundaries、jiazhu_split 两份整文件 fork（k6 那一版）撤掉，差异挂成书级钩子
-    # guji_book.quantangwen.row_hooks。几块都还是登记时那一版时：cv jiazhu_split＋书仓 row_hooks 合回 k6 书仓 jiazhu_split 一项，
-    # cv row_boundaries＋seg_overrides 合回 k6 书仓 row_boundaries 一项，全唐文各册 row_segment 指纹不变（054 全册逐字节相同）。
+    # guji_book.quantangwen.row_hooks。几块都还是登记时那一版时：cv row_boundaries＋书仓 row_hooks 合回 k6 书仓 row_boundaries
+    # 一项，cv jiazhu_split＋seg_overrides 合回 k6 书仓 jiazhu_split 一项，全唐文各册 row_segment 指纹不变（054、013 全册逐字节相同）。
     # 书仓 row_hooks 只有全唐文有，第一项只在全唐文合；别的书 seg_overrides 已被上面 seal_ink 两项收走，第二项合不上。
-    # 两项必须排在 seal_ink 两项之后、且按这个顺序
-    "guji_book.quantangwen.jiazhu_split": ("a0bdb376848116f288d3f912c64b98d6c834ded95b28d297e5fae5ca588f26a0", (
-        ("open_guji_cv.impl.keben.jiazhu_split", "e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b"),
-        ("guji_book.quantangwen.row_hooks", "d903be4d92599f4e37c60203c4d30253b72c291f004fc094e30afc2aadcfe139"))),
+    # 两项必须排在 seal_ink 两项之后。column_gate 的模块表只有 row_boundaries、没有书级模块，认不出是全唐文，
+    # 全唐文 column_gate 指纹会变一次（产物不变，下游按上游产物 sha 不过期；054 四页 column_gate 逐字节相同）。
     "guji_book.quantangwen.row_boundaries": ("99682ac7af551c7f03ffc321bcfb5c8e94be249909d10f358d14527f067f43c3", (
         ("open_guji_cv.impl.keben.row_boundaries", "4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c"),
+        ("guji_book.quantangwen.row_hooks", "d903be4d92599f4e37c60203c4d30253b72c291f004fc094e30afc2aadcfe139"))),
+    "guji_book.quantangwen.jiazhu_split": ("a0bdb376848116f288d3f912c64b98d6c834ded95b28d297e5fae5ca588f26a0", (
+        ("open_guji_cv.impl.keben.jiazhu_split", "e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b"),
         ("open_guji_cv.feedback.seg_overrides", "81f5eb066e4d8fca8df69f95ef375ffb3196ccd30e850a35c099ee9648733fd0"))),
 }
 
