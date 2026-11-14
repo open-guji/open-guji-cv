@@ -112,11 +112,6 @@ def test_pass_skips_human_and_lifts_pending():
     same = R(id="b:1:1:5", admit=True, char="嗚", channel="match_ref", provenance="match", doubts=[])
     refonly = R(id="b:1:1:6", admit=False, char="呼", channel=None, provenance="match", evidence={"group": {"id": "wu"}})
     cand = R(id="b:1:1:7", admit=False, char="之", channel=None, provenance="match")
-
-    class M:
-        def __init__(self, cands):
-            self.candidates = cands
-    mmap = {"b:1:1:6": M([("呼", .9), ("乎", .5)]), "b:1:1:7": M([("之", .9), ("烏", .6), ("鳴", .5)])}
     amap = {"b:1:1:6": ("嗚",)}
     p = SeedAdmitParams(**SKIP)
     object.__setattr__(p, "group_flow_wu_shape", "x")
@@ -125,7 +120,7 @@ def test_pass_skips_human_and_lifts_pending():
         mp.setattr(W, "load", lambda path: {})
         mp.setattr(W, "judge", lambda img, m: {"char": "嗚", "why": "agree", "p": 0.001})
         mp.setattr(sa, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
-        assert sa._wu_shape_pass(p, [C([hum, pend, other, adm, same, refonly, cand])], amap, mmap=mmap) == 2
+        assert sa._wu_shape_pass(p, [C([hum, pend, other, adm, same, refonly, cand])], amap) == 1
     finally:
         mp.undo()
     assert hum.char == "鳴" and hum.channel == "human"
@@ -134,4 +129,4 @@ def test_pass_skips_human_and_lifts_pending():
     assert adm.admit and adm.char == "嗚" and adm.channel == "wu_shape" and adm.evidence["fixed_from"] == {"channel": "group_flow", "char": "鳴"}
     assert same.char == "嗚" and same.channel == "match_ref" and "fixed_from" not in same.evidence
     assert not refonly.admit and refonly.char == "呼" and "wu_shape" not in refonly.evidence     # 只有整理本／字组说嗚鳴 → 不补放
-    assert cand.admit and cand.char == "嗚" and cand.channel == "wu_shape"                       # 库前 3 名有鳴 → 补放
+    assert not cand.admit and cand.char == "之" and "wu_shape" not in cand.evidence             # 库前 3 名有鳴也不补放（t1：鴨鵝鳩 被判成鳴）

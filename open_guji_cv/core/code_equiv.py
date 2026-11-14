@@ -42,6 +42,9 @@ _WU_1114 = ("seed_admit 嗚鳴 书级刻形判法 group_flow_wu_shape（缺省�
 _WU_OOD_1114 = ("seed_admit _wu_shape_pass 补放护栏（总览 11-14 审 #1539）：待审格须本格字是嗚鳴或库前 3 名候选有嗚鳴，只有整理本／字组说嗚鳴的不补放；"
                 "只在 group_flow_wu_shape 开时走：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）20 页 seed_admit 与 origin/dev 0371709 产物逐字节相同；"
                 "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-14（全唐文·形近字线）")
+_WU_TOP1_1114 = ("seed_admit _wu_shape_pass 只判库首位是嗚鳴的格（去掉库前 3 名补放；全唐文 t1 实测库前 3 名放进来的 21 格全是 鴨鵝鳩塢 等右边是鳥／烏的别字）："
+                 "只在 group_flow_wu_shape 开时走：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）20 页 seed_admit 与 origin/dev b9b54ebd 产物逐字节相同；"
+                 "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-14（全唐文·形近字线）")
 _RF_1113 = ("seed_admit group_flow_ruling_first（书级，缺省空不进参数 dump；Chain._ruling_first 名单外直接返回 (None, None)、ask_rf 只在名单内记）：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）40 页 seed_admit 与 origin/dev 69711fa 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-13（全唐文·形近字线）")
 _FR_HOOK_1113 = ("seed_admit follow_ref 加书级钩子 impl/keben/follow_ref_hooks.rival_skip（缺省 None，不调；follow_ref_decide 加 rival_skip "
                  "参数缺省空集，max 的过滤条件多一个恒真项）、新函数 _RivalFacts／_pair_facts／_follow_ref_rival_hook（只在钩子非 None 时用）："
@@ -1666,6 +1669,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='84e728f32f5c8ed37a5141f76b1e4cff34ba2878308c826b79573d8e515dca2b',
           old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
           evidence=_WU_OOD_1114),
+    # seed_admit wu_shape 只判库首位是嗚鳴的格（全唐文 t1，11-14）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='79687a409072cec7216fc8ff9133be6f587eefd4c15ecc3f7a32f7a616119e83',
+          old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
+          evidence=_WU_TOP1_1114),
     # align_ref coord_legacy_line_guard 现役跨行借字不算冲突（缺省关；史記 r60 37:2:6–7 参校本缺「正義」，2026-11-13，A22）
     Equiv(module='open_guji_cv.steps.align_ref',
           new='9e787a1f39ed3f7827de1e79be7b5bb543ff844415f5566c562c3665f7cdbd58',
