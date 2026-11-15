@@ -86,11 +86,19 @@ def iter_events(paths: list[Path]):
                         yield e
 
 
+def overridden_ids(payloads) -> set[str]:
+    """新人裁 `payload.overrides` 指向的旧人裁 id（网站落票时记，用户 2026-11-10 定：新裁直接覆盖旧裁）。"""
+    return {o for pl in payloads for o in ([pl["overrides"]] if isinstance(pl.get("overrides"), str)
+                                           else pl.get("overrides") or []) if o}
+
+
 def decided_cells(events, book: str, as_of: str) -> dict[str, list[tuple[str, str]]]:
     """{格号: [(ts, 类别)…]}，只收截止时刻之前、定了字的事件。"""
     out: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    events = [e for e in events if str(e.get("ts", "")) <= as_of and deciding(e)]
+    gone = overridden_ids((e.get("payload") or {} for e in events))     # 已被后来的人裁推翻的旧人裁不再算这格「定了」
     for e in events:
-        if str(e.get("ts", "")) > as_of:
+        if e.get("id") in gone:
             continue
         kind = deciding(e)
         cell = cell_of(e, book) if kind else None

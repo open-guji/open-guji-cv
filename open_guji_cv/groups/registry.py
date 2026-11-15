@@ -731,6 +731,14 @@ OPT_IN_GROUPS: dict[str, GroupSpec] = {
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/zw",
         flow=FlowSpec((CTX,), review=True, lift_ref_agree=True, review_ref_agree=True),
         note="形近不同义，按文意定（L1 规则，弃权查 L2 表）；放行字须与整理本（参校本）同字：补放要同字，复核时与整理本不同又没有文意给出整理本字的降审（不改字）。"),
+    # 嗚鳴（2026-11-13，全唐文 QTW 经 Ops 转）：本书嗚的刻形与库里鳴的刻例看图分不出（m2 层4 有 130 格参校本作嗚、库首位鳴，
+    #   123 格是 嗚呼／嗚乎／嗚咽／喑嗚），只能靠文意：L1 规则（嗚＝叹词哭声，鳴＝鸟兽乐器之声）→ L2/L3 裁定库（管线不在线问，
+    #   留痕 ask 进 llm_queue）。补放、复核都跑；文意 strong 才改已放行的字、才越过整理本（同 日曰／刺剌）。需点名才开（全唐文册配置 group_flow 加 wu）。
+    "wu": GroupSpec(
+        id="wu", name="嗚鳴", members=frozenset("嗚鳴"), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/wu",
+        flow=FlowSpec((CTX,), review=True, review_fix_strong=True, strong_over_ref=True),
+        note="形近不同义，看图分不开，按文意定（L1 规则，弃权查 L2 表；L3 走裁定库）：嗚＝嗚呼、嗚咽，鳴＝雞鳴、鳴鑾；补放，也复核，文意 strong 才改字（同 日曰）。"),
 }
 
 #: 字组流程可点名的全部组。

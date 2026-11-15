@@ -285,3 +285,44 @@ def test_dt_wyu_sb_have_ids_method_that_abstains_without_bank():
         assert "ids" in FLOW_GROUPS[g].flow.solvers and g in ids_online.SPECS
     v = IDS._run(NS(group="dt_no_such_bank", patch=lambda: None))
     assert v.char is None and v.why == "abstain:no_bank"
+
+
+def test_ruling_first_overrides_lower_layers(tmp_path, monkeypatch):
+    """`FlowConfig.ruling_first`（全唐文 11-13 己已巳按文意＋AI）：本组先查裁定库，命中就照裁定给字（L2 小头让位）；
+    没命中照常走各层；不在名单的组不受影响。"""
+    from tests.test_groups_ctx_l2 import FakeEnc, head
+    monkeypatch.setattr(ctx_l2, "_encoder", lambda n, r: FakeEnc())
+    monkeypatch.delenv(ctx_llm.ENV_ONLINE, raising=False)
+    _L3C.clear()
+    hp = tmp_path / "ry.json"
+    hp.write_text(json.dumps(head(thr=0.99), ensure_ascii=False), encoding="utf-8")
+    cp = tmp_path / "cache.jsonl"
+    ctx_llm.judge("ry", "提示詞", "t", "某乙", "云", frozenset("日曰"), model="m", effort="low",
+                  cache=ctx_llm.AnswerCache(cp), client=FakeClient({"char": "日", "conf": "high", "why": "x"}))
+
+    def cfg(first):
+        class Cfg:
+            l2_tables, l2_models, canon, l2_drift = {}, {"ry": str(hp)}, None, 0
+            l3_online = {"ry": {"system": "提示詞", "ver": "t", "cache": str(cp)}}
+            l3_model, l3_effort, l3_need_l2_agree = "m", "low", False
+            ruling_first = first
+        return Cfg()
+
+    chain = Chain("ctx", steps=(CtxRule(), Llm(), CtxModel(), CtxOnline()))
+
+    def run(c, right="云"):
+        return chain.run(MethodInput(group="ry", members=frozenset("日曰"), cell_id="v:1:1:1", cands=[], ref=None,
+                                     cfg=c, left="某乙", right=right))
+    assert run(cfg(frozenset())).char == "曰"                                  # 缺省：L2 小头先给字
+    assert run(cfg(frozenset({"jys"}))).char == "曰"                            # 别的组开着不影响
+    v = run(cfg(frozenset({"ry"})))
+    assert v.char == "日" and v.via == "ctx:ctx_llm" and v.extra["ruling_first"]
+    v = run(cfg(frozenset({"ry"})), right="云云")                                # 没有裁定：照常 L2，并记下这一问交对话核
+    assert v.char == "曰" and not v.extra.get("ruling_first")
+    assert v.extra["ask_rf"] and v.extra["ask"]["r"] == "云云"
+    assert "ask" not in run(cfg(frozenset()), right="云云").extra                 # 缺省不记
+    from open_guji_cv.feedback import llm_queue
+    doc = {"seed_admit": {"columns": [{"chars": [{"id": "v:1:1:1", "char": "曰", "evidence": {"group": {
+        "id": "ry", "solvers": [{"solver": "ctx", "char": "曰", "why": v.why, **v.extra}]}}}]}]}}
+    (q,) = llm_queue.questions_of_page(doc)
+    assert q["r"] == "云云" and q["cur"] == "曰"
