@@ -21,8 +21,24 @@
 
   被排除且确实在候选里的字记进放行证据 `lane.rival_skip`，方便按参校本错误回查。其余判据（cov 门槛、领先差门槛、
   硬疑问、`diff`）照旧。
+
+- `variant_norm(*, lane, char, form, canon, lib) -> str | None`（2026-11-15 A22，SJ r68 请求、A24 定「本书已归一的异体可放」）
+
+  待审补放三通道（`witness3`／`coord_fallback`／`seal`）要放 `char`，`lane_variant_guard` 发现现候选字或库前
+  `lane_variant_topk` 名里有它的异体 `form`、内建例外（`keep_rare`、印章 `variant_first`／`lane_seal_codepoint_variant`、
+  坐标 `lib_coord_codepoint`）又都不放、本要记 `lane_skip.why=cand_variant` 送审时，最后调一次。
+  返回放行字（两形在本书已归一时通常是归一后的码位）→ 放行，证据记 `lane.variant_norm="hook"`、`lane.variant_from=form`；
+  None／空 → 照旧送审。返回字须与 `char` 语义同（`variants` 归并后同字），否则忽略、照旧送审。
+
+  - `lane`：通道名 "witness3"｜"coord_fallback"｜"seal"；`char`：通道要放的字；`form`：触发护栏的那个异体；
+  - `canon`：本书 `codepoints:` 归一函数（字 → 码位字），本书没写 `codepoints:` 时 None；`lib`：库首位字（可能 None）。
+
+  只在护栏本要拦的格上调；`witness3` 里「库首位与整理本是异体对」（`why=lib_variant`）那一支不经这里。
 """
 from __future__ import annotations
 
 #: None＝不调（缺省）。
 rival_skip = None
+
+#: None＝不调（缺省）。
+variant_norm = None

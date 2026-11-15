@@ -2674,6 +2674,7 @@ class SeedAdmitStep(Step):
                                         (lambda: _lane_witnesses(ctx.book, p))
                                         if (p.lane_witness3 or p.lane_coord) else None,
                                         canon=ctx.book.canonical_char if ctx.book.codepoints else None,
+                                        variant_hook=_lane_variant_hook(ctx),
                                         knn_veto=(_witness3_knn_veto_fn(p, ctx, page)
                                                   if p.witness3_knn_veto and p.group_flow_near_knn else None),
                                         lib_n=(_keben_counts(p.db_path) or None)
@@ -4783,9 +4784,12 @@ def _blind_ref_behind(m, co: str, top_cov: float, gap: float) -> bool:
 
 
 def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict,
-                       vmap, witnesses_fn, canon=None, lib_n: dict | None = None, knn_veto=None) -> int:
+                       vmap, witnesses_fn, canon=None, lib_n: dict | None = None, knn_veto=None,
+                       variant_hook=None) -> int:
     """待审补放三通道（`lane_witness3`／`lane_coord`／`lane_seal`，overview#433）。→ 放行格数。
 
+    `variant_hook`：书级钩子 `follow_ref_hooks.variant_norm`（缺省 None＝不调），`lane_variant_guard` 内建例外都不放时
+    最后问一次，见该模块。
     只升不降：只碰 admit=False、非人裁、不在排除名单上的格；己/已/巳 一族一律跳过。
     `witnesses_fn()` → 证人列表（只在 R1/R4 真要看证人时才调，装载与锚定都是懒的）。"""
     from pathlib import Path
@@ -4995,6 +4999,10 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                 elif (vf is not None and lev.get("via") == "lib_coord_codepoint" and canon is not None
                       and canon(vf) == canon(char)):
                     pass                                    # 候选里的另一形本书已归到同一码位
+                elif vf is not None and variant_hook is not None and (
+                        vn := variant_hook(lane=name, char=char, form=vf, canon=canon, lib=lib)) and same(vn, char):
+                    char = vn                               # 书级钩子：两形本书已归一（史記，follow_ref_hooks.variant_norm）
+                    lev = {**lev, "variant_norm": "hook", "variant_from": vf}
                 elif vf is not None:    # 图上可能是刻本异体：别把它改成通用字（#433）
                     rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "cand_variant", "form": vf, "char": char}}
                     continue
@@ -6737,6 +6745,14 @@ def _follow_ref_rival_hook(ctx: RunContext):
     import importlib
     from ..core.seg_set import resolve
     return getattr(importlib.import_module(resolve(ctx.book, _FOLLOW_REF_HOOKS)), "rival_skip", None)
+
+
+def _lane_variant_hook(ctx: RunContext):
+    """书级钩子 `impl/keben/follow_ref_hooks.variant_norm`（书仓 `code/` 覆盖才有；缺省 None）。
+    书仓模块没写这个名字也当 None（11-13 前写的覆盖模块只有 rival_skip）。"""
+    import importlib
+    from ..core.seg_set import resolve
+    return getattr(importlib.import_module(resolve(ctx.book, _FOLLOW_REF_HOOKS)), "variant_norm", None)
 
 
 def _edge_pair_excluded(a: str, b: str) -> bool:

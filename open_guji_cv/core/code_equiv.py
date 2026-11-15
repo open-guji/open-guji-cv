@@ -45,6 +45,9 @@ _WU_OOD_1114 = ("seed_admit _wu_shape_pass 补放护栏（总览 11-14 审 #1539
 _WU_TOP1_1114 = ("seed_admit _wu_shape_pass 只判库首位是嗚鳴的格（去掉库前 3 名补放；全唐文 t1 实测库前 3 名放进来的 21 格全是 鴨鵝鳩塢 等右边是鳥／烏的别字）："
                  "只在 group_flow_wu_shape 开时走：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）20 页 seed_admit 与 origin/dev b9b54ebd 产物逐字节相同；"
                  "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-14（全唐文·形近字线）")
+_VN_HOOK_1115 = ("seed_admit lane_variant_guard 加书级钩子 impl/keben/follow_ref_hooks.variant_norm（缺省 None，不调；_review_lanes_pass 加 variant_hook 参数缺省 None、"
+                 "cand_variant 前多一支 elif 恒假）、新函数 _lane_variant_hook：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，"
+                 "main 包 cv0.6.23-c33-g19-r8 当上游）seed_admit 与 origin/dev 14aa3bb2 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-15（A22）")
 _PT_1115 = ("seed_admit 书级部件刻形判法 group_flow_part_shape（缺省空、不自动找文件、没填就不跑；模型指纹只在填了时进指纹；groups/part_shape 是新模块）："
             "全唐文 m1 包（cv0.7.10-c65-g-9f3d37-k5-qtw037-m1／qtw076-m1）037 册 4 页（seed_admit 实际跑通的页）＋076 册 12 页（3,20,48,55,65,68,69,92,93,100,120,149）"
             "seed_admit 与 origin/dev e7ce8f26 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-15（全唐文·码位线）")
@@ -1726,6 +1729,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='320d2801fa4702fa86d9f96568273953a1d876db0b84d4c204fbf2440cbc8ae9',
           old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
           evidence=_PT_1115),
+    # seed_admit 异体护栏书级钩子 follow_ref_hooks.variant_norm（缺省 None 不调；史記 r68 本书已归一异体，SJ／A24 11-15）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='531d194c55755537140accb845669ca12d71ce687a895750d75a7e7cf12c1cc9',
+          old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
+          evidence=_VN_HOOK_1115),
+    Equiv(module='open_guji_cv.impl.keben.follow_ref_hooks',
+          new='76f1e160c04766b55fed297b0b9e5da39cf0c903abf901060293044afad8cf6e',
+          old='67ffed25de9e2f114bfd57a4f490d1fa5a7e162d02b1a0174d92bc45543b4895',
+          evidence=_VN_HOOK_1115),
 )
 
 
