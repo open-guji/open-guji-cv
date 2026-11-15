@@ -3,9 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
-- PATCH：seg check 加字内落缝检查 `inner_gap`（史記 R002，A22 11-14）：格线挨着对不上参校字且没放行的格、落在字内窄白缝，旁边另有宽得多的字缝（宮的两口之间、主／言的点与身之间）。只动 eval（`seg_screen`、`seg_screen_run`），不进 code_deps，产物与指纹不变；manager 记 GAP 结构旗。
-
 ## [未发版]
+
+- PATCH：seg check 加字内落缝检查 `inner_gap`（史記 R002，A22 11-14）：格线挨着对不上参校字且没放行的格、落在字内窄白缝，旁边另有宽得多的字缝（宮的两口之间、主／言的点与身之间）。只动 eval（`seg_screen`、`seg_screen_run`），不进 code_deps，产物与指纹不变；manager 记 GAP 结构旗。
+- PATCH：`inner_gap` 加同段窄缝线 `chain`、报页坐标（SJ 11-15）：从报出的线往上下连着落在窄缝（或正落在本线该挪去的缝）的线一并列出；seg check 挪线建议给页 y（列窗每轮可能变）。只动 eval，产物不变。
 
 ## [0.7.37] - 2026-11-14
 

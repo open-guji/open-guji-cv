@@ -53,6 +53,19 @@ def _pins(book: str) -> dict[tuple[int, int], list]:
         return {}
 
 
+def _page_y(geom, y: float) -> str:
+    """列图行号 → 「页 y≈…／列图 …」：列窗每轮可能不同，钉子按页坐标对（SJ 11-15）；取不到几何只给列图 y。"""
+    if geom is None:
+        return f"列图 y≈{y:.0f}"
+    return f"页 y≈{geom.row_to_page(float(y))[1]:.0f}／列图 {y:.0f}"
+
+
+def _chain_note(geom, chain: list[dict]) -> str:
+    if not chain:
+        return ""
+    return "；同段窄缝线 " + "、".join(f"{c['slot_above']}|{c['slot_below']}@{_page_y(geom, c['y'])}" for c in chain)
+
+
 def _img(ctx, book: str, kind: str, key: str):
     """缓存图（灰度）：缓存里没有就现算（同 `guji cache get`），算不出返回 None。"""
     import cv2
@@ -75,7 +88,7 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
     import open_guji_cv.products.kinds  # noqa: F401
     from ..core.spec import column_key, page_key
     from ..steps.row_segment import RowSegmentStep, load_layout
-    from . import seg_screen as ss
+    from . import colgeom, seg_screen as ss
 
     for k in CHECKS:
         rows.setdefault(k, [])
@@ -189,9 +202,12 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
                     c["orphan"] += 1
             if st and ("roster" not in cc.flags or pinned):  # 职名列（非钉子）格贴墨走 roster，字缝口径不同，不查
                 sst = ss.slot_states(adm_by_col[cc.col], st, ref_p)
-                for t in ss.inner_gap(gray, cc, sst):     # 字内落缝：钉子列也查（R002 切分线旧钉子也落进字内白缝）
+                hits = ss.inner_gap(gray, cc, sst)       # 字内落缝：钉子列也查（R002 切分线旧钉子也落进字内白缝）
+                geom = colgeom.current_geom(store, book, page, cc.col) if hits else None
+                for t in hits:
                     rows["inner_gap"].append((book, page, cc.col, f"{t['slot_above']}|{t['slot_below']}",
-                                              f"缝 {t['gap']}px，{t['move']:+d}px 处有 {t['alt_gap']}px 宽缝（线挪到 y≈{t['y'] + t['move']:.0f}），格态 "
+                                              f"缝 {t['gap']}px，{t['move']:+d}px 处有 {t['alt_gap']}px 宽缝"
+                                              f"（线挪到{_page_y(geom, t['y'] + t['move'])}）{_chain_note(geom, t['chain'])}，格态 "
                                               f"{sst.get(t['slot_above'], '')}/{sst.get(t['slot_below'], '')}"))
                     c["inner_gap"] += 1
             if pinned:

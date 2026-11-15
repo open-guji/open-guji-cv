@@ -334,3 +334,15 @@ def test_inner_gap_R002_sj_frozen_columns():
         hits = ss.inner_gap(g, cc, {int(k): v for k, v in d["states"].items()})
         got = [f"{h['slot_above']}|{h['slot_below']}" for h in hits]
         assert set(d["expect"]) <= set(got), (d["col"], got)
+        for h in hits:                # 同段窄缝线（SJ 11-15 看图：钉子一起挪的线）
+            want = CHAIN_EXPECT.get((d["col"], f"{h['slot_above']}|{h['slot_below']}"))
+            if want is not None:
+                assert [f"{c['slot_above']}|{c['slot_below']}" for c in h["chain"]] == want, d["col"]
+
+
+CHAIN_EXPECT = {   # SJ rev 1006446 钉子挪过的线：42:84:1 闕三皇三条、29:117:3 遂到王（3|4 正落在 2|3 该挪去的缝里）、15:170:7 列首三条
+    ("42:84:1", "19|20"): ["18|19", "20|21"],
+    ("29:117:3", "2|3"): ["3|4", "4|5", "5|6", "6|7"],
+    ("15:170:7", "3|4"): ["1|2", "2|3"],
+    ("17:157:6", "1|2"): [],
+}
