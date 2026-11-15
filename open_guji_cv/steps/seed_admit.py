@@ -245,6 +245,7 @@ class SeedAdmitParams(BaseModel):
     group_flow_book_knn: dict[str, str] = Field(default_factory=dict)   # 组 id → 书级刻形近邻库（`groups.book_knn`，缺省找 config/groups/book_knn/<组>.json；没有＝不跑，行为不变）
     group_flow_rr_shape: str = ""            # 入人八 书级刻形判法模型（`groups.rr_shape`，缺省找 config/groups/rr_shape.json；没有＝不跑，行为不变）。
     group_flow_wu_shape: str = ""            # 嗚鳴 书级刻形判法模型（`groups.wu_shape`，缺省找 config/groups/wu_shape.json；没有＝不跑，行为不变；全唐文 11-14）。
+    group_flow_part_shape: str = ""          # 书级部件刻形判法模型（`groups.part_shape`，剌刺／疎踈 等差在一块部件的字对，一份文件挂多对；缺省空＝不跑，不自动找文件；全唐文 11-15）。
     group_flow_near_knn: str = ""            # 形近护栏格书级刻形近邻库（`groups.near_knn`，缺省找 config/groups/near_knn.json；没有＝不跑，行为不变）。
                                               # 只补放待审格，候选限 本格字／整理本／库首位，全书刻例近邻也须同意（全唐文形近字线 2026-11-04）
     group_flow_pair_shape: str = ""          # 书级「两字」刻形二选一模型（`groups.pair_shape`，史记之矣；2026-11-03）。空＝不跑，行为不变。
@@ -1835,6 +1836,9 @@ class SeedAdmitParams(BaseModel):
                 if self.group_flow_wu_shape:         # 嗚鳴 书级刻形判法（没有模型的书不加，旧指纹不变）
                     from ..groups.wu_shape import fingerprint as _ws_fp
                     parts.append("ws" + _ws_fp(self.group_flow_wu_shape))
+                if self.group_flow_part_shape:       # 书级部件刻形判法（没有模型的书不加，旧指纹不变）
+                    from ..groups.part_shape import fingerprint as _pt_fp
+                    parts.append("pt" + _pt_fp(self.group_flow_part_shape))
                 if self.group_flow_pair_shape:       # 书级两字刻形二选一（没有模型的书不加，旧指纹不变）
                     from ..groups.pair_shape import fingerprint as _ps_fp
                     parts.append("ps" + _ps_fp(self.group_flow_pair_shape))
@@ -1921,7 +1925,7 @@ class SeedAdmitStep(Step):
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
-                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_wu_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn",
+                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_wu_shape", "group_flow_part_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn",
                      "solo_adapt_profile", "stroke_veto"),
     )
 
@@ -2612,6 +2616,10 @@ class SeedAdmitStep(Step):
                 d_ws = _wu_shape_pass(p, out, amap, ctx, page, patch_missing)
                 n_auto += d_ws
                 n_review -= d_ws
+            if p.group_flow_part_shape:
+                d_pt = _part_shape_pass(p, out, amap, ctx, page, patch_missing)
+                n_auto += d_pt
+                n_review -= d_pt
             if p.group_flow_pair_shape:
                 d_ps = _pair_shape_pass(p, out, amap, ctx, page, patch_missing, _coord_refs(ctx, page, coord_cache))
                 n_auto += d_ps
@@ -5109,6 +5117,11 @@ def _resolve_group_flow_paths(p) -> None:
     if not ws and "wu" in p.group_flow and (cfg / "wu_shape.json").exists():
         ws = str(cfg / "wu_shape.json")
     object.__setattr__(p, "group_flow_wu_shape", ws)
+    if p.group_flow_part_shape:                  # 相对路径先找数据目录（config/groups/part_shape.json，随中心库走），再找工作区
+        _q = Path(p.group_flow_part_shape).expanduser()
+        _dr = data_root()
+        object.__setattr__(p, "group_flow_part_shape",
+                           str(_dr / _q) if not _q.is_absolute() and _dr is not None and (_dr / _q).exists() else _abs(p.group_flow_part_shape))
     if p.group_flow_pair_shape:
         object.__setattr__(p, "group_flow_pair_shape", _abs(p.group_flow_pair_shape))
     if p.group_flow_pair_shapes:                 # 相对路径先找数据目录（模型随中心库走：config/groups/pair_shape_<组>.json），再找工作区
@@ -5747,6 +5760,50 @@ def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
                 continue
             r.evidence = {**ev, "wu_shape": v, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "wu_shape", "match", []
+            delta += 1
+    return delta
+
+
+def _part_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
+    """书级部件刻形判法（`groups.part_shape`，`SeedAdmitParams.group_flow_part_shape`）。紧接 wu_shape。→ 放行数净增。
+
+    语义同 `_wu_shape_pass`（刻形说了算、只判本格字＝库首位落在某一对里的格、整理本／字组／库前几名不作数）：
+    待审格刻形给字 → 放行（channel `part_shape`）；已放行格刻形给了这一对里的另一个字 → 改字（`evidence.fixed_from`）；
+    弃权不动；人裁格、硬护栏格不碰。一个模型挂多对，按本格字找对。"""
+    from ..groups import part_shape
+    model = part_shape.load(p.group_flow_part_shape)
+    miss = patch_missing if patch_missing is not None else {}
+    delta = 0
+    for c in out:
+        for r in c.chars or []:
+            ev = r.evidence or {}
+            if r.provenance == "human" or r.channel == "human":
+                continue
+            ds = list(r.doubts or [])
+            if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") for d in ds) or ev.get("guard") in ("never_match", "conflict", "timeout"):
+                continue
+            if r.char not in model["_chars"]:
+                continue
+            pair = part_shape.pair_of(model, r.char)
+            try:
+                img = _page_patch(ctx, page, c.col, r.slot, r.sub)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                miss.setdefault(r.id, []).append("part_shape")
+                continue
+            v = part_shape.judge(img, pair)
+            if v["char"] is None:
+                if not r.admit:
+                    r.evidence = {**ev, "part_shape": v}
+                continue
+            if r.admit:
+                if v["char"] != r.char:
+                    r.evidence = {**ev, "part_shape": v, "fixed_from": {"channel": r.channel, "char": r.char}}
+                    r.char, r.channel = v["char"], "part_shape"
+                continue
+            r.evidence = {**ev, "part_shape": v, "lifted_from": {"char": r.char, "doubts": ds}}
+            r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "part_shape", "match", []
             delta += 1
     return delta
 

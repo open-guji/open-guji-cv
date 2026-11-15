@@ -45,6 +45,9 @@ _WU_OOD_1114 = ("seed_admit _wu_shape_pass 补放护栏（总览 11-14 审 #1539
 _WU_TOP1_1114 = ("seed_admit _wu_shape_pass 只判库首位是嗚鳴的格（去掉库前 3 名补放；全唐文 t1 实测库前 3 名放进来的 21 格全是 鴨鵝鳩塢 等右边是鳥／烏的别字）："
                  "只在 group_flow_wu_shape 开时走：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）20 页 seed_admit 与 origin/dev b9b54ebd 产物逐字节相同；"
                  "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-14（全唐文·形近字线）")
+_PT_1115 = ("seed_admit 书级部件刻形判法 group_flow_part_shape（缺省空、不自动找文件、没填就不跑；模型指纹只在填了时进指纹；groups/part_shape 是新模块）："
+            "全唐文 m1 包（cv0.7.10-c65-g-9f3d37-k5-qtw037-m1／qtw076-m1）037 册 4 页（seed_admit 实际跑通的页）＋076 册 12 页（3,20,48,55,65,68,69,92,93,100,120,149）"
+            "seed_admit 与 origin/dev e7ce8f26 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-15（全唐文·码位线）")
 _RF_1113 = ("seed_admit group_flow_ruling_first（书级，缺省空不进参数 dump；Chain._ruling_first 名单外直接返回 (None, None)、ask_rf 只在名单内记）：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）40 页 seed_admit 与 origin/dev 69711fa 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-13（全唐文·形近字线）")
 _FR_HOOK_1113 = ("seed_admit follow_ref 加书级钩子 impl/keben/follow_ref_hooks.rival_skip（缺省 None，不调；follow_ref_decide 加 rival_skip "
                  "参数缺省空集，max 的过滤条件多一个恒真项）、新函数 _RivalFacts／_pair_facts／_follow_ref_rival_hook（只在钩子非 None 时用）："
@@ -1718,6 +1721,11 @@ ENTRIES: tuple[Equiv, ...] = (
     Equiv("open_guji_cv.impl.keben.row_hooks",
           "6e9e81b88fce18f655c3ff079f65195ee27e09bf2c00fa17e943663f3b90ed51",
           "929638d4bf1a4b6a3c63ad18549fbcb7af06634c4de507fdcda427e5eebba743", _QTW_EFO_1114),
+    # seed_admit group_flow_part_shape：书级部件刻形判法（剌刺／疎踈 等，全唐文码位线 11-15）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='320d2801fa4702fa86d9f96568273953a1d876db0b84d4c204fbf2440cbc8ae9',
+          old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
+          evidence=_PT_1115),
 )
 
 
