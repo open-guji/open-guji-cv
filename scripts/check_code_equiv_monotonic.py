@@ -11,20 +11,31 @@
 """
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REL = "open_guji_cv/core/code_equiv.py"
-PAT = re.compile(r"Equiv\(module='([^']+)',\s*new='([0-9a-f]+)',\s*old='([0-9a-f]+)'")
 
 
 def table(src: str) -> dict[str, dict[str, str]]:
+    """执行该版 code_equiv.py 取 ENTRIES，与 code_equiv._table 同口径（同一个 new 后登记的覆盖先登记的）。
+
+    不用正则抠：登记行有单引号、双引号、位置参数（module 不写 module=）几种写法，
+    正则只认一种时会漏读整段链，把接得上的报成「丢链」（2026-11-15 A31 报的 3 条就是这样）。
+    该文件只 import dataclass，执行无副作用。
+    """
+    mod = types.ModuleType("_code_equiv_ref")
+    sys.modules[mod.__name__] = mod          # dataclass 要能从 sys.modules 找到所在模块
+    try:
+        exec(compile(src, REL, "exec"), mod.__dict__)
+    finally:
+        sys.modules.pop(mod.__name__, None)
     t: dict[str, dict[str, str]] = {}
-    for m, n, o in PAT.findall(src):       # 同 code_equiv._table：同一个 new 后登记的覆盖先登记的
-        t.setdefault(m, {})[n] = o
+    for e in mod.ENTRIES:
+        t.setdefault(e.module, {})[e.new] = e.old
     return t
 
 

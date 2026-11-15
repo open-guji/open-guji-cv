@@ -1744,6 +1744,16 @@ ENTRIES: tuple[Equiv, ...] = (
           new='ebd54cc7c92413969a9f7ffd17ef7e68ba90e54c0eecc2186b70a38dbca0c63e',
           old='a9b84a4bb6ec9eee6d095e4919b41ea83e3e8deb86e6ee7973b386783c8d0dad',
           evidence=_VN_HOOK_0738),
+    # v0.7.24／v0.7.28（drop_bad patch 线）补记：两条 align_ref 中间哈希 dev 上缺（dev 同改动按本线哈希另登了 1f4878ab／cace3586），
+    # 原样追加让 check_code_equiv_monotonic.py 对这两个 tag 也接得上；dev 代码不会算出这两个哈希，不改 dev 任何产物新鲜度（A22 2026-11-15）
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="501426bb2d5233bdcb8305fdec956f81f38c8a690fd1c85e6cbe471675545949",
+          old="6afd38325a5f4060b74ddf7f8bfe1a316505479e420899a059fd648182cf4ad6",
+          evidence="同 v0.7.24 线原条（coord_conflict_drop_bad，缺省关，代码核对＋tests/test_align_ref_coord.py），原样抄回 dev"),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="bf9f5964d5f5eaf43e6c07fb4b9c42c4fb45e208f640f2045cf515c53c4cb857",
+          old="6b156bfcc6ec09cbfc8950cf68ea05ec633eb5ec0b48798f6bd0aed0b09ce284",
+          evidence="同 v0.7.28 线原条（drop_bad 冲突格现役字改坐标字 _use_coord_char，缺省关，代码核对＋tests/test_align_ref_coord.py），原样抄回 dev"),
 )
 
 
