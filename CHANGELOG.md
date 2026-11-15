@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH：sb 组手写否决 `sb-否決-卜-史記`（A24 11-15，史記 r68，#1558）：史記卜组 21 格人读为卜被 sb-十-r1/l1 误判十，加具体上下文否决、整格弃权。**下次 dev 线发版须知**：`config/groups/sb/rules.yaml` 进 `seed_admit.group_flow_fingerprint`，用 sb 组的册（殿本、全唐文）seed_admit 指纹会变、被判过期；A22/A24 回测殿本五份整理本 0 变化、全唐文 kanripo 23530 处 0 变化，**产物不变，不用重跑**（规则文件能否登记等价待 A22 答）；发版时告知 ZM、QTW。史記 21 处是真实变化。史記 patch 线已单独发 v0.7.39（= v0.7.38 + #1558 + #1557）。
 - PATCH：seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_norm`（史記 r68，SJ／A24 11-15，A22）：三通道 `cand_variant` 拦前最后问书仓一次，返回与放行字语义同的字就放（本书已归一的异体）。缺省 None 不调，殿本 vol28 16 页 seed_admit 逐字节同，code_equiv 已登记、指纹不变。
 ## [未发版]
 
