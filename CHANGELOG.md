@@ -6,6 +6,11 @@
 ## [未发版]
 
 
+## [0.7.41] - 2026-11-15
+
+- 发版说明（A31 11-15，SJ 史記 patch 线）：v0.7.39 + #1565（`sb-否決-卜-史記` 补 4 条），PATCH，**不含** dev 线 v0.7.40 及 dev 上其他改动。原样 cherry-pick dev b6b5c8c，只改 `config/groups/sb/rules.yaml` 一行；不登 code_equiv（史記真实行为变化）。
+- PATCH：`sb-否決-卜-史記` 补 4 条（A24 11-15）：#1558 后 v0.7.39 回放 24 格仍有 4 格双行小注（ctx 求解器实际匹配串与对齐顺序不同）判十，补 以應◎卦、曰◎五占、義速◎二音、糈者◎求神。他书回测 A22 进行中。
+
 ## [0.7.39] - 2026-11-15
 
 - 发版说明（A31 11-15，SJ 史記 patch 线）：v0.7.38 + #1558（sb 组手写否决 `sb-否決-卜-史記`）+ #1557（code_equiv 只增检查修读登记，只动检查脚本与登记、不动产物），PATCH，**不含** #1432/#1437、#1467 及 dev 上其他改动（v0.7.34–v0.7.37 是 dev 线，本线不带）。#1558 原样 cherry-pick dev 8475e60，只改 `config/groups/sb/rules.yaml` 一行，进 `seed_admit.group_flow_fingerprint`，用 sb 组的册 seed_admit 指纹会变；**不登 code_equiv**（对史記是真实行为变化）。#1557 本线原无 `scripts/check_code_equiv_monotonic.py`，整份取 dev 版；登记只追加 A22 那两条 align_ref 中间哈希（本线 align_ref 哈希 a2bc661c 不在其中，不改本线任何指纹）。
