@@ -56,13 +56,18 @@ def _pins(book: str) -> dict[tuple[int, int], list]:
 def _img(ctx, book: str, kind: str, key: str):
     """缓存图（灰度）：缓存里没有就现算（同 `guji cache get`），算不出返回 None。"""
     import cv2
+
+    from ..utils.image_io import imread
     p = ctx.cache.get(book, kind, key)
     if p is None:
         try:
             p = ctx.materialize(kind, key)
         except Exception:  # noqa: BLE001
             return None
-    return None if p is None else cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    try:
+        return None if p is None else imread(str(p), cv2.IMREAD_GRAYSCALE)   # 不直接 cv2.imread：Windows 非 ASCII 路径会静默 None
+    except FileNotFoundError:
+        return None
 
 
 def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[str, list], counts: dict,
