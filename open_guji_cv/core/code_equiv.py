@@ -48,6 +48,7 @@ _WU_TOP1_1114 = ("seed_admit _wu_shape_pass 只判库首位是嗚鳴的格（去
 _VN_HOOK_1115 = ("seed_admit lane_variant_guard 加书级钩子 impl/keben/follow_ref_hooks.variant_norm（缺省 None，不调；_review_lanes_pass 加 variant_hook 参数缺省 None、"
                  "cand_variant 前多一支 elif 恒假）、新函数 _lane_variant_hook：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，"
                  "main 包 cv0.6.23-c33-g19-r8 当上游）seed_admit 与 origin/dev 14aa3bb2 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-15（A22）")
+_VN_HOOK_0738 = (_VN_HOOK_1115 + "。v0.7.38（史記 patch 线，v0.7.33 + #1554）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _PT_1115 = ("seed_admit 书级部件刻形判法 group_flow_part_shape（缺省空、不自动找文件、没填就不跑；模型指纹只在填了时进指纹；groups/part_shape 是新模块）："
             "全唐文 m1 包（cv0.7.10-c65-g-9f3d37-k5-qtw037-m1／qtw076-m1）037 册 4 页（seed_admit 实际跑通的页）＋076 册 12 页（3,20,48,55,65,68,69,92,93,100,120,149）"
             "seed_admit 与 origin/dev e7ce8f26 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-15（全唐文·码位线）")
@@ -1738,6 +1739,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='76f1e160c04766b55fed297b0b9e5da39cf0c903abf901060293044afad8cf6e',
           old='67ffed25de9e2f114bfd57a4f490d1fa5a7e162d02b1a0174d92bc45543b4895',
           evidence=_VN_HOOK_1115),
+    # v0.7.38（史記 patch 线 = v0.7.33 + #1554）：variant_norm 钩子按本线哈希登记（A31 11-15）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='ebd54cc7c92413969a9f7ffd17ef7e68ba90e54c0eecc2186b70a38dbca0c63e',
+          old='a9b84a4bb6ec9eee6d095e4919b41ea83e3e8deb86e6ee7973b386783c8d0dad',
+          evidence=_VN_HOOK_0738),
 )
 
 
