@@ -7,6 +7,7 @@
 - PATCH：seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_norm`（史記 r68，SJ／A24 11-15，A22）：三通道 `cand_variant` 拦前最后问书仓一次，返回与放行字语义同的字就放（本书已归一的异体）。缺省 None 不调，殿本 vol28 16 页 seed_admit 逐字节同，code_equiv 已登记、指纹不变。
 ## [未发版]
 
+- PATCH：语料等价登记（A22 11-15，答 A31「sb/rules.yaml 这类规则文件改动能否登记等价」）：`corpus_pin.append_pin(..., same_output_as=M)`（manager `guji corpus pin --same-output-as M`）让册的新总号沿用总号 M 的语料指纹，读语料的五步不判过期；按册登记（钉子账是每册的），note 必须写证据，登记时记下两版清单差异条目、取指纹时再核，对不上报错。不登记的册行为不变，现有指纹逐位不变。
 - PATCH：`scripts/check_code_equiv_monotonic.py` 改为执行 code_equiv.py 取 ENTRIES（原正则只认单引号写法，漏读 194 条，A31 11-15 报的 cut_select／seam 三条断链是误报）；补抄 v0.7.24／v0.7.28 两条 align_ref 中间哈希（A22 11-15）。不动指纹。
 - PATCH：seg check 加字内落缝检查 `inner_gap`（史記 R002，A22 11-14）：格线挨着对不上参校字且没放行的格、落在字内窄白缝，旁边另有宽得多的字缝（宮的两口之间、主／言的点与身之间）。只动 eval（`seg_screen`、`seg_screen_run`），不进 code_deps，产物与指纹不变；manager 记 GAP 结构旗。
 - PATCH：`inner_gap` 加同段窄缝线 `chain`、报页坐标（SJ 11-15）：从报出的线往上下连着落在窄缝（或正落在本线该挪去的缝）的线一并列出；seg check 挪线建议给页 y（列窗每轮可能变）。只动 eval，产物不变。
