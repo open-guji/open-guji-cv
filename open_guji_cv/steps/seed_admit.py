@@ -244,7 +244,6 @@ class SeedAdmitParams(BaseModel):
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
     group_flow_book_knn: dict[str, str] = Field(default_factory=dict)   # 组 id → 书级刻形近邻库（`groups.book_knn`，缺省找 config/groups/book_knn/<组>.json；没有＝不跑，行为不变）
     group_flow_rr_shape: str = ""            # 入人八 书级刻形判法模型（`groups.rr_shape`，缺省找 config/groups/rr_shape.json；没有＝不跑，行为不变）。
-    group_flow_wu_shape: str = ""            # 嗚鳴 书级刻形判法模型（`groups.wu_shape`，缺省找 config/groups/wu_shape.json；没有＝不跑，行为不变；全唐文 11-14）。
     group_flow_near_knn: str = ""            # 形近护栏格书级刻形近邻库（`groups.near_knn`，缺省找 config/groups/near_knn.json；没有＝不跑，行为不变）。
                                               # 只补放待审格，候选限 本格字／整理本／库首位，全书刻例近邻也须同意（全唐文形近字线 2026-11-04）
     group_flow_pair_shape: str = ""          # 书级「两字」刻形二选一模型（`groups.pair_shape`，史记之矣；2026-11-03）。空＝不跑，行为不变。
@@ -277,10 +276,6 @@ class SeedAdmitParams(BaseModel):
     没有裁定的半格照旧受保护（本就不放行）。书级，缺省关、关时不进参数 dump、行为不变（SJ 史記 11-12：必 04:26:1:13b、解 03:46:1:4a、遲 等半格裁定放不出，半格是形近待审大头）。
     放行条件（A22 评估 11-12）：裁定记的 cell＝当前格号、裁定字＝整理本字（不走白名单）、本格无 clipped／frame_residue／jiazhu_*／split_* 疑点；放行格 evidence.half=True。
     起因的错放（men 组 06:12:5:12a）是旧在线 L3，不是现在的对话双路裁定；放行前须金标验证 0 错。"""
-    group_flow_ruling_first: list[str] = Field(default_factory=list)
-    """这几组的文意解法先查裁定库（对话裁定，`feedback.rulings`），命中就照裁定给字，不再看 L1 规则、L2 表／小头（书级，缺省空、不进参数 dump、行为不变）。
-    没命中照旧走 L1 → L2 → L3。复核时（`review_fix` 的组，如己已巳）已放行格的上下文有裁定、字不同 → 改成裁定字。
-    全唐文 11-13 Sheldon 定：己已巳 刻形分不开、按文意＋AI 判；L2 小头放错的格（001–030 按文意核 23 格），对话裁定排在小头后面改不动。"""
     group_flow_llm_half_groups: list[str] = Field(default_factory=list)
     """`group_flow_llm_skip_half` 的例外（书级，缺省空、不进参数 dump；A24 11-08，SJ 史記 H01 89 格半格没有 L3 问、写不了裁定键）：
     这几组的夹注半格照样走 L3（答案表、裁定库、记 `llm_pending` 问），由 `feedback/llm_queue` 导出、对话判读后导入。
@@ -452,15 +447,6 @@ class SeedAdmitParams(BaseModel):
     textlayer_ref_allow_pua: bool = False
     textlayer_ref_gap_fingerprint: str = ""
     """文本层数据目录指纹，由校验器填，进 params_hash（数据变了产物判过期）。"""
-    stroke_veto: str = ""
-    """笔画反向护栏（`groups.stroke_veto`，A23 笔画识别 cv #1474）：书级模型路径（相对路径先找数据目录，模型随中心库走，
-    如 `config/groups/stroke_veto.json`，再找工作区）。已放行、非人裁、放行字落在模型某组里（己／已／巳、千／干）的格，
-    笔画判给了类、且与放行字的类不同（判 己 而放行 已／巳，判 已巳 而放行 己；千、干 互反）→ 降回待审，
-    doubt `stroke_veto`，`evidence.stroke_veto` 留判出的类、似然比领先量与特征。笔画弃权（似然比不够、离群、贴坏）不动。
-    排在各补放通道之后、人裁绑丢降审之前，各通道放的格都看。全唐文 001–030 扩组2 已放行格里 24 格放行错，
-    笔画判全对（形近字线 11-13）。空＝关（缺省，不进参数 dump，行为不变）。"""
-    stroke_veto_fingerprint: str = ""
-    """笔画护栏模型文件指纹，由校验器填，进 params_hash（模型换了产物判过期）。"""
     ruling_override_groups: tuple[str, ...] | None = None
     """越过参校本的白名单（书级；A20 对照表第 4 条，A24 第 5 轮）：`ctx-m1` 终审裁定的字≠整理本对位字时，管线再核一遍——
     这个字与整理本字须同属白名单里的某个字组（`groups.registry.FLOW_GROUPS` 成员），否则不放行、留审。
@@ -1422,8 +1408,6 @@ class SeedAdmitParams(BaseModel):
             d.pop("vis_ruling_half", None)
         if isinstance(d, dict) and not self.group_flow_llm_half_groups:
             d.pop("group_flow_llm_half_groups", None)
-        if isinstance(d, dict) and not self.group_flow_ruling_first:
-            d.pop("group_flow_ruling_first", None)
         if isinstance(d, dict) and self.group_flow_form_open:
             d.pop("group_flow_form_open", None)      # 缺省值不进 dump
         if isinstance(d, dict) and not self.p_ref_admit:
@@ -1659,9 +1643,6 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_pair_shape_nm_5b", None)
         if isinstance(d, dict) and not self.group_flow_near_knn:
             d.pop("group_flow_near_knn", None)
-        if isinstance(d, dict) and not self.stroke_veto:
-            d.pop("stroke_veto", None)
-            d.pop("stroke_veto_fingerprint", None)
         if isinstance(d, dict) and not self.match_ref_diff_guard:
             d.pop("match_ref_diff_guard", None)
         if isinstance(d, dict) and not self.lane_seal_title_tolerance:
@@ -1832,9 +1813,6 @@ class SeedAdmitParams(BaseModel):
                 if self.group_flow_rr_shape:         # 入人八 书级刻形判法（没有模型的书不加，旧指纹不变）
                     from ..groups.rr_shape import fingerprint as _rs_fp
                     parts.append("rs" + _rs_fp(self.group_flow_rr_shape))
-                if self.group_flow_wu_shape:         # 嗚鳴 书级刻形判法（没有模型的书不加，旧指纹不变）
-                    from ..groups.wu_shape import fingerprint as _ws_fp
-                    parts.append("ws" + _ws_fp(self.group_flow_wu_shape))
                 if self.group_flow_pair_shape:       # 书级两字刻形二选一（没有模型的书不加，旧指纹不变）
                     from ..groups.pair_shape import fingerprint as _ps_fp
                     parts.append("ps" + _ps_fp(self.group_flow_pair_shape))
@@ -1853,10 +1831,6 @@ class SeedAdmitParams(BaseModel):
                 if _ids_fp(self.group_flow):        # IDS 模板库＋判法（方案 S7）；没有在线 IDS 的组不加，旧指纹不变
                     parts.append(_ids_fp(self.group_flow))
                 object.__setattr__(self, "group_flow_fingerprint", ":".join(parts))
-        if self.stroke_veto and not self.stroke_veto_fingerprint:
-            from ..groups.stroke_veto import fingerprint as _sv_fp
-            object.__setattr__(self, "stroke_veto", _resolve_data_path(self.stroke_veto))
-            object.__setattr__(self, "stroke_veto_fingerprint", _sv_fp(self.stroke_veto))
         if self.textlayer_ref_gap and not self.textlayer_ref_gap_fingerprint:
             from ..groups.textlayer_ref import fingerprint as _tl_fp
             object.__setattr__(self, "textlayer_ref_gap_fingerprint", _tl_fp(self.textlayer_ref_gap))
@@ -1921,8 +1895,8 @@ class SeedAdmitStep(Step):
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
-                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_wu_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn",
-                     "solo_adapt_profile", "stroke_veto"),
+                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn",
+                     "solo_adapt_profile"),
     )
 
     def parallel_warm(self, ctx: RunContext) -> None:
@@ -2608,10 +2582,6 @@ class SeedAdmitStep(Step):
                 d_rs = _rr_shape_pass(p, out, amap, ctx, page, patch_missing)
                 n_auto += d_rs
                 n_review -= d_rs
-            if p.group_flow_wu_shape:
-                d_ws = _wu_shape_pass(p, out, amap, ctx, page, patch_missing)
-                n_auto += d_ws
-                n_review -= d_ws
             if p.group_flow_pair_shape:
                 d_ps = _pair_shape_pass(p, out, amap, ctx, page, patch_missing, _coord_refs(ctx, page, coord_cache))
                 n_auto += d_ps
@@ -2666,6 +2636,7 @@ class SeedAdmitStep(Step):
                                         (lambda: _lane_witnesses(ctx.book, p))
                                         if (p.lane_witness3 or p.lane_coord) else None,
                                         canon=ctx.book.canonical_char if ctx.book.codepoints else None,
+                                        variant_hook=_lane_variant_hook(ctx),
                                         knn_veto=(_witness3_knn_veto_fn(p, ctx, page)
                                                   if p.witness3_knn_veto and p.group_flow_near_knn else None),
                                         lib_n=(_keben_counts(p.db_path) or None)
@@ -2800,11 +2771,6 @@ class SeedAdmitStep(Step):
             d_cl = _consensus_lib_pass(p, out, mmap_raw, amap, _coord_refs(ctx, page, coord_cache))
             n_auto += d_cl
             n_review -= d_cl
-        if p.stroke_veto:
-            # 笔画反向护栏（降）：已放行非人裁格，笔画判与放行字相反 → 降审（排在各补放通道之后，缺省关）
-            d_sv = _stroke_veto_pass(p, out, ctx, page, patch_missing)
-            n_auto -= d_sv
-            n_review += d_sv
         if human_lost:
             # 顺移豁免对位表：现役对位为主，缺格的补坐标对位字（coord_fallback 放行的格没有现役对位；史記 2026-11-03）
             d_hu = _human_unbound_pass(ctx, page, out, human_lost,
@@ -4775,9 +4741,12 @@ def _blind_ref_behind(m, co: str, top_cov: float, gap: float) -> bool:
 
 
 def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict,
-                       vmap, witnesses_fn, canon=None, lib_n: dict | None = None, knn_veto=None) -> int:
+                       vmap, witnesses_fn, canon=None, lib_n: dict | None = None, knn_veto=None,
+                       variant_hook=None) -> int:
     """待审补放三通道（`lane_witness3`／`lane_coord`／`lane_seal`，overview#433）。→ 放行格数。
 
+    `variant_hook`：书级钩子 `follow_ref_hooks.variant_norm`（缺省 None＝不调），`lane_variant_guard` 内建例外都不放时
+    最后问一次，见该模块。
     只升不降：只碰 admit=False、非人裁、不在排除名单上的格；己/已/巳 一族一律跳过。
     `witnesses_fn()` → 证人列表（只在 R1/R4 真要看证人时才调，装载与锚定都是懒的）。"""
     from pathlib import Path
@@ -4987,6 +4956,10 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                 elif (vf is not None and lev.get("via") == "lib_coord_codepoint" and canon is not None
                       and canon(vf) == canon(char)):
                     pass                                    # 候选里的另一形本书已归到同一码位
+                elif vf is not None and variant_hook is not None and (
+                        vn := variant_hook(lane=name, char=char, form=vf, canon=canon, lib=lib)) and same(vn, char):
+                    char = vn                               # 书级钩子：两形本书已归一（史記，follow_ref_hooks.variant_norm）
+                    lev = {**lev, "variant_norm": "hook", "variant_from": vf}
                 elif vf is not None:    # 图上可能是刻本异体：别把它改成通用字（#433）
                     rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "cand_variant", "form": vf, "char": char}}
                     continue
@@ -5105,10 +5078,6 @@ def _resolve_group_flow_paths(p) -> None:
     if not rs and "rr" in p.group_flow and (cfg / "rr_shape.json").exists():
         rs = str(cfg / "rr_shape.json")
     object.__setattr__(p, "group_flow_rr_shape", rs)
-    ws = _abs(p.group_flow_wu_shape) if p.group_flow_wu_shape else ""
-    if not ws and "wu" in p.group_flow and (cfg / "wu_shape.json").exists():
-        ws = str(cfg / "wu_shape.json")
-    object.__setattr__(p, "group_flow_wu_shape", ws)
     if p.group_flow_pair_shape:
         object.__setattr__(p, "group_flow_pair_shape", _abs(p.group_flow_pair_shape))
     if p.group_flow_pair_shapes:                 # 相对路径先找数据目录（模型随中心库走：config/groups/pair_shape_<组>.json），再找工作区
@@ -5703,54 +5672,6 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
     return delta
 
 
-_WU = frozenset("嗚鳴")
-
-
-def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
-    """嗚鳴 书级刻形判法（`groups.wu_shape`，`SeedAdmitParams.group_flow_wu_shape`）。紧接 rr_shape。→ 放行数净增。
-
-    同 `_rr_shape_pass`：刻形说了算、越过整理本与文意（sheldon 11-13「嗚/鳴 归形近不同义组，拆部件 100% 自动区分」，
-    11-14 嗚鳴17格按刻形点）。只判本格字（库首位）是 嗚鳴 的格：待审格刻形给字 → 放行（channel `wu_shape`）；
-    整理本／字组／库前几名里有 嗚鳴 都不算（总览 11-14 审：对不齐时格里可能是别的字；全唐文 t1 实测库前 3 名放进来的 21 格
-    全是 鴨鵝鳩塢鴟 这类右边也是 鳥／烏 的字，网只看右半、照样给 p≈1，3 格错放成 鳴）；
-    已放行的 嗚鳴 格刻形给了另一个字 → 改字（`evidence.fixed_from`）；弃权不动；人裁格、硬护栏格不碰。"""
-    from ..groups import wu_shape
-    model = wu_shape.load(p.group_flow_wu_shape)
-    miss = patch_missing if patch_missing is not None else {}
-    delta = 0
-    for c in out:
-        for r in c.chars or []:
-            ev = r.evidence or {}
-            if r.provenance == "human" or r.channel == "human":
-                continue
-            ds = list(r.doubts or [])
-            if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") for d in ds) or ev.get("guard") in ("never_match", "conflict", "timeout"):
-                continue
-            if r.char not in _WU:
-                continue
-            try:
-                img = _page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("wu_shape")
-                continue
-            v = wu_shape.judge(img, model)
-            if v["char"] is None:
-                if not r.admit:
-                    r.evidence = {**ev, "wu_shape": v}
-                continue
-            if r.admit:
-                if v["char"] != r.char:
-                    r.evidence = {**ev, "wu_shape": v, "fixed_from": {"channel": r.channel, "char": r.char}}
-                    r.char, r.channel = v["char"], "wu_shape"
-                continue
-            r.evidence = {**ev, "wu_shape": v, "lifted_from": {"char": r.char, "doubts": ds}}
-            r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "wu_shape", "match", []
-            delta += 1
-    return delta
-
-
 def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None,
                      coord: dict | None = None, model_path: str | None = None, veto: bool = False,
                      nm_5b: dict | None = None) -> int:
@@ -5831,53 +5752,6 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "pair_shape", "match", []
             delta += 1
     return delta
-
-
-def _resolve_data_path(v: str) -> str:
-    """书级模型路径：绝对路径照用；相对路径先找数据目录（随中心库走），再找工作区。"""
-    from pathlib import Path
-    from ..core.workspace import REPO_ROOT, data_root, workspace_root
-    q = Path(v).expanduser()
-    if q.is_absolute():
-        return str(q)
-    droot = data_root()
-    if droot is not None and (droot / q).exists():
-        return str(droot / q)
-    return str((workspace_root() or REPO_ROOT) / q)
-
-
-def _stroke_veto_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
-    """笔画反向护栏（`SeedAdmitParams.stroke_veto`，`groups.stroke_veto`）。→ 降回待审的格数。
-
-    已放行、非人裁、放行字在模型某组里的格：笔画判给了类且≠放行字的类 → 降审，doubt `stroke_veto`。
-    笔画弃权不动；字块读不到按 `patch_missing` 处理（skip 时记进 patch_missing、不动）。"""
-    from ..groups import stroke_veto as sv
-    model = sv.load(p.stroke_veto)
-    miss = patch_missing if patch_missing is not None else {}
-    n = 0
-    for c in out:
-        for r in c.chars or []:
-            if not r.admit or r.provenance == "human" or r.channel == "human":
-                continue
-            gid, gm = sv.group_of(model, r.char or "")
-            if gm is None or (gm.get("channels") and r.channel not in gm["channels"]):
-                continue
-            try:
-                img = _page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("stroke_veto")
-                continue
-            v = sv.judge(img, gm)
-            if v["cls"] is None or v["cls"] == gm["classes"][r.char]:
-                continue
-            _demote(r, "stroke_veto")
-            r.evidence = {**(r.evidence or {}), "stroke_veto": {"group": gid, "cls": v["cls"], "llr": v.get("llr"), "x": v.get("x")}}
-            r.admit, r.channel, r.provenance = False, None, ""
-            r.doubts = list(r.doubts or []) + ["stroke_veto"]
-            n += 1
-    return n
 
 
 def _book_knn_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
@@ -6030,7 +5904,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      abstain_ref_ok=p._rt_abstain_ref_ok(),
                      shape_ref_ok=p._rt_shape_ref_ok(),
                      l3_online=_l3_online(p), l3_model=p.group_flow_llm_model, l3_effort=p.group_flow_llm_effort,
-                     l3_need_l2_agree=p.group_flow_llm_need_l2_agree, l3_skip_half=p.group_flow_llm_skip_half, l3_half_groups=frozenset(p.group_flow_llm_half_groups), ruling_first=frozenset(p.group_flow_ruling_first), l3_panel=tuple(p.group_flow_llm_panel), l3_panel_groups=tuple(p.group_flow_llm_panel_groups),
+                     l3_need_l2_agree=p.group_flow_llm_need_l2_agree, l3_skip_half=p.group_flow_llm_skip_half, l3_half_groups=frozenset(p.group_flow_llm_half_groups), l3_panel=tuple(p.group_flow_llm_panel), l3_panel_groups=tuple(p.group_flow_llm_panel_groups),
                      vis_model=(p.group_flow_llm_model if p.group_flow_vis and p.group_flow_llm_model else None),
                      vis_cache=_vis_cache(),
                      lift_ref_guard=p.group_flow_lift_ref_guard, provisional=p.group_flow_provisional,
@@ -6680,6 +6554,14 @@ def _follow_ref_rival_hook(ctx: RunContext):
     import importlib
     from ..core.seg_set import resolve
     return getattr(importlib.import_module(resolve(ctx.book, _FOLLOW_REF_HOOKS)), "rival_skip", None)
+
+
+def _lane_variant_hook(ctx: RunContext):
+    """书级钩子 `impl/keben/follow_ref_hooks.variant_norm`（书仓 `code/` 覆盖才有；缺省 None）。
+    书仓模块没写这个名字也当 None（11-13 前写的覆盖模块只有 rival_skip）。"""
+    import importlib
+    from ..core.seg_set import resolve
+    return getattr(importlib.import_module(resolve(ctx.book, _FOLLOW_REF_HOOKS)), "variant_norm", None)
 
 
 def _edge_pair_excluded(a: str, b: str) -> bool:

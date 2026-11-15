@@ -735,3 +735,42 @@ def test_lane_group_img_veto_ignores_non_image_solvers():
 def test_lane_group_img_veto_off_not_in_dump():
     assert "lane_group_img_veto" not in SeedAdmitParams(db_path="x").model_dump()
     assert SeedAdmitParams(db_path="x", lane_group_img_veto=0.6).model_dump()["lane_group_img_veto"] == 0.6
+
+
+# ── 书级钩子 follow_ref_hooks.variant_norm（2026-11-15，史記 r68：本书已归一的异体不再被 cand_variant 拦）──────
+
+def _hooked(hook, cands=(("旨", 0.95), ("㫖", 0.94))):
+    chars = BODY[:30]
+    out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.95)", "上下文 margin 不足(0.10)"], char="旨")})
+    wits = [_wit(f"{k}.txt", "前" + chars[:4] + "旨" + chars[5:] + "後") for k in "dwy"]
+    p = SeedAdmitParams(db_path="x", lane_coord=True)
+    mm = {f"{B}:1:5": NS(char=None, candidates=list(cands), guard=None)}
+    n = _review_lanes_pass(p, out, mm, {}, _ids({5: "旨"}), _vm(), lambda: wits, variant_hook=hook)
+    return n, out[0].chars[4]
+
+
+def test_variant_norm_hook_default_none():
+    from open_guji_cv.impl.keben import follow_ref_hooks
+    assert follow_ref_hooks.variant_norm is None
+
+
+def test_variant_norm_hook_admits_and_records():
+    seen = {}
+
+    def hook(**kw):
+        seen.update(kw)
+        return "旨"
+    n, r = _hooked(hook)
+    assert n == 1 and r.admit and r.char == "旨"
+    assert seen["lane"] == "coord_fallback" and seen["char"] == "旨" and seen["form"] == "㫖" and seen["lib"] == "旨"
+    assert r.evidence["lane"]["variant_norm"] == "hook" and r.evidence["lane"]["variant_from"] == "㫖"
+
+
+def test_variant_norm_hook_none_keeps_guard():
+    n, r = _hooked(lambda **kw: None)
+    assert n == 0 and not r.admit and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+
+def test_variant_norm_hook_must_stay_same_semantic():
+    n, r = _hooked(lambda **kw: "天")         # 钩子给了语义不同的字：忽略，照旧拦
+    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
