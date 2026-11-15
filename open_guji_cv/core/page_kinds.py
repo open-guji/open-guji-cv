@@ -125,10 +125,10 @@ def fold_layer(name: str, layer: dict) -> dict:
     return out
 
 
-#: 老写法登记：(Step id, 参数名) → 页型。`warn_old_syntax` 用。
+#: 老写法登记：(Step id, 参数名) → 页型。`reject_old_syntax` 用。
 _OLD = {v: k for k, v in KIND_PARAM.items()}
-#: 老写法报错的版本（页型表第 4 步，2026-11-04：先警告，下一个 MINOR 起报错）
-OLD_SYNTAX_ERROR_FROM = "0.7.0"
+#: 老写法 2026-11-04 起警告，2026-11-13 起报错（扫过中心库 391 册，没有册还在用）
+OLD_SYNTAX_ERROR_FROM = "2026-11-13"
 
 
 def old_syntax_in(layer: dict) -> list[tuple[str, str]]:
@@ -142,14 +142,20 @@ def old_syntax_in(layer: dict) -> list[tuple[str, str]]:
     return out
 
 
-def warn_old_syntax(book: str, name: str, layer: dict) -> None:
-    """册 yaml／基础配置里写老写法 → 警告一次（`FutureWarning`，下一个 MINOR 起报错）。
-    运行覆盖里的不警告：`--override` 做实验时随手写老字段是正当用法。"""
+def reject_old_syntax(book: str, name: str, layer: dict) -> None:
+    """册 yaml／基础配置里写页型老写法 → 报错（2026-11-13 起；此前只警告，见 `OLD_SYNTAX_ERROR_FROM`）。
+    运行覆盖里的不管：`--override` 做实验时随手写老字段是正当用法。
+    环境变量 `GUJI_ALLOW_OLD_PAGE_SYNTAX=1` 放行（只发 `FutureWarning`）：迁移脚本要读迁移前的老写法册核指纹，
+    手上有没迁的册也可临时用；迁移用 `python scripts/migrate_page_kinds.py <工作区>/books`。"""
     old = old_syntax_in(layer)
     if not old:
         return
-    import warnings
-    warnings.warn(
-        f"{book}（{name}）还在用页型老写法 {'、'.join(a for a, _ in old)}；请改写 {'、'.join(b for _, b in old)}"
-        f"（python scripts/migrate_page_kinds.py <工作区>/books 干跑看改动）。老写法将在 {OLD_SYNTAX_ERROR_FROM} 起报错。",
-        FutureWarning, stacklevel=3)
+    msg = (f"{book}（{name}）还在用页型老写法 {'、'.join(a for a, _ in old)}；请改写 {'、'.join(b for _, b in old)}"
+           f"（python scripts/migrate_page_kinds.py <工作区>/books 干跑看改动，装 guji-manager）")
+    import os
+    if os.environ.get("GUJI_ALLOW_OLD_PAGE_SYNTAX") == "1":
+        import warnings
+        warnings.warn(msg + "；已用 GUJI_ALLOW_OLD_PAGE_SYNTAX 放行", FutureWarning, stacklevel=3)
+        return
+    from .book_config import BookConfigError
+    raise BookConfigError(msg)
