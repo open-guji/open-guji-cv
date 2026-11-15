@@ -3,14 +3,28 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
-- PATCH：sb 组手写否决 `sb-否決-卜-史記`（A24 11-15，史記 r68，#1558）：史記卜组 21 格人读为卜被 sb-十-r1/l1 误判十，加具体上下文否决、整格弃权。**下次 dev 线发版须知（A22 11-15 更正，取代原「指纹会变、被判过期」的说法）**：code_equiv 登记不了 `config/groups/sb/rules.yaml`（它走数据路进指纹）。殿本、全唐文都钉了 corpus，发版后起跑前 `require_pin_clean` 会因 rules.yaml 与所钉底库清单不符报 **CorpusDrift 拒跑**。处理顺序：①发 dev 线新版 cv（带 #1561）＋ manager（带 #584）；②出新底库，**只含 sb/rules.yaml 这一处差异**，不夹带别的；③各册（殿本十册、全唐文各册）单独 `guji corpus pin` 改钉，加 `--same-output-as <旧总号> --note '<回测证据>'`，读语料的五步（glyph_match、rare_candidates、context_decide、align_ref、seed_admit）就都不过期。证据：A22/A24 回测殿本五份整理本 0 变化、全唐文 kanripo 23530 处 0 变化，最好再补一册几页 seed_admit 逐字节对比。改钉前这两本书在新版上跑不了。没钉 corpus 又用 sb 组的册（若有）仍会因 group_flow_fingerprint 变而过期。史記不登等价、照常过期。史記 patch 线已单独发 v0.7.39（= v0.7.38 + #1558 + #1557）。
-- PATCH：seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_norm`（史記 r68，SJ／A24 11-15，A22）：三通道 `cand_variant` 拦前最后问书仓一次，返回与放行字语义同的字就放（本书已归一的异体）。缺省 None 不调，殿本 vol28 16 页 seed_admit 逐字节同，code_equiv 已登记、指纹不变。
 ## [未发版]
 
+## [0.7.40] - 2026-11-15
+
+- 发版说明（A31 11-15，dev 线）：dev 头 `ea45a81`，基于 v0.7.37，PATCH。带 #1561（语料等价登记 `same_output_as`，殿本／全唐文改钉 b25 要用）、#1558（sb 组 `sb-否決-卜-史記`）、#1553（part_shape，缺省关）、#1554（variant_norm，缺省 None，已登等价）、#1557、#1551／#1552（只动 eval）。代码指纹：seed_admit、follow_ref_hooks 经 code_equiv 与 v0.7.37 同；**但** `config/groups/sb/rules.yaml` 变了：钉了 corpus 的册（殿本、全唐文）起跑报 CorpusDrift 拒跑，须改钉底库 b25（Ops 已出，与 b24 只差这一个文件），各册 `guji corpus pin --same-output-as <旧总号> --note '<证据>'`（要 manager ≥0.4.50）则五步不过期；没钉 corpus 又用 sb 组的册 seed_admit 过期。史記走 patch 线（v0.7.38／v0.7.39 见下），本版不给史記。
+- PATCH：sb 组手写否决 `sb-否決-卜-史記`（A24 11-15，史記 r68，#1558）：史記卜组 21 格人读为卜被 sb-十-r1/l1 误判十，加具体上下文否决、整格弃权。**下次 dev 线发版须知（A22 11-15 更正，取代原「指纹会变、被判过期」的说法）**：code_equiv 登记不了 `config/groups/sb/rules.yaml`（它走数据路进指纹）。殿本、全唐文都钉了 corpus，发版后起跑前 `require_pin_clean` 会因 rules.yaml 与所钉底库清单不符报 **CorpusDrift 拒跑**。处理顺序：①发 dev 线新版 cv（带 #1561）＋ manager（带 #584）；②出新底库，**只含 sb/rules.yaml 这一处差异**，不夹带别的；③各册（殿本十册、全唐文各册）单独 `guji corpus pin` 改钉，加 `--same-output-as <旧总号> --note '<回测证据>'`，读语料的五步（glyph_match、rare_candidates、context_decide、align_ref、seed_admit）就都不过期。证据：A22/A24 回测殿本五份整理本 0 变化、全唐文 kanripo 23530 处 0 变化，最好再补一册几页 seed_admit 逐字节对比。改钉前这两本书在新版上跑不了。没钉 corpus 又用 sb 组的册（若有）仍会因 group_flow_fingerprint 变而过期。史記不登等价、照常过期。史記 patch 线已单独发 v0.7.39（= v0.7.38 + #1558 + #1557）。
+- PATCH：seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_norm`（史記 r68，SJ／A24 11-15，A22）：三通道 `cand_variant` 拦前最后问书仓一次，返回与放行字语义同的字就放（本书已归一的异体）。缺省 None 不调，殿本 vol28 16 页 seed_admit 逐字节同，code_equiv 已登记、指纹不变。
 - PATCH：语料等价登记（A22 11-15，答 A31「sb/rules.yaml 这类规则文件改动能否登记等价」）：`corpus_pin.append_pin(..., same_output_as=M)`（manager `guji corpus pin --same-output-as M`）让册的新总号沿用总号 M 的语料指纹，读语料的五步不判过期；按册登记（钉子账是每册的），note 必须写证据，登记时记下两版清单差异条目、取指纹时再核，对不上报错。不登记的册行为不变，现有指纹逐位不变。
 - PATCH：`scripts/check_code_equiv_monotonic.py` 改为执行 code_equiv.py 取 ENTRIES（原正则只认单引号写法，漏读 194 条，A31 11-15 报的 cut_select／seam 三条断链是误报）；补抄 v0.7.24／v0.7.28 两条 align_ref 中间哈希（A22 11-15）。不动指纹。
 - PATCH：seg check 加字内落缝检查 `inner_gap`（史記 R002，A22 11-14）：格线挨着对不上参校字且没放行的格、落在字内窄白缝，旁边另有宽得多的字缝（宮的两口之间、主／言的点与身之间）。只动 eval（`seg_screen`、`seg_screen_run`），不进 code_deps，产物与指纹不变；manager 记 GAP 结构旗。
 - PATCH：`inner_gap` 加同段窄缝线 `chain`、报页坐标（SJ 11-15）：从报出的线往上下连着落在窄缝（或正落在本线该挪去的缝）的线一并列出；seg check 挪线建议给页 y（列窗每轮可能变）。只动 eval，产物不变。
+
+## [0.7.39] - 2026-11-15
+
+- 发版说明（A31 11-15，SJ 史記 patch 线）：v0.7.38 + #1558（sb 组手写否决 `sb-否決-卜-史記`）+ #1557（code_equiv 只增检查修读登记，只动检查脚本与登记、不动产物），PATCH，**不含** #1432/#1437、#1467 及 dev 上其他改动（v0.7.34–v0.7.37 是 dev 线，本线不带）。#1558 原样 cherry-pick dev 8475e60，只改 `config/groups/sb/rules.yaml` 一行，进 `seed_admit.group_flow_fingerprint`，用 sb 组的册 seed_admit 指纹会变；**不登 code_equiv**（对史記是真实行为变化）。#1557 本线原无 `scripts/check_code_equiv_monotonic.py`，整份取 dev 版；登记只追加 A22 那两条 align_ref 中间哈希（本线 align_ref 哈希 a2bc661c 不在其中，不改本线任何指纹）。
+- PATCH：sb 组手写否决 `sb-否決-卜-史記`（A24 11-15，史記 r68）：史記卜组 21 格人读为卜（以卜有求、卜有憂、周公卜三龜等）被 sb-十-r1/l1 误判十，加具体上下文否决、整格弃权。A22/A24 回测：殿本五份整理本 0 变化，全唐文 kanripo 23530 处 0 变化，史記 daizhige 仅 21 处卜由「判十」改「弃权」。
+- PATCH：`scripts/check_code_equiv_monotonic.py` 改为执行 code_equiv.py 取 ENTRIES（原正则只认单引号写法漏读登记，cut_select／seam 三条断链是误报）；补抄 v0.7.24／v0.7.28 两条 align_ref 中间哈希（A22 11-15，#1557）。不动指纹。
+
+## [0.7.38] - 2026-11-15
+
+- 发版说明（A31 11-15，SJ 史記 patch 线）：v0.7.33 + #1554（seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_norm`），PATCH，**不含** #1432/#1437 及 dev 上其他改动（v0.7.34–v0.7.37 是 dev 线，本线不带）。原样 cherry-pick，code_equiv 登记 seed_admit、follow_ref_hooks 两行（哈希按本线重算，逐字节同证据是 dev 上殿本 vol28 16 页）。
+- PATCH：seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_norm`（史記 r68，SJ／A24 11-15，A22）：三通道 `cand_variant` 拦前最后问书仓一次，返回与放行字语义同的字就放（本书已归一的异体）。缺省 None 不调，殿本 vol28 16 页 seed_admit 逐字节同，code_equiv 已登记、指纹不变。
 
 ## [0.7.37] - 2026-11-14
 
