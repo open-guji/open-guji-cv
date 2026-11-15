@@ -752,12 +752,15 @@ def _white_runs(white: np.ndarray) -> list[tuple[int, int]]:
 
 
 def inner_gap(gray: np.ndarray, col_cells, states: dict[int, str], ink_threshold: int = 128) -> list[dict]:
-    """一列里**落在字内白缝的格线**：[{slot_above, slot_below, y, gap, alt_gap, move}]（史記 R002，2026-11-14）。
+    """一列里**落在字内白缝的格线**：[{slot_above, slot_below, y, gap, alt_gap, move, piece, chain}]（史記 R002，2026-11-14）。
 
     看相邻两格（都不是空格、都不是夹注半格）的分界线，要两格里至少一格对不上参校字且没放行（`states` 是
     `slot_states` 的格号→格态，含 b／n）。按内容窗逐行量墨，墨宽 ≤ `GAP_WHITE` 的行算白；原线所在的白缝宽 `gap`
     （线上有墨＝0），离原线 `GAP_NEAR` 格高内另有一条白缝宽 `alt_gap` ≥ max(`GAP_WIDE`, gap＋`GAP_MORE`) 格高就报，
     `move` 是那条缝中心离原线的行数（负＝往上）。Step3 走折线的取折线中位。
+
+    `chain`（11-15，SJ）：同段的后续线——从报出的线往上、往下，连着也落在窄缝（≤`GAP_NARROW`，线上有墨也算）的线，
+    到第一条落进字缝的线为止（邻线正落在本线该挪去的宽缝里也接着算）；串半格往往不止一条线错（42:84:1 闕三皇三条、29:117:3 遂到王一整段）。只列出、不另算一条。
 
     报出的 `move` 就是该挪到的字缝：尺子 9 列 11 条线里 10 条离 SJ 人钉的线 ≤4px（28:37:8 13|14 那条两线指向同一条缝）。
 
@@ -777,18 +780,35 @@ def inner_gap(gray: np.ndarray, col_cells, states: dict[int, str], ink_threshold
     runs = _white_runs(ink <= max(2.0, GAP_WHITE * (x1 - x0)))
     halves = {c.slot for c in col_cells.cells if c.sub}
     spans = _slot_spans(col_cells)
-    out = []
+    lines = {}                    # 第 i 条线（spans[i-1]|spans[i]）→ (y, 所在白缝, 缝宽)；空格、夹注半格两侧的线不算
     for i in range(1, len(spans)):
         a, b = spans[i - 1], spans[i]
         if a["blank"] or b["blank"] or a["slot"] in halves or b["slot"] in halves or min(a["slot"], b["slot"]) < 1:
             continue
-        if not any(ch in "bn" for ch in states.get(a["slot"], "") + states.get(b["slot"], "")):
-            continue
         seam = b["seam_top"] or a["seam_bottom"]
         y = float(np.median(seam)) if seam else float(b["y0"])
+        cur = next(((s, e) for s, e in runs if s <= int(round(y)) < e), None)
+        lines[i] = (y, cur, 0 if cur is None else cur[1] - cur[0])
+
+    def narrow(i):
+        return i in lines and lines[i][2] <= GAP_NARROW * period
+
+    def chain(i, alt_run):        # 同段：往上往下连着也落在窄缝（≤GAP_NARROW）的线，到落进字缝的线为止（SJ 11-15）；
+        out_c = []                # 邻线正落在本线该挪去的那条宽缝里也算（本线挪过去它就得让开，29:117:3 遂到王）
+        for step in (-1, 1):
+            j = i + step
+            while narrow(j) or (j in lines and lines[j][1] == alt_run):
+                out_c.append(j)
+                j += step
+        return [{"slot_above": spans[j - 1]["slot"], "slot_below": spans[j]["slot"], "y": round(lines[j][0], 1)}
+                for j in sorted(out_c)]
+
+    out = []
+    for i, (y, cur, gap) in lines.items():
+        a, b = spans[i - 1], spans[i]
+        if not any(ch in "bn" for ch in states.get(a["slot"], "") + states.get(b["slot"], "")):
+            continue
         yi = int(round(y))
-        cur = next(((s, e) for s, e in runs if s <= yi < e), None)
-        gap = 0 if cur is None else cur[1] - cur[0]
         if gap > GAP_NARROW * period:
             continue
         alts = [(e - s, (s + e) / 2 - y, s, e) for s, e in runs if (s, e) != cur
@@ -805,7 +825,8 @@ def inner_gap(gray: np.ndarray, col_cells, states: dict[int, str], ink_threshold
         if piece + rest <= 0 or not GAP_PIECE[0] <= piece / (piece + rest) <= GAP_PIECE[1]:
             continue
         out.append({"slot_above": a["slot"], "slot_below": b["slot"], "y": round(y, 1), "gap": int(gap),
-                    "alt_gap": int(alt), "move": int(round(move)), "piece": round(float(piece / (piece + rest)), 2)})
+                    "alt_gap": int(alt), "move": int(round(move)), "piece": round(float(piece / (piece + rest)), 2),
+                    "chain": chain(i, (s, e))})
     return out
 
 
