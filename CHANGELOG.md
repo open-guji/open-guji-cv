@@ -6,6 +6,11 @@
 ## [未发版]
 
 
+## [0.7.38] - 2026-11-15
+
+- 发版说明（A31 11-15，SJ 史記 patch 线）：v0.7.33 + #1554（seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_norm`），PATCH，**不含** #1432/#1437 及 dev 上其他改动（v0.7.34–v0.7.37 是 dev 线，本线不带）。原样 cherry-pick，code_equiv 登记 seed_admit、follow_ref_hooks 两行（哈希按本线重算，逐字节同证据是 dev 上殿本 vol28 16 页）。
+- PATCH：seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_norm`（史記 r68，SJ／A24 11-15，A22）：三通道 `cand_variant` 拦前最后问书仓一次，返回与放行字语义同的字就放（本书已归一的异体）。缺省 None 不调，殿本 vol28 16 页 seed_admit 逐字节同，code_equiv 已登记、指纹不变。
+
 ## [0.7.33] - 2026-11-13
 
 - 发版说明（A31 11-13，SJ 史記 patch 线）：v0.7.32 + #1523（align_ref `coord_legacy_line_guard`，缺省关），PATCH，**不含** #1432/#1437、#1497 及 dev 上其他改动。#1523 在 dev 上叠在 #1497（coord_conflict_drop_bad）之后，本线没有 #1497，移植时去掉了与 drop_bad 相关的字段、参数和测试，line_guard 部分自成一体（不依赖 _use_coord_char）。
