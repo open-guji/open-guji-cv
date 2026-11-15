@@ -6,6 +6,12 @@
 ## [未发版]
 
 
+## [0.7.39] - 2026-11-15
+
+- 发版说明（A31 11-15，SJ 史記 patch 线）：v0.7.38 + #1558（sb 组手写否决 `sb-否決-卜-史記`）+ #1557（code_equiv 只增检查修读登记，只动检查脚本与登记、不动产物），PATCH，**不含** #1432/#1437、#1467 及 dev 上其他改动（v0.7.34–v0.7.37 是 dev 线，本线不带）。#1558 原样 cherry-pick dev 8475e60，只改 `config/groups/sb/rules.yaml` 一行，进 `seed_admit.group_flow_fingerprint`，用 sb 组的册 seed_admit 指纹会变；**不登 code_equiv**（对史記是真实行为变化）。#1557 本线原无 `scripts/check_code_equiv_monotonic.py`，整份取 dev 版；登记只追加 A22 那两条 align_ref 中间哈希（本线 align_ref 哈希 a2bc661c 不在其中，不改本线任何指纹）。
+- PATCH：sb 组手写否决 `sb-否決-卜-史記`（A24 11-15，史記 r68）：史記卜组 21 格人读为卜（以卜有求、卜有憂、周公卜三龜等）被 sb-十-r1/l1 误判十，加具体上下文否决、整格弃权。A22/A24 回测：殿本五份整理本 0 变化，全唐文 kanripo 23530 处 0 变化，史記 daizhige 仅 21 处卜由「判十」改「弃权」。
+- PATCH：`scripts/check_code_equiv_monotonic.py` 改为执行 code_equiv.py 取 ENTRIES（原正则只认单引号写法漏读登记，cut_select／seam 三条断链是误报）；补抄 v0.7.24／v0.7.28 两条 align_ref 中间哈希（A22 11-15，#1557）。不动指纹。
+
 ## [0.7.38] - 2026-11-15
 
 - 发版说明（A31 11-15，SJ 史記 patch 线）：v0.7.33 + #1554（seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_norm`），PATCH，**不含** #1432/#1437 及 dev 上其他改动（v0.7.34–v0.7.37 是 dev 线，本线不带）。原样 cherry-pick，code_equiv 登记 seed_admit、follow_ref_hooks 两行（哈希按本线重算，逐字节同证据是 dev 上殿本 vol28 16 页）。
