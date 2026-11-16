@@ -60,6 +60,10 @@ _FR_KEEP_VR_1116 = ("seed_admit _follow_ref_pass 跳过书级钩子 variant_rank
                     "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.37-c73-g-2827ba-k9-qtw020-x1）"
                     "seed_admit 与 origin/dev ec60bba 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22，史記 r71）")
 _FR_KEEP_VR_0743 = (_FR_KEEP_VR_1116 + "。史記 patch 线移植（v0.7.43 + 本修复）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
+_SEM_EXTRA_1116 = ("seed_admit 书级参数 semantic_extra（缺省空、不进参数 dump；空时不包 _ExtraSemanticMap，vmap 照旧）、新函数 _parse_semantic_extra、新类 _ExtraSemanticMap："
+                   "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.6.23-c33-g19-r8）、全唐文 020 16 页"
+                   "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.37-c73-g-2827ba-k9-qtw020-x1）"
+                   "seed_admit 与 origin/dev de92b1d 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22，史記 r71 圗）")
 _VN_HOOK_0738 = (_VN_HOOK_1115 + "。v0.7.38（史記 patch 线，v0.7.33 + #1554）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _PT_1115 = ("seed_admit 书级部件刻形判法 group_flow_part_shape（缺省空、不自动找文件、没填就不跑；模型指纹只在填了时进指纹；groups/part_shape 是新模块）："
             "全唐文 m1 包（cv0.7.10-c65-g-9f3d37-k5-qtw037-m1／qtw076-m1）037 册 4 页（seed_admit 实际跑通的页）＋076 册 12 页（3,20,48,55,65,68,69,92,93,100,120,149）"
@@ -1776,6 +1780,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='be2ed59230f83489123035ea33903b8f05acad7e48abd0664d0031cd7efe9407',
           old='1f3cc92598ca55168986832c0ff4cf650f5bd7bd62b2e1e08e4f68c147a3f73e',
           evidence=_FR_KEEP_VR_0743),
+    # seed_admit 书级 semantic_extra（史記 VariantMap 缺 圗／圖，异体护栏认不出、variant_rank 调不到，SJ 11-16）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='ac83cc2e89d930cc4733d145b0cc7fa3f67c9e4a20a5737d0c2703a35bd9559d',
+          old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
+          evidence=_SEM_EXTRA_1116),
     # v0.7.38（史記 patch 线 = v0.7.33 + #1554）：variant_norm 钩子按本线哈希登记（A31 11-15）
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='ebd54cc7c92413969a9f7ffd17ef7e68ba90e54c0eecc2186b70a38dbca0c63e',
