@@ -55,6 +55,10 @@ _VR_HOOK_1116 = ("seed_admit lane_variant_guard 加书级钩子 impl/keben/follo
                  "seed_admit 与 origin/dev 417feff 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22）")
 _VR_HOOK_0743 = (_VR_HOOK_1116 + "。v0.7.43（史記 patch 线，v0.7.41 + #1573）：同一改动原样 cherry-pick，哈希按本线重算，"
                  "上述逐字节同证据在 dev 上取得，本线未另跑产物比对（A31 2026-11-16）")
+_FR_KEEP_VR_1116 = ("seed_admit _follow_ref_pass 跳过书级钩子 variant_rank 放行的格（证据 lane.variant_rank=hook；钩子缺省 None 时没有这种格，多一句恒假的 continue）："
+                    "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.6.23-c33-g19-r8）、全唐文 020 16 页"
+                    "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.37-c73-g-2827ba-k9-qtw020-x1）"
+                    "seed_admit 与 origin/dev ec60bba 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22，史記 r71）")
 _VN_HOOK_0738 = (_VN_HOOK_1115 + "。v0.7.38（史記 patch 线，v0.7.33 + #1554）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _PT_1115 = ("seed_admit 书级部件刻形判法 group_flow_part_shape（缺省空、不自动找文件、没填就不跑；模型指纹只在填了时进指纹；groups/part_shape 是新模块）："
             "全唐文 m1 包（cv0.7.10-c65-g-9f3d37-k5-qtw037-m1／qtw076-m1）037 册 4 页（seed_admit 实际跑通的页）＋076 册 12 页（3,20,48,55,65,68,69,92,93,100,120,149）"
@@ -1764,6 +1768,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='a73e9aaf0d2972e8c7a724d1d4e5903ad16b0529eb1342b64a510928c10c5eb9',
           old='76f1e160c04766b55fed297b0b9e5da39cf0c903abf901060293044afad8cf6e',
           evidence=_VR_HOOK_0743),
+    # seed_admit follow_ref 变体遍不改回 variant_rank 按刻形放的格（史記 r71 来／圗 被改回 來／圖，SJ 11-16）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='213cac8e90a7304dc57b5b9c0932c7f9c9cd49591e6cfedba2f4be4ea1b272a6',
+          old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
+          evidence=_FR_KEEP_VR_1116),
     # v0.7.38（史記 patch 线 = v0.7.33 + #1554）：variant_norm 钩子按本线哈希登记（A31 11-15）
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='ebd54cc7c92413969a9f7ffd17ef7e68ba90e54c0eecc2186b70a38dbca0c63e',
