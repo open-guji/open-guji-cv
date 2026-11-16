@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH：形近字组表与分流规则（OCR 研究 Project，Sheldon 11-16 定方向）：`config/near_groups.json`（全唐文、史記、殿本字形库挖的极近字对，并上手工、人裁、字体表与库内异体对，572 对／920 字，核心 369 对）、`clustering/near_route.py`（读表、近邻一致度、分流规则：首位字落表送审，近邻一致度不满送审）、`scripts/build_near_groups.py`（`mine`／`merge`）。**没接进匹配器**：新模块不在任何 Step 的 `code_deps` 里，各书指纹不变、缺省输出不变。
+
 - PATCH：seed_admit 书级参数 `semantic_extra`（「异体=正字,…」，缺省空不进 dump；A22，史記 r71）：叠在 VariantMap 之上补语义对，只管语义层、放行字照旧是刻形。史記 圗 不在 `variants.auto.tsv` 里，异体护栏认不出 圗、`variant_rank` 调不到，8 格照整理本放成 圖；史記配 `semantic_extra: 圗=圖` 即可。没改共用异体表（那样各书 seed_admit 指纹都变、钉语料的册要改钉）。殿本 vol28、全唐文 020 各 16 页 seed_admit 逐字节同，code_equiv `_SEM_EXTRA_1116`。
 
 - PATCH：seed_admit `follow_ref` 变体遍跳过书级钩子 `variant_rank` 按刻形放的格（史記 r71：来 14 格、圗 8 格被改回整理本 來／圖；SJ 11-16，A22）。钩子缺省 None 时没有这种格：殿本 vol28、全唐文 020 各 16 页 seed_admit 逐字节同，code_equiv `_FR_KEEP_VR_1116`。
