@@ -241,3 +241,18 @@ def test_rival_facts_fields():
     for k in ("tier", "sources", "n_bridge", "never_only", "is_variant", "never", "edge_excluded", "groups"):
         assert hasattr(f, k)
     assert isinstance(f.groups, tuple)
+
+
+def test_variants_mode_keeps_variant_rank_hook_form():
+    """史記 r71（Sheldon 11-16 圗兾凢来 照刻形写）：书级钩子 variant_rank 按刻形放的格，follow_ref 变体遍不再改回整理本形；
+    别的通道放的同一种格照旧改。"""
+    p = SeedAdmitParams(db_path="x", follow_ref_variants=True)
+    out = _page({1: {"admit": True, "char": "隠", "channel": "witness3"},
+                 2: {"admit": True, "char": "隠", "channel": "witness3"}})
+    out[0].chars[0].evidence = {"lane": {"lane": "witness3", "variant_rank": "hook", "variant_from": "隠"}}
+    out[0].chars[1].evidence = {"lane": {"lane": "witness3"}}
+    _follow_ref_pass(p, out, _mm({1: ([("隠", 0.97)],), 2: ([("隠", 0.97)],)}), {},
+                     {f"{B}:1:1": "隱", f"{B}:1:2": "隱"}, {}, _VM())
+    r = {x.slot: x for x in out[0].chars}
+    assert r[1].char == "隠" and "follow_ref" not in r[1].evidence
+    assert r[2].char == "隱" and r[2].evidence["follow_ref"]["via"] == "variants"
