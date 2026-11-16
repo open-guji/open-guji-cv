@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- PATCH（史記 patch 线移植）：seed_admit 书级参数 `semantic_extra`（史記配 `圗=圖`，让异体护栏认出 圗、走 variant_rank 写刻形；SJ 11-16，A22）。缺省空不进 dump；本线哈希已登 `_SEM_EXTRA_0744`。
+
 
 ## [0.7.44] - 2026-11-16
 
