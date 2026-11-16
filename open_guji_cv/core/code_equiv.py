@@ -1761,13 +1761,10 @@ ENTRIES: tuple[Equiv, ...] = (
           old='67ffed25de9e2f114bfd57a4f490d1fa5a7e162d02b1a0174d92bc45543b4895',
           evidence=_VR_HOOK_1116),
     # v0.7.43（史記 patch 线 = v0.7.41 + #1573）：variant_rank 钩子按本线哈希登记（A31 11-16）
+    # （follow_ref_hooks 本线哈希 a73e9aaf 与 dev 同值，上面 _VR_HOOK_1116 已登 a73e9aaf→67ffed25；本线另登的 →76f1e160 重复，A22 11-16 删，归一结果同为 67ffed25）
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='1f3cc92598ca55168986832c0ff4cf650f5bd7bd62b2e1e08e4f68c147a3f73e',
           old='ebd54cc7c92413969a9f7ffd17ef7e68ba90e54c0eecc2186b70a38dbca0c63e',
-          evidence=_VR_HOOK_0743),
-    Equiv(module='open_guji_cv.impl.keben.follow_ref_hooks',
-          new='a73e9aaf0d2972e8c7a724d1d4e5903ad16b0529eb1342b64a510928c10c5eb9',
-          old='76f1e160c04766b55fed297b0b9e5da39cf0c903abf901060293044afad8cf6e',
           evidence=_VR_HOOK_0743),
     # seed_admit follow_ref 变体遍不改回 variant_rank 按刻形放的格（史記 r71 来／圗 被改回 來／圖，SJ 11-16）
     Equiv(module='open_guji_cv.steps.seed_admit',
