@@ -173,3 +173,57 @@ def test_status_code_ok_still_flags_everything_else(world):
     assert "code_only" not in st["steps"]["t_sr_gate"]
 
 
+
+
+@pytest.fixture
+def corpus_world(world, monkeypatch):
+    """t_sr_gate 当作读语料的步；语料串＝`tok<总号>`，钉子账有 6、7、8 三个总号（SJ v0.1 预检 11-16）。"""
+    from open_guji_cv.core import corpus_pin as CP
+    monkeypatch.setattr(CP, "CORPUS_STEPS", frozenset({"t_sr_gate"}))
+    monkeypatch.setattr(CP, "step_pin_token",
+                        lambda sid, b: f"tok{b.corpus}" if b.corpus and sid in CP.CORPUS_STEPS else None)
+    monkeypatch.setattr(CP, "corpus_token", lambda ws, n, vol=None, dev=False: f"tok{n}")
+    monkeypatch.setattr(CP, "load_pins", lambda ws, vol: [{"n": 6}, {"n": 7}, {"n": 8}])
+    monkeypatch.setattr(CP, "require_pin_clean", lambda *a, **k: None)
+    book, pl, store, cache = world
+    return dataclasses.replace(book, corpus=6), pl, store, cache
+
+
+def test_status_names_corpus_pin_change(corpus_world):
+    """只改语料钉、代码没动：说「语料钉变了」，不说「代码或版本变了」；也不算 code_ok 的「只是代码变了」。"""
+    book, pl, store, cache = corpus_world
+    _eng(book, pl, store, cache).run()
+    e = store.manifest("tsr", "t_sr_gate").get("p0001")
+    assert (e.corpus_pin, e.corpus) == (6, "tok6")
+    assert store.manifest("tsr", "t_sr_down").get("p0001").corpus is None      # 不读语料的步不记
+    eng = _eng(dataclasses.replace(book, corpus=8), pl, store, cache)
+    assert eng.status()["steps"]["t_sr_gate"]["stale_reasons"] == {"语料钉变了：corpus 6→8（代码未变）": 2}
+    _code_only_stale(store, "0.4.4")          # cv_version 记上正式版，证明 code_ok 不把语料变化当新鲜
+    st = eng.status(code_ok=True)["steps"]["t_sr_gate"]
+    assert st["counts"][STALE] == 2 and "code_only" not in st
+
+
+def test_status_corpus_pin_change_old_entry(corpus_world):
+    """老条目没记语料钉：拿 self_hash 逐个旧总号试出来。"""
+    book, pl, store, cache = corpus_world
+    _eng(book, pl, store, cache).run()
+    m = store.manifest("tsr", "t_sr_gate")
+    for k, e in m.all().items():
+        m.put(dataclasses.replace(e, corpus=None, corpus_pin=None))
+    st = _eng(dataclasses.replace(book, corpus=8), pl, store, cache).status()
+    assert st["steps"]["t_sr_gate"]["stale_reasons"] == {"语料钉变了：corpus 6→8（代码未变）": 2}
+    # 代码也变了（self_hash 对不上任何旧总号）：照旧报代码
+    for k, e in m.all().items():
+        m.put(dataclasses.replace(e, self_hash="0" * 24))
+    st = _eng(dataclasses.replace(book, corpus=8), pl, store, cache).status()
+    assert st["steps"]["t_sr_gate"]["stale_reasons"] == {"代码或版本变了": 2}
+
+
+def test_status_corpus_and_code_both_changed(corpus_world):
+    book, pl, store, cache = corpus_world
+    _eng(book, pl, store, cache).run()
+    m = store.manifest("tsr", "t_sr_gate")
+    for k, e in m.all().items():
+        m.put(dataclasses.replace(e, self_hash="0" * 24))
+    st = _eng(dataclasses.replace(book, corpus=7), pl, store, cache).status()
+    assert st["steps"]["t_sr_gate"]["stale_reasons"] == {"代码或版本变了；语料钉也变了：corpus 6→7": 2}

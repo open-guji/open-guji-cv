@@ -6,6 +6,11 @@
 ## [未发版]
 
 
+## [0.7.46] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.45 + #1583（dev 36f8701 原样 cherry-pick），PATCH，**不含** dev 线其他改动。只改 `guji status` 过期原因文案，不改任何 Step 指纹，钉 v0.7.45 的产物在 v0.7.46 下指纹逐位不变。
+- PATCH：`guji status` 过期原因分出「语料钉变了」（SJ v0.1 预检 11-16）：读语料的步（`CORPUS_STEPS`）只因册的 `corpus:` 改钉而过期时，原来报「代码或版本变了」，现在报「语料钉变了：corpus 6→8（代码未变）」；代码也变了报「代码或版本变了；语料钉也变了：…」。新条目在 manifest 记 `corpus_pin`／`corpus`（不进指纹）；老条目用 `self_hash` 逐个旧总号试。过期判定、`code_ok` 不变。
+
 ## [0.7.45] - 2026-11-16
 
 - 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.44 + #1580 移植（A22 分支 a22/semantic-extra-0744 9d9f43b，dev 上 a57a3b7），PATCH，**不含** dev 线 v0.7.40／v0.7.42 及 dev 上其他改动。code_equiv 按本线哈希登记 `_SEM_EXTRA_0744`（seed_admit be2ed592→ffceeab9；缺省空的册不过期，逐字节同证据在 dev 上取得）。史記书配置写 `semantic_extra: 圗=圖` 的册照常过期。
