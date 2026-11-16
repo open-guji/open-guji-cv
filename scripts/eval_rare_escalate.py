@@ -106,7 +106,8 @@ def main() -> int:
                     help="分类头不进融合（权重置 0），只看 emb 一路经阶梯之后的结果；用来分开「阶梯」和「融合」各丢多少")
     ap.add_argument("--cls", action="append", default=None,
                     help="分类头进融合的方式，可多次：gate（现行软门控，缺省）、off（权重 0）、fixed:<w>（固定权重）、"
-                         "hard（emb 首位在类外就关，topm=1）、hi:<w>（软门控但上限降到 w）")
+                         "hard（emb 首位在类外就关，topm=1）、hi:<w>（软门控但上限降到 w）、"
+                         "conf:<t>（分类头首位置信度 ≥t 才用）、inemb:<n>（分类头首位在 emb 前 n 名里才用）")
     ap.add_argument("--allow", default=None,
                     help="临时换否决档（font.charset.allow）：none＝不挡简体；缺省照 edition（刻本 no-simplified）")
     ap.add_argument("--no-keep", action="store_true", help="族展开不挡简体（缺省挡，与 no-simplified 同口径）")
@@ -137,8 +138,26 @@ def main() -> int:
         elif mode.startswith("hi:"):
             w = float(mode[3:])
             CC.cls_gate_weight = lambda emb_order, cl, **_k: gate0(emb_order, cl, hi=w)
+        elif mode.startswith("conf:"):       # 分类头首位置信度够高才用它（满权），否则关
+            t = float(mode[5:])
+            CC.cls_gate_weight = lambda *_a, **_k: (CC.CNN_WEIGHT if _CLS["p"] >= t else 0.0)
+        elif mode.startswith("inemb:"):      # 分类头首位落在 emb 前 n 名里才用它（满权），否则关
+            n = int(mode[6:])
+            CC.cls_gate_weight = lambda emb_order, *_a, **_k: (
+                CC.CNN_WEIGHT if _CLS["c"] in list(emb_order)[:n] else 0.0)
         else:
             raise SystemExit(f"--cls 不认识：{mode}")
+
+    # conf／inemb 两种方式要看分类头首位，`cls_gate_weight` 的入参里没有，包一层 `_fuse` 记下来
+    from open_guji_cv.clustering import rare_panel as RP0
+    _CLS = {"c": None, "p": 0.0}
+    fuse0 = RP0._fuse
+
+    def fuse(a_, b_, cnn_topk, emb_topk, k, db_topk=None):
+        _CLS["c"], _CLS["p"] = (cnn_topk[0][0], float(cnn_topk[0][1])) if cnn_topk else (None, 0.0)
+        return fuse0(a_, b_, cnn_topk, emb_topk, k, db_topk)
+
+    RP0._fuse = fuse
 
     cls_modes = a.cls or (["off"] if a.no_cls else ["gate"])
 
