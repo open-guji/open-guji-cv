@@ -58,6 +58,9 @@ from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateColumn, GateManifest
 from ..impl.keben import jiazhu_split
 from ..impl.keben.column_pair_merge import has_pair_merged
+
+#: 半文半表页点名的表格列的拒因前缀（`ColumnGateParams.table_cols`）；下游统计按它把这些列记成表格列
+TABLE_COLUMN_REJECT = "table_column"
 from ..core.book import _expand_pages
 from ..impl.keben.row_boundaries import estimate_shared_period, row_ink_projection
 
@@ -196,6 +199,13 @@ class ColumnGateParams(BaseModel):
     #: 先验 115），Step3 拿它当格高，抬头格数、格网全乱。0 = 关（只剩上面贴下界那一条）。没配
     #: `period_prior` 的书不受影响。
     period_prior_tol: float = 0.10
+    #: **半文半表页按列标表**（GUJI-772，2026-11-16，史記年表卷首／卷末页一半表一半正文）：`{页: [列号…]}`，列号同
+    #: 产物 col（右起第几列，从 1 起），写法同页号（`["1-5"]`、`[6, 7]`）。点名的列按版式事实拒收（拒因前缀
+    #: `table_column`，同 L0c 版心一路：不参与页级周期与列宽中位，Step3 出 ok=False 不切，对位、定字跳过），
+    #: 页型仍是正文，其余列照常切。页级周期门槛扣掉表格列数（正文只剩 1 列的页仍整页拒，要配 `period_prior_pages`）。
+    #: 产物口径：`column_widths` 仍记全部列，`median_width` 只按正文列算。册配置里写 `page_kinds: {table_cols: …}`
+    #: （`core/page_kinds.py` 翻成本参数）。缺省空，空时不进参数 dump，产物与加字段前逐字节相同。
+    table_cols: dict[int, list[int | str]] = {}
 
     @model_serializer(mode="wrap")
     def _drop_off_period_override(self, handler):
@@ -206,6 +216,8 @@ class ColumnGateParams(BaseModel):
                 d.pop("period_prior_pages", None)
             if not self.expected_cols_pages:
                 d.pop("expected_cols_pages", None)
+            if not self.table_cols:
+                d.pop("table_cols", None)
         return d
 
 
@@ -241,6 +253,12 @@ class ColumnGateStep(Step):
         # 图上核实是夹注双栏内容被误切成单列，band 判据在这正确起作用）。
         widths = [float(c.band[1] - c.band[0]) for c in cols]
         med_w = statistics.median(widths) if widths else None
+        # 半文半表页：点名的表格列不算列宽中位（表格列宽与正文列无关）；没点名的页逐位照旧
+        tc_spec = p.table_cols.get(page) if p.table_cols else None
+        table_cols = set(_expand_pages(list(tc_spec))) if tc_spec else set()
+        if table_cols:
+            tw = [w for c, w in zip(cols, widths) if c.col not in table_cols]
+            med_w = statistics.median(tw) if tw else med_w
         page_reject: list[str] = []
 
         # 闸1 判 skip 的页（封面/书签/牌记），Step2 根本没切列，列数必然是 0。
@@ -289,6 +307,10 @@ class ColumnGateStep(Step):
             for ln in li.lines:
                 if ln.col is not None and ln.kind != "body":
                     non_body[ln.col] = (ln.kind, (ln.flags or [""])[0])
+        # 半文半表页（`table_cols`）：册配置点名的表格列，同版心一样是版式事实，不进页级先验、整列拒收
+        for c in cols:
+            if c.col in table_cols and c.col not in non_body:
+                non_body[c.col] = ("table", "")
 
         # 逐列：页级先验要用**几何正常的正文列**算。
         # 宽度异常的列多半是把界行圈进了列窗，它的投影带着一条整线；
@@ -311,6 +333,9 @@ class ColumnGateStep(Step):
         period_from_prior = False
         if not page_reject:
             need = max(1, len(cols) // 2) if p.count_mode == "detected" else max(2, expected // 2)
+            if table_cols:     # 半文半表页：门槛扣掉表格列数 k（k=0 即上一行，逐位照旧）
+                k = len(table_cols & {c.col for c in cols})
+                need = max(1, (len(cols) - k) // 2) if p.count_mode == "detected" else max(2, (expected - k) // 2)
             if len(projs) < need:
                 page_reject.append(
                     f"period_fallback：几何正常的列只剩 {len(projs)} 条，不足以定页级先验")
@@ -386,6 +411,8 @@ class ColumnGateStep(Step):
         if page_ok and period and expected_slots is not None:
             probe = max(20, int(round(period * 0.6)))
             for c in cols:
+                if c.col in table_cols:       # 半文半表页的表格列：不量抬头／顶格
+                    continue
                 try:
                     img = ctx.image("column_image", column_key(page, c.col))
                 except Exception:
@@ -468,7 +495,9 @@ class ColumnGateStep(Step):
         for c in cols:
             reasons: list[str] = []
             flags: list[str] = []
-            if c.col in non_body:
+            if c.col in non_body and non_body[c.col][0] == "table":
+                reasons.append(f"{TABLE_COLUMN_REJECT}：册配置 page_kinds.table_cols 点名本列为表格列，不切")
+            elif c.col in non_body:
                 kind, why = non_body[c.col]
                 label = {"margin": "版心（书口）", "edge": "版框外页边"}.get(kind, kind)
                 reasons.append(f"non_body_column：Step1 判定本列位是{label}，非正文"
@@ -558,6 +587,9 @@ class ColumnGateStep(Step):
                     + f"（≥{p.frame_residue_min_run} 行判为版框没削干净，flag 不算错）")
             if p.tier == "gold":
                 reasons.append("human_verdict：金标准入尚未接入（P2）")
+            if c.col in table_cols and non_body[c.col][0] == "table":
+                # 半文半表页的表格列只留拒因（L0t），不叠列宽、侧墨、噪点这类 flag
+                flags = []
             recs.append(GateColumn(
                 col=c.col, admitted=not reasons, reject=reasons, flags=flags, tier=p.tier,
                 content_x=(float(c.band[0]), float(c.band[1])),
@@ -601,6 +633,9 @@ COLUMN_GATE_SPEC = GateSpec(
         GateLevel(id="L0c", unit="column",
                   desc="Step1 判定本列位不是正文（筒子页版心 / 版框外页边）——"
                        "版式如此，不是几何坏了", name="non_body_column"),
+        GateLevel(id="L0t", unit="column",
+                  desc="册配置 page_kinds.table_cols 点名的表格列（半文半表页）——版式如此，整列不切，"
+                       "不参与页级周期与列宽中位", name="table_column"),
         GateLevel(id="L1", unit="page",
                   desc="探出的列数是否等于版式列数——整页性的问题才放这一层", name="column_count"),
         GateLevel(id="L1f", unit="page",
