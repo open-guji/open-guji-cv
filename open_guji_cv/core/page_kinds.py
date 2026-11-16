@@ -172,7 +172,7 @@ def kinds_from_params(params: dict[str, dict] | None) -> dict[str, list]:
 
 
 def table_cols_from_params(params: dict[str, dict] | None) -> dict[int, list]:
-    """从（已合并的）`params` 读生效的 `table_cols`：`{页: [列号表达式…]}`，没写返回空。"""
+    """从（已合并的）`params` 读生效的 `table_cols`：`{页: [升序列号…]}`，没写返回空。"""
     sid, field = TABLE_COLS_PARAM
     v = ((params or {}).get(sid) or {}).get(field)
     return {int(k): sorted(set(_expand_cols(c))) for k, c in dict(v).items() if c} if v else {}
