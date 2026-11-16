@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+
+## [0.7.44] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.43 + #1576（A22 移植分支 a22/follow-ref-keep-vr-0743 f5f1a97，dev 上 1f952e4），PATCH，**不含** dev 线 v0.7.40／v0.7.42 及 dev 上其他改动。code_equiv 按本线哈希登记 `_FR_KEEP_VR_0743`（seed_admit 1f3cc925→be2ed592；钩子缺省 None 的册不过期，逐字节同证据在 dev 上取得）。史記书仓开了 variant_rank，照常过期（r71 用）。
 - PATCH（史記 patch 线移植）：seed_admit `follow_ref` 变体遍跳过 `variant_rank` 按刻形放的格（史記 r71 来／圗 被改回 來／圖；SJ 11-16，A22）。dev 上同改动见 dev CHANGELOG；本线哈希已登 `_FR_KEEP_VR_0743`。
 
 
