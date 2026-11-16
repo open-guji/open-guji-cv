@@ -8,7 +8,7 @@
     cover:  [1]            # 书衣／封面页，整页跳过（页型记 cover）
       roster: ["89-132"]     # 职名页，走职名页分支
       table_cols:            # 半文半表页：本页这些列是表、跳过，其余列按正文切、对位（GUJI-772，2026-11-16）
-        112: ["1-5"]         # {页: [列号…]}，列号同产物 col（右起第几列，从 1 起），写法同页号
+        112: ["1-5"]         # {页: [列号…]}，列号同产物 col（图上右起第几列，从 1 起；产物 quad 右上原点），写法同页号
 
 读配置时（`BookSpec.__post_init__`）把它翻成原来就有的三个 Step 参数，**值一字不改**，所以 Step 参数指纹、
 各步产物都不变（L0）：
@@ -67,7 +67,7 @@ def _load_table_cols(raw) -> dict[int, list]:
         except ValueError as e:
             raise ValueError(f"page_kinds.table_cols.{page}: 列号写错了：{e}") from None
         if any(c < 1 for c in got):
-            raise ValueError(f"page_kinds.table_cols.{page}: 列号从 1 起（右起第几列）")
+            raise ValueError(f"page_kinds.table_cols.{page}: 列号从 1 起（图上右起第几列）")
         if got:
             out[page] = sorted(set(got))       # 展开成升序整数：["1-3"] 与 [1, 2, 3] 同一个指纹
     return dict(sorted(out.items()))
@@ -154,7 +154,7 @@ def merge_into_params(params: dict[str, dict], page_kinds: dict[str, list] | Non
             if not same:
                 kind = next((k for k, v in KIND_PARAM.items() if v == (sid, field)), TABLE_COLS)
                 raise ValueError(
-                    f"page_kinds.{kind} 和 params.{sid}.{field} 两处都写了、值不一样（{pages} / {list(old)}）："
+                    f"page_kinds.{kind} 和 params.{sid}.{field} 两处都写了、值不一样（{pages} / {old if isinstance(old, dict) else list(old)}）："
                     f"同一类页只写一处，新写法用 page_kinds")
             out.setdefault(sid, {})[field] = pages
     return out
