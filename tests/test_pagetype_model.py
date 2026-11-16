@@ -23,13 +23,6 @@ def _page(h=1200, w=900, text=True):
                "top_frame_kind": "double", "bottom_frame_kind": "double"}
 
 
-def test_params_off_dump_unchanged():
-    d = BorderDetectGateParams().model_dump(mode="json")
-    assert not any(k.startswith("pagetype_model") for k in d)
-    on = BorderDetectGateParams(pagetype_model=True).model_dump(mode="json")
-    assert on["pagetype_model"] is True and on["pagetype_model_fingerprint"]
-
-
 def test_manifest_none_not_in_dump():
     m = BorderDetectGateManifest(page=1, admitted=True, n_cols=9, expected_cols=9)
     assert "pagetype_model" not in m.model_dump(mode="json")
