@@ -75,6 +75,7 @@ _SAME_WRITING_KEEP = ("xu", "feng", "yi_560", "guan", "guang", "jiao", "jue")
 
 class SeedAdmitParams(BaseModel):
     variants: str = ""                  # 异体表；空 = VariantMap 默认
+    semantic_extra: str = ""            # 书级补语义对「异体=正字,…」，叠在 VariantMap 之上（如史記 圗=圖：语义同、字形层照刻形）；空＝不补、不进 dump（A22 11-16）
     solo_cov: float = 0.99              # match_solo 的 cov 闸，实测拐点
     use_context: bool = True            # 把 Step6 的定字当第三路证据
     context_margin: float = 0.70        # 用它时的 margin 门槛（生产值）
@@ -1689,6 +1690,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.pua_rules:
             d.pop("pua_rules", None)
             d.pop("pua_rule_cov", None)
+        if isinstance(d, dict) and not self.semantic_extra:
+            d.pop("semantic_extra", None)
         if isinstance(d, dict) and not self.follow_ref_variants:
             d.pop("follow_ref_variants", None)
         if isinstance(d, dict) and not self.follow_ref_seen:
@@ -1995,6 +1998,8 @@ class SeedAdmitStep(Step):
         from ..variant_ledger import BookLedger
         p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
         vmap = VariantMap.load(p.variants or None)
+        if p.semantic_extra:
+            vmap = _ExtraSemanticMap(vmap, _parse_semantic_extra(p.semantic_extra))
         if p.codepoint_semantic and ctx.book.codepoints:
             vmap = _CodepointMap(vmap, ctx.book)
         ledger = BookLedger.load_or_empty(p.edition)
@@ -6926,6 +6931,34 @@ class _CodepointMap:
 
     def semantic(self, char: str) -> str:
         return self._base.semantic(self._book.canonical_char(char))
+
+    def __getattr__(self, name):
+        return getattr(self._base, name)
+
+
+def _parse_semantic_extra(spec: str) -> dict[str, str]:
+    """`semantic_extra`「异体=正字,…」→ {异体: 正字}；两边都要是单字，写错直接报错（书配置写错别悄悄不生效）。"""
+    out: dict[str, str] = {}
+    for item in (x.strip() for x in spec.split(",")):
+        if not item:
+            continue
+        a, sep, b = item.partition("=")
+        a, b = a.strip(), b.strip()
+        if not sep or len(a) != 1 or len(b) != 1 or a == b:
+            raise ValueError(f"semantic_extra 写法不对：{item!r}（要「异体=正字」，两边各一个字）")
+        out[a] = b
+    return out
+
+
+class _ExtraSemanticMap:
+    """VariantMap 的包装：书级 `semantic_extra` 补的对先换到正字再查语义（圗→圖 后 semantic(圗)==semantic(圖)）。
+    只管语义层，字形层（候选、放行字）照旧是刻形。"""
+
+    def __init__(self, base, extra: dict[str, str]):
+        self._base, self._extra = base, extra
+
+    def semantic(self, char: str) -> str:
+        return self._base.semantic(self._extra.get(char, char))
 
     def __getattr__(self, name):
         return getattr(self._base, name)
