@@ -67,6 +67,7 @@ _SEM_EXTRA_1116 = ("seed_admit 书级参数 semantic_extra（缺省空、不进�
 _GF_EXCLUDE_1116 = ("seed_admit 书级减法 group_flow_exclude（缺省空、不进参数 dump；空时 model_post_init 不进新分支，group_flow 照旧）："
                     "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.7.42-c34-g22-m3-headraise-fix 当上游）"
                     "seed_admit 与 origin/dev 0e7277b 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22，史記 勢𫝑）")
+_GF_EXCLUDE_0748 = (_GF_EXCLUDE_1116 + "。史記 patch 线移植（v0.7.48 + #1601 → v0.7.50）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _SEM_EXTRA_0744 = (_SEM_EXTRA_1116 + "。史記 patch 线移植（v0.7.44 + 本改动）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _VN_HOOK_0738 = (_VN_HOOK_1115 + "。v0.7.38（史記 patch 线，v0.7.33 + #1554）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _PT_1115 = ("seed_admit 书级部件刻形判法 group_flow_part_shape（缺省空、不自动找文件、没填就不跑；模型指纹只在填了时进指纹；groups/part_shape 是新模块）："
@@ -1850,6 +1851,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='3c9fc8ae6ff02f3cbff55a403e8332de5fc9fdd4d7af2fbdc834a8a002cd023a',
           old='14695ffb4eb100b35808596412291935656db67dc52225515b0b682b3c92d7f3',
           evidence=_TABLE_COLS_ONE_0747),
+    # v0.7.50（史記 patch 线 = v0.7.48 + #1601）：group_flow_exclude 按本线哈希登记（A31 11-16）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='746d3e956607cb04dad065a984e34158ddd09217a8708cc9a5e3d07cd36fc1e5',
+          old='ffceeab903b391ca076a2e5fa2e847aee23d9f59d84fb54248d2274f5c2cb238',
+          evidence=_GF_EXCLUDE_0748),
 )
 
 
