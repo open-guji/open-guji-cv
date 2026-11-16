@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH：半文半表页按列标表格 `page_kinds.table_cols: {页: [列号…]}`（GUJI-772，SJ 台账 R030，A20 定方案；A22）：翻成 `column_gate.table_cols`（缺省空不进 dump），点名列拒收（拒因 `table_column`，GateLevel L0t），不进列宽中位与页级周期、门槛扣表格列数，Step3 出 ok=False、闸3 拒因同名，不进待审单；其余列照正文切。殿本 vol28、全唐文 020 各 16 页、北行 8 页两道闸逐字节同，code_equiv `_TABLE_COLS_1116`。
+
 - PATCH：seed_admit 书级参数 `semantic_extra`（「异体=正字,…」，缺省空不进 dump；A22，史記 r71）：叠在 VariantMap 之上补语义对，只管语义层、放行字照旧是刻形。史記 圗 不在 `variants.auto.tsv` 里，异体护栏认不出 圗、`variant_rank` 调不到，8 格照整理本放成 圖；史記配 `semantic_extra: 圗=圖` 即可。没改共用异体表（那样各书 seed_admit 指纹都变、钉语料的册要改钉）。殿本 vol28、全唐文 020 各 16 页 seed_admit 逐字节同，code_equiv `_SEM_EXTRA_1116`。
 
 - PATCH：seed_admit `follow_ref` 变体遍跳过书级钩子 `variant_rank` 按刻形放的格（史記 r71：来 14 格、圗 8 格被改回整理本 來／圖；SJ 11-16，A22）。钩子缺省 None 时没有这种格：殿本 vol28、全唐文 020 各 16 页 seed_admit 逐字节同，code_equiv `_FR_KEEP_VR_1116`。
