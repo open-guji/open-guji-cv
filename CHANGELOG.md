@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（数据）：`config/variants/local_edges.json` 补 16 条兄弟异体无向边（㕘／叅、𡚁／獘、𢑱／彛、𥪡／䜿、嵗／𡻕、𨽻／隷、𥗤／𡕎、滙／𣾀、𠫊／㕔、𨚫／却、𦊨／𦊕、𩛻／䬤、藳／藁、駵／𩤃、𫾻／敭、𣢾／款），`variants.json` 同步加这 16 对的 `local:keben` 标签（按 build_variants 3.5 的逻辑只补这 16 对，没有重拉上游）。来源：候选召回线三书人裁 5b 冻结集，清单在 ai-team `domain/CV/字形领域/大字符集候选召回-2026-11-15/关系库补边清单-2026-11-16/`，Sheldon 11-16 人审定补 A 档。**hanzi 核心包没有重建**（`config/hanzi/` 现版只含 1 条 local:keben，11-06 加的 14 条也不在里面），`HanziDB.family()` 要等重建后才看得到。共用异体表变了，各书用到关系图的步指纹是否变未测。
+
 - PATCH：seed_admit 书级参数 `semantic_extra`（「异体=正字,…」，缺省空不进 dump；A22，史記 r71）：叠在 VariantMap 之上补语义对，只管语义层、放行字照旧是刻形。史記 圗 不在 `variants.auto.tsv` 里，异体护栏认不出 圗、`variant_rank` 调不到，8 格照整理本放成 圖；史記配 `semantic_extra: 圗=圖` 即可。没改共用异体表（那样各书 seed_admit 指纹都变、钉语料的册要改钉）。殿本 vol28、全唐文 020 各 16 页 seed_admit 逐字节同，code_equiv `_SEM_EXTRA_1116`。
 
 - PATCH：seed_admit `follow_ref` 变体遍跳过书级钩子 `variant_rank` 按刻形放的格（史記 r71：来 14 格、圗 8 格被改回整理本 來／圖；SJ 11-16，A22）。钩子缺省 None 时没有这种格：殿本 vol28、全唐文 020 各 16 页 seed_admit 逐字节同，code_equiv `_FR_KEEP_VR_1116`。
