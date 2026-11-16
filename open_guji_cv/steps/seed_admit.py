@@ -4591,6 +4591,8 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
         for rec in col.chars or []:
             if rec.provenance == "human":
                 continue
+            if ((rec.evidence or {}).get("lane") or {}).get("variant_rank") == "hook":
+                continue        # 书级钩子 variant_rank 按刻形放的字（史記 圗兾凢来，Sheldon 11-16）：别再按整理本改回去
             ref = coord.get(rec.id)
             if not ref:
                 ref = (amap.get(rec.id) or (None,))[0]
