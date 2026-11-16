@@ -231,16 +231,30 @@ def merge(a) -> int:
         e["core"] = bool({"hand", "human", "variant"} & set(e["src"])) or any(n >= CORE_NEAR for n in e["near"].values())
         if not e["near"]:
             del e["near"]
+    from open_guji_cv.groups.registry import FLOW_GROUPS     # 第 7 步字组注册表：哪个字已经有组、哪一对已经在同一组里（有判法）
+    char_groups: dict[str, list[str]] = {}
+    for g in FLOW_GROUPS.values():
+        for c in g.members:
+            char_groups.setdefault(c, []).append(g.id)
+    for k, e in tab.items():
+        shared = sorted(set(char_groups.get(k[0], ())) & set(char_groups.get(k[1], ())))
+        if shared:
+            e["group"] = shared
     pairs = dict(sorted(tab.items(), key=lambda t: (not t[1]["core"], -max(t[1].get("near", {}).values(), default=0), t[0])))
     core = [k for k, e in pairs.items() if e["core"]]
     doc = ("形近字组表（scripts/build_near_groups.py 生成，读法见 open_guji_cv/clustering/near_route.py）。pairs 的键是两个字，"
            "src：lib:<书>＝从该书字形库挖的（near 是近度）、hand／human／font＝confusable.py 的三张表、variant＝同形异码；"
            f"core＝核心对（手工、人裁、同形异码，或某本书近度 ≥{CORE_NEAR}）；全表另含近度 ≥{WIDE_NEAR} 的库内对与字体表。"
+           "group＝这一对两个字同在第 7 步字组注册表（groups/registry.py）的哪个组里，有它就是已经有判法；char_groups＝注册表里每个字属哪些组"
+           "（注册表是字组的单一真源，这里只是生成时抄的一份，供第 5 步不 import groups 包就能查）。"
            "名单用前要人看一遍：库里挖的对有少量是切图丢偏旁造成的假形近。")
     Path(a.out).write_text(json.dumps({"_doc": doc, "books": books, "n_dropped": len(dropped), "n_pairs": len(pairs), "n_core": len(core),
                                        "n_chars": len({c for k in pairs for c in k}),
-                                       "n_core_chars": len({c for k in core for c in k}), "pairs": pairs},
+                                       "n_core_chars": len({c for k in core for c in k}),
+                                       "n_core_in_group": sum(1 for k in core if "group" in pairs[k]),
+                                       "char_groups": dict(sorted(char_groups.items())), "pairs": pairs},
                                       ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    print(f"核心对里两个字已在同一个字组（第 7 步有判法）的 {sum(1 for k in core if 'group' in pairs[k])} 对")
     print(f"合表：剔除名单去掉 {len(dropped)} 对；{len(pairs)} 对／{len({c for k in pairs for c in k})} 字，其中核心 {len(core)} 对／{len({c for k in core for c in k})} 字 → {a.out}")
     return 0
 

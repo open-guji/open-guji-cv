@@ -1,5 +1,5 @@
 {
- "_doc": "形近字组表（scripts/build_near_groups.py 生成，读法见 open_guji_cv/clustering/near_route.py）。pairs 的键是两个字，src：lib:<书>＝从该书字形库挖的（near 是近度）、hand／human／font＝confusable.py 的三张表、variant＝同形异码；core＝核心对（手工、人裁、同形异码，或某本书近度 ≥0.985）；全表另含近度 ≥0.975 的库内对与字体表。名单用前要人看一遍：库里挖的对有少量是切图丢偏旁造成的假形近。",
+ "_doc": "形近字组表（scripts/build_near_groups.py 生成，读法见 open_guji_cv/clustering/near_route.py）。pairs 的键是两个字，src：lib:<书>＝从该书字形库挖的（near 是近度）、hand／human／font＝confusable.py 的三张表、variant＝同形异码；core＝核心对（手工、人裁、同形异码，或某本书近度 ≥0.985）；全表另含近度 ≥0.975 的库内对与字体表。group＝这一对两个字同在第 7 步字组注册表（groups/registry.py）的哪个组里，有它就是已经有判法；char_groups＝注册表里每个字属哪些组（注册表是字组的单一真源，这里只是生成时抄的一份，供第 5 步不 import groups 包就能查）。名单用前要人看一遍：库里挖的对有少量是切图丢偏旁造成的假形近。",
  "books": {
   "qtw": {
    "lib_rows": 35413,
@@ -25,6 +25,1496 @@
  "n_core": 369,
  "n_chars": 920,
  "n_core_chars": 644,
+ "n_core_in_group": 117,
+ "char_groups": {
+  "㑹": [
+   "zh"
+  ],
+  "㓂": [
+   "kgc"
+  ],
+  "㕘": [
+   "can"
+  ],
+  "㝠": [
+   "cp_ming2"
+  ],
+  "㝷": [
+   "cp_xun2"
+  ],
+  "㣲": [
+   "weim"
+  ],
+  "㤗": [
+   "cp_tai4"
+  ],
+  "㫖": [
+   "zhi"
+  ],
+  "㳫": [
+   "cp_ta4"
+  ],
+  "㸃": [
+   "dian"
+  ],
+  "䆒": [
+   "cp_jiu1"
+  ],
+  "䆳": [
+   "cp_sui4"
+  ],
+  "䇿": [
+   "cek"
+  ],
+  "䋲": [
+   "cp_sheng2"
+  ],
+  "䕫": [
+   "kui"
+  ],
+  "䘮": [
+   "sang"
+  ],
+  "䜟": [
+   "chen"
+  ],
+  "䜿": [
+   "cp_shu4c"
+  ],
+  "䟦": [
+   "ba"
+  ],
+  "䟽": [
+   "shu"
+  ],
+  "䧟": [
+   "xian"
+  ],
+  "䨇": [
+   "cp_shuang1"
+  ],
+  "一": [
+   "yr"
+  ],
+  "丈": [
+   "zw"
+  ],
+  "予": [
+   "yz"
+  ],
+  "二": [
+   "yr"
+  ],
+  "于": [
+   "zy"
+  ],
+  "亷": [
+   "cp_lian2b"
+  ],
+  "人": [
+   "rr"
+  ],
+  "仝": [
+   "xjz"
+  ],
+  "令": [
+   "xjz"
+  ],
+  "住": [
+   "xjz"
+  ],
+  "侯": [
+   "hou"
+  ],
+  "俞": [
+   "qin"
+  ],
+  "俟": [
+   "hou"
+  ],
+  "候": [
+   "hou"
+  ],
+  "倚": [
+   "cp_yi3"
+  ],
+  "偏": [
+   "xjz"
+  ],
+  "傅": [
+   "fc"
+  ],
+  "傳": [
+   "fc"
+  ],
+  "入": [
+   "rr"
+  ],
+  "內": [
+   "nei"
+  ],
+  "全": [
+   "xjz"
+  ],
+  "兩": [
+   "liang"
+  ],
+  "八": [
+   "rr"
+  ],
+  "内": [
+   "nei"
+  ],
+  "冊": [
+   "ce"
+  ],
+  "册": [
+   "ce"
+  ],
+  "冐": [
+   "xjz"
+  ],
+  "冑": [
+   "xjz"
+  ],
+  "冠": [
+   "kgc"
+  ],
+  "冥": [
+   "cp_ming2"
+  ],
+  "冦": [
+   "cp_kou4",
+   "kgc"
+  ],
+  "冶": [
+   "xjz"
+  ],
+  "冷": [
+   "xjz"
+  ],
+  "凖": [
+   "zhun"
+  ],
+  "凟": [
+   "cp_du2"
+  ],
+  "出": [
+   "sy",
+   "chu"
+  ],
+  "刊": [
+   "kan"
+  ],
+  "刋": [
+   "kan"
+  ],
+  "删": [
+   "shan"
+  ],
+  "別": [
+   "bie"
+  ],
+  "刪": [
+   "shan"
+  ],
+  "别": [
+   "bie"
+  ],
+  "刺": [
+   "ci"
+  ],
+  "剌": [
+   "ci"
+  ],
+  "前": [
+   "xjz"
+  ],
+  "劍": [
+   "jian"
+  ],
+  "劔": [
+   "jian"
+  ],
+  "勅": [
+   "chi"
+  ],
+  "勢": [
+   "shi"
+  ],
+  "勾": [
+   "xjz"
+  ],
+  "十": [
+   "ss",
+   "sb"
+  ],
+  "千": [
+   "zy"
+  ],
+  "卑": [
+   "xjz"
+  ],
+  "卜": [
+   "sb"
+  ],
+  "即": [
+   "ji"
+  ],
+  "卷": [
+   "juan"
+  ],
+  "卽": [
+   "ji"
+  ],
+  "卿": [
+   "qing"
+  ],
+  "厯": [
+   "lih"
+  ],
+  "參": [
+   "can"
+  ],
+  "叅": [
+   "can"
+  ],
+  "叙": [
+   "xu"
+  ],
+  "句": [
+   "xjz"
+  ],
+  "可": [
+   "xjz"
+  ],
+  "各": [
+   "gm"
+  ],
+  "名": [
+   "gm"
+  ],
+  "吕": [
+   "lv"
+  ],
+  "呂": [
+   "lv"
+  ],
+  "命": [
+   "qin"
+  ],
+  "問": [
+   "wj",
+   "men"
+  ],
+  "啓": [
+   "qik"
+  ],
+  "啟": [
+   "qik"
+  ],
+  "喪": [
+   "sang"
+  ],
+  "嗚": [
+   "wu"
+  ],
+  "嘗": [
+   "xjz"
+  ],
+  "囘": [
+   "huiq"
+  ],
+  "回": [
+   "huiq"
+  ],
+  "固": [
+   "kou"
+  ],
+  "國": [
+   "kou"
+  ],
+  "圍": [
+   "kou"
+  ],
+  "園": [
+   "kou"
+  ],
+  "圓": [
+   "yt",
+   "kou"
+  ],
+  "圖": [
+   "yt",
+   "kou"
+  ],
+  "圜": [
+   "kou"
+  ],
+  "土": [
+   "ts"
+  ],
+  "埤": [
+   "xjz"
+  ],
+  "塡": [
+   "tsh"
+  ],
+  "填": [
+   "tsh"
+  ],
+  "増": [
+   "cp_zeng1"
+  ],
+  "增": [
+   "cp_zeng1"
+  ],
+  "壙": [
+   "xjz"
+  ],
+  "士": [
+   "ss",
+   "ts"
+  ],
+  "壽": [
+   "cp_shou4"
+  ],
+  "夀": [
+   "cp_shou4"
+  ],
+  "夔": [
+   "kui"
+  ],
+  "大": [
+   "dt"
+  ],
+  "太": [
+   "dt"
+  ],
+  "奇": [
+   "qi"
+  ],
+  "奉": [
+   "cp_feng4b"
+  ],
+  "妃": [
+   "cp_fei1"
+  ],
+  "子": [
+   "zy",
+   "yz"
+  ],
+  "孰": [
+   "xjz"
+  ],
+  "宋": [
+   "sz"
+  ],
+  "官": [
+   "guan"
+  ],
+  "宫": [
+   "guan"
+  ],
+  "宮": [
+   "guan"
+  ],
+  "宸": [
+   "guang"
+  ],
+  "宻": [
+   "mi"
+  ],
+  "宼": [
+   "cp_kou4",
+   "kgc"
+  ],
+  "宿": [
+   "cp_su4"
+  ],
+  "寄": [
+   "cp_ji4"
+  ],
+  "密": [
+   "mi"
+  ],
+  "寇": [
+   "cp_kou4",
+   "kgc"
+  ],
+  "寛": [
+   "cp_kuan1"
+  ],
+  "寜": [
+   "ning"
+  ],
+  "實": [
+   "guang"
+  ],
+  "寧": [
+   "ning"
+  ],
+  "寬": [
+   "cp_kuan1"
+  ],
+  "寳": [
+   "cp_bao3"
+  ],
+  "寶": [
+   "cp_bao3"
+  ],
+  "尋": [
+   "cp_xun2"
+  ],
+  "尙": [
+   "shang"
+  ],
+  "尚": [
+   "shang"
+  ],
+  "山": [
+   "sy"
+  ],
+  "岀": [
+   "chu"
+  ],
+  "嵗": [
+   "sui"
+  ],
+  "巡": [
+   "xun",
+   "chuo"
+  ],
+  "己": [
+   "jys"
+  ],
+  "已": [
+   "jys"
+  ],
+  "巳": [
+   "jys"
+  ],
+  "巻": [
+   "juan"
+  ],
+  "干": [
+   "zy"
+  ],
+  "廉": [
+   "cp_lian2b"
+  ],
+  "廣": [
+   "guang"
+  ],
+  "廵": [
+   "xun"
+  ],
+  "弊": [
+   "bi"
+  ],
+  "彖": [
+   "xz"
+  ],
+  "彙": [
+   "hui"
+  ],
+  "彚": [
+   "hui"
+  ],
+  "彛": [
+   "yi_560"
+  ],
+  "彜": [
+   "yi_560"
+  ],
+  "彝": [
+   "yi_560"
+  ],
+  "彞": [
+   "yi_560"
+  ],
+  "往": [
+   "xjz"
+  ],
+  "徧": [
+   "xjz"
+  ],
+  "微": [
+   "weim"
+  ],
+  "徴": [
+   "zheng"
+  ],
+  "徵": [
+   "zheng"
+  ],
+  "徽": [
+   "cp_hui1"
+  ],
+  "心": [
+   "xb"
+  ],
+  "必": [
+   "xb"
+  ],
+  "急": [
+   "cp_ji2"
+  ],
+  "愼": [
+   "shen",
+   "tsh"
+  ],
+  "慎": [
+   "shen",
+   "tsh"
+  ],
+  "慿": [
+   "cp_ping2"
+  ],
+  "憑": [
+   "cp_ping2"
+  ],
+  "懐": [
+   "cp_huai2"
+  ],
+  "懷": [
+   "cp_huai2"
+  ],
+  "戊": [
+   "wxs"
+  ],
+  "戌": [
+   "wxs"
+  ],
+  "戍": [
+   "wxs"
+  ],
+  "扺": [
+   "di"
+  ],
+  "抵": [
+   "di"
+  ],
+  "捜": [
+   "cp_sou1"
+  ],
+  "揚": [
+   "xjz"
+  ],
+  "搜": [
+   "cp_sou1"
+  ],
+  "撫": [
+   "fu"
+  ],
+  "撰": [
+   "zhuan"
+  ],
+  "攜": [
+   "cp_xie2"
+  ],
+  "敎": [
+   "jiao"
+  ],
+  "敕": [
+   "chi"
+  ],
+  "敘": [
+   "xu"
+  ],
+  "教": [
+   "jiao"
+  ],
+  "文": [
+   "zw"
+  ],
+  "既": [
+   "jiw"
+  ],
+  "旣": [
+   "jiw"
+  ],
+  "日": [
+   "ry",
+   "rm"
+  ],
+  "旨": [
+   "zhi"
+  ],
+  "晚": [
+   "wan"
+  ],
+  "晩": [
+   "wan"
+  ],
+  "暁": [
+   "cp_xiao3"
+  ],
+  "曉": [
+   "cp_xiao3"
+  ],
+  "曠": [
+   "xjz"
+  ],
+  "曰": [
+   "ry"
+  ],
+  "曾": [
+   "zh"
+  ],
+  "會": [
+   "zh",
+   "qin"
+  ],
+  "木": [
+   "mb"
+  ],
+  "未": [
+   "wm",
+   "sz"
+  ],
+  "末": [
+   "wm"
+  ],
+  "本": [
+   "mb"
+  ],
+  "朱": [
+   "sz"
+  ],
+  "杰": [
+   "cp_jie2"
+  ],
+  "梨": [
+   "cp_li2b"
+  ],
+  "棃": [
+   "cp_li2b"
+  ],
+  "棗": [
+   "cp_zao3"
+  ],
+  "棻": [
+   "cp_fen1"
+  ],
+  "椘": [
+   "cp_chu3"
+  ],
+  "楊": [
+   "xjz"
+  ],
+  "楚": [
+   "cp_chu3"
+  ],
+  "榮": [
+   "xjz"
+  ],
+  "横": [
+   "cp_heng2"
+  ],
+  "樹": [
+   "cp_shu4b"
+  ],
+  "橅": [
+   "fu"
+  ],
+  "橫": [
+   "cp_heng2"
+  ],
+  "櫽": [
+   "cp_yin3c"
+  ],
+  "步": [
+   "cp_bu4"
+  ],
+  "歩": [
+   "cp_bu4"
+  ],
+  "歲": [
+   "sui"
+  ],
+  "歴": [
+   "lih"
+  ],
+  "毎": [
+   "cp_mei3"
+  ],
+  "每": [
+   "cp_mei3"
+  ],
+  "水": [
+   "xjz"
+  ],
+  "永": [
+   "xjz"
+  ],
+  "沓": [
+   "cp_ta4"
+  ],
+  "治": [
+   "xjz"
+  ],
+  "泰": [
+   "cp_tai4"
+  ],
+  "派": [
+   "pai"
+  ],
+  "涉": [
+   "cp_she4"
+  ],
+  "涵": [
+   "cp_han2"
+  ],
+  "淄": [
+   "zx"
+  ],
+  "淸": [
+   "qx"
+  ],
+  "清": [
+   "qx"
+  ],
+  "渉": [
+   "cp_she4"
+  ],
+  "湽": [
+   "zx"
+  ],
+  "準": [
+   "zhun"
+  ],
+  "滎": [
+   "xjz"
+  ],
+  "漾": [
+   "cp_yang4"
+  ],
+  "濂": [
+   "cp_lian2"
+  ],
+  "濓": [
+   "cp_lian2"
+  ],
+  "瀆": [
+   "cp_du2"
+  ],
+  "為": [
+   "wei"
+  ],
+  "熟": [
+   "xjz"
+  ],
+  "爲": [
+   "wei"
+  ],
+  "獲": [
+   "huo"
+  ],
+  "獵": [
+   "lie"
+  ],
+  "玉": [
+   "wyu"
+  ],
+  "王": [
+   "wyu"
+  ],
+  "瑣": [
+   "suo"
+  ],
+  "由": [
+   "sy"
+  ],
+  "甲": [
+   "js"
+  ],
+  "申": [
+   "js"
+  ],
+  "當": [
+   "xjz"
+  ],
+  "疏": [
+   "shu"
+  ],
+  "發": [
+   "fa"
+  ],
+  "目": [
+   "rm",
+   "mz"
+  ],
+  "眞": [
+   "cp_zhen1"
+  ],
+  "真": [
+   "cp_zhen1"
+  ],
+  "祇": [
+   "xjz"
+  ],
+  "祗": [
+   "xjz"
+  ],
+  "祿": [
+   "cp_lu4b"
+  ],
+  "禄": [
+   "cp_lu4b"
+  ],
+  "禽": [
+   "qin"
+  ],
+  "究": [
+   "cp_jiu1"
+  ],
+  "窿": [
+   "xjz"
+  ],
+  "竄": [
+   "cuan"
+  ],
+  "竒": [
+   "qi"
+  ],
+  "章": [
+   "xjz"
+  ],
+  "策": [
+   "cek"
+  ],
+  "算": [
+   "suan"
+  ],
+  "絕": [
+   "jue"
+  ],
+  "絶": [
+   "jue"
+  ],
+  "緒": [
+   "cp_xu4"
+  ],
+  "緖": [
+   "cp_xu4"
+  ],
+  "繩": [
+   "cp_sheng2"
+  ],
+  "羈": [
+   "jim"
+  ],
+  "翦": [
+   "xjz"
+  ],
+  "而": [
+   "em"
+  ],
+  "耶": [
+   "cp_ye"
+  ],
+  "聞": [
+   "men"
+  ],
+  "胄": [
+   "xjz"
+  ],
+  "自": [
+   "mz"
+  ],
+  "臯": [
+   "cp_gao1"
+  ],
+  "舍": [
+   "qin"
+  ],
+  "艶": [
+   "cp_yan4"
+  ],
+  "艷": [
+   "cp_yan4"
+  ],
+  "苑": [
+   "cp_yuan4"
+  ],
+  "荆": [
+   "cp_jing1"
+  ],
+  "草": [
+   "xjz"
+  ],
+  "荊": [
+   "cp_jing1"
+  ],
+  "荒": [
+   "cp_huang1"
+  ],
+  "葢": [
+   "gai"
+  ],
+  "蒙": [
+   "mn"
+  ],
+  "蓋": [
+   "gai"
+  ],
+  "虚": [
+   "cp_xu1"
+  ],
+  "虛": [
+   "cp_xu1"
+  ],
+  "衛": [
+   "weiw"
+  ],
+  "衞": [
+   "weiw"
+  ],
+  "補": [
+   "cp_bu3"
+  ],
+  "覊": [
+   "jim"
+  ],
+  "說": [
+   "shuo"
+  ],
+  "説": [
+   "shuo"
+  ],
+  "論": [
+   "ly"
+  ],
+  "諭": [
+   "ly"
+  ],
+  "謠": [
+   "yao"
+  ],
+  "謡": [
+   "yao"
+  ],
+  "識": [
+   "chen"
+  ],
+  "變": [
+   "bian"
+  ],
+  "讖": [
+   "chen"
+  ],
+  "豎": [
+   "cp_shu4c"
+  ],
+  "象": [
+   "xz"
+  ],
+  "貌": [
+   "cp_mao4"
+  ],
+  "貎": [
+   "cp_mao4"
+  ],
+  "賓": [
+   "guang"
+  ],
+  "賔": [
+   "guang"
+  ],
+  "賛": [
+   "cp_zan4"
+  ],
+  "贊": [
+   "cp_zan4"
+  ],
+  "跋": [
+   "ba"
+  ],
+  "迎": [
+   "chuo"
+  ],
+  "近": [
+   "chuo"
+  ],
+  "迥": [
+   "chuo"
+  ],
+  "迫": [
+   "chuo"
+  ],
+  "述": [
+   "cp_shu4",
+   "chuo"
+  ],
+  "追": [
+   "chuo"
+  ],
+  "退": [
+   "chuo"
+  ],
+  "逄": [
+   "feng"
+  ],
+  "逆": [
+   "chuo"
+  ],
+  "逋": [
+   "chuo"
+  ],
+  "通": [
+   "chuo"
+  ],
+  "造": [
+   "chuo"
+  ],
+  "逢": [
+   "feng"
+  ],
+  "連": [
+   "chuo"
+  ],
+  "進": [
+   "chuo"
+  ],
+  "逸": [
+   "chuo"
+  ],
+  "逾": [
+   "chuo"
+  ],
+  "遁": [
+   "chuo"
+  ],
+  "遇": [
+   "chuo"
+  ],
+  "運": [
+   "chuo"
+  ],
+  "遍": [
+   "chuo"
+  ],
+  "過": [
+   "chuo"
+  ],
+  "道": [
+   "chuo"
+  ],
+  "違": [
+   "chuo"
+  ],
+  "遜": [
+   "chuo"
+  ],
+  "遞": [
+   "chuo"
+  ],
+  "遠": [
+   "chuo"
+  ],
+  "遣": [
+   "chuo"
+  ],
+  "適": [
+   "chuo"
+  ],
+  "遭": [
+   "chuo"
+  ],
+  "遵": [
+   "chuo"
+  ],
+  "遷": [
+   "chuo"
+  ],
+  "選": [
+   "xuan",
+   "chuo"
+  ],
+  "遺": [
+   "yh",
+   "chuo"
+  ],
+  "遼": [
+   "chuo"
+  ],
+  "邁": [
+   "chuo"
+  ],
+  "邃": [
+   "cp_sui4"
+  ],
+  "還": [
+   "yh",
+   "chuo"
+  ],
+  "邇": [
+   "chuo"
+  ],
+  "邊": [
+   "chuo"
+  ],
+  "郎": [
+   "lang"
+  ],
+  "郞": [
+   "lang"
+  ],
+  "鄉": [
+   "xiang"
+  ],
+  "鄕": [
+   "xiang"
+  ],
+  "釆": [
+   "xjz"
+  ],
+  "采": [
+   "xjz"
+  ],
+  "鎭": [
+   "zhen"
+  ],
+  "鎮": [
+   "zhen"
+  ],
+  "門": [
+   "men"
+  ],
+  "閉": [
+   "men"
+  ],
+  "開": [
+   "men"
+  ],
+  "閎": [
+   "men"
+  ],
+  "閏": [
+   "men"
+  ],
+  "閑": [
+   "men"
+  ],
+  "閒": [
+   "men"
+  ],
+  "間": [
+   "wj",
+   "men"
+  ],
+  "閔": [
+   "men"
+  ],
+  "閣": [
+   "men"
+  ],
+  "閨": [
+   "men"
+  ],
+  "閩": [
+   "men"
+  ],
+  "閭": [
+   "men"
+  ],
+  "閱": [
+   "men"
+  ],
+  "閶": [
+   "men"
+  ],
+  "閻": [
+   "men"
+  ],
+  "闇": [
+   "men"
+  ],
+  "闈": [
+   "men"
+  ],
+  "闌": [
+   "men"
+  ],
+  "闕": [
+   "men"
+  ],
+  "闗": [
+   "guanm"
+  ],
+  "闚": [
+   "men"
+  ],
+  "關": [
+   "guanm",
+   "men"
+  ],
+  "闞": [
+   "men"
+  ],
+  "闡": [
+   "men"
+  ],
+  "闢": [
+   "men"
+  ],
+  "阿": [
+   "xjz"
+  ],
+  "陰": [
+   "yinv"
+  ],
+  "陷": [
+   "xian"
+  ],
+  "隂": [
+   "yinv"
+  ],
+  "隆": [
+   "xjz"
+  ],
+  "隠": [
+   "cp_yin3b"
+  ],
+  "隱": [
+   "cp_yin3b"
+  ],
+  "隸": [
+   "li"
+  ],
+  "雙": [
+   "cp_shuang1"
+  ],
+  "雨": [
+   "liang"
+  ],
+  "靑": [
+   "qy"
+  ],
+  "青": [
+   "qy"
+  ],
+  "面": [
+   "em"
+  ],
+  "顏": [
+   "cp_yan2"
+  ],
+  "顔": [
+   "cp_yan2"
+  ],
+  "顚": [
+   "dx"
+  ],
+  "顛": [
+   "dx"
+  ],
+  "類": [
+   "lei"
+  ],
+  "飮": [
+   "cp_yin3"
+  ],
+  "飲": [
+   "cp_yin3"
+  ],
+  "高": [
+   "cp_gao1b"
+  ],
+  "髙": [
+   "cp_gao1b"
+  ],
+  "髪": [
+   "cp_fa4"
+  ],
+  "髮": [
+   "cp_fa4"
+  ],
+  "鬬": [
+   "cp_dou4"
+  ],
+  "鬭": [
+   "cp_dou4"
+  ],
+  "鬰": [
+   "cp_yu4"
+  ],
+  "鬱": [
+   "cp_yu4"
+  ],
+  "鳯": [
+   "cp_feng4"
+  ],
+  "鳳": [
+   "cp_feng4"
+  ],
+  "鳴": [
+   "wu"
+  ],
+  "麓": [
+   "cp_lu4"
+  ],
+  "黎": [
+   "cp_li2"
+  ],
+  "默": [
+   "cp_mo4"
+  ],
+  "黙": [
+   "cp_mo4"
+  ],
+  "點": [
+   "dian"
+  ],
+  "齊": [
+   "xjz"
+  ],
+  "齋": [
+   "xjz"
+  ],
+  "𠉀": [
+   "hou"
+  ],
+  "𠋣": [
+   "cp_yi3"
+  ],
+  "𠋫": [
+   "hou"
+  ],
+  "𠮓": [
+   "bian"
+  ],
+  "𡚁": [
+   "bi"
+  ],
+  "𡚱": [
+   "cp_fei1"
+  ],
+  "𡨋": [
+   "cp_ming2"
+  ],
+  "𡽪": [
+   "cp_hui1"
+  ],
+  "𢑱": [
+   "yi_560"
+  ],
+  "𢑴": [
+   "yi_560"
+  ],
+  "𢚩": [
+   "cp_ji2"
+  ],
+  "𢰅": [
+   "zhuan"
+  ],
+  "𢹂": [
+   "cp_xie2"
+  ],
+  "𣗳": [
+   "cp_shu4b"
+  ],
+  "𣲖": [
+   "pai"
+  ],
+  "𣹢": [
+   "cp_han2"
+  ],
+  "𣻌": [
+   "cp_yang4"
+  ],
+  "𤇍": [
+   "cp_jie2"
+  ],
+  "𤢪": [
+   "lie"
+  ],
+  "𤨏": [
+   "suo"
+  ],
+  "𤼵": [
+   "fa"
+  ],
+  "𥙷": [
+   "cp_bu3"
+  ],
+  "𥠖": [
+   "cp_li2"
+  ],
+  "𥨥": [
+   "cuan"
+  ],
+  "𦤎": [
+   "cp_gao1"
+  ],
+  "𦯳": [
+   "cp_fen1"
+  ],
+  "𧰼": [
+   "xz"
+  ],
+  "𨕖": [
+   "xuan"
+  ],
+  "𨜊": [
+   "qing"
+  ],
+  "𨼆": [
+   "cp_yin3b"
+  ],
+  "𨽾": [
+   "li"
+  ],
+  "𩔖": [
+   "lei"
+  ],
+  "𪋤": [
+   "cp_lu4"
+  ],
+  "𪧐": [
+   "cp_su4"
+  ],
+  "𫆀": [
+   "cp_ye"
+  ],
+  "𫉬": [
+   "huo"
+  ],
+  "𫎇": [
+   "mn"
+  ],
+  "𫐠": [
+   "cp_shu4"
+  ],
+  "𫝑": [
+   "shi"
+  ],
+  "𫟍": [
+   "cp_yuan4"
+  ],
+  "𫯠": [
+   "cp_feng4b"
+  ],
+  "𬃷": [
+   "cp_zao3"
+  ],
+  "𭔃": [
+   "cp_ji4"
+  ],
+  "𭬚": [
+   "cp_yin3c"
+  ],
+  "𮅕": [
+   "suan"
+  ],
+  "𮎰": [
+   "cp_huang1"
+  ],
+  "𮟏": [
+   "cp_sui4"
+  ]
+ },
  "pairs": {
   "一二": {
    "src": [
@@ -33,7 +1523,10 @@
    "near": {
     "sk": 0.9997
    },
-   "core": true
+   "core": true,
+   "group": [
+    "yr"
+   ]
   },
   "十士": {
    "src": [
@@ -42,7 +1535,10 @@
    "near": {
     "sk": 0.9992
    },
-   "core": true
+   "core": true,
+   "group": [
+    "ss"
+   ]
   },
   "千干": {
    "src": [
@@ -54,7 +1550,10 @@
     "qtw": 0.9846,
     "sk": 0.999
    },
-   "core": true
+   "core": true,
+   "group": [
+    "zy"
+   ]
   },
   "删刪": {
    "src": [
@@ -64,7 +1563,10 @@
    "near": {
     "sk": 0.9976
    },
-   "core": true
+   "core": true,
+   "group": [
+    "shan"
+   ]
   },
   "日曰": {
    "src": [
@@ -78,7 +1580,10 @@
     "qtw": 0.976,
     "sk": 0.9973
    },
-   "core": true
+   "core": true,
+   "group": [
+    "ry"
+   ]
   },
   "別别": {
    "src": [
@@ -88,7 +1593,10 @@
    "near": {
     "sk": 0.9966
    },
-   "core": true
+   "core": true,
+   "group": [
+    "bie"
+   ]
   },
   "十卜": {
    "src": [
@@ -97,7 +1605,10 @@
    "near": {
     "sk": 0.9965
    },
-   "core": true
+   "core": true,
+   "group": [
+    "sb"
+   ]
   },
   "土士": {
    "src": [
@@ -108,7 +1619,10 @@
     "qtw": 0.963,
     "sk": 0.9965
    },
-   "core": true
+   "core": true,
+   "group": [
+    "ts"
+   ]
   },
   "注註": {
    "src": [
@@ -127,7 +1641,10 @@
    "near": {
     "sk": 0.9958
    },
-   "core": true
+   "core": true,
+   "group": [
+    "guan"
+   ]
   },
   "尸戸": {
    "src": [
@@ -150,7 +1667,10 @@
     "qtw": 0.9869,
     "sk": 0.9958
    },
-   "core": true
+   "core": true,
+   "group": [
+    "wm"
+   ]
   },
   "壬干": {
    "src": [
@@ -172,7 +1692,10 @@
     "sj": 0.9841,
     "sk": 0.9951
    },
-   "core": true
+   "core": true,
+   "group": [
+    "guan"
+   ]
   },
   "宫宮": {
    "src": [
@@ -184,7 +1707,10 @@
     "qtw": 0.9901,
     "sk": 0.995
    },
-   "core": true
+   "core": true,
+   "group": [
+    "guan"
+   ]
   },
   "已巳": {
    "src": [
@@ -197,7 +1723,10 @@
     "qtw": 0.9949,
     "sk": 0.9848
    },
-   "core": true
+   "core": true,
+   "group": [
+    "jys"
+   ]
   },
   "虚虛": {
    "src": [
@@ -209,7 +1738,10 @@
     "sj": 0.9947,
     "sk": 0.9748
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_xu1"
+   ]
   },
   "㫖者": {
    "src": [
@@ -236,7 +1768,10 @@
    "near": {
     "sk": 0.9938
    },
-   "core": true
+   "core": true,
+   "group": [
+    "rr"
+   ]
   },
   "人入": {
    "src": [
@@ -248,7 +1783,10 @@
    "near": {
     "sk": 0.9937
    },
-   "core": true
+   "core": true,
+   "group": [
+    "rr"
+   ]
   },
   "天夭": {
    "src": [
@@ -276,7 +1814,10 @@
    "near": {
     "sk": 0.9932
    },
-   "core": true
+   "core": true,
+   "group": [
+    "chu"
+   ]
   },
   "己已": {
    "src": [
@@ -289,7 +1830,10 @@
     "qtw": 0.9907,
     "sk": 0.9932
    },
-   "core": true
+   "core": true,
+   "group": [
+    "jys"
+   ]
   },
   "耶𫆀": {
    "src": [
@@ -298,7 +1842,10 @@
    "near": {
     "sk": 0.9929
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_ye"
+   ]
   },
   "于子": {
    "src": [
@@ -310,7 +1857,10 @@
     "qtw": 0.9753,
     "sk": 0.9925
    },
-   "core": true
+   "core": true,
+   "group": [
+    "zy"
+   ]
   },
   "白臼": {
    "src": [
@@ -352,7 +1902,10 @@
     "qtw": 0.9822,
     "sk": 0.9918
    },
-   "core": true
+   "core": true,
+   "group": [
+    "mb"
+   ]
   },
   "扺抵": {
    "src": [
@@ -362,7 +1915,10 @@
    "near": {
     "sk": 0.9915
    },
-   "core": true
+   "core": true,
+   "group": [
+    "di"
+   ]
   },
   "丸九": {
    "src": [
@@ -413,7 +1969,10 @@
     "qtw": 0.9907,
     "sk": 0.9875
    },
-   "core": true
+   "core": true,
+   "group": [
+    "ci"
+   ]
   },
   "治洽": {
    "src": [
@@ -433,7 +1992,10 @@
    "near": {
     "sk": 0.9903
    },
-   "core": true
+   "core": true,
+   "group": [
+    "nei"
+   ]
   },
   "象𧰼": {
    "src": [
@@ -443,7 +2005,10 @@
    "near": {
     "sk": 0.9902
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xz"
+   ]
   },
   "交父": {
    "src": [
@@ -482,7 +2047,10 @@
    "near": {
     "sk": 0.9896
    },
-   "core": true
+   "core": true,
+   "group": [
+    "em"
+   ]
   },
   "㸃點": {
    "src": [
@@ -492,7 +2060,10 @@
    "near": {
     "sk": 0.9894
    },
-   "core": true
+   "core": true,
+   "group": [
+    "dian"
+   ]
   },
   "冑胄": {
    "src": [
@@ -503,7 +2074,10 @@
     "qtw": 0.9894,
     "sk": 0.9732
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xjz"
+   ]
   },
   "卿鄕": {
    "src": [
@@ -539,7 +2113,10 @@
    "near": {
     "qtw": 0.9891
    },
-   "core": true
+   "core": true,
+   "group": [
+    "zw"
+   ]
   },
   "戊戌": {
    "src": [
@@ -551,7 +2128,10 @@
     "qtw": 0.9804,
     "sk": 0.9891
    },
-   "core": true
+   "core": true,
+   "group": [
+    "wxs"
+   ]
   },
   "延廷": {
    "src": [
@@ -601,7 +2181,10 @@
     "sj": 0.9696,
     "sk": 0.9886
    },
-   "core": true
+   "core": true,
+   "group": [
+    "zheng"
+   ]
   },
   "人八": {
    "src": [
@@ -611,7 +2194,10 @@
    "near": {
     "sk": 0.9885
    },
-   "core": true
+   "core": true,
+   "group": [
+    "rr"
+   ]
   },
   "祇祗": {
    "src": [
@@ -623,7 +2209,10 @@
     "qtw": 0.9885,
     "sk": 0.9805
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xjz"
+   ]
   },
   "藴蘊": {
    "src": [
@@ -651,7 +2240,10 @@
    "near": {
     "qtw": 0.988
    },
-   "core": true
+   "core": true,
+   "group": [
+    "hou"
+   ]
   },
   "問間": {
    "src": [
@@ -663,7 +2255,11 @@
    "near": {
     "sk": 0.988
    },
-   "core": true
+   "core": true,
+   "group": [
+    "men",
+    "wj"
+   ]
   },
   "乃仍": {
    "src": [
@@ -722,7 +2318,10 @@
     "qtw": 0.978,
     "sk": 0.9873
    },
-   "core": true
+   "core": true,
+   "group": [
+    "zy"
+   ]
   },
   "宋朱": {
    "src": [
@@ -732,7 +2331,10 @@
    "near": {
     "sk": 0.9872
    },
-   "core": true
+   "core": true,
+   "group": [
+    "sz"
+   ]
   },
   "亷廉": {
    "src": [
@@ -743,7 +2345,10 @@
     "qtw": 0.9638,
     "sk": 0.987
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_lian2b"
+   ]
   },
   "嗚鳴": {
    "src": [
@@ -752,7 +2357,10 @@
    "near": {
     "qtw": 0.987
    },
-   "core": true
+   "core": true,
+   "group": [
+    "wu"
+   ]
   },
   "論諭": {
    "src": [
@@ -763,7 +2371,10 @@
    "near": {
     "sk": 0.9869
    },
-   "core": true
+   "core": true,
+   "group": [
+    "ly"
+   ]
   },
   "便更": {
    "src": [
@@ -801,7 +2412,10 @@
    "near": {
     "sk": 0.9867
    },
-   "core": true
+   "core": true,
+   "group": [
+    "zh"
+   ]
   },
   "隷隸": {
    "src": [
@@ -830,7 +2444,10 @@
    "near": {
     "sk": 0.9863
    },
-   "core": true
+   "core": true,
+   "group": [
+    "sy"
+   ]
   },
   "泉𭽖": {
    "src": [
@@ -878,7 +2495,10 @@
    "near": {
     "sk": 0.9859
    },
-   "core": true
+   "core": true,
+   "group": [
+    "lih"
+   ]
   },
   "爪瓜": {
    "src": [
@@ -898,7 +2518,10 @@
    "near": {
     "qtw": 0.9859
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_zhen1"
+   ]
   },
   "中申": {
    "src": [
@@ -946,7 +2569,10 @@
     "qtw": 0.9843,
     "sk": 0.9857
    },
-   "core": true
+   "core": true,
+   "group": [
+    "zy"
+   ]
   },
   "冡冢": {
    "src": [
@@ -981,7 +2607,10 @@
     "qtw": 0.9774,
     "sk": 0.9855
    },
-   "core": true
+   "core": true,
+   "group": [
+    "wyu"
+   ]
   },
   "稹積": {
    "src": [
@@ -1009,7 +2638,10 @@
    "near": {
     "qtw": 0.9854
    },
-   "core": true
+   "core": true,
+   "group": [
+    "chuo"
+   ]
   },
   "間閭": {
    "src": [
@@ -1018,7 +2650,10 @@
    "near": {
     "sk": 0.9854
    },
-   "core": true
+   "core": true,
+   "group": [
+    "men"
+   ]
   },
   "章韋": {
    "src": [
@@ -1053,7 +2688,10 @@
     "sj": 0.9782,
     "sk": 0.9838
    },
-   "core": true
+   "core": true,
+   "group": [
+    "dt"
+   ]
   },
   "彥彦": {
    "src": [
@@ -1107,7 +2745,10 @@
     "qtw": 0.978,
     "sk": 0.9835
    },
-   "core": true
+   "core": true,
+   "group": [
+    "wxs"
+   ]
   },
   "未朱": {
    "src": [
@@ -1118,7 +2759,10 @@
    "near": {
     "sk": 0.9835
    },
-   "core": true
+   "core": true,
+   "group": [
+    "sz"
+   ]
   },
   "皐臯": {
    "src": [
@@ -1160,7 +2804,10 @@
     "qtw": 0.98,
     "sk": 0.9825
    },
-   "core": true
+   "core": true,
+   "group": [
+    "liang"
+   ]
   },
   "傚效": {
    "src": [
@@ -1194,7 +2841,10 @@
     "qtw": 0.977,
     "sk": 0.982
    },
-   "core": true
+   "core": true,
+   "group": [
+    "jys"
+   ]
   },
   "春舂": {
    "src": [
@@ -1224,7 +2874,10 @@
    "near": {
     "sk": 0.9818
    },
-   "core": true
+   "core": true,
+   "group": [
+    "lv"
+   ]
   },
   "淸清": {
    "src": [
@@ -1234,7 +2887,10 @@
    "near": {
     "qtw": 0.9818
    },
-   "core": true
+   "core": true,
+   "group": [
+    "qx"
+   ]
   },
   "温溫": {
    "src": [
@@ -1316,7 +2972,10 @@
     "qtw": 0.9691,
     "sk": 0.9802
    },
-   "core": true
+   "core": true,
+   "group": [
+    "fc"
+   ]
   },
   "奥奧": {
    "src": [
@@ -1346,7 +3005,10 @@
    "near": {
     "sk": 0.9799
    },
-   "core": true
+   "core": true,
+   "group": [
+    "rm"
+   ]
   },
   "䘏卹": {
    "src": [
@@ -1376,7 +3038,10 @@
    "near": {
     "sk": 0.9796
    },
-   "core": true
+   "core": true,
+   "group": [
+    "mz"
+   ]
   },
   "𢑱𢑴": {
    "src": [
@@ -1386,7 +3051,10 @@
    "near": {
     "sk": 0.9794
    },
-   "core": true
+   "core": true,
+   "group": [
+    "yi_560"
+   ]
   },
   "㝛宿": {
    "src": [
@@ -1407,7 +3075,10 @@
     "sj": 0.9705,
     "sk": 0.9792
    },
-   "core": true
+   "core": true,
+   "group": [
+    "men"
+   ]
   },
   "冤寃": {
    "src": [
@@ -1458,7 +3129,10 @@
    "near": {
     "qtw": 0.9778
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_mo4"
+   ]
   },
   "絕絶": {
    "src": [
@@ -1468,7 +3142,10 @@
    "near": {
     "sk": 0.9775
    },
-   "core": true
+   "core": true,
+   "group": [
+    "jue"
+   ]
   },
   "概槪": {
    "src": [
@@ -1488,7 +3165,10 @@
    "near": {
     "qtw": 0.9774
    },
-   "core": true
+   "core": true,
+   "group": [
+    "men"
+   ]
   },
   "冐冒": {
    "src": [
@@ -1519,7 +3199,10 @@
    "near": {
     "sk": 0.9768
    },
-   "core": true
+   "core": true,
+   "group": [
+    "bian"
+   ]
   },
   "飇飈": {
    "src": [
@@ -1569,7 +3252,10 @@
    "near": {
     "sk": 0.9758
    },
-   "core": true
+   "core": true,
+   "group": [
+    "lang"
+   ]
   },
   "六大": {
    "src": [
@@ -1611,7 +3297,10 @@
    "near": {
     "sk": 0.9754
    },
-   "core": true
+   "core": true,
+   "group": [
+    "can"
+   ]
   },
   "㣲微": {
    "src": [
@@ -1621,7 +3310,10 @@
    "near": {
     "sk": 0.9754
    },
-   "core": true
+   "core": true,
+   "group": [
+    "weim"
+   ]
   },
   "并幷": {
    "src": [
@@ -1707,7 +3399,10 @@
    "near": {
     "sk": 0.9729
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_jing1"
+   ]
   },
   "釆采": {
    "src": [
@@ -1716,7 +3411,10 @@
    "near": {
     "sk": 0.9728
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xjz"
+   ]
   },
   "隲騭": {
    "src": [
@@ -1744,7 +3442,10 @@
    "near": {
     "sk": 0.9721
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xjz"
+   ]
   },
   "隸𨽾": {
    "src": [
@@ -1754,7 +3455,10 @@
     "qtw": 0.972,
     "sk": 0.9531
    },
-   "core": true
+   "core": true,
+   "group": [
+    "li"
+   ]
   },
   "佛彿": {
    "src": [
@@ -1845,7 +3549,10 @@
    "near": {
     "sk": 0.9694
    },
-   "core": true
+   "core": true,
+   "group": [
+    "ba"
+   ]
   },
   "迥逈": {
    "src": [
@@ -1864,7 +3571,10 @@
    "near": {
     "sk": 0.9693
    },
-   "core": true
+   "core": true,
+   "group": [
+    "shu"
+   ]
   },
   "斂歛": {
    "src": [
@@ -1927,7 +3637,10 @@
    "near": {
     "qtw": 0.9685
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xjz"
+   ]
   },
   "賴頼": {
    "src": [
@@ -1999,7 +3712,10 @@
    "near": {
     "sk": 0.9676
    },
-   "core": true
+   "core": true,
+   "group": [
+    "jiao"
+   ]
   },
   "且旦": {
    "src": [
@@ -2029,7 +3745,10 @@
    "near": {
     "sk": 0.9674
    },
-   "core": true
+   "core": true,
+   "group": [
+    "lei"
+   ]
   },
   "復複": {
    "src": [
@@ -2057,7 +3776,10 @@
    "near": {
     "sj": 0.9669
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_sou1"
+   ]
   },
   "括栝": {
    "src": [
@@ -2084,7 +3806,10 @@
    "near": {
     "sk": 0.9666
    },
-   "core": true
+   "core": true,
+   "group": [
+    "zhun"
+   ]
   },
   "冲沖": {
    "src": [
@@ -2111,7 +3836,10 @@
    "near": {
     "qtw": 0.9658
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xjz"
+   ]
   },
   "瓉瓚": {
    "src": [
@@ -2167,7 +3895,10 @@
     "qtw": 0.9542,
     "sj": 0.9651
    },
-   "core": true
+   "core": true,
+   "group": [
+    "huiq"
+   ]
   },
   "厯歷": {
    "src": [
@@ -2194,7 +3925,10 @@
    "near": {
     "sk": 0.9649
    },
-   "core": true
+   "core": true,
+   "group": [
+    "weiw"
+   ]
   },
   "䧟陷": {
    "src": [
@@ -2203,7 +3937,10 @@
    "near": {
     "sk": 0.9647
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xian"
+   ]
   },
   "辨辯": {
    "src": [
@@ -2302,7 +4039,10 @@
    "near": {
     "sj": 0.9632
    },
-   "core": true
+   "core": true,
+   "group": [
+    "feng"
+   ]
   },
   "叙敘": {
    "src": [
@@ -2311,7 +4051,10 @@
    "near": {
     "sk": 0.9631
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xu"
+   ]
   },
   "縦縱": {
    "src": [
@@ -2384,7 +4127,10 @@
    "near": {
     "sk": 0.9624
    },
-   "core": true
+   "core": true,
+   "group": [
+    "mi"
+   ]
   },
   "冊册": {
    "src": [
@@ -2393,7 +4139,10 @@
    "near": {
     "sk": 0.9623
    },
-   "core": true
+   "core": true,
+   "group": [
+    "ce"
+   ]
   },
   "葢蓋": {
    "src": [
@@ -2403,7 +4152,10 @@
     "qtw": 0.9623,
     "sk": 0.9514
    },
-   "core": true
+   "core": true,
+   "group": [
+    "gai"
+   ]
   },
   "乗乘": {
    "src": [
@@ -2449,7 +4201,10 @@
    "near": {
     "qtw": 0.9615
    },
-   "core": true
+   "core": true,
+   "group": [
+    "hou"
+   ]
   },
   "閻𨶒": {
    "src": [
@@ -2495,7 +4250,10 @@
     "sj": 0.9608,
     "sk": 0.957
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_yin3b"
+   ]
   },
   "俎爼": {
    "src": [
@@ -2558,7 +4316,10 @@
    "near": {
     "qtw": 0.9602
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_zan4"
+   ]
   },
   "奇竒": {
    "src": [
@@ -2567,7 +4328,10 @@
    "near": {
     "qtw": 0.9601
    },
-   "core": true
+   "core": true,
+   "group": [
+    "qi"
+   ]
   },
   "箕萁": {
    "src": [
@@ -2631,7 +4395,10 @@
    "near": {
     "qtw": 0.959
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xjz"
+   ]
   },
   "冗宂": {
    "src": [
@@ -2712,7 +4479,10 @@
    "near": {
     "sk": 0.9576
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_yan2"
+   ]
   },
   "筭算": {
    "src": [
@@ -2793,7 +4563,10 @@
    "near": {
     "sk": 0.9562
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_lian2"
+   ]
   },
   "獲𫉬": {
    "src": [
@@ -2802,7 +4575,10 @@
    "near": {
     "sk": 0.9561
    },
-   "core": true
+   "core": true,
+   "group": [
+    "huo"
+   ]
   },
   "脈脉": {
    "src": [
@@ -2848,7 +4624,10 @@
    "near": {
     "qtw": 0.9558
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xjz"
+   ]
   },
   "輨轄": {
    "src": [
@@ -2866,7 +4645,10 @@
    "near": {
     "sk": 0.9557
    },
-   "core": true
+   "core": true,
+   "group": [
+    "zhuan"
+   ]
   },
   "那郍": {
    "src": [
@@ -2902,7 +4684,10 @@
    "near": {
     "qtw": 0.9551
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xjz"
+   ]
   },
   "緒緖": {
    "src": [
@@ -2911,7 +4696,10 @@
    "near": {
     "sk": 0.9549
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_xu4"
+   ]
   },
   "柏栢": {
    "src": [
@@ -2929,7 +4717,10 @@
    "near": {
     "sk": 0.9545
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_fei1"
+   ]
   },
   "陣陳": {
    "src": [
@@ -3001,7 +4792,10 @@
    "near": {
     "sk": 0.9539
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xiang"
+   ]
   },
   "繈襁": {
    "src": [
@@ -3046,7 +4840,10 @@
    "near": {
     "sk": 0.953
    },
-   "core": true
+   "core": true,
+   "group": [
+    "yi_560"
+   ]
   },
   "鬰鬱": {
    "src": [
@@ -3055,7 +4852,10 @@
    "near": {
     "sk": 0.9529
    },
-   "core": true
+   "core": true,
+   "group": [
+    "cp_yu4"
+   ]
   },
   "郷鄕": {
    "src": [
@@ -3181,7 +4981,10 @@
    "near": {
     "sk": 0.9517
    },
-   "core": true
+   "core": true,
+   "group": [
+    "yi_560"
+   ]
   },
   "彝彞": {
    "src": [
@@ -3190,7 +4993,10 @@
    "near": {
     "sk": 0.9516
    },
-   "core": true
+   "core": true,
+   "group": [
+    "yi_560"
+   ]
   },
   "陰隂": {
    "src": [
@@ -3199,7 +5005,10 @@
    "near": {
     "sk": 0.9514
    },
-   "core": true
+   "core": true,
+   "group": [
+    "yinv"
+   ]
   },
   "罰罸": {
    "src": [
@@ -3217,7 +5026,10 @@
    "near": {
     "sk": 0.951
    },
-   "core": true
+   "core": true,
+   "group": [
+    "yi_560"
+   ]
   },
   "墆滯": {
    "src": [
@@ -3236,7 +5048,10 @@
     "qtw": 0.9506,
     "sk": 0.9505
    },
-   "core": true
+   "core": true,
+   "group": [
+    "xun"
+   ]
   },
   "収收": {
    "src": [
@@ -3311,7 +5126,10 @@
    "src": [
     "hand"
    ],
-   "core": true
+   "core": true,
+   "group": [
+    "hou"
+   ]
   },
   "全金": {
    "src": [
@@ -3329,13 +5147,19 @@
    "src": [
     "human"
    ],
-   "core": true
+   "core": true,
+   "group": [
+    "sy"
+   ]
   },
   "千子": {
    "src": [
     "human"
    ],
-   "core": true
+   "core": true,
+   "group": [
+    "zy"
+   ]
   },
   "却卻": {
    "src": [
@@ -3353,7 +5177,11 @@
    "src": [
     "hand"
    ],
-   "core": true
+   "core": true,
+   "group": [
+    "kou",
+    "yt"
+   ]
   },
   "夫夬": {
    "src": [
@@ -3390,7 +5218,10 @@
    "src": [
     "hand"
    ],
-   "core": true
+   "core": true,
+   "group": [
+    "xz"
+   ]
   },
   "换換": {
    "src": [
@@ -3450,25 +5281,38 @@
    "src": [
     "hand"
    ],
-   "core": true
+   "core": true,
+   "group": [
+    "chuo"
+   ]
   },
   "遺還": {
    "src": [
     "hand"
    ],
-   "core": true
+   "core": true,
+   "group": [
+    "chuo",
+    "yh"
+   ]
   },
   "開間": {
    "src": [
     "human"
    ],
-   "core": true
+   "core": true,
+   "group": [
+    "men"
+   ]
   },
   "間閣": {
    "src": [
     "human"
    ],
-   "core": true
+   "core": true,
+   "group": [
+    "men"
+   ]
   },
   "邰郃": {
    "src": [
@@ -3516,7 +5360,10 @@
     "qtw": 0.979,
     "sk": 0.9846
    },
-   "core": false
+   "core": false,
+   "group": [
+    "js"
+   ]
   },
   "穎顥": {
    "src": [
@@ -3881,7 +5728,10 @@
     "qtw": 0.9813,
     "sk": 0.9785
    },
-   "core": false
+   "core": false,
+   "group": [
+    "wxs"
+   ]
   },
   "予子": {
    "src": [
@@ -3892,7 +5742,10 @@
     "qtw": 0.9789,
     "sk": 0.9812
    },
-   "core": false
+   "core": false,
+   "group": [
+    "yz"
+   ]
   },
   "優憂": {
    "src": [
@@ -4209,7 +6062,10 @@
    "near": {
     "qtw": 0.9791
    },
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "閎閱": {
    "src": [
@@ -4218,7 +6074,10 @@
    "near": {
     "sj": 0.9791
    },
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "杲果": {
    "src": [
@@ -4463,7 +6322,10 @@
    "near": {
     "sk": 0.9773
    },
-   "core": false
+   "core": false,
+   "group": [
+    "chuo"
+   ]
   },
   "變𬽠": {
    "src": [
@@ -4490,7 +6352,10 @@
    "near": {
     "qtw": 0.9771
    },
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "卓車": {
    "src": [
@@ -4508,7 +6373,10 @@
    "near": {
     "sk": 0.977
    },
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "僑喬": {
    "src": [
@@ -4580,7 +6448,10 @@
    "near": {
     "qtw": 0.9768
    },
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "胎貽": {
    "src": [
@@ -4779,7 +6650,10 @@
    "near": {
     "sk": 0.9751
    },
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "嶪業": {
    "src": [
@@ -4800,7 +6674,10 @@
    "src": [
     "font"
    ],
-   "core": false
+   "core": false,
+   "group": [
+    "hou"
+   ]
   },
   "優擾": {
    "src": [
@@ -5010,19 +6887,28 @@
    "src": [
     "font"
    ],
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "聞閣": {
    "src": [
     "font"
    ],
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "聞闇": {
    "src": [
     "font"
    ],
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "胥骨": {
    "src": [
@@ -5070,25 +6956,37 @@
    "src": [
     "font"
    ],
-   "core": false
+   "core": false,
+   "group": [
+    "chuo"
+   ]
   },
   "造進": {
    "src": [
     "font"
    ],
-   "core": false
+   "core": false,
+   "group": [
+    "chuo"
+   ]
   },
   "連遠": {
    "src": [
     "font"
    ],
-   "core": false
+   "core": false,
+   "group": [
+    "chuo"
+   ]
   },
   "遇過": {
    "src": [
     "font"
    ],
-   "core": false
+   "core": false,
+   "group": [
+    "chuo"
+   ]
   },
   "邢邪": {
    "src": [
@@ -5100,19 +6998,28 @@
    "src": [
     "font"
    ],
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "闇關": {
    "src": [
     "font"
    ],
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "闌闡": {
    "src": [
     "font"
    ],
-   "core": false
+   "core": false,
+   "group": [
+    "men"
+   ]
   },
   "陵陸": {
    "src": [

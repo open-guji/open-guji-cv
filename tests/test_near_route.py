@@ -56,9 +56,9 @@ def test_missing_table_is_empty(tmp_path):
     assert R.route("天", 0.5, 1.0, R.RouteConfig(table=str(tmp_path / "none.json"))).reason is None
 
 
-def test_groups_connected(tmp_path):
+def test_components_connected(tmp_path):
     t = _table(tmp_path, {k: {"src": ["hand"], "core": True} for k in ("己已", "已巳", "日曰")})
-    assert R.groups("core", None, t) == [("己", "已", "巳"), ("日", "曰")]
+    assert R.components("core", None, t) == [("己", "已", "巳"), ("日", "曰")]
 
 
 def test_knn_agreement():
@@ -190,3 +190,34 @@ def test_trusted_rows():
     human = np.array([True, True, False, False, False, False])
     got = B.trusted_rows(E, chars, cells, human, np.ones(6, bool))
     assert got.tolist() == [True, True, True, False, False, False]
+
+
+def test_registry_bridge(tmp_path):
+    """和第 7 步字组注册表对接：落表的对标了 group＝已有判法；首位字只在注册表里也算落表；uncovered 列待办。"""
+    p = tmp_path / "t.json"
+    p.write_text(json.dumps({"char_groups": {"日": ["ry", "rm"], "曰": ["ry"], "彝": ["yi_560"]},
+                             "pairs": {"日曰": {"src": ["hand"], "core": True, "group": ["ry"]},
+                                       "天夭": {"src": ["lib:qtw"], "near": {"qtw": 0.99}, "core": True},
+                                       "喬僑": {"src": ["lib:qtw"], "near": {"qtw": 0.976}, "core": False}}}, ensure_ascii=False), encoding="utf-8")
+    t = str(p)
+    assert R.registered(t)["日"] == ("ry", "rm")
+    assert R.uncovered("core", t) == [("天", "夭")] and len(R.uncovered("all", t)) == 2
+    d = R.route("日", 0.2, 1.0, R.RouteConfig(table=t))
+    assert d.reason == "near_group" and d.groups == ("ry", "rm") and d.partners == ("曰",)
+    d = R.route("彝", 0.2, 1.0, R.RouteConfig(table=t))                          # 不在表里、在注册组里
+    assert d.reason == "near_group" and d.groups == ("yi_560",) and d.partners == ()
+    assert R.route("彝", 0.2, 1.0, R.RouteConfig(table=t, registry=False)).reason is None
+    assert R.route("天", 0.2, 1.0, R.RouteConfig(table=t)).groups == ()           # 落表但还没有组
+
+
+def test_merge_marks_registered_groups(tmp_path):
+    B = _build_mod()
+    from open_guji_cv.groups.registry import FLOW_GROUPS
+    mined = tmp_path / "near_x.json"
+    mined.write_text(json.dumps({"book": "x", "db": "g.db", "model": "m/model.pt", "lib_rows": 1, "pairs": {"日曰": [0.99, 3], "天夭": [0.99, 3]}},
+                                ensure_ascii=False), encoding="utf-8")
+    out = tmp_path / "o.json"
+    assert B.main(["merge", str(mined), "--out", str(out)]) == 0
+    d = json.loads(out.read_text(encoding="utf-8"))
+    assert "ry" in d["pairs"]["".join(sorted("日曰"))]["group"]
+    assert set(d["char_groups"]) == {c for g in FLOW_GROUPS.values() for c in g.members}

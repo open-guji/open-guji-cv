@@ -46,6 +46,21 @@
 和 `confusable.partners()` 的关系：那张表（手工＋人裁＋字体）是它的子集来源；库里挖出来的对是新增的
 （天/夭、文/丈、永/氷、早/旱 原先都不在表里）。本模块**只读表、只给判断**，不改 `match.py` 的护栏。
 
+## 和第 7 步字组（`groups/`）的关系：这里只认、不判
+
+形近字组**怎么分**早就有一套，在第 7 步：`groups/registry.py` 是字组的单一真源（每组的成员＋方法数组：码位归一、字频、
+文意 L1/L2/L3、整字 HOG、IDS、量笔画、书级刻形模型），`seed_admit.group_flow` 按组跑方法、放行或留审。本模块不另起一套：
+
+- **第 5 步（5a）只认**：首位字落表、或属于某个已注册字组 → 不下 same 断言，把对家和组 id 写进证据，交给下游；
+- **第 7 步判**：`group_flow` 照注册表的方法数组判。笔画识别、IDS、判别区域这些新方法都注册成 `groups/methods.py` 的方法，
+  挂到组的 `FlowSpec.methods` 里，不放在第 5 步——它们要用整理本对位、文意窗口、书级模型，这些到第 7 步才齐；
+- **表是「发现名单」，注册表是「有判法的组」**。表里每一对标了 `group`（两个字已在同一个注册组里＝已有判法）；没有 `group` 的对
+  是待办：要么给已有的组补成员，要么新注册一组，注册之前这些格只能留审。`RouteDecision.groups` 给首位字所属的注册组，
+  `uncovered()` 列待办。表里还抄了一份 `char_groups`（注册表里每个字属哪些组），这样第 5 步查它不用 import `groups` 包（分层上 `groups` 不 import `clustering`，这边也不反过来绑死）；真源仍是注册表，`build_near_groups.py merge` 时重抄。
+
+实测（11-16）三本书基准格里首位字落核心表的格，绝大多数字已经在某个注册组里；表主要是给已有的组补了没登记的对家
+，完全没有组的只占全部格的 2～3%（数字见 doc/design/形近字组-5a分流与第7步对接.md）。
+
 ## 近邻一致度
 
     knn(c) = 整库 CNN 最像的 k 个刻例（不含本格）里标成 c 的个数 ÷ min(k, c 在库里的刻例数)
@@ -105,8 +120,29 @@ def partners(level: str = "core", book: str | None = None, path: str | None = No
     return {k: frozenset(v) for k, v in acc.items()}
 
 
-def groups(level: str = "core", book: str | None = None, path: str | None = None) -> list[tuple[str, ...]]:
-    """表按连通分量并成字组（给人看、给下游专门方法按组处理用），大组在前。"""
+@lru_cache(maxsize=4)
+def registered(path: str | None = None) -> dict[str, tuple[str, ...]]:
+    """字 → 它在第 7 步字组注册表里属于哪些组（表里抄的那份 `char_groups`）。表不存在当空。"""
+    p = Path(path) if path else TABLE
+    if not p.exists():
+        return {}
+    return {c: tuple(g) for c, g in json.loads(p.read_text(encoding="utf-8")).get("char_groups", {}).items()}
+
+
+def uncovered(level: str = "core", path: str | None = None) -> list[tuple[str, str]]:
+    """表里还没有判法的对：两个字不在同一个注册字组里（给方向 2 排待办用）。按码位排好的无序对。"""
+    p = Path(path) if path else TABLE
+    if not p.exists():
+        return []
+    out = []
+    for pair, v in json.loads(p.read_text(encoding="utf-8")).get("pairs", {}).items():
+        if len(pair) == 2 and not v.get("group") and (level == "all" or v.get("core")):
+            out.append((pair[0], pair[1]))
+    return sorted(out)
+
+
+def components(level: str = "core", book: str | None = None, path: str | None = None) -> list[tuple[str, ...]]:
+    """表按连通分量并起来（给人看形近关系怎么连成片；**不是字组**——字组以 `groups/registry.py` 为准），大的在前。"""
     P = partners(level, book, path)
     seen: set[str] = set()
     out = []
@@ -135,6 +171,8 @@ class RouteConfig:
     """首位字分 − 次位字分（校准到 cov 尺度）低于它算「得分接近」。缺省 0＝不看（实测没用，见模块头）。"""
     knn_min: float = 1.0
     """近邻一致度低于它算「不一致」。缺省 1.0＝前 k 名里只要混进别的字就送审。"""
+    registry: bool = True
+    """首位字不在表里、但属于某个已注册字组，也算落表（那些格第 7 步本来就按组判）。"""
     weak: str = "either"
     """`both`＝得分接近且不一致才送审；`either`＝任一条成立就送审（更保守，多送很多）。"""
     k: int = 10
@@ -154,6 +192,8 @@ class RouteDecision:
     lead: float = 0.0
     knn: float = 0.0
     partners: tuple[str, ...] = ()
+    groups: tuple[str, ...] = ()
+    """首位字在第 7 步字组注册表里属于哪些组（空＝还没有组，下游没有专门判法）。"""
 
 
 def knn_agreement(sims: np.ndarray, chars: np.ndarray, char: str, k: int = 10) -> float:
@@ -188,12 +228,13 @@ def evidence(sims: np.ndarray, chars: np.ndarray, k: int = 10, calib=None) -> tu
 
 
 def route(top: str | None, lead: float, knn: float, cfg: RouteConfig = RouteConfig(), score: float = 0.0) -> RouteDecision:
-    """规则本身（纯函数）：①首位字落表 → near_group；②领先 < lead_min 且一致度 < knn_min → weak；否则不拦。"""
+    """规则本身（纯函数）：①首位字落表（或属于已注册字组）→ near_group；②领先 < lead_min 且一致度 < knn_min → weak；否则不拦。"""
     if top is None:
         return RouteDecision("empty")
     ps = partners(cfg.level, cfg.book, cfg.table).get(top)
-    if ps:
-        return RouteDecision("near_group", top, score, lead, knn, tuple(sorted(ps)))
+    gs = registered(cfg.table).get(top, ())
+    if ps or (cfg.registry and gs):
+        return RouteDecision("near_group", top, score, lead, knn, tuple(sorted(ps or ())), gs)
     close, loose = lead < cfg.lead_min, knn < cfg.knn_min
     if (close and loose) if cfg.weak == "both" else (close or loose):
         return RouteDecision("weak", top, score, lead, knn)
