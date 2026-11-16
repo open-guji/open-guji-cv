@@ -81,6 +81,7 @@ _TABLE_COLS_1116 = ("半文半表页按列标表 column_gate.table_cols（缺省
                     "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.7.42-c34-g22-m3-headraise-fix）、"
                     "全唐文 020 16 页（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.37-c73-g-2827ba-k9-qtw020-x1）、"
                     "北行 bxgb 8 页（3,8,12,20,33,40,50,56）上与 origin/dev 539b653 逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22）")
+_TABLE_COLS_0746 = (_TABLE_COLS_1116 + "。史記 patch 线移植（v0.7.46 + 本改动，column_gate 与 period_edge_fallback 并存的冲突手解）：本线另跑产物比对见 PR 说明")
 
 _DROP_L0_1114 = ("删缺省关、没书开、关时不进参数 dump 的开关（A22 开关收敛 L0 批，A20 11-14 定）：border_detect.merge_narrow_pair、"
                  "border_detect_gate.pagetype_model 三件、column_gate.period_edge_fallback、row_segment.colgold_prior／colgold_fingerprint、"
@@ -1821,6 +1822,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='814bd02de64f51372289b29a7f97c8460651b313c75a879048c021e9db93cd10',
           old='c34a4d88202f30ad4e0aaaf247170180dd5fff369b05f78f1d5a47ff4b1d5b15',
           evidence=_TABLE_COLS_1116),
+    # v0.7.47（史記 patch 线，v0.7.46 + #1590）补记：本线 column_gate 哈希（row_segment_gate 与 dev 同哈希，dev 已登）
+    Equiv(module='open_guji_cv.gates.column_gate',
+          new='14695ffb4eb100b35808596412291935656db67dc52225515b0b682b3c92d7f3',
+          old='222cf212e17eac8a7601aa7d1c51c880cb71356169c9b38df9f41d682eb2d3b0',
+          evidence=_TABLE_COLS_0746),
 )
 
 
