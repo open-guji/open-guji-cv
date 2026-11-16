@@ -26,6 +26,8 @@
 - 发版说明（A31 11-15，dev 线）：dev 头 `0cb4065`＝v0.7.40 + #1565（`sb-否決-卜-史記` 补 4 条），PATCH。只改 `config/groups/sb/rules.yaml`，代码指纹与 v0.7.40 同。**钉 corpus 的册（殿本、全唐文）改钉前别升含 #1558 的版本（v0.7.40 起）**：先改钉底库 **b27**（Ops 出，rev 1011430；＝b24／b25 只改 sb/rules.yaml，含 #1558＋#1565；**不是 b26**，b26 是史記 patch 线的底库），`guji corpus pin --same-output-as <旧总号> --note '<证据>'`（配 manager ≥0.4.50），五步不过期；还钉 b24/b25 的册在本版上报 CorpusDrift。证据：A22/A24 回测 #1558 殿本五份整理本 0 变化、全唐文 kanripo 23530 处 0 变化；#1565 殿本、全唐文 0 变化。史記两次共 23 处卜判十→弃权。史記走 patch 线 v0.7.41。
 ## [未发版]
 
+- PATCH：`guji status` 过期原因分出「语料钉变了」（SJ v0.1 预检 11-16，A31）：读语料的步（glyph_match、rare_candidates、align_ref、context_decide、seed_admit 等 `CORPUS_STEPS`）只因册的 `corpus:` 改钉而过期时，原来报「代码或版本变了」，现在报「语料钉变了：corpus 6→8（代码未变）」；代码也变了报「代码或版本变了；语料钉也变了：…」。新条目在 manifest 记 `corpus_pin`／`corpus`（不进指纹）；老条目没记就拿 `self_hash` 逐个旧总号试。只改原因文案，过期判定、`code_ok` 不变（语料变化不算「只是代码变了」）；不改任何 Step 指纹。
+
 ## [0.7.40] - 2026-11-15
 
 - 发版说明（A31 11-15，dev 线）：dev 头 `ea45a81`，基于 v0.7.37，PATCH。带 #1561（语料等价登记 `same_output_as`，殿本／全唐文改钉 b25 要用）、#1558（sb 组 `sb-否決-卜-史記`）、#1553（part_shape，缺省关）、#1554（variant_norm，缺省 None，已登等价）、#1557、#1551／#1552（只动 eval）。代码指纹：seed_admit、follow_ref_hooks 经 code_equiv 与 v0.7.37 同；**但** `config/groups/sb/rules.yaml` 变了：钉了 corpus 的册（殿本、全唐文）起跑报 CorpusDrift 拒跑，须改钉底库 b25（Ops 已出，与 b24 只差这一个文件），各册 `guji corpus pin --same-output-as <旧总号> --note '<证据>'`（要 manager ≥0.4.50）则五步不过期；没钉 corpus 又用 sb 组的册 seed_admit 过期。史記走 patch 线（v0.7.38／v0.7.39 见下），本版不给史記。
