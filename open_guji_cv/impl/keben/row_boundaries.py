@@ -1636,12 +1636,36 @@ def _dash_only(ink: np.ndarray, period: float, band_w: float, h_frac: float, w_f
     return (ys.max() - ys.min() + 1) <= h_frac * period and (xs.max() - xs.min() + 1) <= w_frac * band_w
 
 
+def _closed_box_glyph(ink: np.ndarray, frame: np.ndarray) -> bool:
+    """「曰」「日」「口」「目」这类闭口方框字（2026-11-16）：左右两侧各有一条长竖，
+    两竖之间 ≥2 道横贯的横画——框角只有一侧的竖，不会同时两侧都有又夹着横档。"""
+    h, w = ink.shape[:2]
+    cs = frame.sum(axis=0) >= 0.4 * h
+    xs = np.nonzero(cs)[0]
+    left = xs[xs < 0.5 * w]
+    right = xs[xs >= 0.5 * w]
+    if left.size == 0 or right.size == 0:
+        return False
+    xa, xb = int(left.max()) + 1, int(right.min())
+    if xb - xa < 0.2 * w:
+        return False
+    cov = ink[:, xa:xb].mean(axis=1) >= 0.7
+    runs, prev = 0, -99
+    for y in np.nonzero(cov)[0]:
+        if y - prev > 3:
+            runs += 1
+        prev = y
+    return runs >= 2
+
+
 def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio: float) -> bool:
     """这一格的墨是不是只有框线（2026-09-26）：必须有跨格长竖穿过；去掉它（连同贴着它的几像素）
     后剩下的要么够不上 `min_ink_ratio`，要么只剩又矮又不宽的细横（框的上下边）。"""
     import cv2
     h, w = ink.shape[:2]
     if h < 10 or w < 10 or not frame.any():
+        return False
+    if _closed_box_glyph(ink, frame):
         return False
     rest = ink & (1 - cv2.dilate(frame, np.ones((5, 5), np.uint8)))
     if float(rest.mean()) < min_ink_ratio:
