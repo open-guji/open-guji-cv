@@ -87,6 +87,7 @@ _TABLE_COLS_ONE_1116 = ("column_gate 半文半表页周期门槛下限改 1 列�
                         "column_warp→column_gate 在殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190）、全唐文 020 16 页"
                         "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170）、北行 bxgb 8 页（3,8,12,20,33,40,50,56）上与 origin/dev 80ace3d 逐字节相同；"
                         "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22）")
+_TABLE_COLS_ONE_0747 = (_TABLE_COLS_ONE_1116 + "。史記 patch 线移植（v0.7.47 + 本修复）：同一改动原样 cherry-pick，哈希按本线重算；本线测试册 keben 3 页 border_detect→row_segment_gate 新旧指纹与产物逐字节同")
 
 _DROP_L0_1114 = ("删缺省关、没书开、关时不进参数 dump 的开关（A22 开关收敛 L0 批，A20 11-14 定）：border_detect.merge_narrow_pair、"
                  "border_detect_gate.pagetype_model 三件、column_gate.period_edge_fallback、row_segment.colgold_prior／colgold_fingerprint、"
@@ -1836,6 +1837,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='14695ffb4eb100b35808596412291935656db67dc52225515b0b682b3c92d7f3',
           old='222cf212e17eac8a7601aa7d1c51c880cb71356169c9b38df9f41d682eb2d3b0',
           evidence=_TABLE_COLS_0746),
+    # v0.7.48（史記 patch 线，v0.7.47 + #1594）补记：本线 column_gate 哈希
+    Equiv(module='open_guji_cv.gates.column_gate',
+          new='3c9fc8ae6ff02f3cbff55a403e8332de5fc9fdd4d7af2fbdc834a8a002cd023a',
+          old='14695ffb4eb100b35808596412291935656db67dc52225515b0b682b3c92d7f3',
+          evidence=_TABLE_COLS_ONE_0747),
 )
 
 
