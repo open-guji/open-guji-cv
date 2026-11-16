@@ -3,6 +3,11 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.48] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.47 + #1594（dev 65de51d cherry-pick），PATCH，**不含** dev 线其他改动。code_equiv `_TABLE_COLS_ONE_0747` 按本线哈希登记。没写 table_cols 的册产物不变；写了 table_cols 的册 column_gate 过期。
+- PATCH：`table_cols` 正文只剩一列的页（史記 11:193）周期门槛下限改 1，不再整页拒（估不出走 period_prior 兜底）；文档写清列号是图上右起（产物 quad 右上原点）；A20 两处小毛病（常量位置、冲突报错打全 dict）。殿本、全唐文、北行 column_gate 逐字节同，code_equiv `_TABLE_COLS_ONE_1116`（A22，SJ 11-16 实测）。
+
 ## [0.7.47] - 2026-11-16
 
 - 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.46 + #1590（dev 4bd7515 cherry-pick），PATCH，**不含** dev 线其他改动（如 `column_gate.expected_cols_pages`、老写法报错）。冲突手解：`column_gate` 参数 dump 保留本线 `period_edge_fallback`；本线老写法仍只警告，册 yaml 直写 `params.column_gate.table_cols` 同样警告（dev 报错）。code_equiv `_TABLE_COLS_0746` 按本线哈希登记（column_gate 222cf212→14695ffb、row_segment_gate c34a4d88→814bd02d）。没写 table_cols 的册产物不变；写了的册从 column_gate 起过期（改了 page_kinds 的册通常要从 border_detect 起重跑）。

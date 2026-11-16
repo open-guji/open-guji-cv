@@ -61,6 +61,11 @@ _TABLE_COLS_1116 = ("半文半表页按列标表 column_gate.table_cols（缺省
                     "全唐文 020 16 页（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.37-c73-g-2827ba-k9-qtw020-x1）、"
                     "北行 bxgb 8 页（3,8,12,20,33,40,50,56）上与 origin/dev 539b653 逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22）")
 _TABLE_COLS_0746 = (_TABLE_COLS_1116 + "。史記 patch 线移植（v0.7.46 + 本改动，column_gate 与 period_edge_fallback 并存的冲突手解）：本线另跑产物比对见 PR 说明")
+_TABLE_COLS_ONE_1116 = ("column_gate 半文半表页周期门槛下限改 1 列（只在 table_cols 点名本页时走；SJ 11:193 正文只剩一列被整页拒）、TABLE_COLUMN_REJECT 常量挪到 import 后："
+                        "column_warp→column_gate 在殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190）、全唐文 020 16 页"
+                        "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170）、北行 bxgb 8 页（3,8,12,20,33,40,50,56）上与 origin/dev 80ace3d 逐字节相同；"
+                        "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22）")
+_TABLE_COLS_ONE_0747 = (_TABLE_COLS_ONE_1116 + "。史記 patch 线移植（v0.7.47 + 本修复）：同一改动原样 cherry-pick，哈希按本线重算；本线测试册 keben 3 页 border_detect→row_segment_gate 新旧指纹与产物逐字节同")
 _SEM_EXTRA_0744 = (_SEM_EXTRA_1116 + "。史記 patch 线移植（v0.7.44 + 本改动）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _FR_KEEP_VR_0743 = (_FR_KEEP_VR_1116 + "。史記 patch 线移植（v0.7.43 + 本修复）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _VR_HOOK_0743 = (_VR_HOOK_1116 + "。v0.7.43（史記 patch 线，v0.7.41 + #1573）：同一改动原样 cherry-pick，哈希按本线重算，"
@@ -1607,6 +1612,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='814bd02de64f51372289b29a7f97c8460651b313c75a879048c021e9db93cd10',
           old='c34a4d88202f30ad4e0aaaf247170180dd5fff369b05f78f1d5a47ff4b1d5b15',
           evidence=_TABLE_COLS_0746),
+    # table_cols 单列页修复（#1594，SJ 11:193）；史記 patch 线（v0.7.47 之上）哈希
+    Equiv(module='open_guji_cv.gates.column_gate',
+          new='3c9fc8ae6ff02f3cbff55a403e8332de5fc9fdd4d7af2fbdc834a8a002cd023a',
+          old='14695ffb4eb100b35808596412291935656db67dc52225515b0b682b3c92d7f3',
+          evidence=_TABLE_COLS_ONE_0747),
 )
 
 
