@@ -3,7 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
-## [未发版]
+## [0.7.47] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.46 + #1590（dev 4bd7515 cherry-pick），PATCH，**不含** dev 线其他改动（如 `column_gate.expected_cols_pages`、老写法报错）。冲突手解：`column_gate` 参数 dump 保留本线 `period_edge_fallback`；本线老写法仍只警告，册 yaml 直写 `params.column_gate.table_cols` 同样警告（dev 报错）。code_equiv `_TABLE_COLS_0746` 按本线哈希登记（column_gate 222cf212→14695ffb、row_segment_gate c34a4d88→814bd02d）。没写 table_cols 的册产物不变；写了的册从 column_gate 起过期（改了 page_kinds 的册通常要从 border_detect 起重跑）。
+- PATCH：半文半表页按列标表格 `page_kinds.table_cols: {页: [列号…]}`（GUJI-772，SJ 台账 R030，A20 定方案；A22）：翻成 `column_gate.table_cols`（缺省空不进 dump），点名列拒收（拒因 `table_column`，GateLevel L0t），不进列宽中位与页级周期、门槛扣表格列数，Step3 出 ok=False、闸3 拒因同名，不进待审单；其余列照正文切。殿本 vol28、全唐文 020 各 16 页、北行 8 页两道闸逐字节同，code_equiv `_TABLE_COLS_1116`。
 
 
 ## [0.7.46] - 2026-11-16
