@@ -107,6 +107,14 @@ BASE_RANGES: dict[str, list[tuple[int, int]]] = {
     "unicode-cjk-ab": [(0x4E00, 0x9FFF), (0x3400, 0x4DBF), (0x20000, 0x2A6DF)],
     # 只有扩B，给 `escalate` 用。
     "unicode-ext-b": [(0x20000, 0x2A6DF)],
+    # 基本区、扩A 之外的全部扩展区（B–J，含扩I；不含兼容补充），74,400 字，给 `escalate` 用。
+    # 各区止于已编码的末位（不是块尾），与 `unicode-all` 里 U+20000 以上的字逐字相同（测试钉着）。
+    # 2026-11-16 加：三书人裁类外字实测，升级档从扩B 换成它，前 10 名召回殿本 86.6→91.5、首位不掉
+    # （ai-team `domain/CV/字形领域/大字符集候选召回-2026-11-15/`）。缺省升级档仍是 `unicode-ext-b`，
+    # 哪册要用在册配置里写 `font.charset.escalate: unicode-ext-all`，阈值按书重标。
+    "unicode-ext-all": [(0x20000, 0x2A6DF), (0x2A700, 0x2B73F), (0x2B740, 0x2B81D),
+                        (0x2B820, 0x2CEAD), (0x2CEB0, 0x2EBE0), (0x2EBF0, 0x2EE5D),
+                        (0x30000, 0x3134A), (0x31350, 0x323AF), (0x323B0, 0x33479)],
     # 兼容汉字区。⚠️ 2026-10-19 起兼容汉字一律折成统一汉字（utils/cjk_compat），
     # 这档折完只剩 12 个本就是统一汉字的码位；留名只为旧册配置不报错。
     "unicode-compat": [(0xF900, 0xFAFF)],
@@ -163,8 +171,18 @@ DEFAULT_ALLOW_BY_EDITION: dict[str, str] = {
 DEFAULT_ESCALATE_THRESHOLD = 0.85
 
 
+#: 第三辅助平面（扩G／H／J）的起点。`_cjk` 2026-11-16 起认到扩J 末尾，见下。
+_TIP_START = "\U00030000"
+
+
 def _cjk(ch: str) -> bool:
-    return ("㐀" <= ch <= "鿿") or ("\U00020000" <= ch <= "\U0002ffff") \
+    """字表认哪些码位。上界 2026-11-16 从 U+2FFFF 放到 U+3347F（扩J 末尾，同 `utils/han_ranges`）。
+
+    原先扩G／H／J（U+30000 起 13,429 字）一律被这里滤掉：`unicode-all` 实得 88,567 字而不是文件里的
+    101,996，册配置 `extra` 写了也进不去，升级档配成含这三区的基集也白配。殿本人裁金标有 9 格
+    （𰜹 𱁪 𲄳）落在这三区，候选池里永远没有它们。
+    """
+    return ("㐀" <= ch <= "鿿") or ("\U00020000" <= ch <= "\U0003347f") \
         or ("豈" <= ch <= "﫿")
 
 
@@ -257,11 +275,12 @@ def spec_for_book(book: str | None, edition: str = "keben") -> dict:
           charset:
             base: unicode-cjk-a     # 基集，见 BASE_RANGES / BASE_FILES
             escalate: unicode-ext-b # 分数低时追加的一档；null = 不做阶梯
+                                    # （`unicode-ext-all` = 扩B 到扩J 全部扩展区，2026-11-16）
             escalate_threshold: 0.85
             corpus: true            # 叠加本册整理本用字（有就吃，没有不报错）
             variants: true          # 叠加异体展开
             allow: no-simplified    # 简体否决（繁体刻本推荐）；none = 不过滤
-            extra: [甫, 鳥]          # 手工补字
+            extra: [甫, 鳥]          # 手工补字（扩G／H／J 的字 2026-11-16 起也收）
             symbols: false          # 特殊符号表（○□△…，`config/charset/symbols.tsv`）并进基集，缺省关
 
     **`corpus` 从「唯一来源」降级成「叠加项」**——这是本次改造的要点。
@@ -335,6 +354,11 @@ def build_charsets(base: str, escalate: str | None, corpus: str | None,
                     vv = v[0] if isinstance(v, (tuple, list)) else v
                     vv = fold_compat(vv)      # 异体表里的兼容码位先折，再判区段
                     if vv in base_set or vv in cs:
+                        continue
+                    # 扩G 及以后的异体产物**不进基集**（2026-11-16）：放开 `_cjk` 上界后，缺省基集的
+                    # 异体展开会多出 992 个扩G／H 字，所有书的基集都要变。升级档收了
+                    # 这三区（`unicode-ext-all`）的归升级档，没收的照旧丢掉——缺省配置下两张字表逐字不变。
+                    if vv >= _TIP_START and vv not in esc_set:
                         continue
                     (spill if vv in esc_set else cs).add(vv)
             esc_set |= spill

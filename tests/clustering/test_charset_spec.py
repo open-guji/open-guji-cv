@@ -121,3 +121,35 @@ def test_symbols_join_base_only_when_switched_on(monkeypatch):
     off, esc_off = build_charsets("unicode-cjk-a", "unicode-ext-b", None, False, True, ())
     assert set(on) - set(off) == set(symbols())
     assert not any(c in symbols() for c in off) and esc_on == esc_off
+
+
+def test_ext_g_and_beyond_reachable_but_not_in_default_base():
+    """扩G／H／J（U+30000 起）2026-11-16 起进得了字表，但缺省配置下两张字表逐字不变。
+
+    原先 `_cjk` 上界是 U+2FFFF，这三区 13,429 字一律被滤掉：殿本人裁金标的 𰜹 𱁪 𲄳 怎么配都进不了候选池。
+    放开后有三条路进字表：册配置 `extra`、升级档 `unicode-ext-all`、文件型基集 `unicode-all`。
+    缺省配置（基本区＋扩A，升级档扩B）不走这三条路：异体展开撞上的 992 个扩G／H 字照旧不收，
+    不然所有书的基集都要变、候选整体漂移，而 `charset_spec` 不在 Step5-b 的代码指纹里，产物不会判过期。
+    """
+    gold = "\U00030739\U0003106A\U00032133"          # 𰜹 𱁪 𲄳
+    tip = "\U00030000"
+
+    assert len(base_charset("unicode-ext-all")) == 74400
+    assert len(base_charset("unicode-all")) == 101996   # 原先 88,567：文件里的扩G／H／J 被滤掉了
+
+    base, esc = build_charsets("unicode-cjk-a", "unicode-ext-b", None, False, True, ())
+    assert not [c for c in base + esc if c >= tip]
+    assert len(esc) == 42720
+
+    base_x, esc_x = build_charsets("unicode-cjk-a", "unicode-ext-b", None, False, True, tuple(gold))
+    assert set(gold) <= set(base_x) and not [c for c in esc_x if c >= tip]
+    assert set(base_x) - set(base) == set(gold)         # 这三个字没有异体边，只多它们自己
+
+    base_a, esc_a = build_charsets("unicode-cjk-a", "unicode-ext-all", None, False, True, ())
+    assert set(gold) <= set(esc_a)
+    assert not [c for c in base_a if c >= tip], "扩G 以后的异体产物应归升级档，不进基集"
+    assert not (set(base_a) & set(esc_a))
+    assert set(esc) <= set(esc_a)
+    # 区间止于已编码的末位：和 Unicode 全集里第二、三辅助平面的字逐字相同，不带没编码的码位
+    assert set(base_charset("unicode-ext-all")) == {
+        c for c in base_charset("unicode-all") if c >= "\U00020000"}
