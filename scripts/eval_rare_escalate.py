@@ -102,6 +102,11 @@ def main() -> int:
     ap.add_argument("--cap", type=int, default=12)
     ap.add_argument("--no-cls", action="store_true",
                     help="分类头不进融合（权重置 0），只看 emb 一路经阶梯之后的结果；用来分开「阶梯」和「融合」各丢多少")
+    ap.add_argument("--cls", action="append", default=None,
+                    help="分类头进融合的方式，可多次：gate（现行软门控，缺省）、off（权重 0）、fixed:<w>（固定权重）、"
+                         "hard（emb 首位在类外就关，topm=1）、hi:<w>（软门控但上限降到 w）")
+    ap.add_argument("--source", choices=["rare", "expected"], default="rare",
+                    help="rare＝rare.jsonl（送审难格）；expected＝expected.json 的全部实例（001/002 是整页所有格）")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
@@ -110,14 +115,36 @@ def main() -> int:
     from open_guji_cv.clustering.charset_spec import is_simplified
     from open_guji_cv.clustering.rare_family import expand_family, family_hit
 
-    if a.no_cls:
-        from open_guji_cv.clustering import cnn_candidates as CC
-        CC.cls_gate_weight = lambda *_a, **_k: 0.0
+    from open_guji_cv.clustering import cnn_candidates as CC
+    gate0 = CC.cls_gate_weight
+    classes = CC.shared_classes()
+
+    def set_cls(mode: str) -> None:
+        if mode == "gate":
+            CC.cls_gate_weight = gate0
+        elif mode == "off":
+            CC.cls_gate_weight = lambda *_a, **_k: 0.0
+        elif mode == "hard":
+            CC.cls_gate_weight = lambda emb_order, cl, **_k: gate0(emb_order, cl, topm=1)
+        elif mode.startswith("fixed:"):
+            w = float(mode[6:])
+            CC.cls_gate_weight = lambda *_a, **_k: w
+        elif mode.startswith("hi:"):
+            w = float(mode[3:])
+            CC.cls_gate_weight = lambda emb_order, cl, **_k: gate0(emb_order, cl, hi=w)
+        else:
+            raise SystemExit(f"--cls 不认识：{mode}")
+
+    cls_modes = a.cls or (["off"] if a.no_cls else ["gate"])
 
     report = {}
     for shard in a.shard:
         d = Path(a.dataset) / "samples" / shard
-        items = [json.loads(l) for l in (d / "rare.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        if a.source == "expected":
+            items = [{"char": x["char"], "png": x["crop"]}
+                     for x in json.loads((d / "expected.json").read_text(encoding="utf-8"))["instances"] if x.get("char")]
+        else:
+            items = [json.loads(l) for l in (d / "rare.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
         if a.limit:
             items = items[:a.limit]
         imgs, kept = [], []
@@ -131,13 +158,16 @@ def main() -> int:
         for i, it in enumerate(items):
             for st in it.get("strata", []):
                 groups.setdefault(st, []).append(i)
+            groups.setdefault("类内" if it["char"] in classes else "类外", []).append(i)   # 分类头训练字表内／外
         rep = {}
-        for esc in (a.escalate or ["unicode-ext-b", "unicode-all"]):
-            for th in (a.threshold or [0.85, 0.95]):
+        for esc, th, mode in [(e, t, m) for e in (a.escalate or ["unicode-ext-b", "unicode-all"])
+                              for t in (a.threshold or [0.85, 0.95]) for m in cls_modes]:
+            if True:
+                set_cls(mode)
                 cands, reach, rate = run_config(imgs, esc, th, a.k)
                 extra = [[c for c, _ in expand_family(cs, a.top_m, a.cap, keep=lambda c: not is_simplified(c))]
                          for cs in cands]
-                key = f"{esc}@{th}"
+                key = f"{esc}@{th}" + ("" if mode == "gate" else f"/cls={mode}")
                 rep[key] = {"escalate_rate": rate}
                 for name, idx in groups.items():
                     n = len(idx)
