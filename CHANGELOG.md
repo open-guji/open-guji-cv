@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- PATCH（史記 patch 线移植）：seed_admit `follow_ref` 变体遍跳过 `variant_rank` 按刻形放的格（史記 r71 来／圗 被改回 來／圖；SJ 11-16，A22）。dev 上同改动见 dev CHANGELOG；本线哈希已登 `_FR_KEEP_VR_0743`。
+
 
 ## [0.7.43] - 2026-11-16
 

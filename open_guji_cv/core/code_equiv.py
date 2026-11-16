@@ -47,6 +47,11 @@ _VR_HOOK_1116 = ("seed_admit lane_variant_guard 加书级钩子 impl/keben/follo
                  "（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.6.23-c33-g19-r8 当上游）、全唐文 020 16 页"
                  "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.37-c73-g-2827ba-k9-qtw020-x1 当上游）"
                  "seed_admit 与 origin/dev 417feff 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22）")
+_FR_KEEP_VR_1116 = ("seed_admit _follow_ref_pass 跳过书级钩子 variant_rank 放行的格（证据 lane.variant_rank=hook；钩子缺省 None 时没有这种格，多一句恒假的 continue）："
+                    "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.6.23-c33-g19-r8）、全唐文 020 16 页"
+                    "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.37-c73-g-2827ba-k9-qtw020-x1）"
+                    "seed_admit 与 origin/dev ec60bba 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22，史記 r71）")
+_FR_KEEP_VR_0743 = (_FR_KEEP_VR_1116 + "。史記 patch 线移植（v0.7.43 + 本修复）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _VR_HOOK_0743 = (_VR_HOOK_1116 + "。v0.7.43（史記 patch 线，v0.7.41 + #1573）：同一改动原样 cherry-pick，哈希按本线重算，"
                  "上述逐字节同证据在 dev 上取得，本线未另跑产物比对（A31 2026-11-16）")
 _FR_HOOK_1113 = ("seed_admit follow_ref 加书级钩子 impl/keben/follow_ref_hooks.rival_skip（缺省 None，不调；follow_ref_decide 加 rival_skip "
@@ -1562,6 +1567,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='a73e9aaf0d2972e8c7a724d1d4e5903ad16b0529eb1342b64a510928c10c5eb9',
           old='76f1e160c04766b55fed297b0b9e5da39cf0c903abf901060293044afad8cf6e',
           evidence=_VR_HOOK_0743),
+    # seed_admit follow_ref 变体遍不改回 variant_rank 按刻形放的格（史記 r71，SJ 11-16）；史記 patch 线（v0.7.43 之上）哈希
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='be2ed59230f83489123035ea33903b8f05acad7e48abd0664d0031cd7efe9407',
+          old='1f3cc92598ca55168986832c0ff4cf650f5bd7bd62b2e1e08e4f68c147a3f73e',
+          evidence=_FR_KEEP_VR_0743),
     # v0.7.24／v0.7.28（drop_bad patch 线）补记：两条 align_ref 中间哈希 dev 上缺（dev 同改动按本线哈希另登了 1f4878ab／cace3586），
     # 原样追加让 check_code_equiv_monotonic.py 对这两个 tag 也接得上；dev 代码不会算出这两个哈希，不改 dev 任何产物新鲜度（A22 2026-11-15）
     Equiv(module="open_guji_cv.steps.align_ref",
