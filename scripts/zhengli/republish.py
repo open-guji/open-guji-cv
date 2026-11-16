@@ -1700,6 +1700,39 @@ def site_page_table(book_id: str, volume) -> dict | None:
     return S.read_table(src, book_id, vol, revs[-1]) if revs else None
 
 
+def copy_figs(export_dir: Path, d: Path, ch: str) -> int:
+    """导出里有图（图片格、插图块，GUJI-740）就把 `NNN.fig.json` 与 `fig/NNN/` 裁图一并拷进 book-text，
+    并在 index.json 本章条目补声明 `fig_file`（校验器 F-OV-13：char 有图须声明）。返回拷了几张图。
+    以前只拷 char／cord／norm，网站图形票落成图片格后 local_check 报 F-OV-13 拒推（ZM 11-16，016／019）。"""
+    src = Path(export_dir) / f"{ch}.fig.json"
+    if not src.exists():
+        return 0
+    shutil.copyfile(src, d / f"{ch}.fig.json")
+    imgs = Path(export_dir) / "fig" / ch
+    dst = d / "fig" / ch
+    if dst.exists():
+        shutil.rmtree(dst)
+    n = 0
+    if imgs.is_dir():
+        dst.mkdir(parents=True, exist_ok=True)
+        for f in sorted(imgs.iterdir()):
+            if f.is_file():
+                shutil.copyfile(f, dst / f.name)
+                n += 1
+    idx = d / "index.json"
+    s = idx.read_text(encoding="utf-8")
+    decl = f'"fig_file": "{ch}.fig.json"'
+    if decl not in s:
+        anchor = f'"norm_file": "{ch}.norm.json"'
+        if s.count(anchor) != 1:
+            anchor = f'"cord_file": "{ch}.cord.json"'
+        if s.count(anchor) != 1:
+            sys.exit(f"✗ book-text index.json 找不到第 {ch} 章条目（要补 fig_file）")
+        idx.write_text(s.replace(anchor, f"{anchor}, {decl}"), encoding="utf-8", newline="\n")
+    print(f"图片格：拷 {ch}.fig.json 与 {n} 张裁图，index 声明 fig_file")
+    return n
+
+
 def copy_cord_for_site(src: Path, dst: Path) -> int:
     """导出的 cord 换到网站页图坐标后写进 book-text（导出目录里的原件不动，sprite 还要用）。返回换了几页。"""
     from guji_manager.formats import guji_char_cord as cc
@@ -1771,6 +1804,7 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
             copy_cord_for_site(src, d / f"{ch}.{t}.json")   # 图源换过版的书要换坐标（网站和 book-text 跟新页走）
         elif src.exists():
             shutil.copyfile(src, d / f"{ch}.{t}.json")
+    copy_figs(Path(plan["export_dir"]), d, ch)
     stamp_char_pending(d / f"{ch}.char.json", plan)
     if stale_doc:
         # book-text 校验器认的是改字清单 NNN.char-edits.json（scripts/book-text/char_edits.py），不是 punct-stale：
@@ -1830,6 +1864,7 @@ def _bump_book_text_cellmap(repo: Path, plan: dict, note: str, base: str) -> str
             copy_cord_for_site(src, d / f"{ch}.{t}.json")
         elif src.exists():
             shutil.copyfile(src, d / f"{ch}.{t}.json")
+    copy_figs(Path(plan["export_dir"]), d, ch)
     pending = set()
     for k in ("pending", "team"):
         f = plan.get(k)
