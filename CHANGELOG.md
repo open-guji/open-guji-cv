@@ -6,6 +6,11 @@
 ## [未发版]
 
 
+## [0.7.43] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.41 + #1573（seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_rank`），PATCH，**不含** dev 线 v0.7.40／v0.7.42 及 dev 上其他改动。原样 cherry-pick dev c060c98（代码与测试无冲突），code_equiv 按本线哈希登记 `_VR_HOOK_0743`（seed_admit 1f3cc925→ebd54cc7、follow_ref_hooks a73e9aaf→76f1e160，规范值与 v0.7.41 同，缺省不调的册指纹不变；逐字节同证据是 dev 上殿本 vol28、全唐文 020 各 16 页）。史記书仓覆盖 follow_ref_hooks，照常过期。
+- PATCH：seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_rank`（史記，Sheldon 11-15 定 圗兾凢来 不并码位归一、改流水线放行；SJ 请求，A22）：三通道本要以 `cand_variant` 拦、`variant_norm` 也不放时再问书仓一次，钩子拿到异体在现字（名次 0）与库前 topk 名的名次，返回与放行字语义同的字就放，证据记 `lane.variant_rank=hook`、`variant_from`、`variant_ranks`。缺省 None 不调。
+
 ## [0.7.41] - 2026-11-15
 
 - 发版说明（A31 11-15，SJ 史記 patch 线）：v0.7.39 + #1565（`sb-否決-卜-史記` 补 4 条），PATCH，**不含** dev 线 v0.7.40 及 dev 上其他改动。原样 cherry-pick dev b6b5c8c，只改 `config/groups/sb/rules.yaml` 一行；不登 code_equiv（史記真实行为变化）。

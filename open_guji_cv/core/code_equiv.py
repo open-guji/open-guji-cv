@@ -42,6 +42,13 @@ _VN_HOOK_1115 = ("seed_admit lane_variant_guard 加书级钩子 impl/keben/follo
                  "cand_variant 前多一支 elif 恒假）、新函数 _lane_variant_hook：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，"
                  "main 包 cv0.6.23-c33-g19-r8 当上游）seed_admit 与 origin/dev 14aa3bb2 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-15（A22）。"
                  "v0.7.38（史記 patch 线，v0.7.33 + #1554）：同一改动原样 cherry-pick，哈希按本线重算，上述逐字节同证据在 dev 上取得，本线未另跑产物比对")
+_VR_HOOK_1116 = ("seed_admit lane_variant_guard 加书级钩子 impl/keben/follow_ref_hooks.variant_rank（缺省 None，不调；_review_lanes_pass 加 rank_hook 参数缺省 None、"
+                 "cand_variant 前多一支 elif 恒假；_lane_variant_hook 加 name 参数缺省 variant_norm）、新函数 _lane_variant_rank：殿本 vol28 16 页"
+                 "（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.6.23-c33-g19-r8 当上游）、全唐文 020 16 页"
+                 "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.37-c73-g-2827ba-k9-qtw020-x1 当上游）"
+                 "seed_admit 与 origin/dev 417feff 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22）")
+_VR_HOOK_0743 = (_VR_HOOK_1116 + "。v0.7.43（史記 patch 线，v0.7.41 + #1573）：同一改动原样 cherry-pick，哈希按本线重算，"
+                 "上述逐字节同证据在 dev 上取得，本线未另跑产物比对（A31 2026-11-16）")
 _FR_HOOK_1113 = ("seed_admit follow_ref 加书级钩子 impl/keben/follow_ref_hooks.rival_skip（缺省 None，不调；follow_ref_decide 加 rival_skip "
                  "参数缺省空集，max 的过滤条件多一个恒真项）、新函数 _RivalFacts／_pair_facts／_follow_ref_rival_hook（只在钩子非 None 时用）："
                  "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.6.23-c33-g19-r8 当上游）seed_admit 与 origin/dev e466f52 "
@@ -1546,6 +1553,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='76f1e160c04766b55fed297b0b9e5da39cf0c903abf901060293044afad8cf6e',
           old='67ffed25de9e2f114bfd57a4f490d1fa5a7e162d02b1a0174d92bc45543b4895',
           evidence=_VN_HOOK_1115),
+    # seed_admit 异体护栏书级钩子 follow_ref_hooks.variant_rank（缺省 None 不调；史記圗兾凢来不归一、按名次放行，SJ 11-16）；v0.7.43 史記 patch 线哈希
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='1f3cc92598ca55168986832c0ff4cf650f5bd7bd62b2e1e08e4f68c147a3f73e',
+          old='ebd54cc7c92413969a9f7ffd17ef7e68ba90e54c0eecc2186b70a38dbca0c63e',
+          evidence=_VR_HOOK_0743),
+    Equiv(module='open_guji_cv.impl.keben.follow_ref_hooks',
+          new='a73e9aaf0d2972e8c7a724d1d4e5903ad16b0529eb1342b64a510928c10c5eb9',
+          old='76f1e160c04766b55fed297b0b9e5da39cf0c903abf901060293044afad8cf6e',
+          evidence=_VR_HOOK_0743),
     # v0.7.24／v0.7.28（drop_bad patch 线）补记：两条 align_ref 中间哈希 dev 上缺（dev 同改动按本线哈希另登了 1f4878ab／cace3586），
     # 原样追加让 check_code_equiv_monotonic.py 对这两个 tag 也接得上；dev 代码不会算出这两个哈希，不改 dev 任何产物新鲜度（A22 2026-11-15）
     Equiv(module="open_guji_cv.steps.align_ref",
