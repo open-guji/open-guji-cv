@@ -66,6 +66,10 @@ _TABLE_COLS_ONE_1116 = ("column_gate 半文半表页周期门槛下限改 1 列�
                         "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170）、北行 bxgb 8 页（3,8,12,20,33,40,50,56）上与 origin/dev 80ace3d 逐字节相同；"
                         "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22）")
 _TABLE_COLS_ONE_0747 = (_TABLE_COLS_ONE_1116 + "。史記 patch 线移植（v0.7.47 + 本修复）：同一改动原样 cherry-pick，哈希按本线重算；本线测试册 keben 3 页 border_detect→row_segment_gate 新旧指纹与产物逐字节同")
+_GF_EXCLUDE_1116 = ("seed_admit 书级减法 group_flow_exclude（缺省空、不进参数 dump；空时 model_post_init 不进新分支，group_flow 照旧）："
+                    "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.7.42-c34-g22-m3-headraise-fix 当上游）"
+                    "seed_admit 与 origin/dev 0e7277b 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22，史記 勢𫝑）")
+_GF_EXCLUDE_0748 = (_GF_EXCLUDE_1116 + "。史記 patch 线移植（v0.7.48 + #1601 → v0.7.50）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _SEM_EXTRA_0744 = (_SEM_EXTRA_1116 + "。史記 patch 线移植（v0.7.44 + 本改动）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _FR_KEEP_VR_0743 = (_FR_KEEP_VR_1116 + "。史記 patch 线移植（v0.7.43 + 本修复）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _VR_HOOK_0743 = (_VR_HOOK_1116 + "。v0.7.43（史記 patch 线，v0.7.41 + #1573）：同一改动原样 cherry-pick，哈希按本线重算，"
@@ -1617,6 +1621,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='3c9fc8ae6ff02f3cbff55a403e8332de5fc9fdd4d7af2fbdc834a8a002cd023a',
           old='14695ffb4eb100b35808596412291935656db67dc52225515b0b682b3c92d7f3',
           evidence=_TABLE_COLS_ONE_0747),
+    # v0.7.50（史記 patch 线 = v0.7.48 + #1601）：group_flow_exclude 按本线哈希登记（A31 11-16）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='746d3e956607cb04dad065a984e34158ddd09217a8708cc9a5e3d07cd36fc1e5',
+          old='ffceeab903b391ca076a2e5fa2e847aee23d9f59d84fb54248d2274f5c2cb238',
+          evidence=_GF_EXCLUDE_0748),
 )
 
 

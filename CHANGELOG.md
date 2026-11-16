@@ -3,6 +3,11 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.50] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.48 + #1601（dev cc3c30f cherry-pick），PATCH，**不含** dev 线其他改动，也不含殿本 patch 线 v0.7.49 的 #1587。code_equiv `_GF_EXCLUDE_0748` 按本线哈希登记。没写 group_flow_exclude 的册产物不变。
+- PATCH：seed_admit 书级减法参数 `group_flow_exclude`（如 `[shi]`）：从 `group_flow`（缺省全部 flow 组）减掉点名的组，免得书配置抄全名单；缺省空不进参数 dump。殿本 vol28 16 页 seed_admit 逐字节同，code_equiv `_GF_EXCLUDE_1116`（A22，史記 勢𫝑，A24 定方案①，11-16）。
+
 ## [0.7.48] - 2026-11-16
 
 - 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.47 + #1594（dev 65de51d cherry-pick），PATCH，**不含** dev 线其他改动。code_equiv `_TABLE_COLS_ONE_0747` 按本线哈希登记。没写 table_cols 的册产物不变；写了 table_cols 的册 column_gate 过期。

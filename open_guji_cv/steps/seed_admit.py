@@ -238,6 +238,10 @@ class SeedAdmitParams(BaseModel):
 
     证据写 `evidence.group`（组、入口、每个解法的给字与理由、结论）。见 `groups/flow.py`、
     doc/design/M7-字组统一流程-variant-tie改造方案.md。关着不进参数 dump（`params_hash` 不变）。"""
+    group_flow_exclude: list[str] = Field(default_factory=list)
+    """书级减法（A22 11-16，史記 勢𫝑 不可分）：从 `group_flow`（缺省＝注册表全部 flow 组）里去掉这几组，免得书配置抄全名单、
+    以后新增组跟不上。写法 `[shi]`；组 id 照 `registry.RENAMED` 换新名，不认识的组报错。空＝不减（不进参数 dump）；
+    减后的 `group_flow` 照常进 dump，产物随之过期。"""
     group_flow_freq: str = ""               # 字频表（`python -m open_guji_cv.groups.freq <工作区>` 冻结），空＝字频解法弃权
     group_flow_freq_major: int = 10         # 主形人裁数下限；其余成员须为 0（2026-10-20 sheldon 定 20→10）
     group_flow_freq_min_vols: int = 2       # 主形人裁须来自至少这么多册（表里有册数才查；0＝不查）
@@ -1609,6 +1613,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_abstain_ref_ok", None)
         if isinstance(d, dict) and not self.group_flow_ref_free:
             d.pop("group_flow_ref_free", None)
+        if isinstance(d, dict) and not self.group_flow_exclude:
+            d.pop("group_flow_exclude", None)
         if isinstance(d, dict) and self.group_flow_dissent_keep_form:
             d.pop("group_flow_dissent_keep_form", None)
         if isinstance(d, dict) and self.group_flow_same_writing_keep == list(_SAME_WRITING_KEEP):
@@ -1793,6 +1799,13 @@ class SeedAdmitParams(BaseModel):
             if not self.solo_adapt_fingerprint:
                 object.__setattr__(self, "solo_adapt_fingerprint",
                                    corpus_fingerprint([self.solo_adapt_profile]) if self.solo_adapt_profile else "missing")
+        if self.group_flow_exclude:
+            from ..groups.registry import FLOW_GROUPS as _FG, flow_names as _fn
+            _ex = _fn(self.group_flow_exclude)
+            if bad := [g for g in _ex if g not in _FG]:
+                raise ValueError(f"seed_admit.group_flow_exclude 有不认识的组：{bad}")
+            object.__setattr__(self, "group_flow_exclude", list(_ex))
+            object.__setattr__(self, "group_flow", tuple(g for g in self.group_flow if g not in _ex))
         if self.group_flow:
             from ..groups.flow import check_groups
             check_groups(self.group_flow)
