@@ -165,6 +165,27 @@ def web_votes(ws: Path, text_id: str, rev: str | None) -> Counter:
 SITE = "https://www.openguji.com"
 
 
+def _get_json_retry(req, tries: int = 5) -> dict:
+    """读网站票的接口时不时断连（11-16 实测 ConnectionResetError 多次），退避重试，别让一次断连挡住出单。"""
+    import time
+    import urllib.error
+    import urllib.request
+    for i in range(tries):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code < 500 or i == tries - 1:
+                raise
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            if i == tries - 1:
+                raise
+        wait = 2 ** (i + 1)
+        print(f"  读网站票断连，{wait}s 后重试（{i + 1}/{tries - 1}）", file=sys.stderr)
+        time.sleep(wait)
+    raise AssertionError("unreachable")
+
+
 def _fetch_votes(q: dict, tok: str) -> list[dict]:
     import urllib.parse
     import urllib.request
@@ -173,8 +194,7 @@ def _fetch_votes(q: dict, tok: str) -> list[dict]:
         qq = {**q, "limit": "256", **({"cursor": cursor} if cursor else {})}
         req = urllib.request.Request(f"{SITE}/api/cellreview?{urllib.parse.urlencode(qq)}",
                                      headers={"Authorization": f"Bearer {tok}", "User-Agent": "open-guji-cv/republish"})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            d = json.load(r)
+        d = _get_json_retry(req)
         if not d.get("success"):
             sys.exit(f"✗ 读网站票失败：{d.get('error')}")
         items += d.get("items") or []
@@ -968,6 +988,10 @@ def cmd_push(a) -> int:
     elif plan.get("sprites"):
         todo.append("⚠ 这次出了雪碧图目录，但单子里没有 sprites[]：网站取不到图（见 sprite_pub.py）")
     print("\n还要做：\n" + "\n".join(f"- {t}" for t in todo))
+    if not a.sync:
+        print(f"\n⚠⚠ 没加 --sync：新单 {a.rev} 只在本机数据目录，中心库和网站还是旧单。"
+              f"现在跑 guji db sync -w {ws}，再触发 proofing-sync，并用 {SITE}/api/pending?book=<text_id>&vol=<章> 核对 rev"
+              "（11-16 019-r10 就是这样漏发的）", file=sys.stderr)
     return 0
 
 
