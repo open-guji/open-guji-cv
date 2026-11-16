@@ -9,6 +9,10 @@
 
 - PATCH：seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_rank`（史記，Sheldon 11-15 定 圗兾凢来 不并码位归一、改流水线放行；SJ 请求，A22）：三通道本要以 `cand_variant` 拦、`variant_norm` 也不放时再问书仓一次，钩子拿到异体在现字（名次 0）与库前 topk 名的名次，返回与放行字语义同的字就放，证据记 `lane.variant_rank=hook`、`variant_from`、`variant_ranks`。缺省 None 不调：殿本 vol28 16 页、全唐文 020 16 页 seed_admit 逐字节同，code_equiv 已登记 `_VR_HOOK_1116`、指纹不变。史記书仓覆盖了 follow_ref_hooks，照常过期；史記走 patch 线的话要把本改动 cherry-pick 到 patch 线并按本线哈希补登。
 
+## [0.7.45] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.44 + #1580 移植（A22 分支 a22/semantic-extra-0744 9d9f43b），PATCH，不含 dev 线 v0.7.40／v0.7.42。tag 在 main 合并提交（PR #1581）；dev 以 `-s ours` 合回、树不变，只追加 code_equiv 本线哈希登记 `_SEM_EXTRA_0744`（seed_admit be2ed592→ffceeab9）。
+
 ## [0.7.44] - 2026-11-16
 
 - 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.43 + #1576（A22 移植分支 f5f1a97），PATCH，不含 dev 线 v0.7.40／v0.7.42。tag 在 main 合并提交（PR #1577）；dev 以 `-s ours` 合回、树不变，只追加 code_equiv 本线哈希登记 `_FR_KEEP_VR_0743`（seed_admit 1f3cc925→be2ed592）。
