@@ -395,6 +395,11 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "_corpus_text": ("steps.align_ref", "_corpus_text"),
     "BookSpec": ("core.book", "BookSpec"),
     "FORBIDDEN_IN_OVERRIDE": ("core.book_config", "FORBIDDEN_IN_OVERRIDE"),
+    # 生僻字候选按异体族展开（manager 审阅卡读取时用，2026-11-16）：不进 code_deps，不动指纹
+    "hanzi_shared": ("hanzi.db", "shared"),
+    "is_simplified": ("clustering.charset_spec", "is_simplified"),
+    "expand_family": ("clustering.rare_family", "expand_family"),
+    "family_hit": ("clustering.rare_family", "family_hit"),
 }
 
 __all__ = sorted(_EXPORTS)
