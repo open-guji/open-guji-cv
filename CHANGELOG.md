@@ -5,6 +5,10 @@
 
 - PATCH：seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_rank`（史記，Sheldon 11-15 定 圗兾凢来 不并码位归一、改流水线放行；SJ 请求，A22）：三通道本要以 `cand_variant` 拦、`variant_norm` 也不放时再问书仓一次，钩子拿到异体在现字（名次 0）与库前 topk 名的名次，返回与放行字语义同的字就放，证据记 `lane.variant_rank=hook`、`variant_from`、`variant_ranks`。缺省 None 不调：殿本 vol28 16 页、全唐文 020 16 页 seed_admit 逐字节同，code_equiv 已登记 `_VR_HOOK_1116`、指纹不变。史記书仓覆盖了 follow_ref_hooks，照常过期；史記走 patch 线的话要把本改动 cherry-pick 到 patch 线并按本线哈希补登。
 
+## [0.7.43] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.41 + #1573（`follow_ref_hooks.variant_rank` 钩子），PATCH，不含 dev 线 v0.7.40／v0.7.42。tag 在 main 合并提交（PR #1574）；dev 以 `-s ours` 合回、树不变，只追加 code_equiv 本线哈希登记 `_VR_HOOK_0743`（seed_admit 1f3cc925→ebd54cc7、follow_ref_hooks a73e9aaf→76f1e160）。
+
 ## [0.7.42] - 2026-11-15
 
 - 发版说明（A31 11-15，dev 线）：dev 头 `0cb4065`＝v0.7.40 + #1565（`sb-否決-卜-史記` 补 4 条），PATCH。只改 `config/groups/sb/rules.yaml`，代码指纹与 v0.7.40 同。**钉 corpus 的册（殿本、全唐文）改钉前别升含 #1558 的版本（v0.7.40 起）**：先改钉底库 **b27**（Ops 出，rev 1011430；＝b24／b25 只改 sb/rules.yaml，含 #1558＋#1565；**不是 b26**，b26 是史記 patch 线的底库），`guji corpus pin --same-output-as <旧总号> --note '<证据>'`（配 manager ≥0.4.50），五步不过期；还钉 b24/b25 的册在本版上报 CorpusDrift。证据：A22/A24 回测 #1558 殿本五份整理本 0 变化、全唐文 kanripo 23530 处 0 变化；#1565 殿本、全唐文 0 变化。史記两次共 23 处卜判十→弃权。史記走 patch 线 v0.7.41。
