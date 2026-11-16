@@ -124,3 +124,15 @@ def test_median_width_excludes_table_cols(tmp_path):
     wide = {c.col for c, w in zip(gm0.columns, gm0.column_widths) if w >= 90}     # 正常宽的正文列
     assert any(f.startswith("column_width：") for c in gm0.columns if c.col in wide for f in c.flags)
     assert not any(f.startswith("column_width：") for c in gm.columns if c.col in wide for f in c.flags)
+
+
+def test_single_text_column_page_not_rejected(tmp_path):
+    """正文只剩一列（史記 11:193 卷末考證页）：门槛下限 1，不整页拒（SJ 11-16 实测）。"""
+    gm = _gate(tmp_path, table_cols={PAGE: ["1-8"]})["gate_manifest"]
+    assert gm.admitted and gm.period
+    assert [c.col for c in gm.columns if c.admitted] == [9]
+
+
+def test_conflict_message_shows_table_cols_values():
+    with pytest.raises(ValueError, match=r"\{9: \[2\]\}"):
+        make_book(page_kinds={"table_cols": {9: [1]}}, params={"column_gate": {"table_cols": {9: [2]}}})

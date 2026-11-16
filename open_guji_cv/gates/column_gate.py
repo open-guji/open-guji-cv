@@ -59,10 +59,11 @@ from ..products.kinds.gate import GateColumn, GateManifest
 from ..impl.keben import jiazhu_split
 from ..impl.keben.column_pair_merge import has_pair_merged
 
-#: 半文半表页点名的表格列的拒因前缀（`ColumnGateParams.table_cols`）；下游统计按它把这些列记成表格列
-TABLE_COLUMN_REJECT = "table_column"
 from ..core.book import _expand_pages
 from ..impl.keben.row_boundaries import estimate_shared_period, row_ink_projection
+
+#: 半文半表页点名的表格列的拒因前缀（`ColumnGateParams.table_cols`）；下游统计按它把这些列记成表格列
+TABLE_COLUMN_REJECT = "table_column"
 
 
 def jiazhu_column_frac(cleaned: np.ndarray, band: tuple[float, float],
@@ -200,9 +201,9 @@ class ColumnGateParams(BaseModel):
     #: `period_prior` 的书不受影响。
     period_prior_tol: float = 0.10
     #: **半文半表页按列标表**（GUJI-772，2026-11-16，史記年表卷首／卷末页一半表一半正文）：`{页: [列号…]}`，列号同
-    #: 产物 col（右起第几列，从 1 起），写法同页号（`["1-5"]`、`[6, 7]`）。点名的列按版式事实拒收（拒因前缀
+    #: 产物 col（图上右起第几列，从 1 起；产物 quad／box 是右上原点，x 小的列在图右边），写法同页号（`["1-5"]`、`[6, 7]`）。点名的列按版式事实拒收（拒因前缀
     #: `table_column`，同 L0c 版心一路：不参与页级周期与列宽中位，Step3 出 ok=False 不切，对位、定字跳过），
-    #: 页型仍是正文，其余列照常切。页级周期门槛扣掉表格列数（正文只剩 1 列的页仍整页拒，要配 `period_prior_pages`）。
+    #: 页型仍是正文，其余列照常切。页级周期门槛扣掉表格列数、下限 1 列（正文只剩一列也照估；估不出来走书级 `period_prior` 兜底，要可靠就点名 `period_prior_pages`）。
     #: 产物口径：`column_widths` 仍记全部列，`median_width` 只按正文列算。册配置里写 `page_kinds: {table_cols: …}`
     #: （`core/page_kinds.py` 翻成本参数）。缺省空，空时不进参数 dump，产物与加字段前逐字节相同。
     table_cols: dict[int, list[int | str]] = {}
@@ -333,9 +334,9 @@ class ColumnGateStep(Step):
         period_from_prior = False
         if not page_reject:
             need = max(1, len(cols) // 2) if p.count_mode == "detected" else max(2, expected // 2)
-            if table_cols:     # 半文半表页：门槛扣掉表格列数 k（k=0 即上一行，逐位照旧）
+            if table_cols:     # 半文半表页：门槛扣掉表格列数 k，下限 1（正文只剩一列也照估，估不出用 period_prior 兜底）
                 k = len(table_cols & {c.col for c in cols})
-                need = max(1, (len(cols) - k) // 2) if p.count_mode == "detected" else max(2, (expected - k) // 2)
+                need = max(1, ((len(cols) if p.count_mode == "detected" else expected) - k) // 2)
             if len(projs) < need:
                 page_reject.append(
                     f"period_fallback：几何正常的列只剩 {len(projs)} 条，不足以定页级先验")
