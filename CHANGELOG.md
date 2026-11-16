@@ -6,6 +6,12 @@
 ## [未发版]
 
 
+## [0.7.45] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.44 + #1580 移植（A22 分支 a22/semantic-extra-0744 9d9f43b，dev 上 a57a3b7），PATCH，**不含** dev 线 v0.7.40／v0.7.42 及 dev 上其他改动。code_equiv 按本线哈希登记 `_SEM_EXTRA_0744`（seed_admit be2ed592→ffceeab9；缺省空的册不过期，逐字节同证据在 dev 上取得）。史記书配置写 `semantic_extra: 圗=圖` 的册照常过期。
+- PATCH（史記 patch 线移植）：seed_admit 书级参数 `semantic_extra`（史記配 `圗=圖`，让异体护栏认出 圗、走 variant_rank 写刻形；SJ 11-16，A22）。缺省空不进 dump；本线哈希已登 `_SEM_EXTRA_0744`。
+
+
 ## [0.7.44] - 2026-11-16
 
 - 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.43 + #1576（A22 移植分支 a22/follow-ref-keep-vr-0743 f5f1a97，dev 上 1f952e4），PATCH，**不含** dev 线 v0.7.40／v0.7.42 及 dev 上其他改动。code_equiv 按本线哈希登记 `_FR_KEEP_VR_0743`（seed_admit 1f3cc925→be2ed592；钩子缺省 None 的册不过期，逐字节同证据在 dev 上取得）。史記书仓开了 variant_rank，照常过期（r71 用）。

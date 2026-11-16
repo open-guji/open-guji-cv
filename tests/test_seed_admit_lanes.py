@@ -823,3 +823,21 @@ def test_variant_rank_hook_after_variant_norm():
 def test_variant_rank_hook_must_stay_same_semantic():
     n, r = _ranked(lambda **kw: "天")
     assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+
+# ── 书级 semantic_extra（2026-11-16，史記：VariantMap 没有 圗／圖，异体护栏认不出、variant_rank 不起作用）──────
+
+def test_semantic_extra_default_empty_not_dumped():
+    assert "semantic_extra" not in SeedAdmitParams(db_path="x").model_dump()
+    assert SeedAdmitParams(db_path="x", semantic_extra="圗=圖").model_dump()["semantic_extra"] == "圗=圖"
+
+
+def test_semantic_extra_map():
+    import pytest
+
+    from open_guji_cv.steps.seed_admit import _ExtraSemanticMap, _parse_semantic_extra
+    vm = _ExtraSemanticMap(_vm(), _parse_semantic_extra("圗=圖, 兾=冀"))
+    assert vm.semantic("圗") == vm.semantic("圖") and vm.semantic("兾") == vm.semantic("冀")
+    assert vm.semantic("天") == "天"
+    with pytest.raises(ValueError):
+        _parse_semantic_extra("圗圖")
