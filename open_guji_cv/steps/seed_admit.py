@@ -2675,6 +2675,7 @@ class SeedAdmitStep(Step):
                                         if (p.lane_witness3 or p.lane_coord) else None,
                                         canon=ctx.book.canonical_char if ctx.book.codepoints else None,
                                         variant_hook=_lane_variant_hook(ctx),
+                                        rank_hook=_lane_variant_hook(ctx, "variant_rank"),
                                         knn_veto=(_witness3_knn_veto_fn(p, ctx, page)
                                                   if p.witness3_knn_veto and p.group_flow_near_knn else None),
                                         lib_n=(_keben_counts(p.db_path) or None)
@@ -4785,11 +4786,12 @@ def _blind_ref_behind(m, co: str, top_cov: float, gap: float) -> bool:
 
 def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict,
                        vmap, witnesses_fn, canon=None, lib_n: dict | None = None, knn_veto=None,
-                       variant_hook=None) -> int:
+                       variant_hook=None, rank_hook=None) -> int:
     """待审补放三通道（`lane_witness3`／`lane_coord`／`lane_seal`，overview#433）。→ 放行格数。
 
     `variant_hook`：书级钩子 `follow_ref_hooks.variant_norm`（缺省 None＝不调），`lane_variant_guard` 内建例外都不放时
-    最后问一次，见该模块。
+    最后问一次，见该模块。`rank_hook`：书级钩子 `follow_ref_hooks.variant_rank`（缺省 None＝不调），`variant_hook`
+    也不放时再问一次。
     只升不降：只碰 admit=False、非人裁、不在排除名单上的格；己/已/巳 一族一律跳过。
     `witnesses_fn()` → 证人列表（只在 R1/R4 真要看证人时才调，装载与锚定都是懒的）。"""
     from pathlib import Path
@@ -5003,6 +5005,11 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                         vn := variant_hook(lane=name, char=char, form=vf, canon=canon, lib=lib)) and same(vn, char):
                     char = vn                               # 书级钩子：两形本书已归一（史記，follow_ref_hooks.variant_norm）
                     lev = {**lev, "variant_norm": "hook", "variant_from": vf}
+                elif vf is not None and rank_hook is not None and (
+                        vr := _lane_variant_rank(rank_hook, name, char, rec.char, m, p.lane_variant_topk, variant_pair, lib)
+                ) and same(vr[0], char):
+                    char = vr[0]                            # 书级钩子：异体只排库后几名（史記，follow_ref_hooks.variant_rank）
+                    lev = {**lev, "variant_rank": "hook", "variant_from": vf, "variant_ranks": vr[1]}
                 elif vf is not None:    # 图上可能是刻本异体：别把它改成通用字（#433）
                     rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "cand_variant", "form": vf, "char": char}}
                     continue
@@ -6747,12 +6754,25 @@ def _follow_ref_rival_hook(ctx: RunContext):
     return getattr(importlib.import_module(resolve(ctx.book, _FOLLOW_REF_HOOKS)), "rival_skip", None)
 
 
-def _lane_variant_hook(ctx: RunContext):
-    """书级钩子 `impl/keben/follow_ref_hooks.variant_norm`（书仓 `code/` 覆盖才有；缺省 None）。
-    书仓模块没写这个名字也当 None（11-13 前写的覆盖模块只有 rival_skip）。"""
+def _lane_variant_hook(ctx: RunContext, name: str = "variant_norm"):
+    """书级钩子 `impl/keben/follow_ref_hooks.<name>`（`variant_norm`／`variant_rank`；书仓 `code/` 覆盖才有；缺省 None）。
+    书仓模块没写这个名字也当 None（11-13 前写的覆盖模块只有 rival_skip，11-16 前的没有 variant_rank）。"""
     import importlib
     from ..core.seg_set import resolve
-    return getattr(importlib.import_module(resolve(ctx.book, _FOLLOW_REF_HOOKS)), "variant_norm", None)
+    return getattr(importlib.import_module(resolve(ctx.book, _FOLLOW_REF_HOOKS)), name, None)
+
+
+def _lane_variant_rank(hook, lane: str, char: str, cur: str | None, m, topk: int, variant_pair,
+                       lib: str | None) -> tuple[str, list] | None:
+    """调书级钩子 `variant_rank`：把 `char` 的异体在现字（名次 0）与库前 `topk` 名（名次 1…）里各排第几告诉它。
+    → (放行字, [[名次, 异体, cov|None], …])；钩子不放 → None。"""
+    cands = [(c, round(float(v), 4)) for c, v in ((m.candidates or [])[:max(topk, 0)] if m else [])]
+    forms = ([[0, cur, None]] if cur and variant_pair(cur, char) else []) + [
+        [i, c, v] for i, (c, v) in enumerate(cands, 1) if variant_pair(c, char)]
+    if not forms:
+        return None
+    vr = hook(lane=lane, char=char, forms=tuple(tuple(f) for f in forms), cur=cur, cands=tuple(cands), lib=lib)
+    return (vr, forms) if vr else None
 
 
 def _edge_pair_excluded(a: str, b: str) -> bool:
