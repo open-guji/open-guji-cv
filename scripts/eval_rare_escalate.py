@@ -52,7 +52,7 @@ def _prime(cnn, *charsets):
         cnn._emb_cache_put(cs, mat.astype("float32"), list(names))
 
 
-def run_config(imgs, escalate, threshold, k):
+def run_config(imgs, escalate, threshold, k, allow=None):
     """临时换升级档规格跑一遍 `rare_for_batch`，返回（每格候选字表, 基集∪升级档字集, 升级率）。"""
     from open_guji_cv.clustering import charset_spec as CS
     from open_guji_cv.clustering import rare_panel as RP
@@ -63,6 +63,8 @@ def run_config(imgs, escalate, threshold, k):
     def patched(book, edition="keben"):
         s = orig(book, edition)
         s["escalate"], s["escalate_threshold"] = escalate, threshold
+        if allow:
+            s["allow"] = allow
         return s
 
     # 冻结集的裁图已经是归一化好的 64² 图（白＝墨），不能再过一遍 normalize_patch（与 eval_ref_verify 同口径）
@@ -105,6 +107,9 @@ def main() -> int:
     ap.add_argument("--cls", action="append", default=None,
                     help="分类头进融合的方式，可多次：gate（现行软门控，缺省）、off（权重 0）、fixed:<w>（固定权重）、"
                          "hard（emb 首位在类外就关，topm=1）、hi:<w>（软门控但上限降到 w）")
+    ap.add_argument("--allow", default=None,
+                    help="临时换否决档（font.charset.allow）：none＝不挡简体；缺省照 edition（刻本 no-simplified）")
+    ap.add_argument("--no-keep", action="store_true", help="族展开不挡简体（缺省挡，与 no-simplified 同口径）")
     ap.add_argument("--source", choices=["rare", "expected"], default="rare",
                     help="rare＝rare.jsonl（送审难格）；expected＝expected.json 的全部实例（001/002 是整页所有格）")
     ap.add_argument("--limit", type=int, default=None)
@@ -164,8 +169,8 @@ def main() -> int:
                               for t in (a.threshold or [0.85, 0.95]) for m in cls_modes]:
             if True:
                 set_cls(mode)
-                cands, reach, rate = run_config(imgs, esc, th, a.k)
-                extra = [[c for c, _ in expand_family(cs, a.top_m, a.cap, keep=lambda c: not is_simplified(c))]
+                cands, reach, rate = run_config(imgs, esc, th, a.k, a.allow)
+                extra = [[c for c, _ in expand_family(cs, a.top_m, a.cap, keep=None if a.no_keep else (lambda c: not is_simplified(c)))]
                          for cs in cands]
                 key = f"{esc}@{th}" + ("" if mode == "gate" else f"/cls={mode}")
                 rep[key] = {"escalate_rate": rate}
