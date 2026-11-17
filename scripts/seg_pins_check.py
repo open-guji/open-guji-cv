@@ -252,7 +252,6 @@ def _geometry(lines: list[str], book: str, store, cache, cols) -> tuple[int, int
 
     from open_guji_cv.core.spec import column_key, page_key
     from open_guji_cv.eval import seg_screen as ss
-    from open_guji_cv.feedback import pins_check as pc
     from open_guji_cv.seg.cut_select import get_judge
     from open_guji_cv.utils.image_io import imread
     lines += ["## 一b、钉子列几何：压墨、一格跨两字", ""]
@@ -276,7 +275,7 @@ def _geometry(lines: list[str], book: str, store, cache, cols) -> tuple[int, int
             lines.append(f"- {book}:{pg}:{col} 没有列图，几何没查")
             nh += 1
             continue
-        for t in pc.pin_geometry(gray, cc, ss.page_pitch(pcells), judge=judge):
+        for t in ss.pin_geometry(gray, cc, ss.page_pitch(pcells), judge=judge):
             lines.append(f"- {book}:{pg}:{col} {t['note']}{'' if t['block'] else '（提示）'}")
             nb += t["block"]
             nh += not t["block"]

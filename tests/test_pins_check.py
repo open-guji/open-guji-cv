@@ -1,6 +1,7 @@
 """推钉子预检（`feedback/pins_check.py`，A22 F3）：纯函数部分，数据自造。"""
 from types import SimpleNamespace
 
+from open_guji_cv.eval import seg_screen as ss
 from open_guji_cv.feedback import pins_check as pc
 from open_guji_cv.products.kinds.cells import CellRec, ColumnCells, PageCells
 from open_guji_cv.products.kinds.chars import CharRec, ColumnChars
@@ -219,7 +220,7 @@ def test_pin_geometry_two_chars_and_ink():
     g[320:436, 40:50] = 0                     # 下一格字竖笔尾被 400 处的格线劈了
     g[440:490, 30:70] = 0
     cc = _geo_col([(1, 100, 300), (2, 300, 400), (3, 400, 500)])
-    out = pc.pin_geometry(g, cc, 100.0)
+    out = ss.pin_geometry(g, cc, 100.0)
     kinds = {(t["kind"], t["slot"]) for t in out}
     assert ("two", "1") in kinds and ("ink", "2|3") in kinds
     two = next(t for t in out if t["kind"] == "two")
@@ -229,7 +230,7 @@ def test_pin_geometry_two_chars_and_ink():
     class J:
         def assess(self, *a, **k):
             return [0.9, 0.99], [0, 0]
-    ink_j = next(t for t in pc.pin_geometry(g, cc, 100.0, judge=J()) if t["kind"] == "ink")
+    ink_j = next(t for t in ss.pin_geometry(g, cc, 100.0, judge=J()) if t["kind"] == "ink")
     assert ink_j["block"] and ink_j["level"] == "中"
 
 
@@ -238,4 +239,4 @@ def test_pin_geometry_clean_column():
     g = np.full((400, 100), 255, np.uint8)
     for y in (110, 210, 310):
         g[y:y + 80, 30:70] = 0
-    assert pc.pin_geometry(g, _geo_col([(1, 100, 200), (2, 200, 300), (3, 300, 400)]), 100.0) == []
+    assert ss.pin_geometry(g, _geo_col([(1, 100, 200), (2, 200, 300), (3, 300, 400)]), 100.0) == []
