@@ -163,3 +163,73 @@ def test_thin_line_position_guard():
     out = remove_edge_specks(img)
     assert out[59, 60] == 1, "字身中部的细横被误删"
     assert out[60, 115] == 0, "外带的竖界行没删掉"
+
+
+# ── 细线规则的相对笔宽护栏（2026-11-17，全唐文字形库 569 例残图）──────────────
+
+def _huai_like(h=200, w=196):
+    """仿全唐文「懷」的紧框图块：右边一个厚实的主体，左边一根 7px 粗、几乎通高、
+    自成连通体的竖（忄 的竖）。图块 200px 时旧的绝对上限是 8.8px。"""
+    img = np.zeros((h, w), dtype=np.uint8)
+    img[10:190, 70:80] = 1                     # 主体：几根 8～10px 的笔画连成一块
+    img[10:20, 70:190] = 1
+    img[95:104, 70:190] = 1
+    img[180:190, 70:190] = 1
+    img[10:190, 180:190] = 1
+    img[6:192, 22:29] = 1                      # 忄 的竖：7px 粗，落在左外带
+    return img
+
+
+def test_thin_radical_stroke_is_kept():
+    """与字身笔画同一量级的偏旁竖不是界行（懷 的忄，v2:009:95:7:11 等）。"""
+    from open_guji_cv.clustering.normalize import remove_edge_specks
+    img = _huai_like()
+    out = remove_edge_specks(img)
+    assert out[100, 25] == 1, "忄 的竖被当界行删了"
+    # 关掉护栏＝旧行为，竖会被删——证明这条测试测的就是护栏
+    old = remove_edge_specks(img, line_stroke_ratio=None)
+    assert old[100, 25] == 0
+
+
+def test_bottom_hbar_of_tight_crop_is_kept():
+    """宣／望 的底横：7px 粗、贴底、与上面不相连，旧上限下被删（v2:009:145:8:17）。"""
+    from open_guji_cv.clustering.normalize import remove_edge_specks
+    img = np.zeros((181, 200), dtype=np.uint8)
+    img[5:15, 20:180] = 1                      # 宝盖
+    img[5:60, 20:30] = 1
+    img[5:60, 170:180] = 1
+    img[160:167, 4:196] = 1                    # 底横，自成连通体
+    out = remove_edge_specks(img)
+    assert out[163, 100] == 1, "底横被当版框删了"
+    assert remove_edge_specks(img, line_stroke_ratio=None)[163, 100] == 0
+
+
+def test_real_frame_line_still_removed_at_fine_scale():
+    """真界行照删：200px 图块里一根 3px、贴边通高的线，主体笔画 9px。"""
+    from open_guji_cv.clustering.normalize import remove_edge_specks
+    img = _huai_like()
+    img[0:200, 193:196] = 1                    # 贴右缘的界行
+    out = remove_edge_specks(img)
+    assert out[100, 194] == 0, "界行没删掉"
+    assert out[100, 25] == 1
+
+
+def test_stroke_width_px():
+    from open_guji_cv.clustering.normalize import stroke_width_px
+    img = np.zeros((60, 60), dtype=np.uint8)
+    img[10:50, 20:28] = 1                      # 8px 粗的竖
+    img[28:31, 0:60] = 1                       # 3px 的细线，面积小，拉不动中位数
+    assert stroke_width_px(img) == 8.0
+    assert stroke_width_px(np.zeros((8, 8), dtype=np.uint8)) == 0.0
+
+
+def test_inner_pad_debris_knob(monkeypatch):
+    """`PAD_DEBRIS_INNER_AREA_RATIO`：不贴边的小块另设上限（缺省不开）。"""
+    from open_guji_cv.clustering import normalize as N
+    img = _huai_like()
+    img[60:100, 2:14] = 1                      # 忄 的左点：离左缘 2px，不贴边；面积约为主体的 7%
+    assert N.remove_edge_specks(img)[80, 8] == 0          # 缺省：当 padding 带碎屑删
+    monkeypatch.setattr(N, "PAD_DEBRIS_INNER_AREA_RATIO", 0.05)
+    assert N.remove_edge_specks(img)[80, 8] == 1
+    img[60:100, 0:14] = 1                      # 贴到左缘：照旧按 0.25 删
+    assert N.remove_edge_specks(img)[80, 8] == 0
