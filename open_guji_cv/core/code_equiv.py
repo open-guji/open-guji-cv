@@ -372,6 +372,7 @@ _GLYPH_LINE_1117 = ("史記 r79 ①类 cut_glyph_line（row_segment 书级参数
                     "scripts/code_equiv.py check，SJ 切分线 2026-11-17")
 _R78_0759 = (_R78_1117 + "。史記 patch 线移植（v0.7.57 + #1632 → v0.7.59）：同一改动原样 cherry-pick（segment_column 只加三个开关，本线无 grid_adjust 等钩子），哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
 _FREE_SEAM_0757 = (_FREE_SEAM_1117 + "。史記 patch 线移植（v0.7.55 + #1624 → v0.7.57）：同一改动原样 cherry-pick（segment_column 只加 cut_free_seam，本线无 grid_adjust 等钩子），哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
+_GLYPH_LINE_0761 = (_GLYPH_LINE_1117 + "。史記 patch 线移植（v0.7.59 + #1638 → v0.7.61）：同一改动原样 cherry-pick（segment_column 只加 cut_glyph_line，本线无 grid_adjust 等钩子），哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
 _GAP_GUARD_0750 = (_GAP_GUARD_1117 + "。史記 patch 线移植（v0.7.50 + #1606 → v0.7.51）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
@@ -1502,6 +1503,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='8055bbc38b299d870a977f9081cc33745ccba45c5e9c7bf4d486ddf698e36299',
           old='02c5d8e0c8e15f86ef22bdaa2341e200f0a73c2a3a28330d9f95b78e1c5e3670',
           evidence=_R78_0759),
+    # 史記 r79 cut_glyph_line（缺省关，2026-11-17；patch 线 v0.7.61）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='cb32ff35d79cf148af83971bdff7400ea28690c64bef24661596fe2f1999b08a',
+          old='a57cd50da1aaaa05fe2e50ead5a3dd96ffcdca2160449ef429870929ef211c8d',
+          evidence=_GLYPH_LINE_0761),
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='158f43277a581f2b5f46b24d216d24516a6cc369ba1210a3a316f92bb2428c2c',
+          old='8055bbc38b299d870a977f9081cc33745ccba45c5e9c7bf4d486ddf698e36299',
+          evidence=_GLYPH_LINE_0761),
     # grid_end_fit 书级开关（缺省关，2026-11-09，殿本 vol28 列尾下溢）
     Equiv(module="open_guji_cv.steps.row_segment",
           new="6a3617931b93c706e43d43ccd2e1b9f5d63e1307343c424637cb0ecb77b32258",
