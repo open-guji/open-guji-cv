@@ -101,3 +101,36 @@ def test_params_dump_unchanged_when_off(tmp_path):
     from open_guji_cv.steps.glyph_match import GlyphMatchParams
     d = GlyphMatchParams(db_path=str(tmp_path / "x.db"), db_fingerprint="f").model_dump()
     assert "stages" not in d and "stages_sha" not in d
+
+
+def test_stage_knn_decides_only_listed_pairs(monkeypatch, tmp_path):
+    """5a.3：近邻给的是首位字、距离比够、字对在书级名单里才定字；别的只出证据。"""
+    from open_guji_cv.groups import near_knn, rr_shape
+    p = tmp_path / "nk.json"
+    p.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(near_knn, "load", lambda path: {})
+    monkeypatch.setattr(rr_shape, "features", lambda g: (np.zeros(4, np.float32),))
+    out = {"char": "其", "why": "agree", "votes": 7, "ratio": 0.3, "cands": ["其", "具"]}
+    monkeypatch.setattr(near_knn, "judge_feat", lambda f, m, cands, exclude=None: dict(out))
+    inp = GS.StageInput("c", "其", (), [("其", 0.99)], np.zeros((8, 8), np.uint8), ("具",))
+
+    def cfg(final, ratio=0.55):
+        return GS.StagesConfig(RouteConfig(), knn=GS.KnnConfig(str(p), frozenset(final), ratio))
+    ev, ch, why = GS.stage_knn(inp, cfg(["其具"]), None)
+    assert (ch, why) == ("其", "near_knn") and ev["knn3"]["ratio"] == 0.3
+    assert GS.stage_knn(inp, cfg([]), None)[1] is None                    # 名单空：只出证据
+    assert GS.stage_knn(inp, cfg(["中申"]), None)[1] is None              # 字对不在名单
+    assert GS.stage_knn(inp, cfg(["其具"], 0.25), None)[1] is None        # 距离比不够
+    out["char"] = "具"
+    assert GS.stage_knn(inp, cfg(["其具"]), None)[1] is None              # 近邻与 5a 首位不一致：不定
+    assert GS.stage_knn(inp, GS.StagesConfig(RouteConfig()), None) == ({}, None, None)   # 没开
+
+
+def test_knn_config_and_fingerprint(tmp_path):
+    c = GS.StagesConfig.from_any({"knn": {"path": str(tmp_path / "x.json"), "final": ["其具"], "ratio_max": 0.5}})
+    assert c.knn.final == frozenset({"其具"}) and c.knn.ratio_max == 0.5
+    assert GS.StagesConfig.from_any(True).knn is None
+    with pytest.raises(ValueError):
+        GS.StagesConfig.from_any({"knn": {"oops": 1}})
+    a, b = GS.stages_fingerprint(True), GS.stages_fingerprint({"knn": {"path": str(tmp_path / "x.json")}})
+    assert b.startswith(a) and ":nk" in b and ":nk" not in a
