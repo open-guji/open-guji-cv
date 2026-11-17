@@ -174,7 +174,11 @@ class Stages:
         if r.reason == "weak":
             if r.rival is not None:
                 ev["rival"] = [r.rival[0], round(r.rival[1], 4)]
-                cands[r.rival[0]] = max(cands.get(r.rival[0], 0.0), r.rival[1])
+                # 对手只是「带进候选」，不许排到首位字前面：候选里的分可能是融合分（`sim_model.fuse`），
+                # 对手的分是纯 CNN 分，两个尺度直接比会把对手顶成首位（全唐文 020 整册对比：碑→裨、遽→蘧）。
+                if r.rival[0] not in cands:
+                    best = max(cands.values(), default=r.rival[1])
+                    cands[r.rival[0]] = round(min(r.rival[1], best - 1e-4), 4)
             return StageOut("unsure", None, "conflict", None, ev, _ranked(cands))
         if r.partners:
             ev["partners"] = list(r.partners)
