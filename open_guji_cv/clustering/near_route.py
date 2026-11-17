@@ -78,7 +78,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -195,6 +195,8 @@ class RouteDecision:
     partners: tuple[str, ...] = ()
     groups: tuple[str, ...] = ()
     """首位字在第 7 步字组注册表里属于哪些组（空＝还没有组，下游没有专门判法）。"""
+    rival: tuple[str, float] | None = None
+    """前 k 名里分最高的别的字及其分（校准后）；`Router.decide` 填，给 weak 格往候选里带对手用。"""
 
 
 def knn_agreement(sims: np.ndarray, chars: np.ndarray, char: str, k: int = 10) -> float:
@@ -263,4 +265,16 @@ class Router:
         if ex:
             sims[ex] = -np.inf
         top, s, lead, knn = evidence(sims, self.chars, self.cfg.k, self.calib)
-        return route(top, lead, knn, self.cfg, s)
+        d = route(top, lead, knn, self.cfg, s)
+        if d.reason != "weak":
+            return d
+        k = min(self.cfg.k, int(np.isfinite(sims).sum()))
+        near = np.argpartition(-sims, k - 1)[:k]
+        near = near[np.argsort(-sims[near], kind="stable")]
+        other = [int(j) for j in near if self.chars[j] != top]
+        if not other:
+            return d
+        rs = float(sims[other[0]])
+        if self.calib is not None:
+            rs = float(np.interp(rs, *self.calib))
+        return replace(d, rival=(str(self.chars[other[0]]), rs))

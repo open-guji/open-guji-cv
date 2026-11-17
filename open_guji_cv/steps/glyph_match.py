@@ -281,8 +281,8 @@ class GlyphMatchParams(BaseModel):
     stages: dict | bool | None = None
     """库匹配之后的分段判定（2026-11-16，`steps.glyph_stages`）：5a.1 形近字组分流、5a.2 起形近字组的字形方法。
     None（缺省）＝不走，不进参数 dump，逐字节不变。要先开 `sim_model`。`{route: {...}, final: [组 id…], shape: true}`：
-    判 same 的格里，首位字落形近字组表（或属于注册字组）、近邻一致度不满的降成 unsure 交后面的步骤；`final` 名单里的组
-    字形方法给了字就在这一步定字。证据落 `MatchRec.stage`。"""
+    判 same 的格里，首位字落形近字组表（或属于注册字组）的降成 unsure、记 `guard=never_match`、对家补进候选；近邻一致度不满的
+    降成 unsure、记 `guard=conflict`；`final` 名单里的组字形方法给了字就在这一步定字。证据与真实来由落 `MatchRec.stage`。"""
     stages_sha: str = ""
     """`stages` 开着时自动填（`glyph_stages.stages_fingerprint`：相关模块代码哈希＋形近字组表＋终判组的模板库）。硬参数。"""
 
@@ -580,10 +580,12 @@ class GlyphMatchStep(Step):
                 # 判决层规则（借库降档 → 共识升档 → 近形升档），顺序与参数见 glyph_rules.RULES
                 d = decide(m, state)
                 verdict, char, matched_id, cov, wmax, via = d.verdict, d.char, d.matched_id, d.cov, d.wmax, d.via
-                guard, stage_ev = m.guard, None
+                guard, stage_ev, cands = m.guard, None, m.candidates
                 if stages is not None:
                     so = stages.apply(verdict, m, normalize_patch(img, is_punct), img, r.id, r.id if p.exclude_self else None)
                     stage_ev = so.stage
+                    if so.candidates is not None:
+                        cands = so.candidates
                     if so.verdict is not None:
                         verdict, guard = so.verdict, so.guard
                         if so.verdict == "same":
@@ -597,7 +599,7 @@ class GlyphMatchStep(Step):
                     verdict=verdict, char=char, matched_id=matched_id,
                     cov=round(float(cov), 4), wmax=round(float(wmax), 2),
                     candidates=[(c, round(float(v), 4))
-                                for c, v in m.candidates[:p.max_candidates]],
+                                for c, v in cands[:p.max_candidates]],
                     guard=guard, n_verified=int(m.n_verified), via=via,
                     cand_variants=cand_variants, near_shape=m.near_shape, stage=stage_ev))
             return ColumnMatch(col=cc.col, ok=True, chars=recs)

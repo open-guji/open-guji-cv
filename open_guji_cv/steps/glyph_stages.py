@@ -4,8 +4,13 @@
 `glyph_match` 的参数 `stages` 开了才走（缺省 None：不 import 本模块，产物与参数指纹逐字节不变）。只处理判决层
 判成 **same** 的格（要放行的格才值得再问一遍；unsure／diff 本来就交后面的步骤）。
 
-    5a.1  `clustering.near_route`：首位字落形近字组表或属于注册字组 → `guard="near_group"`；近邻一致度不满 → `guard="weak_knn"`。
-          两种都把 same 降成 unsure，交后面的步骤（第 7 步按字组判、和整理本互证）。
+    5a.1  `clustering.near_route`：首位字落形近字组表或属于注册字组（near_group）、近邻一致度不满（weak_knn）的格，
+          same 降成 unsure，**落法并进匹配器现有的两种护栏**，后面的步骤不用改就接得住：
+          - near_group → `guard="never_match"`，表里的对家（库里有的）补进候选（分 0.0，同匹配器护栏 1 的做法）。
+            下游照「形近护栏格」走：纯字形单独放行的通道一律不放；整理本与库首位一致的 `match_ref` 照放；
+            第 7 步 `group_flow`、`near_knn`、`nm_5b` 这些专管形近格的判法照常接手；上下文在候选（含对家）里重排。
+          - weak_knn → `guard="conflict"`，前 k 名里分最高的别的字补进候选（同匹配器护栏 2：近邻里有两个字）。
+          `MatchRec.stage.route` 记真实来由（`near_group`／`weak_knn`），统计时和匹配器自己判的护栏分得开。
     5a.2  `groups.shape_stage`：near_group 的格按首位字所属注册组的字形方法判一遍，证据记进 `MatchRec.stage`。
           **只有书级名单 `final` 里的组**、且给字的各组一致时才在这里定字（verdict 回到 same，`via="shape:<组>"`，
           字可以不是 CNN 首位字）。名单缺省空：全部只出证据、不放行。
@@ -109,6 +114,7 @@ class StageOut:
     guard: str | None = None
     via: str | None = None
     stage: dict | None = None         # 落进 `MatchRec.stage` 的证据
+    candidates: list | None = None    # 改了候选时给（对家、对手补进来）；None＝候选不动
 
 
 def stage_shape(inp: StageInput, cfg: StagesConfig, flow_cfg) -> tuple[dict, str | None, str | None]:
@@ -149,7 +155,9 @@ class Stages:
         self.cfg, self._m, self._net, self._embed = cfg, matcher, v.net, embed
         self._rows = [j for j, iid in enumerate(matcher._ids) if not str(iid).startswith(FONT_PREFIX)]
         self._pos = {j: k for k, j in enumerate(self._rows)}
-        E = embed(v.net, [matcher._patches[j] for j in self._rows])
+        # 整库嵌入用精验器已经算好（或它头一次用时也要算）的那份，不另算一遍
+        E = v._lib()[self._rows] if len(self._rows) != len(matcher._ids) else v._lib()
+        self._lib_chars = frozenset(matcher._chars)
         self.router = Router(E, [matcher._chars[j] for j in self._rows], cfg.route, load_calib(v.cfg.path))
         from ..groups.registry import FLOW_GROUPS
         self._flow_cfg = FlowConfig(groups=tuple(FLOW_GROUPS))
@@ -161,11 +169,17 @@ class Stages:
         r = self.router.decide(self._embed(self._net, [norm])[0], ex)
         if r.reason is None or r.reason == "empty":
             return StageOut()
-        ev: dict = {"route": r.reason, "top": r.top, "knn": round(r.knn, 3)}
+        ev: dict = {"route": "weak_knn" if r.reason == "weak" else r.reason, "top": r.top, "knn": round(r.knn, 3)}
+        cands = dict(m.candidates)
         if r.reason == "weak":
-            return StageOut("unsure", None, "weak_knn", None, ev)
+            if r.rival is not None:
+                ev["rival"] = [r.rival[0], round(r.rival[1], 4)]
+                cands[r.rival[0]] = max(cands.get(r.rival[0], 0.0), r.rival[1])
+            return StageOut("unsure", None, "conflict", None, ev, _ranked(cands))
         if r.partners:
             ev["partners"] = list(r.partners)
+            for c in sorted(set(r.partners) & self._lib_chars):
+                cands.setdefault(c, 0.0)
         if r.groups:
             ev["groups"] = list(r.groups)
         if self.cfg.shape and r.groups:
@@ -176,4 +190,9 @@ class Stages:
                 if char is not None:
                     ev["final"] = name
                     return StageOut("same", char, None, f"shape:{gid}", ev)
-        return StageOut("unsure", None, "near_group", None, ev)
+        return StageOut("unsure", None, "never_match", None, ev, _ranked(cands))
+
+
+def _ranked(cands: dict) -> list:
+    """候选按分降序；同分保持插入序（对家按码位序补在后面），产物可复现。"""
+    return sorted(cands.items(), key=lambda t: -t[1])
