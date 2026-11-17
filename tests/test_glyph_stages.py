@@ -77,6 +77,9 @@ def test_apply_routes(monkeypatch):
     o = _stages(RouteDecision("weak", "心", knn=0.8, rival=("必", 0.97))).apply("same", m, norm, norm, "c", None)
     assert (o.verdict, o.guard, o.stage["route"], o.stage["knn"]) == ("unsure", "conflict", "weak_knn", 0.8)
     assert o.candidates == [("心", 0.99), ("必", 0.97)]
+    # 对手的纯 CNN 分比候选里的融合分高时，也不许顶到首位字前面
+    o = _stages(RouteDecision("weak", "心", knn=0.8, rival=("必", 0.995))).apply("same", m, norm, norm, "c", None)
+    assert o.candidates == [("心", 0.99), ("必", 0.9899)]
     monkeypatch.setattr(shape_stage, "judge", _fake_judge({"xb": ("必", "agree")}))
     d = RouteDecision("near_group", "心", partners=("必", "库里没有的字"), groups=("xb",))
     o = _stages(d).apply("same", m, norm, norm, "c", None)                       # 缺省：全部待审，证据带走
