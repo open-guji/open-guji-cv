@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """推格级钉子（manual-cells）前的预检（A22 F3，2026-11-10）。逻辑在 `open_guji_cv/feedback/pins_check.py`。
 
-查五件事，只读、不改本机产物、缓存和中心库：
+查四件事，只读、不改本机产物、缓存和中心库：
   1. 钉子列 vs cell_shrink：钉子每一格都要出同号字格（防史記 r16 那种静默丢字）；
-  1b. 钉子列几何（SJ r76 切分审计，2026-11-17）：压墨（钉子格线劈字，判据同 seg check cut_through，过 U-Net 裁判，
-     强／中档算问题、弱档提示）与一格跨两字（格高 ≥1.2 倍字高、格里墨分两段各高 ≥0.3 倍）；`--geo-hint-only` 降成提示；
   2. 照执行机条件（空字块缓存、不现切）重算涉及页的人裁绑定，标出会让 seed_admit 报 no_patch 的事件
      （史記 04 #1746、06 #1747）和不再采信（review／void）的事件；
   3. 给失锚的老事件出补锚草稿（墨框取**旧切分**那一格的页面框，预演落到新切分哪一格），人看图核过才推；
@@ -46,7 +44,6 @@ def main(argv=None) -> int:
     ap.add_argument("--old-products", help="--no-run 时：旧切分的产物根（出补锚草稿用）")
     ap.add_argument("--pages", help="直接点名页（逗号分隔），盖过按改动算出的页")
     ap.add_argument("--out", default="seg_pins_check_out", help="报告目录")
-    ap.add_argument("--geo-hint-only", action="store_true", help="压墨、一格跨两字只当提示，不计入结论")
     a = ap.parse_args(argv)
     if not a.no_run and not a.items:
         ap.error("沙箱模式要 --items（或加 --no-run）")
@@ -94,16 +91,13 @@ def main(argv=None) -> int:
             print(f"❌ {why}：人裁绑定要读它。先 `guji db sync -w <工作区>`（或 db pull）拉字形库再跑。", file=sys.stderr)
             return 2
 
-    from open_guji_cv.products.cache import ImageCache
-    cache = ImageCache()
     if a.no_run:
         store = ProductStore()
         old_store = ProductStore(Path(a.old_products)) if a.old_products else None
     else:
         lines.append(f"- 沙箱：`{tmp}`（从 row_segment 跑到 cell_shrink）")
         try:
-            store, sb_cache, rep = pc.sandbox_rerun(book, pages, tmp / "sandbox", new) if pages else (ProductStore(), None, None)
-            cache = sb_cache or cache
+            store, _cache, rep = pc.sandbox_rerun(book, pages, tmp / "sandbox", new) if pages else (ProductStore(), None, None)
         except pc.SandboxNotReady as e:
             print(f"❌ {e}", file=sys.stderr)
             return 2
@@ -128,10 +122,6 @@ def main(argv=None) -> int:
             n1 += 1
     lines += [f"- 共 {n1} 处问题" if n1 else "- 全部一致", ""]
     bad |= n1 > 0
-
-    # 1b. 钉子列几何：压墨、一格跨两字
-    nb, nh = _geometry(lines, book, store, cache, cols)
-    bad |= nb > 0 and not a.geo_hint_only
 
     # 2. 模拟执行机绑定
     rows = pc.simulate_bindings(book, pages, tmp / "exec", store=store) if pages else {}
@@ -244,43 +234,6 @@ def main(argv=None) -> int:
     (out / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
     return 3 if bad else 0
-
-
-def _geometry(lines: list[str], book: str, store, cache, cols) -> tuple[int, int]:
-    """第 1b 节：钉子列沙箱重跑后的 row_segment 格网，查压墨与一格跨两字。返回 (问题数, 提示数)。"""
-    import cv2
-
-    from open_guji_cv.core.spec import column_key, page_key
-    from open_guji_cv.eval import seg_screen as ss
-    from open_guji_cv.seg.cut_select import get_judge
-    from open_guji_cv.utils.image_io import imread
-    lines += ["## 一b、钉子列几何：压墨、一格跨两字", ""]
-    judge = get_judge() if cols else None
-    if cols and judge is None:
-        lines.append("- ⚠️ 没有 U-Net 归属裁判（torch／权重），压墨只当提示")
-    nb = nh = 0
-    page_cells = {}
-    for pg, col in sorted(cols):
-        if pg not in page_cells:
-            page_cells[pg] = store.read(book, "row_segment", page_key(pg), "cells")
-        pcells = page_cells[pg]
-        cc = None if pcells is None else next((c for c in pcells.columns if c.col == col and c.ok), None)
-        if cc is None:
-            lines.append(f"- {book}:{pg}:{col} row_segment 没有这一列，几何没查")
-            nh += 1
-            continue
-        p = cache.get(book, "column_image", column_key(pg, col)) if cache is not None else None
-        gray = imread(str(p), cv2.IMREAD_GRAYSCALE) if p is not None else None
-        if gray is None:
-            lines.append(f"- {book}:{pg}:{col} 没有列图，几何没查")
-            nh += 1
-            continue
-        for t in ss.pin_geometry(gray, cc, ss.page_pitch(pcells), judge=judge):
-            lines.append(f"- {book}:{pg}:{col} {t['note']}{'' if t['block'] else '（提示）'}")
-            nb += t["block"]
-            nh += not t["block"]
-    lines += [f"- 问题 {nb} 处、提示 {nh} 处" if nb or nh else "- 没查出", ""]
-    return nb, nh
 
 
 if __name__ == "__main__":
