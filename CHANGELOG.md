@@ -3,6 +3,14 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [未发版]
+- PATCH：code_equiv 登记 utils/daizhige（#1604 〓→▣）对 row_segment 行为等价，史記 v0.7.51→v0.7.54 row_segment 不过期（A22）
+- PATCH：`glyph_match.stages.route.table` 给相对路径时按数据目录、工作区、仓根的顺序找（书自己的形近字组表随中心库走），找不到报错而不是悄悄退回仓里的大表。只动 `steps/glyph_stages.py`（不在 `code_deps`），各 Step `code_hash` 不变；已开 `stages` 的全唐文 `stages_sha` 变一次（还没有带 `stages` 的产物）。背景：全唐文七册实测，仓里按 CNN 近度建的核心表拦 21.8% 的 same 格、只对上 198 个自信错里的 21 个；按实际出错字对建的书级表留一册验证拦 3.7%、对上 129 个（`doc/design/形近字组-5a分流与第7步对接.md` 第七节）。
+
+## [0.7.53] - 2026-11-17
+
+- 发版说明（A31 11-17，**dev 线**，PATCH）：dev 头 `4b90c3b`（含 `32a7764` #1589＋#1609 5a 分段 `glyph_match.stages`，全唐文要）。上一版 dev 线是 v0.7.42，本版并进其后 dev 上全部改动：#1573/#1576/#1580/#1583/#1590/#1594/#1601/#1606（缺省关或已登记等价）、#1587（row_segment 1.51，各书一律生效）、#1604（整理本占位符 〓／▣ 区分）、#1588/#1599/#1600/#1605（只动 manager 侧或脚本）及下面各条。**Step 指纹对 v0.7.42 变了的四步**（实算，经 code_equiv 换算后）：`column_gate`、`row_segment`（#1587 改 `impl/keben/row_boundaries`＋row_segment 升 1.51；#1604 改 `utils/daizhige`）、`align_ref`、`seed_admit`（#1604 改 `align_ref_coord`、新增依赖 `utils/gap`；#1601 改 `groups/flow`）——v0.7.42 及更早的产物这四步起过期，等于从 column_gate 起重跑；`glyph_match` 指纹不变（`_STAGES_1116` 已登记），开 `stages` 的册靠参数过期。**底库不变**：`check_base_corpus` 对 b27 一致（对最新 b28 多出 wu/rules.yaml，b28 是史記 patch 线的，dev 线书别钉 b28），钉 b27 的册不用改钉。
+
 - PATCH：归一化清边的细线规则不再删本字的细笔画（OCR 研究 Project，Sheldon 11-17 定修）：`clustering/normalize.remove_edge_specks` 规则 2 加相对笔宽护栏，候选线粗细不超过本图块笔宽（`stroke_width_px`）的 `LINE_STROKE_RATIO`＝0.6 倍才当界行／版框删。旧的绝对上限按图块短边 4.5% 算，全唐文 200px 的字块上涨到 8～9px（256 画布上 11.5px），把 6～9px 粗的忄竖、底横、顶横、亻都删了：入库存图删一遍（库图残，字形库自检查出 569 例），匹配前归一再删一遍（州 成 川、伽 成 加）。全唐文全库 3.9 万例现格重裁：归一图变 3.09%，字体模板首位＝库标 89.94%→91.66%，569 例名单里首位回到库标 157→561；殿本两册、史記一册真实字块 1 万格只 1 格变。规则 3 的面积上限抽成 `PAD_DEBRIS_AREA_RATIO`（值不变），另留实验旋钮 `PAD_DEBRIS_INNER_AREA_RATIO`（缺省不开）。**缺省输出变**：`normalize` 在 `glyph_match` 的 `code_deps` 里，各书 5a 及下游判过期；库的派生归一图要重算，库图本身残的要从现格重入。原理、数字、上线步骤见 guji-manager `doc/参考/字形图清边与归一.md`。
 
 - PATCH：`glyph_match.stages` 的 5a.1 weak_knn 格：带进候选的对手不再排到首位字前面（对手分是纯 CNN 分，候选里是融合分，直接比会把对手顶成库首位；全唐文 020 整册对比发现 碑→裨、遽→蘧）。只动 `steps/glyph_stages.py`，没开 `stages` 的书不受影响。设计文档第六节补整册对比：29688 格，放行 29664→29662，放行字 0 变。
