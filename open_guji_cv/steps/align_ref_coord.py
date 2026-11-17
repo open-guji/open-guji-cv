@@ -99,7 +99,7 @@ COORD_MERGE_MIN_CELLS = 4      # 少一格救援：共识后至少要给出这�
 @lru_cache(maxsize=1 << 16)
 def is_text_char(ch: str) -> bool:
     """整理本里算「一个字位」的字符：CJK/字母类、数字类（〇）、私用区、`□`（阙字）。"""
-    if ch in "□〓":            # 〓：daizhige 逐列本里没有码表的 PUA 生僻字占位
+    if ch in "□〓▣":           # 〓：daizhige 逐列本里没有码表的 PUA 生僻字占位；▣：以图代字占位（utils/gap.py）
         return True
     cat = unicodedata.category(ch)
     return cat[0] in ("L", "N") or cat == "Co"
