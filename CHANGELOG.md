@@ -3,6 +3,11 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.57] - 2026-11-17
+
+- 发版说明（A31 11-17，SJ 史記 patch 线，r77 用）：v0.7.55 + #1624（dev 2e1b5b0 cherry-pick），PATCH，**不含** dev 线 v0.7.56 的其他改动（#1610、#1617 等）。冲突手解：`segment_column` 只加 `cut_free_seam`（本线无 grid_adjust 等钩子）；开关登记表按本线补一行；code_equiv 按本线重算登 `_FREE_SEAM_0757`（row_segment a931bd1d→6ba5531b、row_boundaries fbb1d8d6→02c5d8e0）。版本号不叫 0.7.56：那号已发 dev 线（全唐文用）。
+- 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时与 v0.7.55 等价（登 code_equiv）。建议值 0.35。
+
 ## [0.7.55] - 2026-11-17
 
 - 发版说明（A31 11-17，SJ 史記 patch 线）：v0.7.54 + #1618（dev 0f24d856 cherry-pick，只取 `core/code_equiv.py` 登记行，原样），PATCH。登记 `utils/daizhige`（#1604 〓→▣）对 row_segment 行为等价（A22 实测：史記、殿本 23360 半叶格位表逐项同，史記 09 册 6 页 row_segment 与 v0.7.51 逐字节同）。史記 row_segment 指纹回到 v0.7.51 的 824691d8；对 v0.7.51 只剩 align_ref、seed_admit 变 → 从 align_ref 起重跑。monotonic 对 origin/main、v0.7.50／51／54 全过。

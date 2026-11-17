@@ -1785,6 +1785,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     snap_cut: float = 0.0,
                     snap_gap_ok=None,
                     cut_gap_guard: float = 0.0,
+                    cut_free_seam: float = 0.0,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1880,6 +1881,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       选中那条不在白缝里（白走廊 < 这么多格高）而池里另有一条在白缝里（≥ 这么多格高）的，改用白走廊最宽的那条，
       `chosen_by="gap"`（`_gap_corridor`；史記 r76 扁字收边坏，2026-11-17）。`snap_gap_ok` 是它的去处护栏（字内白缝不当字缝）；缺省 None 时有 `cut_judge` 就用 U-Net 整字护栏
       （`seg.cut_select.move_keeps_glyphs`，2026-11-13），没有裁判就不拦。
+    - `cut_free_seam`（格高倍数，0＝关；2026-11-17，史記 r77 切分清零）：切点选定后（含 `cut_gap_guard`；人裁不动），选中那条
+      仍劈开一个单字大小的连通块（两边各 ≥20% 面积、各伸出 ≥0.25 格）时，在 ±这么多格内找逐列 |dy|≤1 的最省墨折线
+      （`_free_seam_path`，不越过上下两格各 1/4 格高）：不穿墨，或穿墨 ≤ 原线一半且不再劈那块的，加进候选池（kind
+      `free_seam`）并改选，`chosen_by="free"`。护栏 `_free_seam_keeps_sides`：只修墨大半在上格的块（上字笔画伸进下格），
+      换线后整块归上格，别的块不换边（U-Net 一致率只记不拦：写本戈钩它判给下字）。
+      管上字戈钩／长捺伸进下格、两字不相碰的切坏（伐/曰、成/曰、城/范）：零墨折线在 seam_wide 走廊外，池里没有。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -2206,6 +2213,15 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         char_hs = sorted(c.y1 - c.y0 for c in cells if c.kind == "char" and c.sub is None)
         med_h = float(char_hs[len(char_hs) // 2]) if char_hs else 0.0
         content_w = max(1, x_hi - x_lo)
+        _cc_memo: list = []
+
+        def _cc():
+            """整列连通块（`cut_free_seam` 用，懒算一次）。先 3×3 开运算去毛刺霉点：写本两字间常有一两点墨把它们连成一块。"""
+            if not _cc_memo:
+                import cv2
+                op = cv2.morphologyEx(ink_bin.astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+                _cc_memo.append(cv2.connectedComponentsWithStats(op, connectivity=8)[1:3])
+            return _cc_memo[0]
 
         def _split_suspect(u: Cell, d: Cell) -> bool:
             """L0′ 嫌疑：一矮一高，且矮格墨满（见 SPLIT_* 常量）。"""
@@ -2451,6 +2467,10 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             #    不标）。只记录不改选法：拿不准的交下游再审。两步都在 `_resolve_and_probe` 里，与 L0′ 嫌疑切点共用。
             cands, chosen, chosen_by, escalate, escalate_reason = _resolve_and_probe(cands, chosen, up[0], dn[0], k)
             chosen, chosen_by = _gap_guard(cands, chosen, chosen_by, ink_bin, float(bounds[k]), period, cut_gap_guard)
+            if cut_free_seam > 0:
+                cands, chosen, chosen_by = _free_seam(cands, chosen, chosen_by, ink_bin, _cc(), float(bounds[k]), period,
+                                                      cut_free_seam, up[0], dn[0], cut_judge, col_gray, x_lo, x_hi,
+                                                      ink_threshold)
             cp = CutPointCandidates(k=k, y=float(bounds[k]),
                                     slot_above=up[0].slot, slot_below=dn[0].slot,
                                     candidates=cands, chosen=chosen, chosen_by=chosen_by,
@@ -2514,6 +2534,136 @@ def _gap_guard(cands, chosen: int, chosen_by: str, ink_bin: np.ndarray, y_line: 
     if cor[best] < need or best == chosen:
         return chosen, chosen_by
     return best, "gap"
+
+
+FREE_SEAM_FRAC = 0.2        # 劈字判据：被劈连通块两边各至少占这么多面积
+FREE_SEAM_EXT = 0.25        # 同上：两边各伸出至少这么多格高
+FREE_SEAM_HMAX = 1.3        # 高过这么多格高的连通块不算单字（版框残段、两字以上粘连），不管
+FREE_SEAM_MIN_AREA = 0.015  # 小于这么多格高² 的墨点不管
+FREE_SEAM_ZERO = 2          # 折线穿墨 ≤ 这么多像素算不穿墨（容毛边、霉点）
+FREE_SEAM_KEEP = 0.5        # 找不到零墨路时：穿墨 ≤ 原线这么多倍、且不再劈原来那块，才换
+FREE_SEAM_MARGIN = 0.25     # 折线不越过上格顶、下格底往里这么多格高
+FREE_SEAM_SIDE = 0.05       # 被劈的块换线后另一边至多留这么多（面积比）
+
+
+def _line_ys(ys, y_line: float, w: int) -> np.ndarray:
+    yv = np.full(w, int(round(y_line)), dtype=np.int64) if ys is None else np.asarray(ys, dtype=np.int64)[:w]
+    if len(yv) < w:
+        yv = np.concatenate([yv, np.full(w - len(yv), yv[-1] if len(yv) else int(round(y_line)))])
+    return yv
+
+
+def _split_glyphs(lab: np.ndarray, stats: np.ndarray, yv: np.ndarray, period: float) -> set[int]:
+    """切线 `yv`（逐列 y，行 < y 属上格）劈开的单字大小连通块（两边各 ≥`FREE_SEAM_FRAC` 面积、各伸出 ≥`FREE_SEAM_EXT` 格高）。"""
+    h, w = lab.shape
+    xs = np.arange(w)
+    ids = set(np.unique(lab[np.clip(yv, 0, h - 1), xs]).tolist()) | set(np.unique(lab[np.clip(yv - 1, 0, h - 1), xs]).tolist())
+    ids.discard(0)
+    out: set[int] = set()
+    min_a = FREE_SEAM_MIN_AREA * period * period
+    for i in ids:
+        x, y, cw, ch, a = (int(v) for v in stats[i])
+        if a < min_a or ch > FREE_SEAM_HMAX * period:
+            continue
+        comp = lab[y:y + ch, x:x + cw] == i
+        up = comp & (np.arange(y, y + ch)[:, None] < yv[x:x + cw][None, :])
+        dn = comp & ~up
+        nu, nd = int(up.sum()), int(dn.sum())
+        if min(nu, nd) < FREE_SEAM_FRAC * a:
+            continue
+        ru, rd = np.nonzero(up.any(1))[0], np.nonzero(dn.any(1))[0]
+        if ru[-1] - ru[0] + 1 >= FREE_SEAM_EXT * period and rd[-1] - rd[0] + 1 >= FREE_SEAM_EXT * period:
+            out.add(int(i))
+    return out
+
+
+def _free_seam_path(ink_bin: np.ndarray, lo: int, hi: int, y_line: float) -> tuple[int, np.ndarray] | None:
+    """`[lo, hi)` 行带内逐列 |dy|≤1 的最省墨折线（列图坐标）：(穿墨像素数, 逐列 y)。同价先走平、终点取离 `y_line` 近的。"""
+    sub = ink_bin[lo:hi].astype(np.int64)
+    r, w = sub.shape
+    if r < 3 or w < 1:
+        return None
+    big = 1 << 40
+    cost = sub[:, 0].copy()
+    back = np.zeros((r, w), np.int8)
+    for x in range(1, w):
+        c = np.stack([cost, np.r_[cost[1:], big], np.r_[big, cost[:-1]]])   # 从 r、r+1、r−1 来
+        kk = c.argmin(0)
+        cost = c[kk, np.arange(r)] + sub[:, x]
+        back[:, x] = kk
+    row = int(np.lexsort((np.abs(np.arange(r) + lo - y_line), cost))[0])
+    best = int(cost[row])
+    ys = [row]
+    for x in range(w - 1, 0, -1):
+        b = back[row, x]
+        row += 1 if b == 1 else (-1 if b == 2 else 0)
+        ys.append(row)
+    return best, np.asarray(ys[::-1], dtype=np.int64) + lo
+
+
+def _free_seam(cands, chosen: int, chosen_by: str, ink_bin: np.ndarray, cc, y_line: float, period: float,
+               band: float, up_c, dn_c, judge, col_gray, x_lo: int, x_hi: int, ink_threshold: int):
+    """`cut_free_seam`：选中那条还劈着单字大小的连通块，就在 ±`band` 格内找最省墨折线，够干净就加进池并改选（见 segment_column 文档）。
+    返回 (cands, chosen, chosen_by)。"""
+    if band <= 0 or period <= 0 or chosen_by == "human":
+        return cands, chosen, chosen_by
+    lab, stats = cc
+    h, w = ink_bin.shape
+    if w < 2:
+        return cands, chosen, chosen_by
+    cur = _line_ys(cands[chosen].y, y_line, w)
+    split = _split_glyphs(lab, stats, cur, period)
+    if not split:
+        return cands, chosen, chosen_by
+    m = FREE_SEAM_MARGIN * period
+    lo = int(max(0, np.ceil(y_line - band * period), np.ceil(up_c.y0 + m)))
+    hi = int(min(h, np.floor(y_line + band * period) + 1, np.floor(dn_c.y1 - m) + 1))
+    found = _free_seam_path(ink_bin, lo, hi, y_line)
+    if found is None:
+        return cands, chosen, chosen_by
+    ink_new, ys = found
+    ink_cur = int(ink_bin[np.clip(cur, 0, h - 1), np.arange(w)].sum())
+    if ink_new > FREE_SEAM_ZERO and not (ink_new <= FREE_SEAM_KEEP * ink_cur
+                                         and not (split & _split_glyphs(lab, stats, ys, period))):
+        return cands, chosen, chosen_by
+    if np.array_equal(ys, cur):
+        return cands, chosen, chosen_by
+    if not _free_seam_keeps_sides(lab, stats, cur, ys, split, period):
+        return cands, chosen, chosen_by
+    new = SeamCandidate(kind="free_seam", y=[int(v) for v in ys], seam_ink=int(ink_new),
+                        dev_max=int(np.abs(ys - y_line).max()))
+    if judge is not None:                 # 只记一致率供下游看，不拿它拦（U-Net 正是把戈钩判给下字的那个，见 FREE_SEAM_SIDE）
+        res = judge.assess(col_gray, int(x_lo), int(x_hi), int(round(up_c.y0)), int(round(dn_c.y1)), y_line,
+                           [new.y], ink_threshold=ink_threshold)
+        if res is not None and len(res[0]) == 1:
+            new.agree = res[0][0]
+            new.dis_unet = int(res[1][0])
+    return list(cands) + [new], len(cands), "free"
+
+
+def _free_seam_keeps_sides(lab: np.ndarray, stats: np.ndarray, cur: np.ndarray, new: np.ndarray, split: set[int],
+                           period: float) -> bool:
+    """换线护栏：只修「上字的笔画伸进下格」——被原线劈开的块墨大半在上格（≥ 一半），换线后要整块（≥ 1−`FREE_SEAM_SIDE`）
+    归上格；别的单字大小的块不许换边（墨大半从一边挪到另一边）。
+    史記 42 册 14 处看图：墨大半在上格的 6 处（或/在、滅/詩、城/范 戈钩，子/峻 钩，十/篇 竖尾，無/字）全对；墨大半在下格的
+    8 处对错各半（通/共 零墨路走进甬与辶之间、整个辶给了下字，急/政 心给了下字，穆/清、以/次），分不开，不做。
+    U-Net 一致率也分不开（两类换线后都掉 0.07–0.15），只记不拦。"""
+    h, w = lab.shape
+    lo, hi = int(max(0, min(cur.min(), new.min()) - 1)), int(min(h, max(cur.max(), new.max()) + 1))
+    min_a = FREE_SEAM_MIN_AREA * period * period
+    ids = set(np.unique(lab[lo:hi]).tolist()) - {0}
+    for i in ids:
+        x, y, cw, ch, a = (int(v) for v in stats[i])
+        comp = lab[y:y + ch, x:x + cw] == i
+        rows = np.arange(y, y + ch)[:, None]
+        up0 = int((comp & (rows < cur[x:x + cw][None, :])).sum()) / a
+        up1 = int((comp & (rows < new[x:x + cw][None, :])).sum()) / a
+        if i in split:
+            if up0 < 0.5 or up1 < 1 - FREE_SEAM_SIDE:
+                return False
+        elif a >= min_a and (up0 >= 0.5) != (up1 >= 0.5):
+            return False
+    return True
 
 
 def _slot_to_pos_local(slot: int, n_raised: int) -> int:
