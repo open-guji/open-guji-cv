@@ -15,6 +15,28 @@ from ..utils.ji_yi_si import FAMILY as _JYS
 from ..impl.keben.row_boundaries import RESOLVED_CHOSEN, ResolvedCut
 from .mojibake import is_legal_shape
 
+
+def _lenient() -> bool:
+    """GUJI_LOOKUP_LENIENT=1：读不到人工指定／绑定表时退回空表继续（旧行为）。缺省报错——
+    静默退回会让人的指定悄悄失效、重跑后又冒出来（11-13 覆盖逻辑清查：人工指定分片、绑定表、作废表都出过）。"""
+    import os
+    return os.environ.get("GUJI_LOOKUP_LENIENT", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _shard_items(shard: str, what: str) -> list:
+    """读一个人工指定分片（verdict_store）；读不到就报错，不再悄悄当没有。"""
+    from ..gold.store import verdict_store
+    try:
+        return verdict_store().list(shard, legacy=False)
+    except FileNotFoundError:
+        return []                 # 分片还没建过 = 没有人工指定，正常，不是读失败
+    except Exception as e:  # noqa: BLE001
+        if _lenient():
+            _logger.warning("读 %s（分片 %s）失败，按空表继续（GUJI_LOOKUP_LENIENT）：%r", what, shard, e)
+            return []
+        raise RuntimeError(f"读 {what}（分片 {shard}）失败：{e!r}。人工指定读不到会悄悄退回自动结果；"
+                           "查清原因，或确知可忽略时设 GUJI_LOOKUP_LENIENT=1") from e
+
 # 不叫 `log`：`human_chars(book, log=None, …)` 的形参 `log` 是 EventLog 实例，
 # 同名会在函数体内把这个 logger 遮住（`log.warning(...)` 变成调 EventLog 不存在的方法）。
 _logger = logging.getLogger(__name__)
@@ -86,10 +108,7 @@ def resolved_slots(book: str) -> dict[tuple[int, int], ResolvedColumn]:
     """
     from ..gold.store import verdict_store
     out: dict[tuple[int, int], int] = {}
-    try:
-        items = verdict_store().list(SLOT_COUNT_SHARD, legacy=False)
-    except Exception:
-        return out
+    items = _shard_items(SLOT_COUNT_SHARD, "页首抬头/列数指定")
     for it in items:
         if it.status != "active" or str(it.anchor.book) != book:
             continue
@@ -118,10 +137,7 @@ def resolved_head_raise(book: str) -> dict[tuple[int, int], int]:
     """
     from ..gold.store import verdict_store
     out: dict[tuple[int, int], int] = {}
-    try:
-        items = verdict_store().list(HEAD_RAISE_SHARD, legacy=False)
-    except Exception:  # noqa: BLE001
-        return out
+    items = _shard_items(HEAD_RAISE_SHARD, "抬头抬高指定")
     for it in items:
         if it.status != "active" or str(it.anchor.book) != book:
             continue
@@ -268,10 +284,7 @@ def resolved_solo_notes(book: str) -> dict[tuple[int, int], set[int]]:
     """
     from ..gold.store import verdict_store
     out: dict[tuple[int, int], set[int]] = {}
-    try:
-        items = verdict_store().list(SOLO_NOTE_SHARD, legacy=False)
-    except Exception:
-        return out
+    items = _shard_items(SOLO_NOTE_SHARD, "夹注单列指定")
     for it in items:
         if it.status != "active" or str(it.anchor.book) != book:
             continue
@@ -374,10 +387,7 @@ def resolved_cuts(book: str) -> dict[tuple[int, int, int], ResolvedCut]:
     """
     from ..gold.store import verdict_store
     out: dict[tuple[int, int, int], ResolvedCut] = {}
-    try:
-        items = verdict_store().list(TOUCHING_CUTS_SHARD, legacy=False)
-    except Exception:
-        return out
+    items = _shard_items(TOUCHING_CUTS_SHARD, "粘连列切线指定")
     for it in items:
         if it.status != "active" or str(it.anchor.book) != book:
             continue
@@ -407,10 +417,7 @@ def resolved_pins(book: str, store=None) -> dict[tuple[int, int, int], float]:
     from ..gold.store import verdict_store
     st = store or ProductStore()
     out: dict[tuple[int, int, int], float] = {}
-    try:
-        items = verdict_store().list(TOUCHING_CUTS_SHARD, legacy=False)
-    except Exception:
-        return out
+    items = _shard_items(TOUCHING_CUTS_SHARD, "粘连列切线指定")
     for it in items:
         ex = it.expected
         # `ok` 也收（2026-09-26）：人对着**钉住后的线**又按了回车，后到的 `ok` 覆盖了先前的 `moved`，
@@ -445,8 +452,11 @@ def stale_human_marks(book: str) -> dict[str, str]:
         con = sqlite3.connect(str(glyph_db_path()))
         rows = con.execute("SELECT instance_id, provenance FROM admissions "
                            "WHERE provenance LIKE 'human_stale_%'").fetchall()
+        con.close()
     except Exception:
-        return out
+        # 库读不到（云端任务机上字形库没建好等）只是缺了库里的标记，下面的作废表 tsv 照读；
+        # 以前这里直接 return，tsv 里的作废被整张忽略（vol01 182:9 临时人裁 2026-11-13）
+        rows = []
     for iid, prov in rows:
         key = iid[3:] if iid.startswith("v2:") else iid
         if key.startswith(book + ":"):
@@ -537,8 +547,12 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         try:
             from .bindings import book_bindings
             bound = book_bindings(book, log)
-        except Exception:
-            bound = {}            # 绑定表算不出来就退回按编号（与 09-25 之前一致），不因此丢掉全部人裁
+        except Exception as e:
+            if not _lenient():
+                raise RuntimeError(f"human_chars({book})：绑定表算不出来：{e!r}。退回按格号会把换了切分的人裁落错格、"
+                                   "或悄悄丢掉；先查原因（原图／glyph.db／字块缓存），确知可忽略时设 GUJI_LOOKUP_LENIENT=1") from e
+            _logger.warning("human_chars(%s)：绑定表算不出来，退回按格号（GUJI_LOOKUP_LENIENT）：%r", book, e)
+            bound = {}
     from .events import EventLog, counts_as_human, iter_events_readonly
     out: dict[str, tuple[str, str | None]] = {}
     pre = f"{book}:"

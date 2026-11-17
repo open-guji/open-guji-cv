@@ -269,6 +269,23 @@ class GlyphMatchParams(BaseModel):
     首位，证据落 `MatchRec.near_shape`；匹配器没判护栏的 unsure 格再升 same（`via="near_shape:<s>"`）。
     书级 yaml `params: {glyph_match: {near_shape: true}}` 可开。"""
 
+    sim_model: dict | str | None = None
+    """精验改用度量学习 CNN 的逐对相似度（2026-11-10，A23，`clustering.sim_cnn`）。None（缺省）＝照旧用覆盖分，
+    不进参数 dump，逐字节不变。`{path: models/glyph_sim_qtw/model.pt, same: 0.90, low: 0.50}`：分数 ≥ same 判 same、
+    ≥ low 判 unsure。**分数尺度与 cov 不同**，开了要按书重标 `consensus_cov`／`consensus_margin`、`font_tier.cov`。
+    书级 yaml `params: {glyph_match: {sim_model: {...}}}` 可开。"""
+    sim_model_sha: str = ""
+    """`sim_model` 开着时自动填：权重 sha256＋`clustering.sim_cnn` 代码哈希（`sim_cnn.sim_fingerprint`）。
+    硬参数：换权重或改 sim_cnn 这一步判过期；sim_cnn 不进 `code_deps`，不开的书不受它影响。"""
+
+    stages: dict | bool | None = None
+    """库匹配之后的分段判定（2026-11-16，`steps.glyph_stages`）：5a.1 形近字组分流、5a.2 起形近字组的字形方法。
+    None（缺省）＝不走，不进参数 dump，逐字节不变。要先开 `sim_model`。`{route: {...}, final: [组 id…], shape: true}`：
+    判 same 的格里，首位字落形近字组表（或属于注册字组）的降成 unsure、记 `guard=never_match`、对家补进候选；近邻一致度不满的
+    降成 unsure、记 `guard=conflict`；`final` 名单里的组字形方法给了字就在这一步定字。证据与真实来由落 `MatchRec.stage`。"""
+    stages_sha: str = ""
+    """`stages` 开着时自动填（`glyph_stages.stages_fingerprint`：相关模块代码哈希＋形近字组表＋终判组的模板库）。硬参数。"""
+
     borrow_fingerprint: str = ""
     """被借字形库的名字（`borrow_fingerprint()`，留空自动填）。硬参数：借的库换了，这一步判过期。
     没借库时是空串，不进参数 dump（参数哈希与 S6 之前逐位相同）。见模块头「借来的刻例」。"""
@@ -315,6 +332,12 @@ class GlyphMatchParams(BaseModel):
                 d.pop("cell_budget_s", None)
             if not d.get("borrow_fingerprint"):
                 d.pop("borrow_fingerprint", None)
+            if not d.get("sim_model"):
+                d.pop("sim_model", None)
+                d.pop("sim_model_sha", None)
+            if not d.get("stages"):
+                d.pop("stages", None)
+                d.pop("stages_sha", None)
             if not d.get("batch_knn"):
                 d.pop("batch_knn", None)
             if d.get("font_tier") in (None, False):
@@ -338,6 +361,12 @@ class GlyphMatchParams(BaseModel):
             object.__setattr__(self, "db_path", _default_db())
         if not self.db_fingerprint:
             object.__setattr__(self, "db_fingerprint", db_fingerprint(self.db_path))
+        if self.sim_model and not self.sim_model_sha:
+            from ..clustering.sim_cnn import SimModelConfig, sim_fingerprint
+            object.__setattr__(self, "sim_model_sha", sim_fingerprint(SimModelConfig.from_any(self.sim_model).path))
+        if self.stages and not self.stages_sha:
+            from .glyph_stages import stages_fingerprint
+            object.__setattr__(self, "stages_sha", stages_fingerprint(self.stages))
         if not self.borrow_fingerprint:
             object.__setattr__(self, "borrow_fingerprint", borrow_fingerprint(self.db_path))
         tier = _FontTier.rule(self.font_tier)
@@ -427,7 +456,18 @@ class GlyphMatchStep(Step):
             matcher = _with_same_gate(matcher, p.same_cov, p.same_wmax)
         if p.knn_per_char > 0:
             matcher = _with_knn_cap(matcher, p.knn_per_char, p.knn_per_char_top)
+        if p.sim_model:
+            matcher = _with_sim_model(matcher, p.sim_model)
         return matcher
+
+    def _stages(self, matcher, p):
+        """`stages`：按（匹配器, 配置）缓存一份（整库嵌入只算一次）。"""
+        from .glyph_stages import Stages, StagesConfig
+        k = (id(matcher), p.stages_sha)
+        hit = getattr(self, "_stages_hit", None)
+        if hit is None or hit[0] != k or hit[1] is not matcher:
+            self._stages_hit = (k, matcher, Stages(matcher, StagesConfig.from_any(p.stages)))
+        return self._stages_hit[2]
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.normalize import normalize_patch as _normalize_patch
@@ -442,6 +482,7 @@ class GlyphMatchStep(Step):
             # 现代链：库域默认 = 这本书自己长的库（三模式方案 §五.2）
             p = p.model_copy(update={"edition": f"modern:{ctx.book.id}"})
         matcher = self._matcher(p)
+        stages = self._stages(matcher, p) if p.stages else None
         ns_cfg = NearShapeConfig.from_any(p.near_shape)
         # 共识升档要的人裁例数：一次 run 里几十页共用，按库指纹缓存在 step 实例上
         key = (p.db_path, p.db_fingerprint, p.consensus_count)
@@ -539,14 +580,28 @@ class GlyphMatchStep(Step):
                 # 判决层规则（借库降档 → 共识升档 → 近形升档），顺序与参数见 glyph_rules.RULES
                 d = decide(m, state)
                 verdict, char, matched_id, cov, wmax, via = d.verdict, d.char, d.matched_id, d.cov, d.wmax, d.via
+                guard, stage_ev, cands = m.guard, None, m.candidates
+                if stages is not None:
+                    so = stages.apply(verdict, m, normalize_patch(img, is_punct), img, r.id, r.id if p.exclude_self else None)
+                    stage_ev = so.stage
+                    if so.candidates is not None:
+                        cands = so.candidates
+                    if so.verdict is not None:
+                        verdict, guard = so.verdict, so.guard
+                        if so.verdict == "same":
+                            if so.char != char:
+                                matched_id = None
+                            char, via = so.char, so.via
+                        else:
+                            char, matched_id = None, None
                 recs.append(MatchRec(
                     id=r.id, slot=r.slot, sub=r.sub,
                     verdict=verdict, char=char, matched_id=matched_id,
                     cov=round(float(cov), 4), wmax=round(float(wmax), 2),
                     candidates=[(c, round(float(v), 4))
-                                for c, v in m.candidates[:p.max_candidates]],
-                    guard=m.guard, n_verified=int(m.n_verified), via=via,
-                    cand_variants=cand_variants, near_shape=m.near_shape))
+                                for c, v in cands[:p.max_candidates]],
+                    guard=guard, n_verified=int(m.n_verified), via=via,
+                    cand_variants=cand_variants, near_shape=m.near_shape, stage=stage_ev))
             return ColumnMatch(col=cc.col, ok=True, chars=recs)
 
         out: list[ColumnMatch] = [_match_column(cc) for cc in chars.columns]
@@ -674,6 +729,27 @@ def _with_knn_cap(matcher, per_char: int, per_char_top: int):
     g.per_char_top = int(per_char_top)
     _CAPPED.clear()
     _CAPPED[k] = (matcher, g)
+    return g
+
+
+_SIM: dict = {}
+
+
+def _with_sim_model(matcher, cfg):
+    """`sim_model`：缓存匹配器的浅拷贝，精验换成 CNN 逐对相似度（`clustering.sim_cnn.CnnVerifier`）。
+    整库嵌入只算一次（按 (原匹配器, 配置) 缓存，只留最近一份）；不改缓存里那份。"""
+    import copy
+    from ..clustering.sim_cnn import CnnVerifier, SimModelConfig
+    c = SimModelConfig.from_any(cfg)
+    k = (id(matcher), c)
+    hit = _SIM.get(k)
+    if hit is not None and hit[0] is matcher:
+        return hit[1]
+    g = copy.copy(matcher)
+    g._verify = CnnVerifier(c, matcher._patches)
+    g.verify_method = "cnn"
+    _SIM.clear()
+    _SIM[k] = (matcher, g)
     return g
 
 
