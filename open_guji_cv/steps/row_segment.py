@@ -925,6 +925,10 @@ class RowSegmentParams(BaseModel):
     cut_gap_keep_glyph: bool = False
     cut_white_row: float = 0.0
     straight_seam_ink: bool = False
+    #: **按连通块归属画线**（2026-11-17，史記 r79 ①类，`row_boundaries._glyph_line`）：`cut_white_row` 之后选中那条仍劈开单字大小的连通块，
+    #: 被劈的块按离哪边别的墨近整块归那边，逐列取上格墨之下、下格墨之上离原线最近的 y（± 这么多格高内，不限坡度）。
+    #: 上下字交错（上字捺尾伸进下格、下字点画顶进上格）。拿不准归哪边、某列上下墨重叠就不动。书级参数；0＝关（缺省，不进参数哈希）。
+    cut_glyph_line: float = 0.0
     #: 原 `seal_gap_slots_empty`、`seal_inkcut`（大印下表中间空格位记空、剔印泥再切）两个书级开关 2026-11-10 搬进书级代码：
     #: 缺省实现 `impl/keben/seal_ink`（不做），史記书仓 `code/seal_ink.py` 覆盖。见 `_RETIRED`。
     #: **备选切法**（2026-11-03，史記文淵閣本第 7 轮，设计稿 https://claude.ai/artifact/NVqgK8BS2GietVShFnoqUU）：
@@ -1036,7 +1040,7 @@ class RowSegmentParams(BaseModel):
                 d.pop("cut_gap_guard", None)
             if not self.cut_free_seam:
                 d.pop("cut_free_seam", None)
-            for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink"):
+            for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line"):
                 if not getattr(self, k_):
                     d.pop(k_, None)
             if self.page_map == "off":
@@ -1166,7 +1170,7 @@ class RowSegmentStep(Step):
             raise ValueError(f"row_segment.cut_gap_guard：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         if p.cut_free_seam and "cut_free_seam" not in inspect.signature(segment_column).parameters:
             raise ValueError(f"row_segment.cut_free_seam：本册套书的 {RB.__name__}.segment_column 没有这个参数")
-        for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink"):
+        for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line"):
             if getattr(p, k_) and k_ not in inspect.signature(segment_column).parameters:
                 raise ValueError(f"row_segment.{k_}：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         gate: GateManifest = ctx.product("gate_manifest", page)
@@ -1338,7 +1342,7 @@ class RowSegmentStep(Step):
                     **({"snap_cut": p.snap_cut} if p.snap_cut and final else {}),
                     **({"cut_gap_guard": p.cut_gap_guard} if p.cut_gap_guard and final else {}),
                     **({"cut_free_seam": p.cut_free_seam} if p.cut_free_seam and final else {}),
-                    **{k_: getattr(p, k_) for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink")
+                    **{k_: getattr(p, k_) for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line")
                        if getattr(p, k_) and final},
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))

@@ -1812,6 +1812,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     cut_free_seam: float = 0.0,
                     cut_gap_keep_glyph: bool = False,
                     cut_white_row: float = 0.0,
+                    cut_glyph_line: float = 0.0,
                     straight_seam_ink: bool = False,
                     grid_adjust=None,
                     jiazhu_heads=None,
@@ -1928,6 +1929,11 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     - `grid_adjust`／`jiazhu_heads`／`half_a_left`／`jiazhu_pair_ok`（书级钩子 `impl/keben/row_hooks`，2026-11-12／13）：
       缺省 None＝不调。`grid_adjust` 在 `grid_bounds` 落缝前改格线；`jiazhu_heads` 在段端收编前补认段头；`half_a_left` 给只有
       一半有字的夹注格定右半左缘；`jiazhu_pair_ok` 判一格是不是真并排两字。签名与用法见 `row_hooks` 模块头。
+    - `cut_glyph_line`（格高倍数，0＝关；2026-11-17，史記 r79 ①类上下字交错）：最后一道（`cut_white_row` 之后；人裁不动）。
+      选中那条仍劈开单字大小的连通块时，被劈的块按 `_settle_side` 整块归离它近的那边（看两边别的墨离它多远），别的块按
+      墨多的那边；逐列取「上格墨最低行之下、下格墨最高行之上」离原线最近的 y（±这么多格高内、不越过上格顶下格底往里
+      `FREE_SEAM_MARGIN`，不限坡度），kind `glyph_line`，`chosen_by="glyph"`。离两边一样近时按墨多的那边（少的那边
+      ≤`GLYPH_LINE_MAJ`）；仍拿不准、被劈块高过 `GLYPH_LINE_TALL` 格（两字粘成一块）、某列上下墨重叠，都不动。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -2537,6 +2543,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if cut_white_row > 0:
                 cands, chosen, chosen_by = _white_row(cands, chosen, chosen_by, ink_bin, _cc(), float(bounds[k]), period,
                                                       cut_white_row, up[0], dn[0])
+            if cut_glyph_line > 0:
+                cands, chosen, chosen_by = _glyph_line(cands, chosen, chosen_by, ink_bin, _cc(), float(bounds[k]), period,
+                                                       cut_glyph_line, up[0], dn[0])
             cp = CutPointCandidates(k=k, y=float(bounds[k]),
                                     slot_above=up[0].slot, slot_below=dn[0].slot,
                                     candidates=cands, chosen=chosen, chosen_by=chosen_by,
@@ -2828,6 +2837,98 @@ def _white_row_ok(lab: np.ndarray, stats: np.ndarray, cur: np.ndarray, new: np.n
         elif a >= min_a and (up0 >= 0.5) != (up1 >= 0.5):
             return False
     return True
+
+
+SETTLE_NEAR = 0.05      # `cut_glyph_line`：被劈块离两边别的墨的距离差不到这么多格高，拿不准归哪边，不动
+SETTLE_XPAD = 0.3       # 量「别的墨」时左右各放宽这么多格高
+GLYPH_LINE_TALL = 1.15  # 被劈块高过这么多格高（多半是两字粘成一块），不动
+GLYPH_LINE_MAJ = 0.35   # 离两边一样近时，小的那边面积比不到这么多才按墨多的那边归
+
+
+def _settle_side(lab: np.ndarray, stats: np.ndarray, i: int, cur: np.ndarray, top: int, bot: int, period: float) -> int:
+    """被原线劈开的块 `i` 该归哪边：1 上、0 下、-1 拿不准。看它离哪边**别的墨**近（同一字的笔画挨着字身）：
+    上格（`top`..原线）里除它以外的墨的最低行到它顶的距离，比下格（原线..`bot`）里别的墨的最高行到它底的距离；
+    一边没有别的墨（它自己就是那一格的字）就归那边。差不到 `SETTLE_NEAR` 格高拿不准。"""
+    x, y, cw, ch, a = (int(v) for v in stats[i])
+    h, w = lab.shape
+    xa, xb = max(0, x - int(SETTLE_XPAD * period)), min(w, x + cw + int(SETTLE_XPAD * period))
+    sub = lab[:, xa:xb]
+    other = (sub > 0) & (sub != i)
+    cy = cur[xa:xb][None, :]
+    rows = np.arange(h)[:, None]
+    ru = np.nonzero((other & (rows < cy) & (rows >= top)).any(1))[0]
+    rd = np.nonzero((other & (rows >= cy) & (rows < bot)).any(1))[0]
+    if not len(ru) and not len(rd):
+        return -1
+    if not len(ru) or not len(rd):
+        return 1 if not len(ru) else 0
+    d_up = max(0, y - int(ru[-1]))
+    d_dn = max(0, int(rd[0]) - (y + ch - 1))
+    if abs(d_up - d_dn) < SETTLE_NEAR * period:
+        return -1
+    return 1 if d_up < d_dn else 0
+
+
+def _glyph_line(cands, chosen: int, chosen_by: str, ink_bin: np.ndarray, cc, y_line: float, period: float,
+                band: float, up_c, dn_c):
+    """`cut_glyph_line`（见 segment_column 文档）：按连通块归属逐列画线。返回 (cands, chosen, chosen_by)。"""
+    if band <= 0 or period <= 0 or chosen_by == "human":
+        return cands, chosen, chosen_by
+    lab, stats = cc
+    h, w = ink_bin.shape
+    if w < 2:
+        return cands, chosen, chosen_by
+    cur = _line_ys(cands[chosen].y, y_line, w)
+    split = _split_glyphs(lab, stats, cur, period)
+    if not split:
+        return cands, chosen, chosen_by
+    m = FREE_SEAM_MARGIN * period
+    top, bot = int(max(0, up_c.y0)), int(min(h, dn_c.y1))
+    lo = int(max(1, np.ceil(y_line - band * period), np.ceil(up_c.y0 + m)))
+    hi = int(min(h - 1, np.floor(y_line + band * period), np.floor(dn_c.y1 - m)))
+    if hi <= lo:
+        return cands, chosen, chosen_by
+    side: dict[int, int] = {}
+    for i in split:
+        if stats[i][3] > GLYPH_LINE_TALL * period:
+            return cands, chosen, chosen_by
+        s = _settle_side(lab, stats, i, cur, top, bot, period)
+        if s < 0:      # 离两边一样近（多半两边都挨着）：墨明显偏一边（≥ 1−`GLYPH_LINE_MAJ`）就归那边
+            x, y, cw, ch, a = (int(v) for v in stats[i])
+            comp = lab[y:y + ch, x:x + cw] == i
+            fu = int((comp & (np.arange(y, y + ch)[:, None] < cur[x:x + cw][None, :])).sum()) / a
+            if min(fu, 1 - fu) > GLYPH_LINE_MAJ:
+                return cands, chosen, chosen_by
+            s = 1 if fu >= 0.5 else 0
+        side[i] = s
+    # 带内（再上下各放一格高，块伸出带外也要算）每个块归哪边：被劈的按 side，别的按墨多的那边
+    r0, r1 = max(0, lo - int(period)), min(h, hi + int(period) + 1)
+    sub = lab[r0:r1]
+    ids = set(np.unique(sub).tolist()) - {0}
+    up_mask = np.zeros_like(sub, dtype=bool)
+    dn_mask = np.zeros_like(sub, dtype=bool)
+    for i in ids:
+        if i in side:
+            is_up = side[i] == 1
+        else:
+            x, y, cw, ch, a = (int(v) for v in stats[i])
+            comp = lab[y:y + ch, x:x + cw] == i
+            is_up = int((comp & (np.arange(y, y + ch)[:, None] < cur[x:x + cw][None, :])).sum()) * 2 >= a
+        (up_mask if is_up else dn_mask)[sub == i] = True
+    rows = np.arange(r0, r1)[:, None]
+    up_low = np.where(up_mask, rows, -1).max(0) + 1          # 上格墨最低行之下
+    dn_high = np.where(dn_mask, rows, h).min(0)              # 下格墨最高行
+    a_ = np.maximum(up_low, lo)
+    b_ = np.minimum(dn_high, hi)
+    if np.any(a_ > b_):
+        return cands, chosen, chosen_by
+    ys = np.clip(cur, a_, b_).astype(np.int64)
+    if np.array_equal(ys, cur) or _split_glyphs(lab, stats, ys, period):
+        return cands, chosen, chosen_by
+    ink = int(ink_bin[np.clip(ys, 0, h - 1), np.arange(w)].sum())
+    new = SeamCandidate(kind="glyph_line", y=[int(v) for v in ys], seam_ink=ink,
+                        dev_max=int(np.abs(ys - y_line).max()))
+    return list(cands) + [new], len(cands), "glyph"
 
 
 def _slot_to_pos_local(slot: int, n_raised: int) -> int:
