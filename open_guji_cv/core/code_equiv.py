@@ -357,6 +357,7 @@ _GAP_GUARD_1117 = ("切点白缝护栏 cut_gap_guard（row_segment 书级参数�
                    "关时 _gap_guard 直接返回）：row_segment 在殿本 vol30 10 页（2,15,30,45,60,75,90,105,120,135，r8 包当上游）、全唐文 020 8 页"
                    "（3,20,40,60,80,100,120,150，y1 包当上游）、史記 09 册 6 页（5,41,77,113,149,180，r72 包当上游）上与 origin/dev fb2e4d5 "
                    "产物逐字节相同；scripts/code_equiv.py check，A22 2026-11-17")
+_GAP_GUARD_0750 = (_GAP_GUARD_1117 + "。史記 patch 线移植（v0.7.50 + #1606 → v0.7.51）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -1869,6 +1870,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='746d3e956607cb04dad065a984e34158ddd09217a8708cc9a5e3d07cd36fc1e5',
           old='ffceeab903b391ca076a2e5fa2e847aee23d9f59d84fb54248d2274f5c2cb238',
           evidence=_GF_EXCLUDE_0748),
+    # cut_gap_guard 史記 patch 线 v0.7.51（v0.7.50 + #1606）按本线哈希
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='a931bd1d86be1de438db24964b58b4febac7a178cdbc19d66071df266f634b78',
+          old='7fdda3460f73f1839cc1bcc84780ed73c04bad60b8b24d219154d723fc6c5ab3',
+          evidence=_GAP_GUARD_0750),
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='fbb1d8d6f6a0e386c1747f8d1d33c8c7d33d569c9294c5952b3899c6696a3a31',
+          old='5983f2059782aa6f4de8ea1c0197e2c892fd550eb324f994994c1aa1936613f9',
+          evidence=_GAP_GUARD_0750),
 )
 
 
