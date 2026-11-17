@@ -3,8 +3,24 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- `scripts/seg_pins_check.py` 加第 1c 节整列丢字预检（SJ r75 请求，A22 11-17）：①钉后格数要等于原列格数（旧切分有字格，没有就比旧钉子），不等要在钉子 `expected.count_why` 写理由；②列图上格外成段的墨（剥长直线、细高界行残段后每行墨 ≥4px、连续 ≥max(25px, 0.4 格高)、不在任一格里）算问题，版框线附近不算、印章压到的只提示。史記 r75 丢字 4 列两项都拦住；史記 6 册 188、殿本 14、全唐文 19 个钉子列 ② 无误报。只是预检脚本，不进任何 Step 的 `code_deps`，产物指纹不变。
+
+- 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时殿本 vol30、全唐文 020、史記 42 逐字节同，登 code_equiv `_FREE_SEAM_1117`。建议值 0.35。
+
 ## [未发版]
 - PATCH：字形库体检加「清边不变式」（OCR 研究 Project，Sheldon 11-17 要求防再犯）：`glyph_selfcheck.clean_invariant(库)` 逐例看库图（已清过边的 canonical）在匹配前再清一遍还删不删墨，删 ≥3% 记违例，占比 ≥0.2% 报警；`run_selfcheck` 开头先跑并打印，结果进 summary 的 `clean_invariant`。只读库，两三分钟。#1617 修复前全唐文 1.16% 违例、殿本史記 0，修复后三套书都是 0。不进任何 Step 的 `code_deps`，产物指纹不变。`doc/pipeline_handbook.md` 第 4 节记这条坑和三条规矩。
+
+- 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
+
+## [0.7.57] - 2026-11-17
+
+- 发版说明（A31 11-17，SJ 史記 patch 线，r77 用）：v0.7.55 + #1624（dev 2e1b5b0 cherry-pick），PATCH，**不含** dev 线 v0.7.56 的其他改动（#1610、#1617 等）。冲突手解：`segment_column` 只加 `cut_free_seam`（本线无 grid_adjust 等钩子）；开关登记表按本线补一行；code_equiv 按本线重算登 `_FREE_SEAM_0757`（row_segment a931bd1d→6ba5531b、row_boundaries fbb1d8d6→02c5d8e0）。版本号不叫 0.7.56：那号已发 dev 线（全唐文用）。
+- 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时与 v0.7.55 等价（登 code_equiv）。建议值 0.35。
+
+## [0.7.56] - 2026-11-17
+
+- 发版说明（A31 11-17，**dev 线**，PATCH）：dev 头 `46836b7`＝v0.7.53 + #1610（stages.route.table 按数据目录解析，书级形近字组表）＋#1618（daizhige 对 row_segment 等价登记）＋#1617（归一化清边细线护栏）。**Step 指纹对 v0.7.53**：`glyph_match` 变（#1617 改 `clustering/normalize`，未登等价，产物会变），下游随之过期；`row_segment` 也变——#1618 把 daizhige 换回 #1604 前的哈希，v0.7.42／v0.7.49／v0.7.51 出的 row_segment 因此不过期，但 **v0.7.53 出的 row_segment 反而判「代码或版本变了」**（产物逐字节同；status code_ok 下正式版当新鲜）。#1610 的 glyph_stages 不在 code_deps，开 stages 的册靠 stages_sha。**底库不变**：对 b27 逐文件一致。
+
 - PATCH：归一化清边的细线规则不再删本字的细笔画（OCR 研究 Project，Sheldon 11-17 定修）：`clustering/normalize.remove_edge_specks` 规则 2 加相对笔宽护栏，候选线粗细不超过本图块笔宽（`stroke_width_px`）的 `LINE_STROKE_RATIO`＝0.6 倍才当界行／版框删。旧的绝对上限按图块短边 4.5% 算，全唐文 200px 的字块上涨到 8～9px（256 画布上 11.5px），把 6～9px 粗的忄竖、底横、顶横、亻都删了：入库存图删一遍（库图残，字形库自检查出 569 例），匹配前归一再删一遍（州 成 川、伽 成 加）。全唐文全库 3.9 万例现格重裁：归一图变 3.09%，字体模板首位＝库标 89.94%→91.66%，569 例名单里首位回到库标 157→561；殿本两册、史記一册真实字块 1 万格只 1 格变。规则 3 的面积上限抽成 `PAD_DEBRIS_AREA_RATIO`（值不变），另留实验旋钮 `PAD_DEBRIS_INNER_AREA_RATIO`（缺省不开）。**缺省输出变**：`normalize` 在 `glyph_match` 的 `code_deps` 里，各书 5a 及下游判过期；库的派生归一图要重算，库图本身残的要从现格重入。原理、数字、上线步骤见 guji-manager `doc/参考/字形图清边与归一.md`。
 - PATCH：code_equiv 登记 utils/daizhige（#1604 〓→▣）对 row_segment 行为等价，史記 v0.7.51→v0.7.54 row_segment 不过期（A22）
 - PATCH：`glyph_match.stages.route.table` 给相对路径时按数据目录、工作区、仓根的顺序找（书自己的形近字组表随中心库走），找不到报错而不是悄悄退回仓里的大表。只动 `steps/glyph_stages.py`（不在 `code_deps`），各 Step `code_hash` 不变；已开 `stages` 的全唐文 `stages_sha` 变一次（还没有带 `stages` 的产物）。背景：全唐文七册实测，仓里按 CNN 近度建的核心表拦 21.8% 的 same 格、只对上 198 个自信错里的 21 个；按实际出错字对建的书级表留一册验证拦 3.7%、对上 129 个（`doc/design/形近字组-5a分流与第7步对接.md` 第七节）。
