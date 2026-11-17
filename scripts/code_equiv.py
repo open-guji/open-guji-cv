@@ -109,6 +109,12 @@ def cmd_check(args) -> int:
                        check=False)
     subprocess.run(["git", "-C", str(ROOT), "worktree", "add", "--detach", str(base_tree), args.base],
                    check=True, capture_output=True)
+    # models/ 不进 git：基线检出里链接本机的权重（全唐文 glyph_match 参数校验要读 glyph_sim_qtw，缺了基线跑不起来）
+    for d in (ROOT / "models").iterdir() if (ROOT / "models").is_dir() else ():
+        dst = base_tree / "models" / d.name
+        if d.is_dir() and not dst.exists():
+            dst.parent.mkdir(exist_ok=True)
+            dst.symlink_to(d)
     try:
         rcs = {}
         for name, code_root in (("old", base_tree), ("new", ROOT)):

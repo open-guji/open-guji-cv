@@ -2510,12 +2510,14 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
 
 
 GAP_CORRIDOR_Q = 10   # 白走廊取逐列白段长的这个百分位（容几个霉点、毛边列）
+GAP_INK_COLS = 0.02   # 切线压墨的列数 > max(2, 内容宽 × 这么多) 就不算在白缝里
 
 
-def _gap_corridor(ink_bin: np.ndarray, ys, y_line: float, cap: int) -> float:
+def _gap_corridor(ink_bin: np.ndarray, ys, y_line: float, cap: int, clean: bool = False) -> float:
     """一条切线（`ys`：逐列 y，None＝直线 `y_line`）的白走廊宽：每列从切线那一行往上下数连续白像素（各至多 `cap` 行），
-    切线落在墨上的列记 0；取逐列白段长的 `GAP_CORRIDOR_Q` 百分位。直线落在整行白的字缝里≈字缝宽；
-    贴着笔画绕的折线、字内两笔之间的窄缝都小。"""
+    取逐列白段长的 `GAP_CORRIDOR_Q` 百分位。直线落在整行白的字缝里≈字缝宽；贴着笔画绕的折线、字内两笔之间的窄缝都小。
+    `clean`：切线压墨的列超过 `GAP_INK_COLS`（容几点霉点）就记 0——换过去的那条要干净（细竖笔只占几列，百分位看不出来）；
+    现选那条不加这条（压着几列细笔画、两边是宽字缝的直线，本来就对）。"""
     h, w = ink_bin.shape
     if w == 0:
         return 0.0
@@ -2523,6 +2525,8 @@ def _gap_corridor(ink_bin: np.ndarray, ys, y_line: float, cap: int) -> float:
     if len(yv) < w:
         yv = np.concatenate([yv, np.full(w - len(yv), yv[-1] if len(yv) else int(round(y_line)))])
     yv = np.clip(yv, 0, h - 1)
+    if clean and int(ink_bin[yv, np.arange(w)].sum()) > max(2, GAP_INK_COLS * w):
+        return 0.0
     runs = np.zeros(w)
     for x in range(w):
         col = ink_bin[:, x]
@@ -2541,12 +2545,14 @@ def _gap_corridor(ink_bin: np.ndarray, ys, y_line: float, cap: int) -> float:
 
 def _gap_guard(cands, chosen: int, chosen_by: str, ink_bin: np.ndarray, y_line: float, period: float,
                guard: float) -> tuple[int, str]:
-    """`cut_gap_guard`：选中的切线不在白缝里、池里另有在白缝里的，改用白走廊最宽的那条（同宽取池里靠前的）。"""
+    """`cut_gap_guard`：选中的切线不在白缝里（白走廊 < 门槛），池里另有干净地落在白缝里的，改用白走廊最宽的那条（同宽取池里靠前的）。
+    选中那条已在白缝里的不动，哪怕别的更宽：试过「窄缝换宽缝」（走廊宽 2 倍就换），史記 09／26 册把「多」的撇、「之」的捺劈开
+    （32:117:2、01:64:8），宽的那条常是字内大白（A22 11-17）。"""
     if guard <= 0 or period <= 0 or chosen_by == "human" or len(cands) < 2:
         return chosen, chosen_by
     need = guard * period
     cap = int(np.ceil(period))
-    cor = [_gap_corridor(ink_bin, c.y, y_line, cap) for c in cands]
+    cor = [_gap_corridor(ink_bin, c.y, y_line, cap, clean=i != chosen) for i, c in enumerate(cands)]
     if cor[chosen] >= need:
         return chosen, chosen_by
     best = max(range(len(cands)), key=lambda i: (cor[i], -i))
