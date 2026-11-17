@@ -207,6 +207,60 @@ def assign_flags(f: Finding) -> Finding:
     return f
 
 
+CLEAN_INVARIANT_LOSS = 0.03   # 库图再清一遍删掉的墨占比到这档就算违例
+CLEAN_INVARIANT_ALARM = 0.002  # 违例占库的比例到这档就该停下来查清边规则，不是逐例撤图
+
+
+def clean_invariant(db_path: str | Path, loss: float = CLEAN_INVARIANT_LOSS,
+                    max_list: int = 200) -> dict:
+    """清边不变式：库图是 canonical，入库时已经清过边，匹配前 `normalize_patch` 再清一遍
+    **理应什么都不删**。删了成块的墨，说明清边规则在这本书的字号、分辨率上把本字的笔画
+    当成了界行或残片——查询格也过同一步，库和查询一起残，体检的形状比对两边同时误报，
+    自己发现不了。
+
+    2026-11-17 立（全唐文清边丢笔画，569 例残图）：出事时全唐文 3.9 万例里违例 459 例
+    （1.16%：伽 成 加、州 成 川），同期殿本 2.2 万例、史記 7530 例都是 0；修复后三套书
+    都是 0。所以这个数**不该是一个需要调的阈值，健康值就是 0**：占比到
+    `CLEAN_INVARIANT_ALARM` 就是规则在这本书上失效了，要修规则。
+
+    只读库、不要原图，约每千例 3 秒。返回 `n`（本书刻例数）、`n_bad`、`rate`、`alarm`、
+    `worst`（按删掉的墨占比从大到小，至多 `max_list` 条 `{instance_id, char, loss}`）。
+    看不到入库那一遍删了什么（库里存的已经是清过的图）；那一遍要拿原始字块量，
+    见 guji-manager `doc/参考/字形图清边与归一.md`。"""
+    import cv2
+    from .normalize import _drop_stray_components, remove_edge_specks, sauvola_binarize
+    c = connect_ro(db_path)
+    try:
+        fe = {r[0] for r in c.execute("SELECT edition_tag FROM sources WHERE kind='font'")}
+        rows = c.execute(
+            "SELECT e.instance_id, g.char, g.edition_tag, i.patch_png "
+            "FROM exemplars e JOIN glyphs g ON g.glyph_id=e.glyph_id "
+            "JOIN instances i ON i.instance_id=e.instance_id").fetchall()
+    finally:
+        c.close()
+    n, bad = 0, []
+    for iid, ch, ed, png in rows:
+        if ed in fe or str(ed).startswith("font:"):
+            continue
+        gray = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
+        if gray is None:
+            continue
+        n += 1
+        b = sauvola_binarize(gray)
+        total = int(b.sum())
+        if not total:
+            continue
+        kept = int(_drop_stray_components(remove_edge_specks(b)).sum())
+        lost = (total - kept) / total
+        if lost >= loss:
+            bad.append({"instance_id": iid, "char": ch, "loss": round(lost, 4)})
+    bad.sort(key=lambda d: -d["loss"])
+    rate = len(bad) / n if n else 0.0
+    return {"n": n, "n_bad": len(bad), "rate": round(rate, 5),
+            "alarm": rate >= CLEAN_INVARIANT_ALARM, "loss_th": loss,
+            "worst": bad[:max_list]}
+
+
 def load_entries(db_path: str | Path, origin: str = "", vmap=None) -> list[Entry]:
     """一个库的本书套刻例（非字体来源），带归一图。"""
     if vmap is None:
@@ -303,6 +357,12 @@ def run_selfcheck(db_path: str | Path,
 
     t0 = time.time()
     lib = library_rows(db_path)             # 开跑时的库：指纹与各卡图块 sha 都按这一刻记
+    # 先查清边不变式（两三分钟）：它一报警，下面的形状比对结论都不可信（库和查询一起残）
+    inv = clean_invariant(db_path) if only is None else None
+    if progress and inv is not None:
+        print(f"清边不变式：{inv['n']} 例里库图再清一遍还删墨 ≥{inv['loss_th']:.0%} 的 {inv['n_bad']} 例"
+              f"（{inv['rate']:.2%}）" + ("  ← 报警：清边规则在这本书上删真笔画，先修规则"
+                                        if inv["alarm"] else ""), flush=True)
     vmap = VariantMap.load()
     uv = (_unihan_same(UNIHAN_SAME if unihan_variants is True else unihan_variants)
           if unihan_variants else (lambda a, b: False))
@@ -450,6 +510,7 @@ def run_selfcheck(db_path: str | Path,
                    "FONT_MARGIN": FONT_MARGIN, "KNN_GLOBAL": KNN_GLOBAL,
                    "KNN_SAME": KNN_SAME, "KNN_FONT": KNN_FONT, "FONT_FAR": FONT_FAR,
                    "FONT_SETS": list(FONT_SETS)},
+        "clean_invariant": inv,
         "seconds": round(time.time() - t0, 1),
         "findings": flagged,
         "all": findings,
