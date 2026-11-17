@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.52] - 2026-11-16
+
+- 发版说明（ZM 11-16，殿本 patch 线）：v0.7.49 + #1604（整理本缺字占位符区分：私用码 `〓`／以图代字 `▣`，`utils/gap.py`；A23 设计，Sheldon 11-16/17 审定），PATCH。`seed_admit`、`groups/flow` 判缺字改走 `is_gap`（两种语义相同：有字、读不出、不当证人）；`align_ref_coord.is_text_char` 认 `▣`（旧版会把它当标点丢掉、整列错一格）；`daizhige.fix_pua` 缺字图占位码记 `▣`；新 `scripts/dzg_placeholders.py`（整理本就地换字＋侧表）。seed_admit、align_ref 等步指纹变，殿本各册判过期，随换整理本新语料一并重跑。**换含 `▣` 的整理本必须用本版或以后的版本**。基于 v0.7.49，不含 dev 上 v0.7.50/51（史記线）及其他改动；底库不变（b27），不需配新底库。#1604 已合 dev。
+
 ## [0.7.49] - 2026-11-16
 
 - 发版说明（ZM 11-16，殿本 patch 线）：v0.7.42 + #1587（row_segment 1.51：框线判空认闭口方框字曰日口目，不再把它们当框角记空并进邻格）。PATCH；row_segment 及其下游步指纹变，殿本各册产物判过期、按全局设置改钉后择机重跑。基于 v0.7.42，不含 dev 上 v0.7.43–48 之后的改动（史記钩子、wu/rules.yaml 等），底库仍 b27，不需配新底库。
