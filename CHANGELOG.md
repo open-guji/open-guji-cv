@@ -3,6 +3,11 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.51] - 2026-11-17
+
+- 发版说明（A31 11-17，SJ 史記 patch 线）：v0.7.50 + #1606（dev a5e21ff cherry-pick），PATCH，**不含** dev 线其他改动（含 #1605 seg_pins_check 1b 节），也不含殿本 patch 线 v0.7.49 的 #1587。code_equiv `_GAP_GUARD_0750` 按本线哈希登记。没写 `row_segment.cut_gap_guard` 的册产物不变；写了的册从 row_segment 起过期。SJ 定不进 r76，v0.1 之后单开一轮全书 A/B。
+- PATCH：row_segment 书级参数 `cut_gap_guard`（缺省 0＝关，不进参数 dump）：切点选定后，选中那条不在白缝里、候选池里另有干净落在白缝里的，改用白走廊最宽的那条（`chosen_by="gap"`）。史記写本 U-Net 把上字底横、下字头判给扁字（畫/一、靈/七），Step4 照切线分墨 一→二；史記 25 页＋58 页改 11 个切点，看图 9 对 2 持平。关时殿本 vol30、全唐文 020、史記 09 row_segment 逐字节同，code_equiv `_GAP_GUARD_1117`。`scripts/code_equiv.py check` 基线检出链接本机 models/（A22，SJ r76，11-17）。
+
 ## [0.7.50] - 2026-11-16
 
 - 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.48 + #1601（dev cc3c30f cherry-pick），PATCH，**不含** dev 线其他改动，也不含殿本 patch 线 v0.7.49 的 #1587。code_equiv `_GF_EXCLUDE_0748` 按本线哈希登记。没写 group_flow_exclude 的册产物不变。
