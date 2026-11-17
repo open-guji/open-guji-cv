@@ -366,6 +366,10 @@ _R78_1117 = ("史記 r78 三个切点开关 cut_gap_keep_glyph／cut_white_row�
              "row_segment 在殿本 vol30 10 页（2,15,30,45,60,75,90,105,120,135，r8 包当上游）、全唐文 020 8 页（3,20,40,60,80,100,120,150，"
              "y2 包当上游）、史記 42 册 3 页（52,71,100，r77 包当上游，书仓 k24 开着 gap 0.08／free 0.35）上与 origin/dev ead2e04 产物逐字节相同；"
              "scripts/code_equiv.py check，A22 2026-11-17")
+_GLYPH_LINE_1117 = ("史記 r79 ①类 cut_glyph_line（row_segment 书级参数，缺省关、不进参数 dump；row_boundaries 加 _settle_side／_glyph_line，关时不调）："
+                    "row_segment 在史記 42 册 5 页（24,94,137,139,140，r78 main 包 job5101 当上游；94/137/139/140 是开关开时会改线的页），"
+                    "书仓 k25 参数（开 cut_gap_guard／cut_free_seam／#1632 三开关）上与 origin/dev 313998ff 产物逐字节相同；"
+                    "scripts/code_equiv.py check，SJ 切分线 2026-11-17")
 _R78_0759 = (_R78_1117 + "。史記 patch 线移植（v0.7.57 + #1632 → v0.7.59）：同一改动原样 cherry-pick（segment_column 只加三个开关，本线无 grid_adjust 等钩子），哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
 _FREE_SEAM_0757 = (_FREE_SEAM_1117 + "。史記 patch 线移植（v0.7.55 + #1624 → v0.7.57）：同一改动原样 cherry-pick（segment_column 只加 cut_free_seam，本线无 grid_adjust 等钩子），哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
 _GAP_GUARD_0750 = (_GAP_GUARD_1117 + "。史記 patch 线移植（v0.7.50 + #1606 → v0.7.51）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
@@ -1472,6 +1476,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='e418a2bba66994173bc64b596cda3604eaf04c46c19752ffa61e6188579b22ba',
           old='70816a6a1a2184754a1cf0e63fea6a4cf281c8f8553b5f59663f73697bab1f0a',
           evidence=_R78_1117),
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='283302e551afb91bc8c09462f9dc401266867526a31d83309b8be77bfd443521',
+          old='6fd4a89d12f16eed8e88206f666c8680709dba5d56a73b4b7861f7250174939b',
+          evidence=_GLYPH_LINE_1117),
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='ceef6bd694fa145ca3bf6873ca0505bdde1a21a4ca664444c26633236237d13c',
+          old='70816a6a1a2184754a1cf0e63fea6a4cf281c8f8553b5f59663f73697bab1f0a',
+          evidence=_GLYPH_LINE_1117),
     # cut_free_seam 书级参数（缺省关，2026-11-17，史記 r77；patch 线 v0.7.57）
     Equiv(module='open_guji_cv.steps.row_segment',
           new='6ba5531b5f3bbcffa92bc17fd35fcd8bd4533255583c91b7b8d45a34866a3c4d',
