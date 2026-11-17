@@ -33,6 +33,12 @@ PAD_DEBRIS_AREA_RATIO = 0.25
 #: 设 0.05 再多恢复 7 例、设 0.10 多 4 例；殿本两册真实字块上 0.05 是变好 6、变坏 4，
 #: 0.10 是变好 4、变坏 0。证据还薄，先留旋钮不开。
 PAD_DEBRIS_INNER_AREA_RATIO: float | None = None
+# 「像笔画的小块不删」护栏（2026-11-17 第二轮）：规则 3（padding 带碎屑）和
+# `_drop_stray_components`（字身框外的小块）要删的连通体，若同时满足下面四条就留着：
+# 粗细 ≥ 0.7×本图块笔宽、面积 ≥ 2×笔宽²、外接框长宽比 ≥ 2、离其余墨不超过 3 个笔宽。
+# 这是 忄／帝／常 的侧点、而／百 的顶横一类贴在字身外缘的真笔画；邻字残片和噪点多半细、
+# 小、近方或离得远。设 `None` 关掉（回到之前的行为，只给对照实验用）。
+STROKE_KEEP: tuple[float, float, float, float] | None = (0.7, 2.0, 2.0, 3.0)
 _UNSET = object()       # 「没传」哨兵（None 另有含义：关掉该护栏）
 SAUVOLA_WINDOW = 31
 #: 2026-09-16 由 0.2 降到 0.10（用户裁定）。北行日錄刻本这类**淡墨细笔**的扫描上，
@@ -201,8 +207,34 @@ def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
         if not touches and PAD_DEBRIS_INNER_AREA_RATIO is not None:
             cap3 = min(cap3, PAD_DEBRIS_INNER_AREA_RATIO)
         if area - in_core >= 0.8 * area and area < cap3 * largest:     # 规则 3
+            if STROKE_KEEP is not None:                       # 像笔画的小块不删
+                if runs is None:
+                    hr, vr = _run_lengths(binary)
+                    runs = (hr, vr, _stroke_width(binary, hr, vr))
+                if _stroke_like(binary, comp, int(bw), int(bh), int(area), runs):
+                    continue
             out[comp] = 0
     return out
+
+
+def _stroke_like(binary: np.ndarray, comp: np.ndarray, bw: int, bh: int, area: int,
+                 runs: tuple[np.ndarray, np.ndarray, float]) -> bool:
+    """这个小连通体像不像本字的一笔（见 `STROKE_KEEP`）。`runs` 是整块图的
+    (横向墨段长, 纵向墨段长, 笔宽)。"""
+    if STROKE_KEEP is None:
+        return False
+    thick_r, area_r, elong_r, gap_r = STROKE_KEEP
+    hr, vr, sw = runs
+    if sw <= 0 or area < area_r * sw * sw:
+        return False
+    if max(bw, bh) < elong_r * max(1, min(bw, bh)):
+        return False
+    if float(np.median(np.minimum(hr, vr)[comp])) < thick_r * sw:
+        return False
+    k = 2 * int(np.ceil(gap_r * sw)) + 1
+    near = cv2.dilate(comp.astype(np.uint8),
+                      cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    return bool(np.any((near > 0) & (binary > 0) & ~comp))
 
 
 def _run_lengths(binary: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -274,6 +306,7 @@ def _drop_stray_components(binary: np.ndarray,
     # 字身外接框（只由第 1 步留下的块决定）
     body = np.isin(labels, list(keep))
     ys, xs = np.nonzero(body)
+    runs = None
     if len(xs):
         x0, x1, y0, y1 = xs.min(), xs.max(), ys.min(), ys.max()
         for i in range(1, n):
@@ -282,6 +315,14 @@ def _drop_stray_components(binary: np.ndarray,
             cx, cy = centroids[i]
             if x0 <= cx <= x1 and y0 <= cy <= y1:
                 keep.add(i)
+            elif STROKE_KEEP is not None:             # 框外但像笔画的小块（忄 的侧点）也留
+                if runs is None:
+                    hr, vr = _run_lengths(binary)
+                    runs = (hr, vr, _stroke_width(binary, hr, vr))
+                if _stroke_like(binary, labels == i, int(stats[i, cv2.CC_STAT_WIDTH]),
+                                int(stats[i, cv2.CC_STAT_HEIGHT]),
+                                int(stats[i, cv2.CC_STAT_AREA]), runs):
+                    keep.add(i)
     out = binary.copy()
     drop_mask = ~np.isin(labels, list(keep)) & (binary > 0)
     out[drop_mask] = 0
