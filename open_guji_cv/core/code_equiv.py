@@ -357,6 +357,10 @@ _GAP_GUARD_1117 = ("切点白缝护栏 cut_gap_guard（row_segment 书级参数�
                    "关时 _gap_guard 直接返回）：row_segment 在殿本 vol30 10 页（2,15,30,45,60,75,90,105,120,135，r8 包当上游）、全唐文 020 8 页"
                    "（3,20,40,60,80,100,120,150，y1 包当上游）、史記 09 册 6 页（5,41,77,113,149,180，r72 包当上游）上与 origin/dev fb2e4d5 "
                    "产物逐字节相同；scripts/code_equiv.py check，A22 2026-11-17")
+_FREE_SEAM_1117 = ("零墨折线候选 cut_free_seam（row_segment 书级参数，缺省 0＝关、不进参数 dump；row_boundaries 加 _free_seam／_free_seam_path／"
+                   "_split_glyphs／_free_seam_keeps_sides／_line_ys 与懒算连通块 _cc，关时不调）：row_segment 在殿本 vol30 10 页"
+                   "（2,15,30,45,60,75,90,105,120,135，r8 包当上游）、全唐文 020 8 页（3,20,40,60,80,100,120,150，y2 包当上游）、史記 42 册 6 页"
+                   "（4,36,59,72,126,139，r75 包当上游）上与 origin/dev 4058d91 产物逐字节相同；scripts/code_equiv.py check，A22 2026-11-17")
 _GAP_GUARD_0750 = (_GAP_GUARD_1117 + "。史記 patch 线移植（v0.7.50 + #1606 → v0.7.51）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
@@ -1444,6 +1448,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='8920535f9f2322a9aae44bb36024dceec6fa207b716543554b134db0a83a7cb0',
           old='70816a6a1a2184754a1cf0e63fea6a4cf281c8f8553b5f59663f73697bab1f0a',
           evidence=_GAP_GUARD_1117),
+    # cut_free_seam 书级参数（缺省关，2026-11-17，史記 r77 切分清零）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='b5ecd960d9617889efaee79100e98b90ff84dc1ce97000c678904520f3af57c4',
+          old='e77bf946fd955af5da1e6968140e4e17ecb9458d983ef8f878593e7726fcaa95',
+          evidence=_FREE_SEAM_1117),
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='8c851c84d5d17ff58e704d92982f7369116eaac9589e42d8ee3a788054ed6ecc',
+          old='8920535f9f2322a9aae44bb36024dceec6fa207b716543554b134db0a83a7cb0',
+          evidence=_FREE_SEAM_1117),
     # grid_end_fit 书级开关（缺省关，2026-11-09，殿本 vol28 列尾下溢）
     Equiv(module="open_guji_cv.steps.row_segment",
           new="6a3617931b93c706e43d43ccd2e1b9f5d63e1307343c424637cb0ecb77b32258",
