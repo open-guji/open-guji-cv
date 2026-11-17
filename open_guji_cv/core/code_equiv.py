@@ -335,7 +335,13 @@ _FREE_SEAM_1117 = ("零墨折线候选 cut_free_seam（row_segment 书级参数�
                    "_split_glyphs／_free_seam_keeps_sides／_line_ys 与懒算连通块 _cc，关时不调）：row_segment 在殿本 vol30 10 页"
                    "（2,15,30,45,60,75,90,105,120,135，r8 包当上游）、全唐文 020 8 页（3,20,40,60,80,100,120,150，y2 包当上游）、史記 42 册 6 页"
                    "（4,36,59,72,126,139，r75 包当上游）上与 origin/dev 4058d91 产物逐字节相同；scripts/code_equiv.py check，A22 2026-11-17")
+_R78_1117 = ("史記 r78 三个切点开关 cut_gap_keep_glyph／cut_white_row／straight_seam_ink（row_segment 书级参数，缺省关、不进参数 dump；"
+             "row_boundaries 加 _gap_move_hurts／_white_row／_white_row_ok，_gap_guard 多一个 splits 参数（缺省 None 不变），关时不调）："
+             "row_segment 在殿本 vol30 10 页（2,15,30,45,60,75,90,105,120,135，r8 包当上游）、全唐文 020 8 页（3,20,40,60,80,100,120,150，"
+             "y2 包当上游）、史記 42 册 3 页（52,71,100，r77 包当上游，书仓 k24 开着 gap 0.08／free 0.35）上与 origin/dev ead2e04 产物逐字节相同；"
+             "scripts/code_equiv.py check，A22 2026-11-17")
 _FREE_SEAM_0757 = (_FREE_SEAM_1117 + "。史記 patch 线移植（v0.7.55 + #1624 → v0.7.57）：同一改动原样 cherry-pick（segment_column 只加 cut_free_seam，本线无 grid_adjust 等钩子），哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
+_R78_0759 = (_R78_1117 + "。史記 patch 线移植（v0.7.57 + #1632 → v0.7.59）：同一改动原样 cherry-pick（segment_column 只加三个开关，本线无 grid_adjust 等钩子），哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
 _GAP_GUARD_0750 = (_GAP_GUARD_1117 + "。史記 patch 线移植（v0.7.50 + #1606 → v0.7.51）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
@@ -1428,6 +1434,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='02c5d8e0c8e15f86ef22bdaa2341e200f0a73c2a3a28330d9f95b78e1c5e3670',
           old='fbb1d8d6f6a0e386c1747f8d1d33c8c7d33d569c9294c5952b3899c6696a3a31',
           evidence=_FREE_SEAM_0757),
+    # 史記 r78 三个切点开关（缺省关，2026-11-17；patch 线 v0.7.59）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='a57cd50da1aaaa05fe2e50ead5a3dd96ffcdca2160449ef429870929ef211c8d',
+          old='6ba5531b5f3bbcffa92bc17fd35fcd8bd4533255583c91b7b8d45a34866a3c4d',
+          evidence=_R78_0759),
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='8055bbc38b299d870a977f9081cc33745ccba45c5e9c7bf4d486ddf698e36299',
+          old='02c5d8e0c8e15f86ef22bdaa2341e200f0a73c2a3a28330d9f95b78e1c5e3670',
+          evidence=_R78_0759),
     # grid_end_fit 书级开关（缺省关，2026-11-09，殿本 vol28 列尾下溢）
     Equiv(module="open_guji_cv.steps.row_segment",
           new="6a3617931b93c706e43d43ccd2e1b9f5d63e1307343c424637cb0ecb77b32258",
