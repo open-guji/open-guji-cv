@@ -1810,6 +1810,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     snap_gap_ok=None,
                     cut_gap_guard: float = 0.0,
                     cut_free_seam: float = 0.0,
+                    cut_gap_keep_glyph: bool = False,
+                    cut_white_row: float = 0.0,
+                    straight_seam_ink: bool = False,
                     grid_adjust=None,
                     jiazhu_heads=None,
                     half_a_left=None,
@@ -1915,6 +1918,13 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       `free_seam`）并改选，`chosen_by="free"`。护栏 `_free_seam_keeps_sides`：只修墨大半在上格的块（上字笔画伸进下格），
       换线后整块归上格，别的块不换边（U-Net 一致率只记不拦：写本戈钩它判给下字）。
       管上字戈钩／长捺伸进下格、两字不相碰的切坏（伐/曰、成/曰、城/范）：零墨折线在 seam_wide 走廊外，池里没有。
+    - 史記 r78 三个开关（2026-11-17，缺省都关，关时逐字节不变）：
+      `cut_gap_keep_glyph`：`cut_gap_guard` 换过去的线不许劈开原线没劈的单字大小连通块（白走廊宽的那条常贴着戈钩内侧走，
+      代/黃、或/欲、之/實）。`cut_white_row`（格高倍数）：切点选定后（含 gap、free）仍劈开单字大小的连通块、±这么多格内
+      有整行白（压墨 ≤`FREE_SEAM_ZERO`）的，挪到最近那段整行白的正中（kind `white_row`，`chosen_by="white"`）；
+      护栏 `_white_row_ok`：被劈的块整块归它墨多的那边，别的单字大小的块不换边（挡字内白缝：二、三、言的亠下）；
+      换边的墨上下跨 ≥`GAP_DOWN_SPAN` 格也不挪。
+      `straight_seam_ink`：直线候选的 `seam_ink` 记真墨（原来写死 0，只是记录，选线不看它；史記核查工具拿它当「池里有零墨线」）。
     - `grid_adjust`／`jiazhu_heads`／`half_a_left`／`jiazhu_pair_ok`（书级钩子 `impl/keben/row_hooks`，2026-11-12／13）：
       缺省 None＝不调。`grid_adjust` 在 `grid_bounds` 落缝前改格线；`jiazhu_heads` 在段端收编前补认段头；`half_a_left` 给只有
       一半有字的夹注格定右半左缘；`jiazhu_pair_ok` 判一格是不是真并排两字。签名与用法见 `row_hooks` 模块头。
@@ -2268,6 +2278,11 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 _cc_memo.append(cv2.connectedComponentsWithStats(op, connectivity=8)[1:3])
             return _cc_memo[0]
 
+        def _splits_fn():
+            """`cut_gap_keep_glyph` 用：(原线, 新线) → 新线会不会坏字（`_gap_move_hurts`）。"""
+            lab_, st_ = _cc()
+            return lambda cur_, new_: _gap_move_hurts(lab_, st_, cur_, new_, period)
+
         def _split_suspect(u: Cell, d: Cell) -> bool:
             """L0′ 嫌疑：一矮一高，且矮格墨满（见 SPLIT_* 常量）。"""
             if med_h <= 0:
@@ -2421,7 +2436,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     continue
                 cands = [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)]
                 cands, chosen, chosen_by, escalate, escalate_reason = _resolve_and_probe(cands, 0, up[0], dn[0], k, clean=True)
-                chosen, chosen_by = _gap_guard(cands, chosen, chosen_by, ink_bin, float(bounds[k]), period, cut_gap_guard)
+                chosen, chosen_by = _gap_guard(cands, chosen, chosen_by, ink_bin, float(bounds[k]), period, cut_gap_guard,
+                                               splits=_splits_fn() if cut_gap_keep_glyph else None)
                 origin = "split_suspect" if suspect else "clean_probe"
                 if escalate_reason:
                     escalate_reason = origin + " " + escalate_reason
@@ -2435,8 +2451,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     dn[0].seam_top = cands[chosen].y
                 continue
             # 1) 直线永远是候选（dev_max=0，也是不切时的兜底）
-            cands = [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)]
             straight_ink = int(ink_bin[y].sum())
+            s_ink = straight_ink if straight_seam_ink else 0
+            cands = [SeamCandidate(kind="straight", y=None, seam_ink=s_ink, dev_max=0)]
             sm = _seam.find_seam(ink_bin, y, band=seam_band)
             if int(np.abs(sm - y).max()) > 0:
                 cands.append(SeamCandidate(kind="seam_narrow", y=sm.tolist(),
@@ -2479,7 +2496,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             # 现在恒删不掉任何一条，理由见上面长注释；`chosen` 仍按旧池下标定位、
             # 随过滤重指，这样将来过滤真的生效时它不会指错。
             chosen_seam = None if chosen == 0 else cands[chosen].y
-            kept = [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)]
+            kept = [SeamCandidate(kind="straight", y=None, seam_ink=s_ink, dev_max=0)]
             chosen = 0
             for c in cands[1:]:
                 if c.seam_ink >= straight_ink:
@@ -2511,11 +2528,15 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             #    U-Net，记一致率与分歧块；池 ≥2 时按门槛改选；所选分歧块 ≥ ESCALATE_BLOB 标 `escalate`（人裁过的
             #    不标）。只记录不改选法：拿不准的交下游再审。两步都在 `_resolve_and_probe` 里，与 L0′ 嫌疑切点共用。
             cands, chosen, chosen_by, escalate, escalate_reason = _resolve_and_probe(cands, chosen, up[0], dn[0], k)
-            chosen, chosen_by = _gap_guard(cands, chosen, chosen_by, ink_bin, float(bounds[k]), period, cut_gap_guard)
+            chosen, chosen_by = _gap_guard(cands, chosen, chosen_by, ink_bin, float(bounds[k]), period, cut_gap_guard,
+                                               splits=_splits_fn() if cut_gap_keep_glyph else None)
             if cut_free_seam > 0:
                 cands, chosen, chosen_by = _free_seam(cands, chosen, chosen_by, ink_bin, _cc(), float(bounds[k]), period,
                                                       cut_free_seam, up[0], dn[0], cut_judge, col_gray, x_lo, x_hi,
                                                       ink_threshold)
+            if cut_white_row > 0:
+                cands, chosen, chosen_by = _white_row(cands, chosen, chosen_by, ink_bin, _cc(), float(bounds[k]), period,
+                                                      cut_white_row, up[0], dn[0])
             cp = CutPointCandidates(k=k, y=float(bounds[k]),
                                     slot_above=up[0].slot, slot_below=dn[0].slot,
                                     candidates=cands, chosen=chosen, chosen_by=chosen_by,
@@ -2564,7 +2585,7 @@ def _gap_corridor(ink_bin: np.ndarray, ys, y_line: float, cap: int, clean: bool 
 
 
 def _gap_guard(cands, chosen: int, chosen_by: str, ink_bin: np.ndarray, y_line: float, period: float,
-               guard: float) -> tuple[int, str]:
+               guard: float, splits=None) -> tuple[int, str]:
     """`cut_gap_guard`：选中的切线不在白缝里（白走廊 < 门槛），池里另有干净地落在白缝里的，改用白走廊最宽的那条（同宽取池里靠前的）。
     选中那条已在白缝里的不动，哪怕别的更宽：试过「窄缝换宽缝」（走廊宽 2 倍就换），史記 09／26 册把「多」的撇、「之」的捺劈开
     （32:117:2、01:64:8），宽的那条常是字内大白（A22 11-17）。"""
@@ -2575,6 +2596,14 @@ def _gap_guard(cands, chosen: int, chosen_by: str, ink_bin: np.ndarray, y_line: 
     cor = [_gap_corridor(ink_bin, c.y, y_line, cap, clean=i != chosen) for i, c in enumerate(cands)]
     if cor[chosen] >= need:
         return chosen, chosen_by
+    if splits is not None:
+        # `cut_gap_keep_glyph`（史記 r78，A22 11-17）：换过去的线不许劈开原线没劈的单字大小连通块，也不许往上抬、把上字一大段
+        # 划给下格（`_gap_move_hurts`）。白走廊宽的那条常贴着戈钩内侧走（13:131:6 代、28:61:5 實：钩里那片白也算走廊，压墨
+        # ≤2 像素过了 clean），或是 seam_wide 探进上字字内大白（42:71:5 彬的彡、42:100:1 為的钩）。
+        w = ink_bin.shape[1]
+        cur = _line_ys(cands[chosen].y, y_line, w)
+        cor = [v if i == chosen or v < need or not splits(cur, _line_ys(cands[i].y, y_line, w)) else 0.0
+               for i, v in enumerate(cor)]
     best = max(range(len(cands)), key=lambda i: (cor[i], -i))
     if cor[best] < need or best == chosen:
         return chosen, chosen_by
@@ -2705,6 +2734,96 @@ def _free_seam_keeps_sides(lab: np.ndarray, stats: np.ndarray, cur: np.ndarray, 
         up1 = int((comp & (rows < new[x:x + cw][None, :])).sum()) / a
         if i in split:
             if up0 < 0.5 or up1 < 1 - FREE_SEAM_SIDE:
+                return False
+        elif a >= min_a and (up0 >= 0.5) != (up1 >= 0.5):
+            return False
+    return True
+
+
+GAP_DOWN_SPAN = 0.35   # `cut_gap_keep_glyph`：换线后从上格划给下格的墨，上下跨这么多格高就不换
+
+
+def _gap_move_hurts(lab: np.ndarray, stats: np.ndarray, cur: np.ndarray, new: np.ndarray, period: float) -> bool:
+    """`cut_gap_keep_glyph`：线从 `cur` 换到 `new` 会不会坏字——劈开原线没劈的单字大小连通块，或新线往上抬、把上格一段
+    上下跨 ≥`GAP_DOWN_SPAN` 格高的墨划给下格（几块小墨合起来算：彬的彡、為的钩连着大块）。
+    往下挪（把下格的墨划给上格）不拦：史記 79 处 gap 改选看图，跨 0.3–0.53 格的下挪（雲、醫、蓋、農）都对；
+    上抬跨 ≥0.38 格的 7 处（代、彬、為、學、武、城、農）全错，≤0.31 格的（多/稱、以/東）对。"""
+    if _split_glyphs(lab, stats, new, period) - _split_glyphs(lab, stats, cur, period):
+        return True
+    rows = np.arange(lab.shape[0])[:, None]
+    moved = (lab > 0) & (rows >= new[None, :]) & (rows < cur[None, :])
+    r = np.nonzero(moved.any(1))[0]
+    return bool(len(r)) and (r[-1] - r[0] + 1) >= GAP_DOWN_SPAN * period
+
+
+WHITE_ROW_INK = FREE_SEAM_ZERO   # 一行压墨 ≤ 这么多像素算整行白（容毛边、霉点）
+
+
+def _white_row(cands, chosen: int, chosen_by: str, ink_bin: np.ndarray, cc, y_line: float, period: float,
+               band: float, up_c, dn_c):
+    """`cut_white_row`：选中那条还劈着单字大小的连通块、±`band` 格内有整行白的，挪到离原线最近那段整行白的正中
+    （kind `white_row`，逐列同一 y）。不越过上格顶、下格底往里 `FREE_SEAM_MARGIN` 格高；过 `_white_row_ok` 才换，
+    近的那段不过就试下一段。人裁不动。返回 (cands, chosen, chosen_by)。"""
+    if band <= 0 or period <= 0 or chosen_by == "human":
+        return cands, chosen, chosen_by
+    lab, stats = cc
+    h, w = ink_bin.shape
+    if w < 2:
+        return cands, chosen, chosen_by
+    cur = _line_ys(cands[chosen].y, y_line, w)
+    split = _split_glyphs(lab, stats, cur, period)
+    if not split:
+        return cands, chosen, chosen_by
+    m = FREE_SEAM_MARGIN * period
+    lo = int(max(1, np.ceil(y_line - band * period), np.ceil(up_c.y0 + m)))
+    hi = int(min(h - 1, np.floor(y_line + band * period) + 1, np.floor(dn_c.y1 - m) + 1))
+    if hi - lo < 1:
+        return cands, chosen, chosen_by
+    white = ink_bin[lo:hi].sum(1) <= WHITE_ROW_INK
+    runs: list[tuple[int, int]] = []
+    i = 0
+    while i < len(white):
+        if white[i]:
+            j = i
+            while j + 1 < len(white) and white[j + 1]:
+                j += 1
+            runs.append((lo + i, lo + j))
+            i = j + 1
+        else:
+            i += 1
+    runs.sort(key=lambda r: (0 if r[0] <= y_line <= r[1] else min(abs(r[0] - y_line), abs(r[1] - y_line)), r[0]))
+    for a, b in runs:
+        yy = (a + b + 1) // 2
+        ys = np.full(w, yy, dtype=np.int64)
+        if np.array_equal(ys, cur) or not _white_row_ok(lab, stats, cur, ys, split, period):
+            continue
+        rows = np.arange(h)[:, None]
+        moved = (lab > 0) & (rows >= np.minimum(cur, ys)[None, :]) & (rows < np.maximum(cur, ys)[None, :])
+        r = np.nonzero(moved.any(1))[0]
+        if len(r) and r[-1] - r[0] + 1 >= GAP_DOWN_SPAN * period:
+            continue      # 换边的墨上下跨太多：言/救 线挪进言的亠下，整个口划给下格（史記 23:181:5，A22 11-17）
+        new = SeamCandidate(kind="white_row", y=[int(yy)] * w, seam_ink=int(ink_bin[yy].sum()),
+                            dev_max=int(np.abs(ys - y_line).max()))
+        return list(cands) + [new], len(cands), "white"
+    return cands, chosen, chosen_by
+
+
+def _white_row_ok(lab: np.ndarray, stats: np.ndarray, cur: np.ndarray, new: np.ndarray, split: set[int],
+                  period: float) -> bool:
+    """`cut_white_row` 护栏：被原线劈开的块整块（≥ 1−`FREE_SEAM_SIDE`）归它原来墨多的那边；别的单字大小的块不换边
+    （墨大半从一边挪到另一边）。挡字内白缝：线挪进「二」两横之间、「言」亠下面，上横／亠会整块换到上格。"""
+    h, w = lab.shape
+    lo, hi = int(max(0, min(cur.min(), new.min()) - 1)), int(min(h, max(cur.max(), new.max()) + 1))
+    min_a = FREE_SEAM_MIN_AREA * period * period
+    ids = set(np.unique(lab[lo:hi]).tolist()) - {0}
+    for i in ids:
+        x, y, cw, ch, a = (int(v) for v in stats[i])
+        comp = lab[y:y + ch, x:x + cw] == i
+        rows = np.arange(y, y + ch)[:, None]
+        up0 = int((comp & (rows < cur[x:x + cw][None, :])).sum()) / a
+        up1 = int((comp & (rows < new[x:x + cw][None, :])).sum()) / a
+        if i in split:
+            if (up1 if up0 >= 0.5 else 1 - up1) < 1 - FREE_SEAM_SIDE:
                 return False
         elif a >= min_a and (up0 >= 0.5) != (up1 >= 0.5):
             return False
