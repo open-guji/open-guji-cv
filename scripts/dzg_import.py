@@ -8,6 +8,7 @@
     python scripts/dzg_import.py compare    [--ws DIR] [--samples 10]
     python scripts/dzg_import.py colgold    [--ws DIR] --release DIR [--vols 01,03]
     python scripts/dzg_import.py fix-glyph-codes [--ws DIR]
+    python scripts/dzg_placeholders.py --ws DIR --out DIR   （整理本占位符区分：就地换字＋▣＋侧表，只读试算／出新语料）
 
 `--ws` 缺省读 `GUJI_WORKSPACE`（四庫總目书目录那一层）。
 
@@ -25,7 +26,7 @@
 - `glyphs` 是本条的**缺字图**：`{"U+1001": [图路径, x, y, w, h, …]}`。源文件拿缅甸文字母
   （U+1001 起，每条从头编号）当缺字的占位码，`text` 字段里同一位写的是 `□`。这些码位
   不是 PUA，`fix_pua` 原先认不出，缅甸字母原样进了整理本（2026-10-23 A24 在 align_ref
-  坐标对位里发现，殿本 0001–0005 共 233 处）；现在与映不上的 PUA 一样记 `〓`。
+  坐标对位里发现，殿本 0001–0005 共 233 处）；现在记 `▣`（以图代字；映不上的 PUA 仍记 `〓`，2026-11-16 起两者分开，见 `utils/gap.py`）。
 - **0001–0005 是總目**（0005 尾部附《四庫抽燬書提要》），0006 起是別的书。
   所以 `download` 收到**第一个不含總目的文件就停**，不一路试到 404（那是 1500 冊）。
 
@@ -78,7 +79,7 @@ VOLS = [f"{i:02d}" for i in range(1, 11)]
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # 源记录 → 半叶、PUA 修复、读序串：与 Step3 自动配页共用一份（open_guji_cv/utils/daizhige.py）
-from open_guji_cv.utils.daizhige import (NCOL, SHORT_CHARS, UNMAPPED, Half, _fix_col,  # noqa: F401
+from open_guji_cv.utils.daizhige import (IMAGE_PH, NCOL, SHORT_CHARS, UNMAPPED, Half, _fix_col,  # noqa: F401
                                          _is_pua, _norm_field, build_halves, column_plain,
                                          fix_pua, half_kind, han_only, load_records)
 
@@ -196,7 +197,7 @@ TXT_NAME = "siku_daizhige.txt"
 TXT_HEADER = (
     "# daizhige 逐列整理本（文淵閣四庫全書總目，sikuquanshu.daizhige.net/data/0001–0005.jsonl，"
     "即維基文庫 ProofreadPage 逐列校對本）。一行＝一列（line_is_column），列首全角空格＝start 格數，"
-    "雙行小注寫作<右行|左行>，映不上的PUA缺字與缺字圖占位碼記〓。每個半葉前一行「#@ 記錄id 頁 h0/h1」。"
+    "雙行小注寫作<右行|左行>，映不上的PUA缺字記〓，缺字圖占位碼（以圖代字）記▣。每個半葉前一行「#@ 記錄id 頁 h0/h1」。"
     "由 open-guji-cv scripts/dzg_import.py convert 生成，勿手改。"
 )
 
@@ -241,8 +242,8 @@ GLYPH_CODE_RE = re.compile(r"[\u1000-\u109f]")
 
 
 def fix_glyph_codes(text: str) -> tuple[str, int]:
-    """已生成的整理本里漏掉的缺字图占位码 → `〓`。一字换一字，行数、列内格位都不变。"""
-    return GLYPH_CODE_RE.subn(UNMAPPED, text)
+    """已生成的整理本里漏掉的缺字图占位码 → `▣`（以图代字）。一字换一字，行数、列内格位都不变。"""
+    return GLYPH_CODE_RE.subn(IMAGE_PH, text)
 
 
 def cmd_fix_glyph_codes(ws: Path) -> None:
@@ -486,7 +487,7 @@ def classify(a: str, b: str, vm) -> str:
         return "dzg多字"
     if not b:
         return "dzg少字"
-    if UNMAPPED in b:
+    if UNMAPPED in b or IMAGE_PH in b:
         return "dzg缺字〓"
     if len(a) == len(b) == 1 and vm is not None and vm.semantic(a) == vm.semantic(b):
         return "异体"

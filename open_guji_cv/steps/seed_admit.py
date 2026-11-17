@@ -51,6 +51,7 @@ from ..products.kinds.recog import (AdmitRec, ColumnAdmit, PageAdmit,
                                     PageAlignRef, PageDecision, PageMatch,
                                     PageOcr)
 from ..utils.image_io import imread as cv_imread
+from ..utils.gap import GAP_CHARS, GAP_IMAGE, is_gap
 from ..utils.ji_yi_si import FAMILY as _JYS
 
 _log = logging.getLogger(__name__)
@@ -1898,6 +1899,7 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.groups.prompt_template", "open_guji_cv.feedback.rulings",
                    "open_guji_cv.groups.context", "open_guji_cv.groups.textlayer_ref",
                    "open_guji_cv.groups.bars", "open_guji_cv.groups.aspect", "open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.rr_clf",
+                   "open_guji_cv.utils.gap",                   # 整理本缺字占位 〓／▣（is_gap，2026-11-16）
                    # 其 `ids` 解法（方案 S7）：在线判别＋它用到的 IDS 路模块
                    "open_guji_cv.groups.ids_online", "open_guji_cv.groups.ids", "open_guji_cv.groups.ids_two",
                    "open_guji_cv.groups.ids_parts", "open_guji_cv.groups.ids_segment", "open_guji_cv.groups.ids_solver",
@@ -2484,7 +2486,7 @@ class SeedAdmitStep(Step):
                         doubts.append("ref_lib_diff")
                     elif _top and _top not in always and p.ref_lib_coord_dissent \
                             and vmap.semantic(_top) == vmap.semantic(align_char) \
-                            and (_cr := _coord_refs(ctx, page, coord_cache).get(r.id)) not in (None, "", "〓") \
+                            and (_cr := _coord_refs(ctx, page, coord_cache).get(r.id)) not in (None, "", *GAP_CHARS) \
                             and vmap.semantic(_cr) != vmap.semantic(align_char):
                         doubts.append("ref_lib_coord_dissent")
                     elif _top and _top not in always \
@@ -2936,7 +2938,7 @@ def _rare_ref_coord_ok(ref: str, lib_top: str | None, cands: list, doubts, topk:
                        min_cov: float = _RARE_REF_COORD_MIN_COV, group_top_ok: bool = False) -> bool:
     """规则 A 坐标对位那支（`SeedAdmitParams.rare_ref_coord`）比现役对位多的护栏。纯函数。
     `group_top_ok`（`rare_ref_coord_group_top`）：库首位在字组里不拦，坐标对位字在字组里仍拦。"""
-    if not ref or ref == "〓":                  # 空格位／逐列本生僻字占位：不知道是哪个字
+    if not ref or is_gap(ref):                  # 空格位／逐列本生僻字占位：不知道是哪个字
         return False
     if cov < min_cov:
         return False
@@ -3121,7 +3123,7 @@ def rare_sparse_decide(*, ref: str | None, cands: list, n_lib: int, doubts, guar
                        group_chars: frozenset = frozenset()) -> tuple[str, float] | None:
     """规则 A 少刻例支（`SeedAdmitParams.rare_ref_sparse`）的判据，纯函数。`cands`＝5-b 候选 [(字, 分, 来源)…]，按融合名次。
     → (放行字＝整理本字, 领先量) 或 None。"""
-    if not ref or ref == "〓" or ref in _JYS or not _is_hanzi(ref) or not cands:
+    if not ref or is_gap(ref) or ref in _JYS or not _is_hanzi(ref) or not cands:
         return None
     if n_lib > max_n:
         return None
@@ -3201,7 +3203,7 @@ def solo_5b_decide(*, cands: list, rare_top: str | None, n_lib: dict | int, doub
     top, cov1 = ranked[0]
     if cov_min_same is not None and same_char is not None and same_char == top:
         cov_min = min(cov_min, cov_min_same)      # 库已判 same 的格降一档（solo_5b_same_cov）
-    if (not top or top == "〓" or top in _JYS or not _is_hanzi(top) or top in group_chars
+    if (not top or is_gap(top) or top in _JYS or not _is_hanzi(top) or top in group_chars
             or top in near_form_chars or float(cov1) < cov_min):
         return None
     if guard is not None or _hard_blocked(doubts or [], guard):
@@ -3250,7 +3252,7 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
         for rec in col.chars or []:
             if rec.admit or rec.provenance == "human" or rec.channel == "human":
                 continue
-            if rec.id in amap or (coord.get(rec.id) or "") not in ("", "〓"):
+            if rec.id in amap or (coord.get(rec.id) or "") not in ("", *GAP_CHARS):
                 continue                  # 有整理本对位的格归别的通道
             m = mmap.get(rec.id)
             if m is None or not m.candidates:
@@ -3289,7 +3291,7 @@ def consensus_lib_decide(*, raw, doubts, cov_min: float, group_review: bool = Fa
     ch = raw.char
     if top != ch or float(cov1) < cov_min or float(raw.cov or 0.0) < cov_min:
         return None
-    if ch == "〓" or ch in _JYS or not _is_hanzi(ch):
+    if is_gap(ch) or ch in _JYS or not _is_hanzi(ch):
         return None
     if raw.guard is not None or _hard_blocked(doubts or [], raw.guard):
         return None
@@ -3381,7 +3383,7 @@ def solo_adapt_decide(*, cands: list, rare_top: str | None, guard, doubts, prof:
         ok = ok + ("near_form",)              # solo_adapt_nf_ok：形近家族字只是候选；窗口内的形近表对手下面照拦
     if any(not (isinstance(d, str) and d.startswith(ok)) for d in (doubts or [])):
         return None
-    if (not c or c == "〓" or c in _JYS or not _is_hanzi(c) or c in group_chars or c in near_form_chars):
+    if (not c or is_gap(c) or c in _JYS or not _is_hanzi(c) or c in group_chars or c in near_form_chars):
         return None
     pc = prof.get(c)
     thr = max(floor, pc[pct]) if pc else 1.0
@@ -3425,7 +3427,7 @@ def _solo_adapt_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, ra
         for rec in col.chars or []:
             if rec.admit or rec.provenance == "human" or rec.channel == "human":
                 continue
-            if rec.id in amap or (coord.get(rec.id) or "") not in ("", "〓"):
+            if rec.id in amap or (coord.get(rec.id) or "") not in ("", *GAP_CHARS):
                 continue                  # 有整理本对位的格归别的通道
             m = mmap.get(rec.id)
             if m is None or not m.candidates:
@@ -3515,7 +3517,7 @@ def _num_run_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord
             for i, rec in enumerate(seq):
                 if rec.admit or rec.provenance == "human" or rec.channel == "human":
                     continue
-                if rec.id in amap or (coord.get(rec.id) or "") not in ("", "〓"):
+                if rec.id in amap or (coord.get(rec.id) or "") not in ("", *GAP_CHARS):
                     continue              # 有整理本对位的格归别的通道
                 m = mmap.get(rec.id)
                 if m is None or not m.candidates:
@@ -3561,7 +3563,7 @@ def solo_cal_decide(*, cands: list, guard, doubts, tiers: list, skip: str, group
     ranked = sorted(cands, key=lambda t: -t[1])
     c, v = ranked[0]
     v = float(v)
-    if not c or c == "〓" or not _is_hanzi(c):
+    if not c or is_gap(c) or not _is_hanzi(c):
         return None
     got = _solo_cal_plain(c, v, ranked, doubts=doubts, tiers=tiers, skip=skip, group_chars=group_chars,
                           near_form_chars=near_form_chars, rare_top=rare_top, cov_5b=cov_5b, ok_doubts=ok_doubts)
@@ -3605,7 +3607,7 @@ def _solo_cal_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare
         for rec in col.chars or []:
             if rec.admit or rec.provenance == "human" or rec.channel == "human":
                 continue
-            if rec.id in amap or (coord.get(rec.id) or "") not in ("", "〓"):
+            if rec.id in amap or (coord.get(rec.id) or "") not in ("", *GAP_CHARS):
                 continue                  # 有整理本对位的格归别的通道
             m = mmap.get(rec.id)
             if m is None or not m.candidates:
@@ -3647,7 +3649,7 @@ def lead_5b_decide(*, cands: list, rare: list, guard, doubts, cell_id: str, skip
     ranked = sorted(cands, key=lambda t: -t[1])
     c = ranked[0][0]
     r0, s0 = rare[0][0], float(rare[0][1])
-    if (not r0 or r0 == "〓" or not _is_hanzi(r0) or not c or r0 == c
+    if (not r0 or is_gap(r0) or not _is_hanzi(r0) or not c or r0 == c
             or r0 in skip or c in skip or are_variants(r0, c)):
         return None
     lead = s0 - max((float(s) for d, s in rare[1:] if d != r0), default=0.0)
@@ -3671,7 +3673,7 @@ def _lead_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
         for rec in col.chars or []:
             if rec.admit or rec.provenance == "human" or rec.channel == "human":
                 continue
-            if rec.id in amap or (coord.get(rec.id) or "") not in ("", "〓"):
+            if rec.id in amap or (coord.get(rec.id) or "") not in ("", *GAP_CHARS):
                 continue
             m = mmap.get(rec.id)
             if m is None or not m.candidates or rec.id not in rlist:
@@ -4231,7 +4233,7 @@ def _pua_rule_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coor
             ref = coord.get(rec.id)
             if ref is None:
                 ref = (amap.get(rec.id) or (None,))[0]
-            if ref != "〓":
+            if not is_gap(ref):
                 continue
             m = mmap.get(rec.id)
             if not m or not m.candidates or getattr(m, "guard", None) is not None:
@@ -4244,7 +4246,7 @@ def _pua_rule_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coor
                 continue
             rec.admit, rec.channel, rec.provenance, rec.char = True, "pua_rule", "pua_rule", char
             rec.evidence = {**(rec.evidence or {}),
-                            "lane": {"lane": "pua_rule", "lib": top, "cov": round(cov, 4), "ref": "〓",
+                            "lane": {"lane": "pua_rule", "lib": top, "cov": round(cov, 4), "ref": ref,
                                      "prev_doubts": list(rec.doubts or [])}}
             rec.doubts = ["lane_pua_rule"]
             n += 1
@@ -4284,7 +4286,7 @@ def ref_topk_decide(*, char, ref, cands, verdict, guard, doubts, evidence, seman
                     gap_max: float = REFERENCE_TRUST_TOPK_GAP) -> int:
     """`ref_topk_follow` 的判据，纯函数。待审格：库首位≠整理本字、整理本字在前 5 名且 cov 差 ≤ `gap_max` →
     返回整理本字在候选里的名次（2–5），否则 0。"""
-    if not char or not ref or ref == "〓" or char == ref or char in _REF_LIB_COORD_SKIP or ref in _REF_LIB_COORD_SKIP:
+    if not char or not ref or is_gap(ref) or char == ref or char in _REF_LIB_COORD_SKIP or ref in _REF_LIB_COORD_SKIP:
         return 0
     if char in _JYS or ref in _JYS or guard is not None or verdict == "diff" or not cands:
         return 0
@@ -4318,7 +4320,7 @@ def _ref_topk_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coor
         for r in col.chars or []:
             if r.admit and r.char:
                 rf = coord.get(r.id) or (amap.get(r.id) or (None,))[0]
-                if rf and rf != "〓":
+                if rf and not is_gap(rf):
                     tot += 1
                     hit += r.char == rf
         if not (tot >= 3 and hit / tot >= 0.8):
@@ -4356,7 +4358,7 @@ def ref_lib_coord_decide(*, char, ref, cands, verdict, guard, doubts, evidence, 
     """`ref_lib_coord` 的判据，纯函数（离线回放与线上共用）。待审格是否按整理本字放行。
     `blind_ok`（调用方已验过本列对位健康）：库首位不是整理本字、但格带 `ctx_guard_ref`（库认不出、文意又与整理本不同）、
     库首位 cov < `blind_cov_max`（库没有强烈说是别的字）→ 也按整理本放。"""
-    if not char or not ref or ref == "〓" or char != ref or char in _REF_LIB_COORD_SKIP or char in _JYS or not _is_han(ref):
+    if not char or not ref or is_gap(ref) or char != ref or char in _REF_LIB_COORD_SKIP or char in _JYS or not _is_han(ref):
         return False
     ds = [d for d in (doubts or []) if isinstance(d, str)]
     if any(not d.startswith(_REF_LIB_COORD_DOUBTS) for d in ds):
@@ -4402,7 +4404,7 @@ def _ref_lib_coord_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict,
             for r in col.chars or []:
                 if r.admit and r.char:
                     rf = coord.get(r.id) or (amap.get(r.id) or (None,))[0]
-                    if rf and rf != "〓":
+                    if rf and not is_gap(rf):
                         tot += 1
                         hit += r.char == rf
             blind_ok = tot >= 3 and hit / tot >= 0.8
@@ -4610,10 +4612,10 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
                     continue
             m = mmap.get(rec.id)
             here, via = rules, None
-            if ref not in rules or (vmap is not None and ref != "〓"):
+            if ref not in rules or (vmap is not None and not is_gap(ref)):
                 # 表里没有这个整理本形：按参校本取异体（`follow_ref_variants`）。表里有、但本格的字不是表里那一形
                 # （史記 r45：表加了 嵗=歳，嵗 的格放行字是 歲，表路只认 歳 不改）时同样走这条路，别让表项接管。
-                if vmap is None or not ref or ref == "〓":
+                if vmap is None or not ref or is_gap(ref):
                     continue
                 other = rec.char if rec.admit else ((m.candidates or [(None,)])[0][0] if m else None)
                 if ref in rules and (not other or other == rules[ref]):
@@ -4872,7 +4874,7 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
             al = amap.get(rec.id)
             ref, op = (al[0], al[1]) if al else (None, None)
             co = coord.get(rec.id)
-            if co == "〓":                       # 逐列本的 PUA 生僻字占位：知道有字、不知道是哪个
+            if is_gap(co):                       # 逐列本的 PUA 生僻字占位：知道有字、不知道是哪个
                 co = None
             lib = lib_top_of(rec.id)
             ev = rec.evidence or {}
@@ -5428,7 +5430,7 @@ def _blank_ink_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: dict, co
         ref_n = agree = 0
         for rec in recs:
             ch = coord.get(rec.id)
-            if not ch or ch == "〓":
+            if not ch or is_gap(ch):
                 continue
             ref_n += 1
             m = mmap.get(rec.id)
@@ -5465,7 +5467,7 @@ def _p_coord_refs(ctx: RunContext, page: int, cache: dict) -> dict[str, str]:
     """`p_ref_coord` 用：本页坐标对位的整理本字，去掉坐标冲突格、〓、空格位。"""
     ref: PageAlignRef | None = _opt(ctx, "align_ref", page)
     bad = set(getattr(ref, "coord_conflict_ids", None) or []) if ref else set()
-    return {k: v for k, v in _coord_refs(ctx, page, cache).items() if v not in (None, "", "〓") and k not in bad}
+    return {k: v for k, v in _coord_refs(ctx, page, cache).items() if v not in (None, "", *GAP_CHARS) and k not in bad}
 
 
 _IRREGULAR_SOURCES = frozenset({"twedu", "local:keben"})
@@ -5600,7 +5602,7 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, c
                 if gid is None:
                     continue
             if p.fold_coord_ref:
-                if not ref and coord and coord.get(r.id) not in (None, "", "〓"):
+                if not ref and coord and coord.get(r.id) not in (None, "", *GAP_CHARS):
                     ref, via_coord = coord[r.id], True
                 if gid is None and ref:
                     top = (list(getattr(mmap.get(r.id) if mmap else None, "candidates", None) or [(None,)]))[0][0]
@@ -6536,7 +6538,7 @@ def _solo_coord_dissented(r, vmap, coord: dict) -> bool:
     放行字＝库 same 取库字，否则库候选 top1（同 `_pick_char` 对 solo 通道的取法）。豁免见参数说明：
     坐标字非汉字（私用码／占位）、两边都是数字（坐标对位在数字处常漂）、语义同字（异体）。"""
     cr = coord.get(r.id)
-    if cr in (None, "", "〓") or len(cr) != 1 or not _ruling_han(cr):
+    if cr in (None, "", *GAP_CHARS) or len(cr) != 1 or not _ruling_han(cr):
         return False
     cands = list(r.candidates or [])
     ch = r.char if r.verdict == "same" and r.char else (max(cands, key=lambda t: t[1])[0] if cands else None)
@@ -6722,7 +6724,7 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
             dens = hit.get((cc.col, r.slot, r.sub or ""))
             if dens is None:
                 continue
-            if r.id in coord and coord[r.id] == "〓":
+            if r.id in coord and is_gap(coord[r.id]):
                 # 逐列本里没有码表的 PUA 生僻字占位：知道这儿有字、不知道是哪个
                 out[r.id] = (dens, None, "coord_pua")
             elif r.id in coord:
@@ -6774,7 +6776,7 @@ def _ref_placeholder_norm(ch: str | None) -> str | None:
     不然 `ctx_guard_ref` 会把占位符当整理本字设成默认字，出单、导出露出 ခ（A24 R01 深挖，
     史記 03:114:2:20、08:122:2:16、10:3:6:7b；sheldon 11-07 同意）。"""
     if ch and len(ch) == 1 and 0x1000 <= ord(ch) <= 0x109F:
-        return "〓"
+        return GAP_IMAGE
     return ch
 
 
@@ -6791,7 +6793,7 @@ def _context_guard(p: "SeedAdmitParams", r, ctx_char: str, coord: dict[str, str]
     if p.context_guard_diff and r.verdict == "diff" and r.cov < p.context_guard_cov:
         return "ctx_guard_diff", None
     ref = coord.get(r.id)
-    if ref is not None and r.verdict != "same" and ref != "〓":
+    if ref is not None and r.verdict != "same" and not is_gap(ref):
         if ref == "":
             if p.context_guard_ref_blank:
                 return "ctx_guard_ref_blank", None
@@ -6821,7 +6823,7 @@ def _garble_guard(p: "SeedAdmitParams", r, ctx_char: str, witnesses, run_ids, vm
     `witnesses`：整理本对齐字、坐标对位字、OCR 候选（None/空串/〓 不算证人）。有一个与
     context 字语义相同就是有背书，不拦；其余按 shape → rare → run 依次判。"""
     sem = vmap.semantic(ctx_char)
-    if any(w and w != "〓" and vmap.semantic(w) == sem for w in witnesses):
+    if any(w and not is_gap(w) and vmap.semantic(w) == sem for w in witnesses):
         return None
     if r.cov < p.context_garble_cov:
         return "ctx_garble_shape"
@@ -6971,14 +6973,14 @@ def _iron_confusable_witness(iron_char: str, witnesses, vmap) -> str | None:
     from ..clustering.iron_evidence import extra_confusable_partners
     near = partners().get(iron_char, frozenset()) | extra_confusable_partners().get(iron_char, frozenset())
     for w in witnesses:
-        if w and w != "〓" and w in near and vmap.semantic(w) != vmap.semantic(iron_char):
+        if w and not is_gap(w) and w in near and vmap.semantic(w) != vmap.semantic(iron_char):
             return w
     return None
 
 
 def _iron_coord_dissent(iron_char: str, ref: str | None, vmap) -> bool:
     """`iron_coord_guard` 用：坐标对位字与铁证字语义不同、也没有直接异体边。空串（空格位）、`〓`、None 不算证人。"""
-    if not ref or ref == "〓" or ref == iron_char:
+    if not ref or is_gap(ref) or ref == iron_char:
         return False
     if vmap.semantic(ref) == vmap.semantic(iron_char):
         return False

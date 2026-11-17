@@ -58,7 +58,7 @@ def test_fix_pua_maps_known_and_marks_unknown():
 def test_fix_pua_marks_glyph_image_codes():
     # 源文件拿缅甸文字母当缺字图占位码（本条 glyphs 登记），不能原样进整理本
     s, miss = dzg.fix_pua("臲\u1002據荀", None, {"U+1002": ["img/glyphs/0001-2.png", 0, 0, 64, 64]})
-    assert s == "臲〓據荀" and miss == 1
+    assert s == "臲▣據荀" and miss == 1      # 以图代字记 ▣，映不上的私用码记 〓（2026-11-16，utils/gap.py）
 
 
 def test_build_halves_marks_glyph_codes_in_text_and_notes(tmp_path):
@@ -69,12 +69,12 @@ def test_build_halves_marks_glyph_codes_in_text_and_notes(tmp_path):
     p = tmp_path / "0001.jsonl"
     p.write_text(json.dumps(r, ensure_ascii=False) + "\n", encoding="utf-8")
     h = dzg.build_halves([p])[0]
-    assert dzg.column_line(h.cols[0]) == F * 2 + "董〓嚴<甲〓|乙>" and h.unmapped == 2
+    assert dzg.column_line(h.cols[0]) == F * 2 + "董▣嚴<甲▣|乙>" and h.unmapped == 2
 
 
 def test_fix_glyph_codes_keeps_length():
     s, n = dzg.fix_glyph_codes("其人董\u1001嚴陵\n圖作\u1002形")
-    assert s == "其人董〓嚴陵\n圖作〓形" and n == 2
+    assert s == "其人董▣嚴陵\n圖作▣形" and n == 2
 
 
 def test_build_halves_splits_leaf_into_two_halves(tmp_path):
