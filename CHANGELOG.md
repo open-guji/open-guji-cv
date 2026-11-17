@@ -3,6 +3,12 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.61] - 2026-11-17
+
+史記 patch 线：v0.7.59 + #1638（SJ 11-17，史記 r79）。
+
+- 新书级参数 `row_segment.cut_glyph_line`（缺省 0＝关、不进参数哈希，关时逐字节不变）：`cut_white_row` 之后选中切线仍劈开单字大小连通块时，被劈的块整块归离它近的那边，逐列取上格墨之下、下格墨之上离原线最近的 y（±这么多格内，不限坡度），kind `glyph_line`、`chosen_by="glyph"`；拿不准、块高过 1.15 格、某列上下墨重叠都不动。建议值 0.35。冲突手解：`segment_column` 只加 `cut_glyph_line`（本线无 grid_adjust 等钩子）；code_equiv 按本线重算登 `_GLYPH_LINE_0761`（row_segment a57cd50d→cb32ff35、row_boundaries 8055bbc3→158f4327；dev 线为 `_GLYPH_LINE_1117`）。
+
 ## [0.7.59] - 2026-11-17
 
 史記 patch 线：v0.7.57 + #1632（A22 11-17，史記 r78）。
