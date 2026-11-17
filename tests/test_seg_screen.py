@@ -346,3 +346,30 @@ CHAIN_EXPECT = {   # SJ rev 1006446 钉子挪过的线：42:84:1 闕三皇三条
     ("15:170:7", "3|4"): ["1|2", "2|3"],
     ("17:157:6", "1|2"): [],
 }
+
+
+def test_two_glyphs_tall_cell_with_two_chars():
+    """格高 2 倍、框住上下两个字（中间 20px 白缝）：报；同一格只有一个高字（竖笔连着）不报。"""
+    cc = _col(1, [1])
+    cell = cc.cells[0].model_copy(update={"y1": 300.0})       # y 100–300
+    g = _img(400)
+    g[110:190, 30:70] = 0
+    g[210:290, 30:70] = 0
+    r = ss.two_glyphs(g, cell, cc.content_x, 100.0)
+    assert r and r["ratio"] == 2.0 and len(r["parts"]) == 2 and r["gap"] == 20
+    g2 = _img(400)
+    g2[110:290, 45:55] = 0
+    assert ss.two_glyphs(g2, cell, cc.content_x, 100.0) is None
+
+
+def test_two_glyphs_quiet_on_normal_cell_and_flat_strokes():
+    cc = _col(1, [1])
+    g = _img(400)
+    g[110:140, 30:70] = 0
+    g[160:190, 30:70] = 0                     # 一格一字（呂）：格高 1 倍不看
+    assert ss.two_glyphs(g, cc.cells[0], cc.content_x, 100.0) is None
+    cell = cc.cells[0].model_copy(update={"y1": 250.0})
+    g2 = _img(400)
+    for y in (120, 160, 200, 240):            # 高格里几道扁横（二、三）：每段都矮
+        g2[y:y + 8, 20:80] = 0
+    assert ss.two_glyphs(g2, cell, cc.content_x, 100.0) is None

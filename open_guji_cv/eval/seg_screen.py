@@ -961,3 +961,47 @@ def cut_through(gray: np.ndarray, col_cells, ink_threshold: int = 128, *, mid: f
                     "best": int(best), "move": int(round(move)), "level": "强" if c0 >= strong * p2 else "中" if abs(move) >= CUT_WEAK_MOVE * period else "弱",
                     "agree": agree})
     return out
+
+
+TWO_MIN_H = 1.2            # 格高 ≥ 参照字高（正文＝本页格高中位，夹注半格＝本列半格高中位）这么多倍才看
+TWO_PART = 0.3             # 格里墨按白缝分段，至少两段各高 ≥ 参照字高这么多
+TWO_GAP = 0.05             # 段与段之间的白缝 ≥ 参照字高这么多才算断开（字内笔画间的小缝并成一段）
+TWO_ROW = 0.04             # 一行墨宽 ≥ 内容宽这么多（且 ≥ 2px）算有墨行（尘点、残笔尖不算）
+
+
+def two_glyphs(gray: np.ndarray, cell, content_x, ref_h: float, ink_threshold: int = 128,
+               stripped: np.ndarray | None = None) -> dict | None:
+    """一格框住了两个字（SJ r76 审计：推钉子预检只核格数，一格跨两字没人查，2026-11-17）。
+
+    格高 ≥ `TWO_MIN_H`×参照字高，格内（先剥界行、版框长直线）有墨行按 ≥ `TWO_GAP` 的白缝分段，有 ≥2 段各高 ≥ `TWO_PART`
+    ×参照字高 → `{"ratio": 格高倍数, "parts": [段高倍数…], "gap": 最宽段间缝 px}`；否则 None。
+    `stripped`：本列内容窗 [x0, x1) 剥过长直线的墨图（同一列逐格查时先算一次传进来）。
+    扁字（一、二、三）每段都矮、凑不到两段够高的；格高不到 1.2 倍的（呂、昌一格一字）不看。"""
+    if not ref_h or ref_h <= 0:
+        return None
+    y0, y1 = int(round(cell.y0)), int(round(cell.y1))
+    if (y1 - y0) < TWO_MIN_H * ref_h:
+        return None
+    h, w = gray.shape[:2]
+    x0, x1 = (int(content_x[0]), int(content_x[1])) if content_x else (0, w)
+    cx0, cx1 = max(0, int(round(cell.x0)), x0), min(w, int(round(cell.x1)), x1)
+    y0, y1 = max(0, y0), min(h, y1)
+    if cx1 - cx0 < 2 or y1 - y0 < 2:
+        return None
+    if stripped is None:
+        stripped = strip_long_lines((gray[:, x0:x1] < ink_threshold).astype(np.uint8))
+    ink = stripped[y0:y1, cx0 - x0:cx1 - x0]
+    rows = ink.sum(axis=1) >= max(2, TWO_ROW * (cx1 - cx0))
+    segs: list[list[int]] = []
+    min_gap = TWO_GAP * ref_h
+    for y in np.flatnonzero(rows):
+        if segs and y - segs[-1][1] <= min_gap:
+            segs[-1][1] = int(y)
+        else:
+            segs.append([int(y), int(y)])
+    tall = [s for s in segs if s[1] - s[0] + 1 >= TWO_PART * ref_h]
+    if len(tall) < 2:
+        return None
+    gaps = [b[0] - a[1] - 1 for a, b in zip(segs, segs[1:])]
+    return {"ratio": round((y1 - y0) / ref_h, 2), "parts": [round((s[1] - s[0] + 1) / ref_h, 2) for s in tall],
+            "gap": int(max(gaps)) if gaps else 0}
