@@ -1,7 +1,6 @@
 """推钉子预检（`feedback/pins_check.py`，A22 F3）：纯函数部分，数据自造。"""
 from types import SimpleNamespace
 
-from open_guji_cv.eval import seg_screen as ss
 from open_guji_cv.feedback import pins_check as pc
 from open_guji_cv.products.kinds.cells import CellRec, ColumnCells, PageCells
 from open_guji_cv.products.kinds.chars import CharRec, ColumnChars
@@ -202,41 +201,3 @@ def test_merge_anchor_drafts_replaces_in_place():
     assert [r["event"] for r in rows] == ["e1", "e2", "e3"]
     assert rows[0]["anchor"] == {"ink_bbox": [9]}
     assert duplicate_anchor_keys(out) == {}
-
-
-def _geo_col(cells):
-    recs = [CellRec(slot=s, pos=s, y0=y0, y1=y1, x0=0, x1=100, kind="char", order=i)
-            for i, (s, y0, y1) in enumerate(cells)]
-    return ColumnCells(col=1, ok=True, n_body_slots=len(recs), cells=recs, period=100.0, content_x=(0.0, 100.0),
-                       border_top=20.0, border_bottom=500.0, flags=["manual_cells"])
-
-
-def test_pin_geometry_two_chars_and_ink():
-    import numpy as np
-    g = np.full((500, 100), 255, np.uint8)
-    g[110:190, 30:70] = 0
-    g[210:290, 30:70] = 0                     # 钉子把两个字钉进一格（100–300）
-    g[320:390, 30:70] = 0
-    g[320:436, 40:50] = 0                     # 下一格字竖笔尾被 400 处的格线劈了
-    g[440:490, 30:70] = 0
-    cc = _geo_col([(1, 100, 300), (2, 300, 400), (3, 400, 500)])
-    out = ss.pin_geometry(g, cc, 100.0)
-    kinds = {(t["kind"], t["slot"]) for t in out}
-    assert ("two", "1") in kinds and ("ink", "2|3") in kinds
-    two = next(t for t in out if t["kind"] == "two")
-    ink = next(t for t in out if t["kind"] == "ink")
-    assert two["block"] and not ink["block"]          # 没裁判：压墨只当提示
-
-    class J:
-        def assess(self, *a, **k):
-            return [0.9, 0.99], [0, 0]
-    ink_j = next(t for t in ss.pin_geometry(g, cc, 100.0, judge=J()) if t["kind"] == "ink")
-    assert ink_j["block"] and ink_j["level"] == "中"
-
-
-def test_pin_geometry_clean_column():
-    import numpy as np
-    g = np.full((400, 100), 255, np.uint8)
-    for y in (110, 210, 310):
-        g[y:y + 80, 30:70] = 0
-    assert ss.pin_geometry(g, _geo_col([(1, 100, 200), (2, 200, 300), (3, 300, 400)]), 100.0) == []

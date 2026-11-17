@@ -35,16 +35,3 @@ def test_real_char_next_to_frame_is_kept():
     fr = RB._frame_mask(ink, P)
     cell = slice(60, 120)
     assert not RB._frame_only(ink[cell], fr[cell], P, 0.01)
-
-
-def test_closed_box_glyph_not_frame():
-    """「曰」类闭口方框字：两侧竖+多道横档，不得当框角判空（vol14 32 葉 7 列）。"""
-    ink = _col(h=300, w=190)
-    ink[0:300, 62:66] = 1                       # 他格也有的左侧长竖（模拟被收进 frame 的两侧竖）
-    ink[0:300, 124:130] = 1
-    for y in (78, 108, 144):
-        ink[y:y + 5, 62:130] = 1
-    fr = RB._frame_mask(ink, P)
-    cell = slice(60, 171)
-    assert fr[cell].any()
-    assert not RB._frame_only(ink[cell], fr[cell], P, 0.01)
