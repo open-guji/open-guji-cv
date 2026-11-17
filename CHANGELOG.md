@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.55] - 2026-11-17
+
+- 发版说明（A31 11-17，SJ 史記 patch 线）：v0.7.54 + #1618（dev 0f24d856 cherry-pick，只取 `core/code_equiv.py` 登记行，原样），PATCH。登记 `utils/daizhige`（#1604 〓→▣）对 row_segment 行为等价（A22 实测：史記、殿本 23360 半叶格位表逐项同，史記 09 册 6 页 row_segment 与 v0.7.51 逐字节同）。史記 row_segment 指纹回到 v0.7.51 的 824691d8；对 v0.7.51 只剩 align_ref、seed_admit 变 → 从 align_ref 起重跑。monotonic 对 origin/main、v0.7.50／51／54 全过。
+
 ## [0.7.54] - 2026-11-17
 
 - 发版说明（A31 11-17，SJ 史記 patch 线）：v0.7.51 + #1604（dev 496d5736 cherry-pick，无冲突；整理本缺字占位符区分：私用码 `〓`／以图代字 `▣`，`utils/gap.py`），PATCH。`seed_admit`、`groups/flow` 判缺字改走 `is_gap`（两种语义相同：有字、读不出、不当证人）；`align_ref_coord.is_text_char` 认 `▣`（旧版当标点丢掉、整列错一格）；`daizhige.fix_pua` 缺字图占位码记 `▣`；新 `scripts/dzg_placeholders.py`。**换含 `▣` 的语料（A23 占位符试算包）必须用本版或以后的版本**。对 v0.7.51 指纹变：row_segment（code_deps 含 utils.daizhige）、align_ref、seed_admit，从 row_segment 起重跑；不登等价。**不含** dev 线其他改动（#1605、#1589/#1609 等）及殿本线 #1587。底库不变。
