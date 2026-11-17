@@ -1,0 +1,7049 @@
+{
+ "_doc": "形近字组表（scripts/build_near_groups.py 生成，读法见 open_guji_cv/clustering/near_route.py）。pairs 的键是两个字，src：lib:<书>＝从该书字形库挖的（near 是近度）、hand／human／font＝confusable.py 的三张表、variant＝同形异码；core＝核心对（手工、人裁、同形异码，或某本书近度 ≥0.985）；全表另含近度 ≥0.975 的库内对与字体表。group＝这一对两个字同在第 7 步字组注册表（groups/registry.py）的哪个组里，有它就是已经有判法；char_groups＝注册表里每个字属哪些组（注册表是字组的单一真源，这里只是生成时抄的一份，供第 5 步不 import groups 包就能查）。名单用前要人看一遍：库里挖的对有少量是切图丢偏旁造成的假形近。",
+ "books": {
+  "qtw": {
+   "lib_rows": 35413,
+   "trusted_only": false,
+   "model": "glyph_sim_qtw",
+   "pairs": 220
+  },
+  "sj": {
+   "lib_rows": 3426,
+   "trusted_only": true,
+   "model": "m_sj",
+   "pairs": 16
+  },
+  "sk": {
+   "lib_rows": 15553,
+   "trusted_only": true,
+   "model": "m_sk",
+   "pairs": 118
+  }
+ },
+ "n_dropped": 18,
+ "n_pairs": 572,
+ "n_core": 369,
+ "n_chars": 920,
+ "n_core_chars": 644,
+ "n_core_in_group": 117,
+ "char_groups": {
+  "㑹": [
+   "zh"
+  ],
+  "㓂": [
+   "kgc"
+  ],
+  "㕘": [
+   "can"
+  ],
+  "㝠": [
+   "cp_ming2"
+  ],
+  "㝷": [
+   "cp_xun2"
+  ],
+  "㣲": [
+   "weim"
+  ],
+  "㤗": [
+   "cp_tai4"
+  ],
+  "㫖": [
+   "zhi"
+  ],
+  "㳫": [
+   "cp_ta4"
+  ],
+  "㸃": [
+   "dian"
+  ],
+  "䆒": [
+   "cp_jiu1"
+  ],
+  "䆳": [
+   "cp_sui4"
+  ],
+  "䇿": [
+   "cek"
+  ],
+  "䋲": [
+   "cp_sheng2"
+  ],
+  "䕫": [
+   "kui"
+  ],
+  "䘮": [
+   "sang"
+  ],
+  "䜟": [
+   "chen"
+  ],
+  "䜿": [
+   "cp_shu4c"
+  ],
+  "䟦": [
+   "ba"
+  ],
+  "䟽": [
+   "shu"
+  ],
+  "䧟": [
+   "xian"
+  ],
+  "䨇": [
+   "cp_shuang1"
+  ],
+  "一": [
+   "yr"
+  ],
+  "丈": [
+   "zw"
+  ],
+  "予": [
+   "yz"
+  ],
+  "二": [
+   "yr"
+  ],
+  "于": [
+   "zy"
+  ],
+  "亷": [
+   "cp_lian2b"
+  ],
+  "人": [
+   "rr"
+  ],
+  "仝": [
+   "xjz"
+  ],
+  "令": [
+   "xjz"
+  ],
+  "住": [
+   "xjz"
+  ],
+  "侯": [
+   "hou"
+  ],
+  "俞": [
+   "qin"
+  ],
+  "俟": [
+   "hou"
+  ],
+  "候": [
+   "hou"
+  ],
+  "倚": [
+   "cp_yi3"
+  ],
+  "偏": [
+   "xjz"
+  ],
+  "傅": [
+   "fc"
+  ],
+  "傳": [
+   "fc"
+  ],
+  "入": [
+   "rr"
+  ],
+  "內": [
+   "nei"
+  ],
+  "全": [
+   "xjz"
+  ],
+  "兩": [
+   "liang"
+  ],
+  "八": [
+   "rr"
+  ],
+  "内": [
+   "nei"
+  ],
+  "冊": [
+   "ce"
+  ],
+  "册": [
+   "ce"
+  ],
+  "冐": [
+   "xjz"
+  ],
+  "冑": [
+   "xjz"
+  ],
+  "冠": [
+   "kgc"
+  ],
+  "冥": [
+   "cp_ming2"
+  ],
+  "冦": [
+   "cp_kou4",
+   "kgc"
+  ],
+  "冶": [
+   "xjz"
+  ],
+  "冷": [
+   "xjz"
+  ],
+  "凖": [
+   "zhun"
+  ],
+  "凟": [
+   "cp_du2"
+  ],
+  "出": [
+   "sy",
+   "chu"
+  ],
+  "刊": [
+   "kan"
+  ],
+  "刋": [
+   "kan"
+  ],
+  "删": [
+   "shan"
+  ],
+  "別": [
+   "bie"
+  ],
+  "刪": [
+   "shan"
+  ],
+  "别": [
+   "bie"
+  ],
+  "刺": [
+   "ci"
+  ],
+  "剌": [
+   "ci"
+  ],
+  "前": [
+   "xjz"
+  ],
+  "劍": [
+   "jian"
+  ],
+  "劔": [
+   "jian"
+  ],
+  "勅": [
+   "chi"
+  ],
+  "勢": [
+   "shi"
+  ],
+  "勾": [
+   "xjz"
+  ],
+  "十": [
+   "ss",
+   "sb"
+  ],
+  "千": [
+   "zy"
+  ],
+  "卑": [
+   "xjz"
+  ],
+  "卜": [
+   "sb"
+  ],
+  "即": [
+   "ji"
+  ],
+  "卷": [
+   "juan"
+  ],
+  "卽": [
+   "ji"
+  ],
+  "卿": [
+   "qing"
+  ],
+  "厯": [
+   "lih"
+  ],
+  "參": [
+   "can"
+  ],
+  "叅": [
+   "can"
+  ],
+  "叙": [
+   "xu"
+  ],
+  "句": [
+   "xjz"
+  ],
+  "可": [
+   "xjz"
+  ],
+  "各": [
+   "gm"
+  ],
+  "名": [
+   "gm"
+  ],
+  "吕": [
+   "lv"
+  ],
+  "呂": [
+   "lv"
+  ],
+  "命": [
+   "qin"
+  ],
+  "問": [
+   "wj",
+   "men"
+  ],
+  "啓": [
+   "qik"
+  ],
+  "啟": [
+   "qik"
+  ],
+  "喪": [
+   "sang"
+  ],
+  "嗚": [
+   "wu"
+  ],
+  "嘗": [
+   "xjz"
+  ],
+  "囘": [
+   "huiq"
+  ],
+  "回": [
+   "huiq"
+  ],
+  "固": [
+   "kou"
+  ],
+  "國": [
+   "kou"
+  ],
+  "圍": [
+   "kou"
+  ],
+  "園": [
+   "kou"
+  ],
+  "圓": [
+   "yt",
+   "kou"
+  ],
+  "圖": [
+   "yt",
+   "kou"
+  ],
+  "圜": [
+   "kou"
+  ],
+  "土": [
+   "ts"
+  ],
+  "埤": [
+   "xjz"
+  ],
+  "塡": [
+   "tsh"
+  ],
+  "填": [
+   "tsh"
+  ],
+  "増": [
+   "cp_zeng1"
+  ],
+  "增": [
+   "cp_zeng1"
+  ],
+  "壙": [
+   "xjz"
+  ],
+  "士": [
+   "ss",
+   "ts"
+  ],
+  "壽": [
+   "cp_shou4"
+  ],
+  "夀": [
+   "cp_shou4"
+  ],
+  "夔": [
+   "kui"
+  ],
+  "大": [
+   "dt"
+  ],
+  "太": [
+   "dt"
+  ],
+  "奇": [
+   "qi"
+  ],
+  "奉": [
+   "cp_feng4b"
+  ],
+  "妃": [
+   "cp_fei1"
+  ],
+  "子": [
+   "zy",
+   "yz"
+  ],
+  "孰": [
+   "xjz"
+  ],
+  "宋": [
+   "sz"
+  ],
+  "官": [
+   "guan"
+  ],
+  "宫": [
+   "guan"
+  ],
+  "宮": [
+   "guan"
+  ],
+  "宸": [
+   "guang"
+  ],
+  "宻": [
+   "mi"
+  ],
+  "宼": [
+   "cp_kou4",
+   "kgc"
+  ],
+  "宿": [
+   "cp_su4"
+  ],
+  "寄": [
+   "cp_ji4"
+  ],
+  "密": [
+   "mi"
+  ],
+  "寇": [
+   "cp_kou4",
+   "kgc"
+  ],
+  "寛": [
+   "cp_kuan1"
+  ],
+  "寜": [
+   "ning"
+  ],
+  "實": [
+   "guang"
+  ],
+  "寧": [
+   "ning"
+  ],
+  "寬": [
+   "cp_kuan1"
+  ],
+  "寳": [
+   "cp_bao3"
+  ],
+  "寶": [
+   "cp_bao3"
+  ],
+  "尋": [
+   "cp_xun2"
+  ],
+  "尙": [
+   "shang"
+  ],
+  "尚": [
+   "shang"
+  ],
+  "山": [
+   "sy"
+  ],
+  "岀": [
+   "chu"
+  ],
+  "嵗": [
+   "sui"
+  ],
+  "巡": [
+   "xun",
+   "chuo"
+  ],
+  "己": [
+   "jys"
+  ],
+  "已": [
+   "jys"
+  ],
+  "巳": [
+   "jys"
+  ],
+  "巻": [
+   "juan"
+  ],
+  "干": [
+   "zy"
+  ],
+  "廉": [
+   "cp_lian2b"
+  ],
+  "廣": [
+   "guang"
+  ],
+  "廵": [
+   "xun"
+  ],
+  "弊": [
+   "bi"
+  ],
+  "彖": [
+   "xz"
+  ],
+  "彙": [
+   "hui"
+  ],
+  "彚": [
+   "hui"
+  ],
+  "彛": [
+   "yi_560"
+  ],
+  "彜": [
+   "yi_560"
+  ],
+  "彝": [
+   "yi_560"
+  ],
+  "彞": [
+   "yi_560"
+  ],
+  "往": [
+   "xjz"
+  ],
+  "徧": [
+   "xjz"
+  ],
+  "微": [
+   "weim"
+  ],
+  "徴": [
+   "zheng"
+  ],
+  "徵": [
+   "zheng"
+  ],
+  "徽": [
+   "cp_hui1"
+  ],
+  "心": [
+   "xb"
+  ],
+  "必": [
+   "xb"
+  ],
+  "急": [
+   "cp_ji2"
+  ],
+  "愼": [
+   "shen",
+   "tsh"
+  ],
+  "慎": [
+   "shen",
+   "tsh"
+  ],
+  "慿": [
+   "cp_ping2"
+  ],
+  "憑": [
+   "cp_ping2"
+  ],
+  "懐": [
+   "cp_huai2"
+  ],
+  "懷": [
+   "cp_huai2"
+  ],
+  "戊": [
+   "wxs"
+  ],
+  "戌": [
+   "wxs"
+  ],
+  "戍": [
+   "wxs"
+  ],
+  "扺": [
+   "di"
+  ],
+  "抵": [
+   "di"
+  ],
+  "捜": [
+   "cp_sou1"
+  ],
+  "揚": [
+   "xjz"
+  ],
+  "搜": [
+   "cp_sou1"
+  ],
+  "撫": [
+   "fu"
+  ],
+  "撰": [
+   "zhuan"
+  ],
+  "攜": [
+   "cp_xie2"
+  ],
+  "敎": [
+   "jiao"
+  ],
+  "敕": [
+   "chi"
+  ],
+  "敘": [
+   "xu"
+  ],
+  "教": [
+   "jiao"
+  ],
+  "文": [
+   "zw"
+  ],
+  "既": [
+   "jiw"
+  ],
+  "旣": [
+   "jiw"
+  ],
+  "日": [
+   "ry",
+   "rm"
+  ],
+  "旨": [
+   "zhi"
+  ],
+  "晚": [
+   "wan"
+  ],
+  "晩": [
+   "wan"
+  ],
+  "暁": [
+   "cp_xiao3"
+  ],
+  "曉": [
+   "cp_xiao3"
+  ],
+  "曠": [
+   "xjz"
+  ],
+  "曰": [
+   "ry"
+  ],
+  "曾": [
+   "zh"
+  ],
+  "會": [
+   "zh",
+   "qin"
+  ],
+  "木": [
+   "mb"
+  ],
+  "未": [
+   "wm",
+   "sz"
+  ],
+  "末": [
+   "wm"
+  ],
+  "本": [
+   "mb"
+  ],
+  "朱": [
+   "sz"
+  ],
+  "杰": [
+   "cp_jie2"
+  ],
+  "梨": [
+   "cp_li2b"
+  ],
+  "棃": [
+   "cp_li2b"
+  ],
+  "棗": [
+   "cp_zao3"
+  ],
+  "棻": [
+   "cp_fen1"
+  ],
+  "椘": [
+   "cp_chu3"
+  ],
+  "楊": [
+   "xjz"
+  ],
+  "楚": [
+   "cp_chu3"
+  ],
+  "榮": [
+   "xjz"
+  ],
+  "横": [
+   "cp_heng2"
+  ],
+  "樹": [
+   "cp_shu4b"
+  ],
+  "橅": [
+   "fu"
+  ],
+  "橫": [
+   "cp_heng2"
+  ],
+  "櫽": [
+   "cp_yin3c"
+  ],
+  "步": [
+   "cp_bu4"
+  ],
+  "歩": [
+   "cp_bu4"
+  ],
+  "歲": [
+   "sui"
+  ],
+  "歴": [
+   "lih"
+  ],
+  "毎": [
+   "cp_mei3"
+  ],
+  "每": [
+   "cp_mei3"
+  ],
+  "水": [
+   "xjz"
+  ],
+  "永": [
+   "xjz"
+  ],
+  "沓": [
+   "cp_ta4"
+  ],
+  "治": [
+   "xjz"
+  ],
+  "泰": [
+   "cp_tai4"
+  ],
+  "派": [
+   "pai"
+  ],
+  "涉": [
+   "cp_she4"
+  ],
+  "涵": [
+   "cp_han2"
+  ],
+  "淄": [
+   "zx"
+  ],
+  "淸": [
+   "qx"
+  ],
+  "清": [
+   "qx"
+  ],
+  "渉": [
+   "cp_she4"
+  ],
+  "湽": [
+   "zx"
+  ],
+  "準": [
+   "zhun"
+  ],
+  "滎": [
+   "xjz"
+  ],
+  "漾": [
+   "cp_yang4"
+  ],
+  "濂": [
+   "cp_lian2"
+  ],
+  "濓": [
+   "cp_lian2"
+  ],
+  "瀆": [
+   "cp_du2"
+  ],
+  "為": [
+   "wei"
+  ],
+  "熟": [
+   "xjz"
+  ],
+  "爲": [
+   "wei"
+  ],
+  "獲": [
+   "huo"
+  ],
+  "獵": [
+   "lie"
+  ],
+  "玉": [
+   "wyu"
+  ],
+  "王": [
+   "wyu"
+  ],
+  "瑣": [
+   "suo"
+  ],
+  "由": [
+   "sy"
+  ],
+  "甲": [
+   "js"
+  ],
+  "申": [
+   "js"
+  ],
+  "當": [
+   "xjz"
+  ],
+  "疏": [
+   "shu"
+  ],
+  "發": [
+   "fa"
+  ],
+  "目": [
+   "rm",
+   "mz"
+  ],
+  "眞": [
+   "cp_zhen1"
+  ],
+  "真": [
+   "cp_zhen1"
+  ],
+  "祇": [
+   "xjz"
+  ],
+  "祗": [
+   "xjz"
+  ],
+  "祿": [
+   "cp_lu4b"
+  ],
+  "禄": [
+   "cp_lu4b"
+  ],
+  "禽": [
+   "qin"
+  ],
+  "究": [
+   "cp_jiu1"
+  ],
+  "窿": [
+   "xjz"
+  ],
+  "竄": [
+   "cuan"
+  ],
+  "竒": [
+   "qi"
+  ],
+  "章": [
+   "xjz"
+  ],
+  "策": [
+   "cek"
+  ],
+  "算": [
+   "suan"
+  ],
+  "絕": [
+   "jue"
+  ],
+  "絶": [
+   "jue"
+  ],
+  "緒": [
+   "cp_xu4"
+  ],
+  "緖": [
+   "cp_xu4"
+  ],
+  "繩": [
+   "cp_sheng2"
+  ],
+  "羈": [
+   "jim"
+  ],
+  "翦": [
+   "xjz"
+  ],
+  "而": [
+   "em"
+  ],
+  "耶": [
+   "cp_ye"
+  ],
+  "聞": [
+   "men"
+  ],
+  "胄": [
+   "xjz"
+  ],
+  "自": [
+   "mz"
+  ],
+  "臯": [
+   "cp_gao1"
+  ],
+  "舍": [
+   "qin"
+  ],
+  "艶": [
+   "cp_yan4"
+  ],
+  "艷": [
+   "cp_yan4"
+  ],
+  "苑": [
+   "cp_yuan4"
+  ],
+  "荆": [
+   "cp_jing1"
+  ],
+  "草": [
+   "xjz"
+  ],
+  "荊": [
+   "cp_jing1"
+  ],
+  "荒": [
+   "cp_huang1"
+  ],
+  "葢": [
+   "gai"
+  ],
+  "蒙": [
+   "mn"
+  ],
+  "蓋": [
+   "gai"
+  ],
+  "虚": [
+   "cp_xu1"
+  ],
+  "虛": [
+   "cp_xu1"
+  ],
+  "衛": [
+   "weiw"
+  ],
+  "衞": [
+   "weiw"
+  ],
+  "補": [
+   "cp_bu3"
+  ],
+  "覊": [
+   "jim"
+  ],
+  "說": [
+   "shuo"
+  ],
+  "説": [
+   "shuo"
+  ],
+  "論": [
+   "ly"
+  ],
+  "諭": [
+   "ly"
+  ],
+  "謠": [
+   "yao"
+  ],
+  "謡": [
+   "yao"
+  ],
+  "識": [
+   "chen"
+  ],
+  "變": [
+   "bian"
+  ],
+  "讖": [
+   "chen"
+  ],
+  "豎": [
+   "cp_shu4c"
+  ],
+  "象": [
+   "xz"
+  ],
+  "貌": [
+   "cp_mao4"
+  ],
+  "貎": [
+   "cp_mao4"
+  ],
+  "賓": [
+   "guang"
+  ],
+  "賔": [
+   "guang"
+  ],
+  "賛": [
+   "cp_zan4"
+  ],
+  "贊": [
+   "cp_zan4"
+  ],
+  "跋": [
+   "ba"
+  ],
+  "迎": [
+   "chuo"
+  ],
+  "近": [
+   "chuo"
+  ],
+  "迥": [
+   "chuo"
+  ],
+  "迫": [
+   "chuo"
+  ],
+  "述": [
+   "cp_shu4",
+   "chuo"
+  ],
+  "追": [
+   "chuo"
+  ],
+  "退": [
+   "chuo"
+  ],
+  "逄": [
+   "feng"
+  ],
+  "逆": [
+   "chuo"
+  ],
+  "逋": [
+   "chuo"
+  ],
+  "通": [
+   "chuo"
+  ],
+  "造": [
+   "chuo"
+  ],
+  "逢": [
+   "feng"
+  ],
+  "連": [
+   "chuo"
+  ],
+  "進": [
+   "chuo"
+  ],
+  "逸": [
+   "chuo"
+  ],
+  "逾": [
+   "chuo"
+  ],
+  "遁": [
+   "chuo"
+  ],
+  "遇": [
+   "chuo"
+  ],
+  "運": [
+   "chuo"
+  ],
+  "遍": [
+   "chuo"
+  ],
+  "過": [
+   "chuo"
+  ],
+  "道": [
+   "chuo"
+  ],
+  "違": [
+   "chuo"
+  ],
+  "遜": [
+   "chuo"
+  ],
+  "遞": [
+   "chuo"
+  ],
+  "遠": [
+   "chuo"
+  ],
+  "遣": [
+   "chuo"
+  ],
+  "適": [
+   "chuo"
+  ],
+  "遭": [
+   "chuo"
+  ],
+  "遵": [
+   "chuo"
+  ],
+  "遷": [
+   "chuo"
+  ],
+  "選": [
+   "xuan",
+   "chuo"
+  ],
+  "遺": [
+   "yh",
+   "chuo"
+  ],
+  "遼": [
+   "chuo"
+  ],
+  "邁": [
+   "chuo"
+  ],
+  "邃": [
+   "cp_sui4"
+  ],
+  "還": [
+   "yh",
+   "chuo"
+  ],
+  "邇": [
+   "chuo"
+  ],
+  "邊": [
+   "chuo"
+  ],
+  "郎": [
+   "lang"
+  ],
+  "郞": [
+   "lang"
+  ],
+  "鄉": [
+   "xiang"
+  ],
+  "鄕": [
+   "xiang"
+  ],
+  "釆": [
+   "xjz"
+  ],
+  "采": [
+   "xjz"
+  ],
+  "鎭": [
+   "zhen"
+  ],
+  "鎮": [
+   "zhen"
+  ],
+  "門": [
+   "men"
+  ],
+  "閉": [
+   "men"
+  ],
+  "開": [
+   "men"
+  ],
+  "閎": [
+   "men"
+  ],
+  "閏": [
+   "men"
+  ],
+  "閑": [
+   "men"
+  ],
+  "閒": [
+   "men"
+  ],
+  "間": [
+   "wj",
+   "men"
+  ],
+  "閔": [
+   "men"
+  ],
+  "閣": [
+   "men"
+  ],
+  "閨": [
+   "men"
+  ],
+  "閩": [
+   "men"
+  ],
+  "閭": [
+   "men"
+  ],
+  "閱": [
+   "men"
+  ],
+  "閶": [
+   "men"
+  ],
+  "閻": [
+   "men"
+  ],
+  "闇": [
+   "men"
+  ],
+  "闈": [
+   "men"
+  ],
+  "闌": [
+   "men"
+  ],
+  "闕": [
+   "men"
+  ],
+  "闗": [
+   "guanm"
+  ],
+  "闚": [
+   "men"
+  ],
+  "關": [
+   "guanm",
+   "men"
+  ],
+  "闞": [
+   "men"
+  ],
+  "闡": [
+   "men"
+  ],
+  "闢": [
+   "men"
+  ],
+  "阿": [
+   "xjz"
+  ],
+  "陰": [
+   "yinv"
+  ],
+  "陷": [
+   "xian"
+  ],
+  "隂": [
+   "yinv"
+  ],
+  "隆": [
+   "xjz"
+  ],
+  "隠": [
+   "cp_yin3b"
+  ],
+  "隱": [
+   "cp_yin3b"
+  ],
+  "隸": [
+   "li"
+  ],
+  "雙": [
+   "cp_shuang1"
+  ],
+  "雨": [
+   "liang"
+  ],
+  "靑": [
+   "qy"
+  ],
+  "青": [
+   "qy"
+  ],
+  "面": [
+   "em"
+  ],
+  "顏": [
+   "cp_yan2"
+  ],
+  "顔": [
+   "cp_yan2"
+  ],
+  "顚": [
+   "dx"
+  ],
+  "顛": [
+   "dx"
+  ],
+  "類": [
+   "lei"
+  ],
+  "飮": [
+   "cp_yin3"
+  ],
+  "飲": [
+   "cp_yin3"
+  ],
+  "高": [
+   "cp_gao1b"
+  ],
+  "髙": [
+   "cp_gao1b"
+  ],
+  "髪": [
+   "cp_fa4"
+  ],
+  "髮": [
+   "cp_fa4"
+  ],
+  "鬬": [
+   "cp_dou4"
+  ],
+  "鬭": [
+   "cp_dou4"
+  ],
+  "鬰": [
+   "cp_yu4"
+  ],
+  "鬱": [
+   "cp_yu4"
+  ],
+  "鳯": [
+   "cp_feng4"
+  ],
+  "鳳": [
+   "cp_feng4"
+  ],
+  "鳴": [
+   "wu"
+  ],
+  "麓": [
+   "cp_lu4"
+  ],
+  "黎": [
+   "cp_li2"
+  ],
+  "默": [
+   "cp_mo4"
+  ],
+  "黙": [
+   "cp_mo4"
+  ],
+  "點": [
+   "dian"
+  ],
+  "齊": [
+   "xjz"
+  ],
+  "齋": [
+   "xjz"
+  ],
+  "𠉀": [
+   "hou"
+  ],
+  "𠋣": [
+   "cp_yi3"
+  ],
+  "𠋫": [
+   "hou"
+  ],
+  "𠮓": [
+   "bian"
+  ],
+  "𡚁": [
+   "bi"
+  ],
+  "𡚱": [
+   "cp_fei1"
+  ],
+  "𡨋": [
+   "cp_ming2"
+  ],
+  "𡽪": [
+   "cp_hui1"
+  ],
+  "𢑱": [
+   "yi_560"
+  ],
+  "𢑴": [
+   "yi_560"
+  ],
+  "𢚩": [
+   "cp_ji2"
+  ],
+  "𢰅": [
+   "zhuan"
+  ],
+  "𢹂": [
+   "cp_xie2"
+  ],
+  "𣗳": [
+   "cp_shu4b"
+  ],
+  "𣲖": [
+   "pai"
+  ],
+  "𣹢": [
+   "cp_han2"
+  ],
+  "𣻌": [
+   "cp_yang4"
+  ],
+  "𤇍": [
+   "cp_jie2"
+  ],
+  "𤢪": [
+   "lie"
+  ],
+  "𤨏": [
+   "suo"
+  ],
+  "𤼵": [
+   "fa"
+  ],
+  "𥙷": [
+   "cp_bu3"
+  ],
+  "𥠖": [
+   "cp_li2"
+  ],
+  "𥨥": [
+   "cuan"
+  ],
+  "𦤎": [
+   "cp_gao1"
+  ],
+  "𦯳": [
+   "cp_fen1"
+  ],
+  "𧰼": [
+   "xz"
+  ],
+  "𨕖": [
+   "xuan"
+  ],
+  "𨜊": [
+   "qing"
+  ],
+  "𨼆": [
+   "cp_yin3b"
+  ],
+  "𨽾": [
+   "li"
+  ],
+  "𩔖": [
+   "lei"
+  ],
+  "𪋤": [
+   "cp_lu4"
+  ],
+  "𪧐": [
+   "cp_su4"
+  ],
+  "𫆀": [
+   "cp_ye"
+  ],
+  "𫉬": [
+   "huo"
+  ],
+  "𫎇": [
+   "mn"
+  ],
+  "𫐠": [
+   "cp_shu4"
+  ],
+  "𫝑": [
+   "shi"
+  ],
+  "𫟍": [
+   "cp_yuan4"
+  ],
+  "𫯠": [
+   "cp_feng4b"
+  ],
+  "𬃷": [
+   "cp_zao3"
+  ],
+  "𭔃": [
+   "cp_ji4"
+  ],
+  "𭬚": [
+   "cp_yin3c"
+  ],
+  "𮅕": [
+   "suan"
+  ],
+  "𮎰": [
+   "cp_huang1"
+  ],
+  "𮟏": [
+   "cp_sui4"
+  ]
+ },
+ "pairs": {
+  "一二": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9997
+   },
+   "core": true,
+   "group": [
+    "yr"
+   ]
+  },
+  "十士": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9992
+   },
+   "core": true,
+   "group": [
+    "ss"
+   ]
+  },
+  "千干": {
+   "src": [
+    "font",
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9846,
+    "sk": 0.999
+   },
+   "core": true,
+   "group": [
+    "zy"
+   ]
+  },
+  "删刪": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9976
+   },
+   "core": true,
+   "group": [
+    "shan"
+   ]
+  },
+  "日曰": {
+   "src": [
+    "font",
+    "hand",
+    "human",
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.976,
+    "sk": 0.9973
+   },
+   "core": true,
+   "group": [
+    "ry"
+   ]
+  },
+  "別别": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9966
+   },
+   "core": true,
+   "group": [
+    "bie"
+   ]
+  },
+  "十卜": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9965
+   },
+   "core": true,
+   "group": [
+    "sb"
+   ]
+  },
+  "土士": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.963,
+    "sk": 0.9965
+   },
+   "core": true,
+   "group": [
+    "ts"
+   ]
+  },
+  "注註": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9961
+   },
+   "core": true
+  },
+  "官宮": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9958
+   },
+   "core": true,
+   "group": [
+    "guan"
+   ]
+  },
+  "尸戸": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9958
+   },
+   "core": true
+  },
+  "未末": {
+   "src": [
+    "font",
+    "hand",
+    "human",
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9869,
+    "sk": 0.9958
+   },
+   "core": true,
+   "group": [
+    "wm"
+   ]
+  },
+  "壬干": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9953
+   },
+   "core": true
+  },
+  "官宫": {
+   "src": [
+    "lib:qtw",
+    "lib:sj",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9881,
+    "sj": 0.9841,
+    "sk": 0.9951
+   },
+   "core": true,
+   "group": [
+    "guan"
+   ]
+  },
+  "宫宮": {
+   "src": [
+    "lib:qtw",
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9901,
+    "sk": 0.995
+   },
+   "core": true,
+   "group": [
+    "guan"
+   ]
+  },
+  "已巳": {
+   "src": [
+    "hand",
+    "lib:qtw",
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9949,
+    "sk": 0.9848
+   },
+   "core": true,
+   "group": [
+    "jys"
+   ]
+  },
+  "虚虛": {
+   "src": [
+    "lib:sj",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9726,
+    "sj": 0.9947,
+    "sk": 0.9748
+   },
+   "core": true,
+   "group": [
+    "cp_xu1"
+   ]
+  },
+  "㫖者": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9945
+   },
+   "core": true
+  },
+  "千壬": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9944
+   },
+   "core": true
+  },
+  "入八": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9938
+   },
+   "core": true,
+   "group": [
+    "rr"
+   ]
+  },
+  "人入": {
+   "src": [
+    "font",
+    "hand",
+    "human",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9937
+   },
+   "core": true,
+   "group": [
+    "rr"
+   ]
+  },
+  "天夭": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9937
+   },
+   "core": true
+  },
+  "但間": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9935
+   },
+   "core": true
+  },
+  "出岀": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9932
+   },
+   "core": true,
+   "group": [
+    "chu"
+   ]
+  },
+  "己已": {
+   "src": [
+    "font",
+    "hand",
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9907,
+    "sk": 0.9932
+   },
+   "core": true,
+   "group": [
+    "jys"
+   ]
+  },
+  "耶𫆀": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9929
+   },
+   "core": true,
+   "group": [
+    "cp_ye"
+   ]
+  },
+  "于子": {
+   "src": [
+    "font",
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9753,
+    "sk": 0.9925
+   },
+   "core": true,
+   "group": [
+    "zy"
+   ]
+  },
+  "白臼": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9924
+   },
+   "core": true
+  },
+  "諡謚": {
+   "src": [
+    "lib:sj",
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9922
+   },
+   "core": true
+  },
+  "歴歷": {
+   "src": [
+    "lib:sj",
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sj": 0.977,
+    "sk": 0.9921
+   },
+   "core": true
+  },
+  "木本": {
+   "src": [
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9822,
+    "sk": 0.9918
+   },
+   "core": true,
+   "group": [
+    "mb"
+   ]
+  },
+  "扺抵": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9915
+   },
+   "core": true,
+   "group": [
+    "di"
+   ]
+  },
+  "丸九": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9914
+   },
+   "core": true
+  },
+  "疎踈": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9914
+   },
+   "core": true
+  },
+  "几凡": {
+   "src": [
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9913,
+    "sk": 0.9818
+   },
+   "core": true
+  },
+  "救敕": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9912
+   },
+   "core": true
+  },
+  "刺剌": {
+   "src": [
+    "lib:qtw",
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9907,
+    "sk": 0.9875
+   },
+   "core": true,
+   "group": [
+    "ci"
+   ]
+  },
+  "治洽": {
+   "src": [
+    "font",
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9907
+   },
+   "core": true
+  },
+  "內内": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9903
+   },
+   "core": true,
+   "group": [
+    "nei"
+   ]
+  },
+  "象𧰼": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9902
+   },
+   "core": true,
+   "group": [
+    "xz"
+   ]
+  },
+  "交父": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.99
+   },
+   "core": true
+  },
+  "簫蕭": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9897
+   },
+   "core": true
+  },
+  "例列": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9896
+   },
+   "core": true
+  },
+  "而面": {
+   "src": [
+    "font",
+    "hand",
+    "human",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9896
+   },
+   "core": true,
+   "group": [
+    "em"
+   ]
+  },
+  "㸃點": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9894
+   },
+   "core": true,
+   "group": [
+    "dian"
+   ]
+  },
+  "冑胄": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9894,
+    "sk": 0.9732
+   },
+   "core": true,
+   "group": [
+    "xjz"
+   ]
+  },
+  "卿鄕": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9894
+   },
+   "core": true
+  },
+  "毌母": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9893
+   },
+   "core": true
+  },
+  "祼裸": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9893
+   },
+   "core": true
+  },
+  "丈文": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9891
+   },
+   "core": true,
+   "group": [
+    "zw"
+   ]
+  },
+  "戊戌": {
+   "src": [
+    "lib:qtw",
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9804,
+    "sk": 0.9891
+   },
+   "core": true,
+   "group": [
+    "wxs"
+   ]
+  },
+  "延廷": {
+   "src": [
+    "font",
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.989
+   },
+   "core": true
+  },
+  "伺司": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9889
+   },
+   "core": true
+  },
+  "厎底": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9889
+   },
+   "core": true
+  },
+  "専專": {
+   "src": [
+    "lib:sj",
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9889
+   },
+   "core": true
+  },
+  "徴徵": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9696,
+    "sk": 0.9886
+   },
+   "core": true,
+   "group": [
+    "zheng"
+   ]
+  },
+  "人八": {
+   "src": [
+    "human",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9885
+   },
+   "core": true,
+   "group": [
+    "rr"
+   ]
+  },
+  "祇祗": {
+   "src": [
+    "lib:qtw",
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9885,
+    "sk": 0.9805
+   },
+   "core": true,
+   "group": [
+    "xjz"
+   ]
+  },
+  "藴蘊": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9885
+   },
+   "core": true
+  },
+  "懍懷": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9882
+   },
+   "core": true
+  },
+  "侯𠋫": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.988
+   },
+   "core": true,
+   "group": [
+    "hou"
+   ]
+  },
+  "問間": {
+   "src": [
+    "font",
+    "hand",
+    "human",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.988
+   },
+   "core": true,
+   "group": [
+    "men",
+    "wj"
+   ]
+  },
+  "乃仍": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9879
+   },
+   "core": true
+  },
+  "晝畫": {
+   "src": [
+    "lib:qtw",
+    "lib:sj",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9879,
+    "sj": 0.9857
+   },
+   "core": true
+  },
+  "季李": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9878
+   },
+   "core": true
+  },
+  "朿東": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9878
+   },
+   "core": true
+  },
+  "亮鳧": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9877
+   },
+   "core": true
+  },
+  "于千": {
+   "src": [
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.978,
+    "sk": 0.9873
+   },
+   "core": true,
+   "group": [
+    "zy"
+   ]
+  },
+  "宋朱": {
+   "src": [
+    "human",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9872
+   },
+   "core": true,
+   "group": [
+    "sz"
+   ]
+  },
+  "亷廉": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9638,
+    "sk": 0.987
+   },
+   "core": true,
+   "group": [
+    "cp_lian2b"
+   ]
+  },
+  "嗚鳴": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.987
+   },
+   "core": true,
+   "group": [
+    "wu"
+   ]
+  },
+  "論諭": {
+   "src": [
+    "font",
+    "hand",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9869
+   },
+   "core": true,
+   "group": [
+    "ly"
+   ]
+  },
+  "便更": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9868
+   },
+   "core": true
+  },
+  "公分": {
+   "src": [
+    "lib:sj"
+   ],
+   "near": {
+    "sj": 0.9868
+   },
+   "core": true
+  },
+  "泰秦": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9868
+   },
+   "core": true
+  },
+  "曾會": {
+   "src": [
+    "font",
+    "hand",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9867
+   },
+   "core": true,
+   "group": [
+    "zh"
+   ]
+  },
+  "隷隸": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9867
+   },
+   "core": true
+  },
+  "庚庾": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9866
+   },
+   "core": true
+  },
+  "山由": {
+   "src": [
+    "human",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9863
+   },
+   "core": true,
+   "group": [
+    "sy"
+   ]
+  },
+  "泉𭽖": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9863
+   },
+   "core": true
+  },
+  "厦廈": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9861
+   },
+   "core": true
+  },
+  "攅攢": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9861
+   },
+   "core": true
+  },
+  "童重": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.986
+   },
+   "core": true
+  },
+  "厯歴": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9859
+   },
+   "core": true,
+   "group": [
+    "lih"
+   ]
+  },
+  "爪瓜": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9859
+   },
+   "core": true
+  },
+  "眞真": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9859
+   },
+   "core": true,
+   "group": [
+    "cp_zhen1"
+   ]
+  },
+  "中申": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9858
+   },
+   "core": true
+  },
+  "允充": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9858
+   },
+   "core": true
+  },
+  "汗汙": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9858
+   },
+   "core": true
+  },
+  "鞠鞫": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9858
+   },
+   "core": true
+  },
+  "于干": {
+   "src": [
+    "font",
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9843,
+    "sk": 0.9857
+   },
+   "core": true,
+   "group": [
+    "zy"
+   ]
+  },
+  "冡冢": {
+   "src": [
+    "lib:qtw",
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9857,
+    "sk": 0.9831
+   },
+   "core": true
+  },
+  "蔭隂": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9857
+   },
+   "core": true
+  },
+  "玉王": {
+   "src": [
+    "font",
+    "human",
+    "lib:qtw",
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9774,
+    "sk": 0.9855
+   },
+   "core": true,
+   "group": [
+    "wyu"
+   ]
+  },
+  "稹積": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9855
+   },
+   "core": true
+  },
+  "睢雎": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9854
+   },
+   "core": true
+  },
+  "違遠": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9854
+   },
+   "core": true,
+   "group": [
+    "chuo"
+   ]
+  },
+  "間閭": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9854
+   },
+   "core": true,
+   "group": [
+    "men"
+   ]
+  },
+  "章韋": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9851
+   },
+   "core": true
+  },
+  "東柬": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.985
+   },
+   "core": true
+  },
+  "大太": {
+   "src": [
+    "font",
+    "hand",
+    "human",
+    "lib:qtw",
+    "lib:sj",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9849,
+    "sj": 0.9782,
+    "sk": 0.9838
+   },
+   "core": true,
+   "group": [
+    "dt"
+   ]
+  },
+  "彥彦": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9846
+   },
+   "core": true
+  },
+  "字宇": {
+   "src": [
+    "human",
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9845,
+    "sk": 0.9844
+   },
+   "core": true
+  },
+  "柳栁": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9845
+   },
+   "core": true
+  },
+  "巂雟": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9842
+   },
+   "core": true
+  },
+  "戌戍": {
+   "src": [
+    "lib:qtw",
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.978,
+    "sk": 0.9835
+   },
+   "core": true,
+   "group": [
+    "wxs"
+   ]
+  },
+  "未朱": {
+   "src": [
+    "font",
+    "human",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9835
+   },
+   "core": true,
+   "group": [
+    "sz"
+   ]
+  },
+  "皐臯": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9835
+   },
+   "core": true
+  },
+  "搆構": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9831
+   },
+   "core": true
+  },
+  "讃讚": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9828
+   },
+   "core": true
+  },
+  "兩雨": {
+   "src": [
+    "lib:qtw",
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.98,
+    "sk": 0.9825
+   },
+   "core": true,
+   "group": [
+    "liang"
+   ]
+  },
+  "傚效": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9822
+   },
+   "core": true
+  },
+  "穎頴": {
+   "src": [
+    "lib:qtw",
+    "lib:sj",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9822,
+    "sj": 0.9807
+   },
+   "core": true
+  },
+  "己巳": {
+   "src": [
+    "hand",
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.977,
+    "sk": 0.982
+   },
+   "core": true,
+   "group": [
+    "jys"
+   ]
+  },
+  "春舂": {
+   "src": [
+    "human",
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.982
+   },
+   "core": true
+  },
+  "歲歳": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9819
+   },
+   "core": true
+  },
+  "吕呂": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9818
+   },
+   "core": true,
+   "group": [
+    "lv"
+   ]
+  },
+  "淸清": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9818
+   },
+   "core": true,
+   "group": [
+    "qx"
+   ]
+  },
+  "温溫": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9815
+   },
+   "core": true
+  },
+  "朿束": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9814
+   },
+   "core": true
+  },
+  "决決": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9589,
+    "sk": 0.9812
+   },
+   "core": true
+  },
+  "卻郤": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9812
+   },
+   "core": true
+  },
+  "斲斵": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9812
+   },
+   "core": true
+  },
+  "閈閉": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9806
+   },
+   "core": true
+  },
+  "廏廐": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9803
+   },
+   "core": true
+  },
+  "傅傳": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9691,
+    "sk": 0.9802
+   },
+   "core": true,
+   "group": [
+    "fc"
+   ]
+  },
+  "奥奧": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9801
+   },
+   "core": true
+  },
+  "摽標": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9799
+   },
+   "core": true
+  },
+  "日目": {
+   "src": [
+    "human",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9799
+   },
+   "core": true,
+   "group": [
+    "rm"
+   ]
+  },
+  "䘏卹": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9797
+   },
+   "core": true
+  },
+  "褒襃": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9797
+   },
+   "core": true
+  },
+  "目自": {
+   "src": [
+    "human",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9796
+   },
+   "core": true,
+   "group": [
+    "mz"
+   ]
+  },
+  "𢑱𢑴": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9794
+   },
+   "core": true,
+   "group": [
+    "yi_560"
+   ]
+  },
+  "㝛宿": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9792
+   },
+   "core": true
+  },
+  "閒間": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9705,
+    "sk": 0.9792
+   },
+   "core": true,
+   "group": [
+    "men"
+   ]
+  },
+  "冤寃": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.979
+   },
+   "core": true
+  },
+  "祅祆": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9789
+   },
+   "core": true
+  },
+  "刀刁": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9783
+   },
+   "core": true
+  },
+  "鍾鐘": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9781,
+    "sj": 0.9567
+   },
+   "core": true
+  },
+  "默黙": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9778
+   },
+   "core": true,
+   "group": [
+    "cp_mo4"
+   ]
+  },
+  "絕絶": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9775
+   },
+   "core": true,
+   "group": [
+    "jue"
+   ]
+  },
+  "概槪": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9774
+   },
+   "core": true
+  },
+  "閏閨": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9774
+   },
+   "core": true,
+   "group": [
+    "men"
+   ]
+  },
+  "冐冒": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9773
+   },
+   "core": true
+  },
+  "箸著": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9772,
+    "sj": 0.9586
+   },
+   "core": true
+  },
+  "變𠮓": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9768
+   },
+   "core": true,
+   "group": [
+    "bian"
+   ]
+  },
+  "飇飈": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9768
+   },
+   "core": true
+  },
+  "岐歧": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9765
+   },
+   "core": true
+  },
+  "吳呉": {
+   "src": [
+    "lib:sj",
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9762
+   },
+   "core": true
+  },
+  "挺梃": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9761
+   },
+   "core": true
+  },
+  "郎郞": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9758
+   },
+   "core": true,
+   "group": [
+    "lang"
+   ]
+  },
+  "六大": {
+   "src": [
+    "human",
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9756
+   },
+   "core": true
+  },
+  "鈎鉤": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9755,
+    "sk": 0.9639
+   },
+   "core": true
+  },
+  "閱閲": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9728,
+    "sk": 0.9755
+   },
+   "core": true
+  },
+  "㕘叅": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9754
+   },
+   "core": true,
+   "group": [
+    "can"
+   ]
+  },
+  "㣲微": {
+   "src": [
+    "lib:sk",
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9754
+   },
+   "core": true,
+   "group": [
+    "weim"
+   ]
+  },
+  "并幷": {
+   "src": [
+    "human",
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9753,
+    "sj": 0.973
+   },
+   "core": true
+  },
+  "摳樞": {
+   "src": [
+    "lib:qtw",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9752
+   },
+   "core": true
+  },
+  "垂埀": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.974
+   },
+   "core": true
+  },
+  "壬王": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9581,
+    "sk": 0.974
+   },
+   "core": true
+  },
+  "卑𤰞": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9736
+   },
+   "core": true
+  },
+  "榖穀": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9736
+   },
+   "core": true
+  },
+  "皋皐": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9736
+   },
+   "core": true
+  },
+  "協恊": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9732
+   },
+   "core": true
+  },
+  "荆荊": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9729
+   },
+   "core": true,
+   "group": [
+    "cp_jing1"
+   ]
+  },
+  "釆采": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9728
+   },
+   "core": true,
+   "group": [
+    "xjz"
+   ]
+  },
+  "隲騭": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9725
+   },
+   "core": true
+  },
+  "掲揭": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9508,
+    "sk": 0.9724
+   },
+   "core": true
+  },
+  "冐冑": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9721
+   },
+   "core": true,
+   "group": [
+    "xjz"
+   ]
+  },
+  "隸𨽾": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.972,
+    "sk": 0.9531
+   },
+   "core": true,
+   "group": [
+    "li"
+   ]
+  },
+  "佛彿": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9711
+   },
+   "core": true
+  },
+  "纏纒": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.971
+   },
+   "core": true
+  },
+  "郷鄉": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.971
+   },
+   "core": true
+  },
+  "𨽻𨽾": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9707,
+    "sk": 0.9617
+   },
+   "core": true
+  },
+  "埤𡌨": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9704
+   },
+   "core": true
+  },
+  "往徃": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9704
+   },
+   "core": true
+  },
+  "鉞鋮": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9699
+   },
+   "core": true
+  },
+  "傳𫝊": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9698
+   },
+   "core": true
+  },
+  "管菅": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9696
+   },
+   "core": true
+  },
+  "䟦跋": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9694
+   },
+   "core": true,
+   "group": [
+    "ba"
+   ]
+  },
+  "迥逈": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9694,
+    "sk": 0.9578
+   },
+   "core": true
+  },
+  "䟽疏": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9693
+   },
+   "core": true,
+   "group": [
+    "shu"
+   ]
+  },
+  "斂歛": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.969
+   },
+   "core": true
+  },
+  "遙遥": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9689
+   },
+   "core": true
+  },
+  "丹舟": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9688
+   },
+   "core": true
+  },
+  "鳧鳬": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9686
+   },
+   "core": true
+  },
+  "䙝褻": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9685
+   },
+   "core": true
+  },
+  "來来": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9685
+   },
+   "core": true
+  },
+  "齊齋": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9685
+   },
+   "core": true,
+   "group": [
+    "xjz"
+   ]
+  },
+  "賴頼": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9684
+   },
+   "core": true
+  },
+  "弻弼": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9682
+   },
+   "core": true
+  },
+  "狶豨": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9682
+   },
+   "core": true
+  },
+  "隸𨽻": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.968
+   },
+   "core": true
+  },
+  "摸模": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9678
+   },
+   "core": true
+  },
+  "符苻": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9677
+   },
+   "core": true
+  },
+  "剋尅": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9676
+   },
+   "core": true
+  },
+  "敎教": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9676
+   },
+   "core": true,
+   "group": [
+    "jiao"
+   ]
+  },
+  "且旦": {
+   "src": [
+    "human",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9672,
+    "sj": 0.963,
+    "sk": 0.9674
+   },
+   "core": true
+  },
+  "卬卯": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9674
+   },
+   "core": true
+  },
+  "類𩔖": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9674
+   },
+   "core": true,
+   "group": [
+    "lei"
+   ]
+  },
+  "復複": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.967,
+    "sk": 0.9631
+   },
+   "core": true
+  },
+  "棱稜": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.967
+   },
+   "core": true
+  },
+  "捜搜": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9669
+   },
+   "core": true,
+   "group": [
+    "cp_sou1"
+   ]
+  },
+  "括栝": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9668
+   },
+   "core": true
+  },
+  "駁駮": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9667
+   },
+   "core": true
+  },
+  "凖準": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9666
+   },
+   "core": true,
+   "group": [
+    "zhun"
+   ]
+  },
+  "冲沖": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9665
+   },
+   "core": true
+  },
+  "廩稟": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9663
+   },
+   "core": true
+  },
+  "仝全": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9658
+   },
+   "core": true,
+   "group": [
+    "xjz"
+   ]
+  },
+  "瓉瓚": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9658
+   },
+   "core": true
+  },
+  "䴡麗": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9657
+   },
+   "core": true
+  },
+  "纉纘": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9656
+   },
+   "core": true
+  },
+  "贑贛": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9656
+   },
+   "core": true
+  },
+  "躋隮": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9652
+   },
+   "core": true
+  },
+  "囘回": {
+   "src": [
+    "human",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9542,
+    "sj": 0.9651
+   },
+   "core": true,
+   "group": [
+    "huiq"
+   ]
+  },
+  "厯歷": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.965
+   },
+   "core": true
+  },
+  "寇𡨥": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9649
+   },
+   "core": true
+  },
+  "衛衞": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9649
+   },
+   "core": true,
+   "group": [
+    "weiw"
+   ]
+  },
+  "䧟陷": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9647
+   },
+   "core": true,
+   "group": [
+    "xian"
+   ]
+  },
+  "辨辯": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9647
+   },
+   "core": true
+  },
+  "兖兗": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9646
+   },
+   "core": true
+  },
+  "荘莊": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9645
+   },
+   "core": true
+  },
+  "准淮": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9644
+   },
+   "core": true
+  },
+  "第苐": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9644
+   },
+   "core": true
+  },
+  "䝉蒙": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9643
+   },
+   "core": true
+  },
+  "諌諫": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9637
+   },
+   "core": true
+  },
+  "䍐罕": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9636
+   },
+   "core": true
+  },
+  "犄猗": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9635
+   },
+   "core": true
+  },
+  "廸迪": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9633
+   },
+   "core": true
+  },
+  "逄逢": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9632
+   },
+   "core": true,
+   "group": [
+    "feng"
+   ]
+  },
+  "叙敘": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9631
+   },
+   "core": true,
+   "group": [
+    "xu"
+   ]
+  },
+  "縦縱": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9631
+   },
+   "core": true
+  },
+  "幹榦": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.963
+   },
+   "core": true
+  },
+  "户戸": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.963
+   },
+   "core": true
+  },
+  "聴聽": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9558,
+    "sk": 0.9629
+   },
+   "core": true
+  },
+  "偁稱": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9627
+   },
+   "core": true
+  },
+  "健徤": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9626
+   },
+   "core": true
+  },
+  "擭獲": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9625
+   },
+   "core": true
+  },
+  "宻密": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9624
+   },
+   "core": true,
+   "group": [
+    "mi"
+   ]
+  },
+  "冊册": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9623
+   },
+   "core": true,
+   "group": [
+    "ce"
+   ]
+  },
+  "葢蓋": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9623,
+    "sk": 0.9514
+   },
+   "core": true,
+   "group": [
+    "gai"
+   ]
+  },
+  "乗乘": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.962
+   },
+   "core": true
+  },
+  "壊壞": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9619
+   },
+   "core": true
+  },
+  "觧鮮": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9617
+   },
+   "core": true
+  },
+  "簿薄": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9616,
+    "sk": 0.9572
+   },
+   "core": true
+  },
+  "候𠋫": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9615
+   },
+   "core": true,
+   "group": [
+    "hou"
+   ]
+  },
+  "閻𨶒": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9615
+   },
+   "core": true
+  },
+  "皋臯": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9613
+   },
+   "core": true
+  },
+  "凌淩": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.961
+   },
+   "core": true
+  },
+  "勅勑": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.961
+   },
+   "core": true
+  },
+  "隠隱": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9608,
+    "sk": 0.957
+   },
+   "core": true,
+   "group": [
+    "cp_yin3b"
+   ]
+  },
+  "俎爼": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9606
+   },
+   "core": true
+  },
+  "杪秒": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9604
+   },
+   "core": true
+  },
+  "卣鹵": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9603
+   },
+   "core": true
+  },
+  "峡峽": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9603
+   },
+   "core": true
+  },
+  "昂昻": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9603
+   },
+   "core": true
+  },
+  "衮袞": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9603
+   },
+   "core": true
+  },
+  "賛贊": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9602
+   },
+   "core": true,
+   "group": [
+    "cp_zan4"
+   ]
+  },
+  "奇竒": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9601
+   },
+   "core": true,
+   "group": [
+    "qi"
+   ]
+  },
+  "箕萁": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.96,
+    "sk": 0.953
+   },
+   "core": true
+  },
+  "麪麵": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.96
+   },
+   "core": true
+  },
+  "宄究": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9599
+   },
+   "core": true
+  },
+  "統綂": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9596
+   },
+   "core": true
+  },
+  "脯酺": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9596
+   },
+   "core": true
+  },
+  "凉涼": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9593
+   },
+   "core": true
+  },
+  "住往": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.959
+   },
+   "core": true,
+   "group": [
+    "xjz"
+   ]
+  },
+  "冗宂": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9586
+   },
+   "core": true
+  },
+  "寕寧": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9584
+   },
+   "core": true
+  },
+  "昂昴": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9581
+   },
+   "core": true
+  },
+  "抵牴": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.958
+   },
+   "core": true
+  },
+  "翱翺": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.958
+   },
+   "core": true
+  },
+  "晧皓": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9578
+   },
+   "core": true
+  },
+  "覧覽": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9578
+   },
+   "core": true
+  },
+  "盡𥁞": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9577
+   },
+   "core": true
+  },
+  "顏顔": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9576
+   },
+   "core": true,
+   "group": [
+    "cp_yan2"
+   ]
+  },
+  "筭算": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9575
+   },
+   "core": true
+  },
+  "唇脣": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9574
+   },
+   "core": true
+  },
+  "裦褒": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9574
+   },
+   "core": true
+  },
+  "冰氷": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9571
+   },
+   "core": true
+  },
+  "燿耀": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9571
+   },
+   "core": true
+  },
+  "淫滛": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.957
+   },
+   "core": true
+  },
+  "嵗歳": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9569
+   },
+   "core": true
+  },
+  "輒輙": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9565
+   },
+   "core": true
+  },
+  "濂濓": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9562
+   },
+   "core": true,
+   "group": [
+    "cp_lian2"
+   ]
+  },
+  "獲𫉬": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9561
+   },
+   "core": true,
+   "group": [
+    "huo"
+   ]
+  },
+  "脈脉": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9561
+   },
+   "core": true
+  },
+  "圖圗": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.956
+   },
+   "core": true
+  },
+  "明眀": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.956
+   },
+   "core": true
+  },
+  "疎疏": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.956
+   },
+   "core": true
+  },
+  "冶治": {
+   "src": [
+    "human",
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9558
+   },
+   "core": true,
+   "group": [
+    "xjz"
+   ]
+  },
+  "輨轄": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9558
+   },
+   "core": true
+  },
+  "撰𢰅": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9557
+   },
+   "core": true,
+   "group": [
+    "zhuan"
+   ]
+  },
+  "那郍": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9554
+   },
+   "core": true
+  },
+  "剝剥": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9553
+   },
+   "core": true
+  },
+  "壯牡": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9552
+   },
+   "core": true
+  },
+  "壙曠": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9551
+   },
+   "core": true,
+   "group": [
+    "xjz"
+   ]
+  },
+  "緒緖": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9549
+   },
+   "core": true,
+   "group": [
+    "cp_xu4"
+   ]
+  },
+  "柏栢": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9546
+   },
+   "core": true
+  },
+  "妃𡚱": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9545
+   },
+   "core": true,
+   "group": [
+    "cp_fei1"
+   ]
+  },
+  "陣陳": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9545
+   },
+   "core": true
+  },
+  "皁皂": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9544
+   },
+   "core": true
+  },
+  "鐡鐵": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9542
+   },
+   "core": true
+  },
+  "䟽疎": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9541
+   },
+   "core": true
+  },
+  "徹澈": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9541
+   },
+   "core": true
+  },
+  "回囬": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.954
+   },
+   "core": true
+  },
+  "確礭": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.954
+   },
+   "core": true
+  },
+  "鄉鄕": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9539
+   },
+   "core": true,
+   "group": [
+    "xiang"
+   ]
+  },
+  "繈襁": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9538
+   },
+   "core": true
+  },
+  "㓨刺": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9536
+   },
+   "core": true
+  },
+  "夢夣": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9535
+   },
+   "core": true
+  },
+  "孼孽": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.953
+   },
+   "core": true
+  },
+  "彞𢑱": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.953
+   },
+   "core": true,
+   "group": [
+    "yi_560"
+   ]
+  },
+  "鬰鬱": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9529
+   },
+   "core": true,
+   "group": [
+    "cp_yu4"
+   ]
+  },
+  "郷鄕": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9528
+   },
+   "core": true
+  },
+  "濛蒙": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9527
+   },
+   "core": true
+  },
+  "廼迺": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9526
+   },
+   "core": true
+  },
+  "逺遠": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9525
+   },
+   "core": true
+  },
+  "悽淒": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9524
+   },
+   "core": true
+  },
+  "㕔𠫊": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9523
+   },
+   "core": true
+  },
+  "翻飜": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9522
+   },
+   "core": true
+  },
+  "煇輝": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.952
+   },
+   "core": true
+  },
+  "况況": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9519
+   },
+   "core": true
+  },
+  "敶陳": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9519
+   },
+   "core": true
+  },
+  "耤藉": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9519
+   },
+   "core": true
+  },
+  "兢競": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9518
+   },
+   "core": true
+  },
+  "凡凢": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9517
+   },
+   "core": true
+  },
+  "彞𢑴": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9517
+   },
+   "core": true,
+   "group": [
+    "yi_560"
+   ]
+  },
+  "彝彞": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9516
+   },
+   "core": true,
+   "group": [
+    "yi_560"
+   ]
+  },
+  "陰隂": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9514
+   },
+   "core": true,
+   "group": [
+    "yinv"
+   ]
+  },
+  "罰罸": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9511
+   },
+   "core": true
+  },
+  "彝𢑴": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.951
+   },
+   "core": true,
+   "group": [
+    "yi_560"
+   ]
+  },
+  "墆滯": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9506
+   },
+   "core": true
+  },
+  "巡廵": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9506,
+    "sk": 0.9505
+   },
+   "core": true,
+   "group": [
+    "xun"
+   ]
+  },
+  "収收": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9505
+   },
+   "core": true
+  },
+  "虗虛": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sk": 0.9505
+   },
+   "core": true
+  },
+  "奕弈": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9502
+   },
+   "core": true
+  },
+  "望朢": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "sj": 0.9502
+   },
+   "core": true
+  },
+  "摠總": {
+   "src": [
+    "variant"
+   ],
+   "near": {
+    "qtw": 0.9501
+   },
+   "core": true
+  },
+  "七匕": {
+   "src": [
+    "hand"
+   ],
+   "core": true
+  },
+  "仕士": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "何河": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "來末": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "侯候": {
+   "src": [
+    "hand"
+   ],
+   "core": true,
+   "group": [
+    "hou"
+   ]
+  },
+  "全金": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "其具": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "出山": {
+   "src": [
+    "human"
+   ],
+   "core": true,
+   "group": [
+    "sy"
+   ]
+  },
+  "千子": {
+   "src": [
+    "human"
+   ],
+   "core": true,
+   "group": [
+    "zy"
+   ]
+  },
+  "却卻": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "四因": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "圓圖": {
+   "src": [
+    "hand"
+   ],
+   "core": true,
+   "group": [
+    "kou",
+    "yt"
+   ]
+  },
+  "夫夬": {
+   "src": [
+    "font",
+    "hand"
+   ],
+   "core": true
+  },
+  "嬴贏": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "宣直": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "廣贋": {
+   "src": [
+    "hand"
+   ],
+   "core": true
+  },
+  "強强": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "彖象": {
+   "src": [
+    "hand"
+   ],
+   "core": true,
+   "group": [
+    "xz"
+   ]
+  },
+  "换換": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "揀棟": {
+   "src": [
+    "hand"
+   ],
+   "core": true
+  },
+  "擇澤": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "月用": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "未禾": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "未米": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "法注": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "猶獨": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "與興": {
+   "src": [
+    "human"
+   ],
+   "core": true
+  },
+  "過選": {
+   "src": [
+    "hand"
+   ],
+   "core": true,
+   "group": [
+    "chuo"
+   ]
+  },
+  "遺還": {
+   "src": [
+    "hand"
+   ],
+   "core": true,
+   "group": [
+    "chuo",
+    "yh"
+   ]
+  },
+  "開間": {
+   "src": [
+    "human"
+   ],
+   "core": true,
+   "group": [
+    "men"
+   ]
+  },
+  "間閣": {
+   "src": [
+    "human"
+   ],
+   "core": true,
+   "group": [
+    "men"
+   ]
+  },
+  "邰郃": {
+   "src": [
+    "lib:sj"
+   ],
+   "near": {
+    "sj": 0.9849
+   },
+   "core": false
+  },
+  "閣閤": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9849
+   },
+   "core": false
+  },
+  "諝謂": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9848
+   },
+   "core": false
+  },
+  "潁穎": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9846
+   },
+   "core": false
+  },
+  "甲申": {
+   "src": [
+    "font",
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.979,
+    "sk": 0.9846
+   },
+   "core": false,
+   "group": [
+    "js"
+   ]
+  },
+  "穎顥": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9845
+   },
+   "core": false
+  },
+  "鈎鈞": {
+   "src": [
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9845,
+    "sk": 0.9762
+   },
+   "core": false
+  },
+  "乎平": {
+   "src": [
+    "font",
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9843
+   },
+   "core": false
+  },
+  "㝢寓": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9842
+   },
+   "core": false
+  },
+  "寖寢": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.984
+   },
+   "core": false
+  },
+  "惜愔": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.984
+   },
+   "core": false
+  },
+  "司同": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9839
+   },
+   "core": false
+  },
+  "潁頴": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9837
+   },
+   "core": false
+  },
+  "俸奉": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9835
+   },
+   "core": false
+  },
+  "儆敬": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9835
+   },
+   "core": false
+  },
+  "刪剛": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9834
+   },
+   "core": false
+  },
+  "朿柬": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9834
+   },
+   "core": false
+  },
+  "曼蔓": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9828
+   },
+   "core": false
+  },
+  "但問": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9826
+   },
+   "core": false
+  },
+  "書畫": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9826
+   },
+   "core": false
+  },
+  "杞祀": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9825
+   },
+   "core": false
+  },
+  "儲諸": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9824
+   },
+   "core": false
+  },
+  "七𠤎": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9823
+   },
+   "core": false
+  },
+  "束東": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9823
+   },
+   "core": false
+  },
+  "瞻贍": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9823
+   },
+   "core": false
+  },
+  "禕褘": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9823
+   },
+   "core": false
+  },
+  "俘孚": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9822
+   },
+   "core": false
+  },
+  "山岀": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9822
+   },
+   "core": false
+  },
+  "治沿": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9821
+   },
+   "core": false
+  },
+  "茶荼": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9821
+   },
+   "core": false
+  },
+  "詀詁": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9821
+   },
+   "core": false
+  },
+  "仙山": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.982
+   },
+   "core": false
+  },
+  "幹斡": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.982
+   },
+   "core": false
+  },
+  "衞衡": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.982
+   },
+   "core": false
+  },
+  "今令": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9819
+   },
+   "core": false
+  },
+  "翃翊": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9819
+   },
+   "core": false
+  },
+  "闔闥": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9819
+   },
+   "core": false
+  },
+  "尢尤": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9818
+   },
+   "core": false
+  },
+  "旬甸": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9817
+   },
+   "core": false
+  },
+  "早旱": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9815
+   },
+   "core": false
+  },
+  "亍于": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9814
+   },
+   "core": false
+  },
+  "井并": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9813
+   },
+   "core": false
+  },
+  "什仆": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9813
+   },
+   "core": false
+  },
+  "元无": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9813
+   },
+   "core": false
+  },
+  "戊戍": {
+   "src": [
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9813,
+    "sk": 0.9785
+   },
+   "core": false,
+   "group": [
+    "wxs"
+   ]
+  },
+  "予子": {
+   "src": [
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9789,
+    "sk": 0.9812
+   },
+   "core": false,
+   "group": [
+    "yz"
+   ]
+  },
+  "優憂": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9812
+   },
+   "core": false
+  },
+  "隷𨽾": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9812
+   },
+   "core": false
+  },
+  "吾悟": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9811
+   },
+   "core": false
+  },
+  "根桹": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9811
+   },
+   "core": false
+  },
+  "與輿": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9811
+   },
+   "core": false
+  },
+  "嚴巖": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9809
+   },
+   "core": false
+  },
+  "迥迴": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9809
+   },
+   "core": false
+  },
+  "十干": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9808
+   },
+   "core": false
+  },
+  "米采": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9808
+   },
+   "core": false
+  },
+  "巨臣": {
+   "src": [
+    "lib:sj"
+   ],
+   "near": {
+    "sj": 0.9807
+   },
+   "core": false
+  },
+  "廬盧": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9807
+   },
+   "core": false
+  },
+  "閬闐": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9807
+   },
+   "core": false
+  },
+  "氷永": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9806
+   },
+   "core": false
+  },
+  "熏薰": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9805
+   },
+   "core": false
+  },
+  "甍舋": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9805
+   },
+   "core": false
+  },
+  "束柬": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9804
+   },
+   "core": false
+  },
+  "撙樽": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9803
+   },
+   "core": false
+  },
+  "徒徙": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9802
+   },
+   "core": false
+  },
+  "支文": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9802
+   },
+   "core": false
+  },
+  "烏鳥": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9802
+   },
+   "core": false
+  },
+  "暕陳": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9801
+   },
+   "core": false
+  },
+  "洄𭰁": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9798
+   },
+   "core": false
+  },
+  "埋理": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9796
+   },
+   "core": false
+  },
+  "像象": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9795
+   },
+   "core": false
+  },
+  "刖別": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9795
+   },
+   "core": false
+  },
+  "賛贇": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9795
+   },
+   "core": false
+  },
+  "栗粟": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9794
+   },
+   "core": false
+  },
+  "責貴": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9794
+   },
+   "core": false
+  },
+  "含舍": {
+   "src": [
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9767,
+    "sk": 0.9793
+   },
+   "core": false
+  },
+  "情靑": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9792
+   },
+   "core": false
+  },
+  "裦襃": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9792
+   },
+   "core": false
+  },
+  "悚束": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9791
+   },
+   "core": false
+  },
+  "採棌": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9791
+   },
+   "core": false
+  },
+  "績繽": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9791
+   },
+   "core": false
+  },
+  "閉閑": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9791
+   },
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "閎閱": {
+   "src": [
+    "lib:sj"
+   ],
+   "near": {
+    "sj": 0.9791
+   },
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "杲果": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.979
+   },
+   "core": false
+  },
+  "祖租": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.979
+   },
+   "core": false
+  },
+  "促足": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9789
+   },
+   "core": false
+  },
+  "曰目": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9789
+   },
+   "core": false
+  },
+  "伽加": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9787
+   },
+   "core": false
+  },
+  "鶚鷂": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9787
+   },
+   "core": false
+  },
+  "儀義": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9786
+   },
+   "core": false
+  },
+  "杞杷": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9786
+   },
+   "core": false
+  },
+  "單憚": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9784
+   },
+   "core": false
+  },
+  "辦辨": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9784
+   },
+   "core": false
+  },
+  "頠顏": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9784
+   },
+   "core": false
+  },
+  "決泱": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9783
+   },
+   "core": false
+  },
+  "因困": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9782
+   },
+   "core": false
+  },
+  "萁蓂": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9782
+   },
+   "core": false
+  },
+  "未耒": {
+   "src": [
+    "lib:qtw",
+    "lib:sk"
+   ],
+   "near": {
+    "qtw": 0.9781,
+    "sk": 0.9771
+   },
+   "core": false
+  },
+  "乂人": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.978
+   },
+   "core": false
+  },
+  "杞𣏌": {
+   "src": [
+    "lib:sj"
+   ],
+   "near": {
+    "sj": 0.978
+   },
+   "core": false
+  },
+  "上土": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9779
+   },
+   "core": false
+  },
+  "卯卵": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9779
+   },
+   "core": false
+  },
+  "探揆": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9779
+   },
+   "core": false
+  },
+  "閎閼": {
+   "src": [
+    "lib:sj"
+   ],
+   "near": {
+    "sj": 0.9779
+   },
+   "core": false
+  },
+  "丙内": {
+   "src": [
+    "lib:sj"
+   ],
+   "near": {
+    "sj": 0.9777
+   },
+   "core": false
+  },
+  "主王": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9774
+   },
+   "core": false
+  },
+  "廿甘": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9774
+   },
+   "core": false
+  },
+  "晞睎": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9774
+   },
+   "core": false
+  },
+  "璩瓌": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9774
+   },
+   "core": false
+  },
+  "遣遺": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9773
+   },
+   "core": false,
+   "group": [
+    "chuo"
+   ]
+  },
+  "變𬽠": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9772
+   },
+   "core": false
+  },
+  "水氷": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9771
+   },
+   "core": false
+  },
+  "閎閔": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9771
+   },
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "卓車": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.977
+   },
+   "core": false
+  },
+  "聞間": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.977
+   },
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "僑喬": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9769
+   },
+   "core": false
+  },
+  "兒見": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9769
+   },
+   "core": false
+  },
+  "兦匹": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9769
+   },
+   "core": false
+  },
+  "删剛": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9769
+   },
+   "core": false
+  },
+  "卑畢": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9769
+   },
+   "core": false
+  },
+  "買賈": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9769
+   },
+   "core": false
+  },
+  "壺壼": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9768
+   },
+   "core": false
+  },
+  "聞閒": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9768
+   },
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "胎貽": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9768
+   },
+   "core": false
+  },
+  "錢餞": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9768
+   },
+   "core": false
+  },
+  "允尢": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9767
+   },
+   "core": false
+  },
+  "庭廷": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9763
+   },
+   "core": false
+  },
+  "覲觀": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9762
+   },
+   "core": false
+  },
+  "貝貞": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9762
+   },
+   "core": false
+  },
+  "閎閬": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9762
+   },
+   "core": false
+  },
+  "哀衷": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.976
+   },
+   "core": false
+  },
+  "蟾贍": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.976
+   },
+   "core": false
+  },
+  "闇闍": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.976
+   },
+   "core": false
+  },
+  "戍成": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9759
+   },
+   "core": false
+  },
+  "夫失": {
+   "src": [
+    "font",
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9757
+   },
+   "core": false
+  },
+  "大犬": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9756
+   },
+   "core": false
+  },
+  "怙恬": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9756
+   },
+   "core": false
+  },
+  "帥師": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9755
+   },
+   "core": false
+  },
+  "但閭": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9754
+   },
+   "core": false
+  },
+  "穀縠": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9754
+   },
+   "core": false
+  },
+  "僧憎": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9752
+   },
+   "core": false
+  },
+  "尼足": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9752
+   },
+   "core": false
+  },
+  "早皁": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9752
+   },
+   "core": false
+  },
+  "撲樸": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.9751
+   },
+   "core": false
+  },
+  "閭閻": {
+   "src": [
+    "lib:sk"
+   ],
+   "near": {
+    "sk": 0.9751
+   },
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "嶪業": {
+   "src": [
+    "lib:qtw"
+   ],
+   "near": {
+    "qtw": 0.975
+   },
+   "core": false
+  },
+  "侍待": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "侯俟": {
+   "src": [
+    "font"
+   ],
+   "core": false,
+   "group": [
+    "hou"
+   ]
+  },
+  "優擾": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "其某": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "具異": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "動勤": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "吉告": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "呈里": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "員貢": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "奏秦": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "奸好": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "富當": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "富童": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "寓萬": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "實寶": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "巽異": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "彼披": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "往柱": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "待持": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "徹撤": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "志忘": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "志忠": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "惟推": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "意童": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "慨概": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "戴載": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "折析": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "持特": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "撿檢": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "更頁": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "末朱": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "殷設": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "由白": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "畏長": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "睦陸": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "籍藉": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "聞開": {
+   "src": [
+    "font"
+   ],
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "聞閣": {
+   "src": [
+    "font"
+   ],
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "聞闇": {
+   "src": [
+    "font"
+   ],
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "胥骨": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "草革": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "莘萃": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "表衷": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "覯觀": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "請講": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "貢質": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "追造": {
+   "src": [
+    "font"
+   ],
+   "core": false,
+   "group": [
+    "chuo"
+   ]
+  },
+  "造進": {
+   "src": [
+    "font"
+   ],
+   "core": false,
+   "group": [
+    "chuo"
+   ]
+  },
+  "連遠": {
+   "src": [
+    "font"
+   ],
+   "core": false,
+   "group": [
+    "chuo"
+   ]
+  },
+  "遇過": {
+   "src": [
+    "font"
+   ],
+   "core": false,
+   "group": [
+    "chuo"
+   ]
+  },
+  "邢邪": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "閣闇": {
+   "src": [
+    "font"
+   ],
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "闇關": {
+   "src": [
+    "font"
+   ],
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "闌闡": {
+   "src": [
+    "font"
+   ],
+   "core": false,
+   "group": [
+    "men"
+   ]
+  },
+  "陵陸": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "雕離": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "雪雲": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  },
+  "顧顯": {
+   "src": [
+    "font"
+   ],
+   "core": false
+  }
+ }
+}
