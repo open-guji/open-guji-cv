@@ -7,6 +7,11 @@
 
 ## [未发版]
 
+## [0.7.57] - 2026-11-17
+
+- 发版说明（A31 11-17，SJ 史記 patch 线，r77 用）：v0.7.55 + #1624（dev 2e1b5b0 cherry-pick），PATCH，**不含** dev 线 v0.7.56 的其他改动（#1610、#1617 等）。冲突手解：`segment_column` 只加 `cut_free_seam`（本线无 grid_adjust 等钩子）；开关登记表按本线补一行；code_equiv 按本线重算登 `_FREE_SEAM_0757`（row_segment a931bd1d→6ba5531b、row_boundaries fbb1d8d6→02c5d8e0）。版本号不叫 0.7.56：那号已发 dev 线（全唐文用）。
+- 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时与 v0.7.55 等价（登 code_equiv）。建议值 0.35。
+
 ## [0.7.56] - 2026-11-17
 
 - 发版说明（A31 11-17，**dev 线**，PATCH）：dev 头 `46836b7`＝v0.7.53 + #1610（stages.route.table 按数据目录解析，书级形近字组表）＋#1618（daizhige 对 row_segment 等价登记）＋#1617（归一化清边细线护栏）。**Step 指纹对 v0.7.53**：`glyph_match` 变（#1617 改 `clustering/normalize`，未登等价，产物会变），下游随之过期；`row_segment` 也变——#1618 把 daizhige 换回 #1604 前的哈希，v0.7.42／v0.7.49／v0.7.51 出的 row_segment 因此不过期，但 **v0.7.53 出的 row_segment 反而判「代码或版本变了」**（产物逐字节同；status code_ok 下正式版当新鲜）。#1610 的 glyph_stages 不在 code_deps，开 stages 的册靠 stages_sha。**底库不变**：对 b27 逐文件一致。
