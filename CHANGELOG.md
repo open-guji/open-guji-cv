@@ -6,6 +6,10 @@
 
 ## [未发版]
 
+## [0.7.60] - 2026-11-17
+
+- 发版说明（A31 11-17，**dev 线 patch**，PATCH）：v0.7.56 + #1635（清边第二次修复，cherry-pick 3e82d9c），不含 v0.7.56 之后 dev 上的其他改动。给全唐文 b2 重跑 5a。Step 指纹对 v0.7.56 只有 `glyph_match` 变（`clustering/normalize`，未登等价，产物会变）；底库不变（b27）。
+
 ## [0.7.56] - 2026-11-17
 
 - 发版说明（A31 11-17，**dev 线**，PATCH）：dev 头 `46836b7`＝v0.7.53 + #1610（stages.route.table 按数据目录解析，书级形近字组表）＋#1618（daizhige 对 row_segment 等价登记）＋#1617（归一化清边细线护栏）。**Step 指纹对 v0.7.53**：`glyph_match` 变（#1617 改 `clustering/normalize`，未登等价，产物会变），下游随之过期；`row_segment` 也变——#1618 把 daizhige 换回 #1604 前的哈希，v0.7.42／v0.7.49／v0.7.51 出的 row_segment 因此不过期，但 **v0.7.53 出的 row_segment 反而判「代码或版本变了」**（产物逐字节同；status code_ok 下正式版当新鲜）。#1610 的 glyph_stages 不在 code_deps，开 stages 的册靠 stages_sha。**底库不变**：对 b27 逐文件一致。
