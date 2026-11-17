@@ -64,6 +64,10 @@ _SEM_EXTRA_1116 = ("seed_admit 书级参数 semantic_extra（缺省空、不进�
                    "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.6.23-c33-g19-r8）、全唐文 020 16 页"
                    "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.37-c73-g-2827ba-k9-qtw020-x1）"
                    "seed_admit 与 origin/dev de92b1d 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22，史記 r71 圗）")
+_GF_EXCLUDE_1116 = ("seed_admit 书级减法 group_flow_exclude（缺省空、不进参数 dump；空时 model_post_init 不进新分支，group_flow 照旧）："
+                    "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.7.42-c34-g22-m3-headraise-fix 当上游）"
+                    "seed_admit 与 origin/dev 0e7277b 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22，史記 勢𫝑）")
+_GF_EXCLUDE_0748 = (_GF_EXCLUDE_1116 + "。史記 patch 线移植（v0.7.48 + #1601 → v0.7.50）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _SEM_EXTRA_0744 = (_SEM_EXTRA_1116 + "。史記 patch 线移植（v0.7.44 + 本改动）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _VN_HOOK_0738 = (_VN_HOOK_1115 + "。v0.7.38（史記 patch 线，v0.7.33 + #1554）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对")
 _PT_1115 = ("seed_admit 书级部件刻形判法 group_flow_part_shape（缺省空、不自动找文件、没填就不跑；模型指纹只在填了时进指纹；groups/part_shape 是新模块）："
@@ -75,6 +79,19 @@ _FR_HOOK_1113 = ("seed_admit follow_ref 加书级钩子 impl/keben/follow_ref_ho
                  "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.6.23-c33-g19-r8 当上游）seed_admit 与 origin/dev e466f52 "
                  "产物逐字节相同；Step code_hash 改前改后同（babb397c0ee19af7，follow_ref_hooks 经 SPLITS 合回 pua_v2_codes）；"
                  "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-13（A22）")
+
+_TABLE_COLS_1116 = ("半文半表页按列标表 column_gate.table_cols（缺省空、不进参数 dump；空时 med_w／周期门槛／flag 逐位照旧）、row_segment_gate 认 table_column 拒因"
+                    "（只在 ok=False 且 error 含 table_column 时走新分支）：column_warp→column_gate、row_segment→row_segment_gate 两道闸产物在"
+                    "殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，main 包 cv0.7.42-c34-g22-m3-headraise-fix）、"
+                    "全唐文 020 16 页（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.37-c73-g-2827ba-k9-qtw020-x1）、"
+                    "北行 bxgb 8 页（3,8,12,20,33,40,50,56）上与 origin/dev 539b653 逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22）")
+_TABLE_COLS_0746 = (_TABLE_COLS_1116 + "。史記 patch 线移植（v0.7.46 + 本改动，column_gate 与 period_edge_fallback 并存的冲突手解）：本线另跑产物比对见 PR 说明")
+
+_TABLE_COLS_ONE_1116 = ("column_gate 半文半表页周期门槛下限改 1 列（只在 table_cols 点名本页时走；SJ 11:193 正文只剩一列被整页拒）、TABLE_COLUMN_REJECT 常量挪到 import 后："
+                        "column_warp→column_gate 在殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190）、全唐文 020 16 页"
+                        "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170）、北行 bxgb 8 页（3,8,12,20,33,40,50,56）上与 origin/dev 80ace3d 逐字节相同；"
+                        "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-16（A22）")
+_TABLE_COLS_ONE_0747 = (_TABLE_COLS_ONE_1116 + "。史記 patch 线移植（v0.7.47 + 本修复）：同一改动原样 cherry-pick，哈希按本线重算；本线测试册 keben 3 页 border_detect→row_segment_gate 新旧指纹与产物逐字节同")
 
 _DROP_L0_1114 = ("删缺省关、没书开、关时不进参数 dump 的开关（A22 开关收敛 L0 批，A20 11-14 定）：border_detect.merge_narrow_pair、"
                  "border_detect_gate.pagetype_model 三件、column_gate.period_edge_fallback、row_segment.colgold_prior／colgold_fingerprint、"
@@ -1786,6 +1803,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='ac83cc2e89d930cc4733d145b0cc7fa3f67c9e4a20a5737d0c2703a35bd9559d',
           old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
           evidence=_SEM_EXTRA_1116),
+    # seed_admit 书级减法 group_flow_exclude（史記 勢𫝑 不可分，去掉 shi 组；A24 定方案①，11-16）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='781a12f3cd04ee61d84119d373ed5dc25f5e3a75b376c83c24d764ee1c5282b4',
+          old='b8e8e0446898454c53e803ecb392fd4cd2fa9d6b5199a3b58894e98f03bd9873',
+          evidence=_GF_EXCLUDE_1116),
     # v0.7.45（史記 patch 线 = v0.7.44 + #1580）：semantic_extra 按本线哈希登记（A31 11-16）
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='ffceeab903b391ca076a2e5fa2e847aee23d9f59d84fb54248d2274f5c2cb238',
@@ -1806,6 +1828,34 @@ ENTRIES: tuple[Equiv, ...] = (
           new="bf9f5964d5f5eaf43e6c07fb4b9c42c4fb45e208f640f2045cf515c53c4cb857",
           old="6b156bfcc6ec09cbfc8950cf68ea05ec633eb5ec0b48798f6bd0aed0b09ce284",
           evidence="同 v0.7.28 线原条（drop_bad 冲突格现役字改坐标字 _use_coord_char，缺省关，代码核对＋tests/test_align_ref_coord.py），原样抄回 dev"),
+    # 半文半表页按列标表 page_kinds.table_cols → column_gate.table_cols（GUJI-772，SJ R030，A20 11-16 定方案）
+    Equiv(module='open_guji_cv.gates.column_gate',
+          new='83b7bd8f2897bf7ce427ba7f138b311d3e70c3870944f1d627db2a330b280e14',
+          old='bc4749f1f07753e004d84b5006ec4cfbdf1af23383c457f085475acc05063b22',
+          evidence=_TABLE_COLS_1116),
+    Equiv(module='open_guji_cv.gates.row_segment_gate',
+          new='814bd02de64f51372289b29a7f97c8460651b313c75a879048c021e9db93cd10',
+          old='c34a4d88202f30ad4e0aaaf247170180dd5fff369b05f78f1d5a47ff4b1d5b15',
+          evidence=_TABLE_COLS_1116),
+    Equiv(module='open_guji_cv.gates.column_gate',
+          new='82f00ee6ea20857b7aff1b83c2cc80e0e1fd1f03853e681ccf9d0e1f47ac8ece',
+          old='bc4749f1f07753e004d84b5006ec4cfbdf1af23383c457f085475acc05063b22',
+          evidence=_TABLE_COLS_ONE_1116),
+    # v0.7.47（史記 patch 线，v0.7.46 + #1590）补记：本线 column_gate 哈希（row_segment_gate 与 dev 同哈希，dev 已登）
+    Equiv(module='open_guji_cv.gates.column_gate',
+          new='14695ffb4eb100b35808596412291935656db67dc52225515b0b682b3c92d7f3',
+          old='222cf212e17eac8a7601aa7d1c51c880cb71356169c9b38df9f41d682eb2d3b0',
+          evidence=_TABLE_COLS_0746),
+    # v0.7.48（史記 patch 线，v0.7.47 + #1594）补记：本线 column_gate 哈希
+    Equiv(module='open_guji_cv.gates.column_gate',
+          new='3c9fc8ae6ff02f3cbff55a403e8332de5fc9fdd4d7af2fbdc834a8a002cd023a',
+          old='14695ffb4eb100b35808596412291935656db67dc52225515b0b682b3c92d7f3',
+          evidence=_TABLE_COLS_ONE_0747),
+    # v0.7.50（史記 patch 线 = v0.7.48 + #1601）：group_flow_exclude 按本线哈希登记（A31 11-16）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='746d3e956607cb04dad065a984e34158ddd09217a8708cc9a5e3d07cd36fc1e5',
+          old='ffceeab903b391ca076a2e5fa2e847aee23d9f59d84fb54248d2274f5c2cb238',
+          evidence=_GF_EXCLUDE_0748),
 )
 
 

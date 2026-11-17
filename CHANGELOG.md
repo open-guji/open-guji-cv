@@ -5,11 +5,23 @@
 
 - PATCH：形近字组表与分流规则（OCR 研究 Project，Sheldon 11-16 定方向）：`config/near_groups.json`（全唐文、史記、殿本字形库挖的极近字对，并上手工、人裁、字体表与库内异体对，572 对／920 字，核心 369 对）、`clustering/near_route.py`（读表、近邻一致度、分流规则：首位字落表送审，近邻一致度不满送审）、`scripts/build_near_groups.py`（`mine`／`merge`）、`groups/shape_stage.py`（5a.2：按注册字组里只吃字块图的方法出字形判定）。表里每对标了所在的注册字组。**没接进匹配器**：新模块不在任何 Step 的 `code_deps` 里，各书指纹不变、缺省输出不变。
 
+- PATCH：seed_admit 书级减法参数 `group_flow_exclude`（如 `[shi]`）：从 `group_flow`（缺省全部 flow 组）减掉点名的组，免得书配置抄全名单；缺省空不进参数 dump。殿本 vol28 16 页 seed_admit 逐字节同，code_equiv `_GF_EXCLUDE_1116`（A22，史記 勢𫝑，A24 定方案①，11-16）。
+
+- PATCH：`scripts/train_glyph_sim_cnn.py` 支持几本书合训 5a 相似度 CNN（`--db` 给多次，同码位跨书合一类；`--per-book-classes` 按书分类）、`--resume` 按轮存档续训、`--limit` 每书限例数、`--threads`；单书用法与结果不变。`scripts/eval_sim_bench.py` 加 `cnn` 子命令（`--model <权重> --name <分数名>`）给一份 CNN 权重出逐对分。只动 scripts，不改 Step 指纹。实验结论见 ai-team `跨书通用底座-2026-11-16.md`，用法见 guji-manager `doc/参考/5a相似度模型.md`（OCR 研究 Project，11-16）。
+
+- PATCH：`table_cols` 正文只剩一列的页（史記 11:193）周期门槛下限改 1，不再整页拒（估不出走 period_prior 兜底）；文档写清列号是图上右起（产物 quad 右上原点）；A20 两处小毛病（常量位置、冲突报错打全 dict）。殿本、全唐文、北行 column_gate 逐字节同，code_equiv `_TABLE_COLS_ONE_1116`（A22，SJ 11-16 实测）。
+
+- PATCH：半文半表页按列标表格 `page_kinds.table_cols: {页: [列号…]}`（GUJI-772，SJ 台账 R030，A20 定方案；A22）：翻成 `column_gate.table_cols`（缺省空不进 dump），点名列拒收（拒因 `table_column`，GateLevel L0t），不进列宽中位与页级周期、门槛扣表格列数，Step3 出 ok=False、闸3 拒因同名，不进待审单；其余列照正文切。殿本 vol28、全唐文 020 各 16 页、北行 8 页两道闸逐字节同，code_equiv `_TABLE_COLS_1116`。
+
 - PATCH：seed_admit 书级参数 `semantic_extra`（「异体=正字,…」，缺省空不进 dump；A22，史記 r71）：叠在 VariantMap 之上补语义对，只管语义层、放行字照旧是刻形。史記 圗 不在 `variants.auto.tsv` 里，异体护栏认不出 圗、`variant_rank` 调不到，8 格照整理本放成 圖；史記配 `semantic_extra: 圗=圖` 即可。没改共用异体表（那样各书 seed_admit 指纹都变、钉语料的册要改钉）。殿本 vol28、全唐文 020 各 16 页 seed_admit 逐字节同，code_equiv `_SEM_EXTRA_1116`。
 
 - PATCH：seed_admit `follow_ref` 变体遍跳过书级钩子 `variant_rank` 按刻形放的格（史記 r71：来 14 格、圗 8 格被改回整理本 來／圖；SJ 11-16，A22）。钩子缺省 None 时没有这种格：殿本 vol28、全唐文 020 各 16 页 seed_admit 逐字节同，code_equiv `_FR_KEEP_VR_1116`。
 
 - PATCH：seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_rank`（史記，Sheldon 11-15 定 圗兾凢来 不并码位归一、改流水线放行；SJ 请求，A22）：三通道本要以 `cand_variant` 拦、`variant_norm` 也不放时再问书仓一次，钩子拿到异体在现字（名次 0）与库前 topk 名的名次，返回与放行字语义同的字就放，证据记 `lane.variant_rank=hook`、`variant_from`、`variant_ranks`。缺省 None 不调：殿本 vol28 16 页、全唐文 020 16 页 seed_admit 逐字节同，code_equiv 已登记 `_VR_HOOK_1116`、指纹不变。史記书仓覆盖了 follow_ref_hooks，照常过期；史記走 patch 线的话要把本改动 cherry-pick 到 patch 线并按本线哈希补登。
+
+## [0.7.49] - 2026-11-16
+
+- 发版说明（ZM 11-16，殿本 patch 线）：v0.7.42 + #1587（row_segment 1.51 闭口方框字不当框线），PATCH。基于 v0.7.42，不含 v0.7.43–48 与 dev 上其他改动；tag 在 main 合并提交（PR #1597）；dev 以 `-s ours` 合回、树不变（#1587 已在 dev 上）。
 
 ## [0.7.46] - 2026-11-16
 
