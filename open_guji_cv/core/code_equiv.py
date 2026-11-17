@@ -1105,6 +1105,13 @@ ENTRIES: tuple[Equiv, ...] = (
           old="504321227060b83062dbe45680a9df9c29b214a629b1a310124a36cf78c7e0fd",
           evidence="待收字：僻字码原码位（daizhige:U+XXXX）旁路带到 run 的 pua／pua_r／pua_l（新增函数 pua_codes，文本仍写〓，A24 11-05）："
                    "row_segment 在殿本 vol04 7 页（--pages 5,12,30,60,90,120,150）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.utils.daizhige",
+          new="1c41134dcc1add33b4e65c712fd75226b2cf2c7ffc33ff64a817006f4b8320d1",
+          old="504321227060b83062dbe45680a9df9c29b214a629b1a310124a36cf78c7e0fd",
+          evidence="#1604 整理本缺字占位区分（fix_pua 把 glyphs 登记的以图代字码写 ▣、不再写 〓，一换一、长度不变）：row_segment 只用 daizhige 的格位（column_layout）与汉字数（han_only），"
+                   "两字都不是汉字、都占一个格位。v0.7.51 与 v0.7.54 在史記（988g3f0wsu）、殿本（siku-zongmu）两套 daizhige 共 23360 个半叶上 build_halves 后的"
+                   "格位表、nchars、half_kind 逐项相同（文本里 ▣ 史記 73、殿本 233 个）；史記 09 册 6 页（--pages 5,41,77,113,149,180）row_segment 与 v0.7.51 产物逐字节相同；"
+                   "scripts/code_equiv.py check，2026-11-17（A22，史記 r76 起跑步）"),
     Equiv(module="open_guji_cv.steps.row_segment",
           new="00a6f2b28da6d1e20bea27bf4bdd2af2cc3df98def3258e14be15238c2389cf2",
           old="589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f",
