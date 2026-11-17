@@ -79,11 +79,18 @@ class MatchRec(BaseModel):
     弃权理由、局部分 s、库内留一正确率、差异区域外接框。为 None 时**不落盘**（见下），
     没开这项的产物逐字节不变。"""
 
+    stage: dict | None = None
+    """库匹配之后分段判定的证据（`steps.glyph_stages`，Step5-a `stages` 参数开了、这一格被分流才有）：
+    `route`（near_group／weak）、首位字、近邻一致度、对家、注册组，5a.2 各组字形方法的留痕 `shape`，
+    在这一步定了字的记 `final`（哪一段）。为 None 时不落盘。"""
+
     @model_serializer(mode="wrap")
     def _drop_unset_near_shape(self, handler):
         d = handler(self)
         if isinstance(d, dict) and d.get("near_shape") is None:
             d.pop("near_shape", None)
+        if isinstance(d, dict) and d.get("stage") is None:
+            d.pop("stage", None)
         return d
 
 
