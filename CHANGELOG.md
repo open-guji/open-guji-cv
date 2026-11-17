@@ -2,6 +2,7 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+- PATCH：清边不再删贴在字身外缘的真笔画（忄／帝／常 的侧点、而／百 的顶横；OCR 研究 Project，Sheldon 11-17「残墨彻底修好」）：`clustering/normalize.py` 加 `STROKE_KEEP`，规则 3（padding 带碎屑）和 `_drop_stray_components` 要删的连通体，粗细 ≥0.7×本图块笔宽、面积 ≥2×笔宽²、长宽比 ≥2、离其余墨 ≤3 笔宽的留下。管线真实字块实测（按该格定字的字体模板量）：全唐文 009 抽 9407 格变 173、更像 9、更不像 0；史記 08 抽 5467 格变 45、更像 22、更不像 0；殿本 vol05＋vol40 抽 1.76 万格变 83、更像 11、更不像 7。`normalize` 在 `glyph_match` 的 `code_deps` 里，各书 5a 判过期（与 #1617 同一波）。原理见 guji-manager `doc/参考/字形图清边与归一.md`。
 
 - 史記 r78 三个书级切点开关（A22 11-17，缺省都关、不进参数哈希，关时殿本 vol30、全唐文 020 逐字节同，登 code_equiv `_R78_1117`）：`row_segment.cut_gap_keep_glyph`（cut_gap_guard 换线不许劈新字、不许把上字一段跨 ≥0.35 格的墨划给下格；修 r77 代/黃、實、彬、為等 gap 换错的线）、`cut_white_row`（仍劈字时挪到 ±这么多格内最近的整行白，护字内白缝）、`straight_seam_ink`（直线候选 seam_ink 记真墨，只是记录）。史記 32 册 105 页：改选 16 处看图全对，格号 0 变化。
 
