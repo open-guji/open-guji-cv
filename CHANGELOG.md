@@ -3,18 +3,59 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
-## [0.7.52] - 2026-11-16
+## [0.7.53] - 2026-11-17
 
-- 发版说明（ZM 11-16，殿本 patch 线）：v0.7.49 + #1604（整理本缺字占位符区分：私用码 `〓`／以图代字 `▣`，`utils/gap.py`；A23 设计，Sheldon 11-16/17 审定），PATCH。`seed_admit`、`groups/flow` 判缺字改走 `is_gap`（两种语义相同：有字、读不出、不当证人）；`align_ref_coord.is_text_char` 认 `▣`（旧版会把它当标点丢掉、整列错一格）；`daizhige.fix_pua` 缺字图占位码记 `▣`；新 `scripts/dzg_placeholders.py`（整理本就地换字＋侧表）。seed_admit、align_ref 等步指纹变，殿本各册判过期，随换整理本新语料一并重跑。**换含 `▣` 的整理本必须用本版或以后的版本**。基于 v0.7.49，不含 dev 上 v0.7.50/51（史記线）及其他改动；底库不变（b27），不需配新底库。#1604 已合 dev。
+- 发版说明（A31 11-17，**dev 线**，PATCH）：dev 头 `4b90c3b`（含 `32a7764` #1589＋#1609 5a 分段 `glyph_match.stages`，全唐文要）。上一版 dev 线是 v0.7.42，本版并进其后 dev 上全部改动：#1573/#1576/#1580/#1583/#1590/#1594/#1601/#1606（缺省关或已登记等价）、#1587（row_segment 1.51，各书一律生效）、#1604（整理本占位符 〓／▣ 区分）、#1588/#1599/#1600/#1605（只动 manager 侧或脚本）及下面各条。**Step 指纹对 v0.7.42 变了的四步**（实算，经 code_equiv 换算后）：`column_gate`、`row_segment`（#1587 改 `impl/keben/row_boundaries`＋row_segment 升 1.51；#1604 改 `utils/daizhige`）、`align_ref`、`seed_admit`（#1604 改 `align_ref_coord`、新增依赖 `utils/gap`；#1601 改 `groups/flow`）——v0.7.42 及更早的产物这四步起过期，等于从 column_gate 起重跑；`glyph_match` 指纹不变（`_STAGES_1116` 已登记），开 `stages` 的册靠参数过期。**底库不变**：`check_base_corpus` 对 b27 一致（对最新 b28 多出 wu/rules.yaml，b28 是史記 patch 线的，dev 线书别钉 b28），钉 b27 的册不用改钉。
+
+- PATCH：`glyph_match.stages` 的 5a.1 weak_knn 格：带进候选的对手不再排到首位字前面（对手分是纯 CNN 分，候选里是融合分，直接比会把对手顶成库首位；全唐文 020 整册对比发现 碑→裨、遽→蘧）。只动 `steps/glyph_stages.py`，没开 `stages` 的书不受影响。设计文档第六节补整册对比：29688 格，放行 29664→29662，放行字 0 变。
+
+- PATCH：5a 分段接进第 5 步（Sheldon 11-16 定结构）：`glyph_match` 新参数 `stages`（缺省关，不进参数 dump），`steps/glyph_stages.py` 在判决层之后跑 5a.1 分流（same 降 unsure，落法并进匹配器现有护栏：落表 `never_match`＋对家进候选，近邻不一致 `conflict`＋对手进候选；来由记 `stage.route`，第 7 步与 manager 待审原因不用改）与 5a.2 形近字组字形方法（证据落 `MatchRec.stage`；书级 `final` 名单里的组才在这一步定字，缺省空＝全部待审）。相关模块不进 `code_deps`，开着的书靠 `stages_sha` 判过期；`glyph_match.py` 的改动登记等价（`_STAGES_1116`）。开关登记表、设计文档第三节已更新。
+
+- PATCH：形近字组表与分流规则（OCR 研究 Project，Sheldon 11-16 定方向）：`config/near_groups.json`（全唐文、史記、殿本字形库挖的极近字对，并上手工、人裁、字体表与库内异体对，572 对／920 字，核心 369 对）、`clustering/near_route.py`（读表、近邻一致度、分流规则：首位字落表送审，近邻一致度不满送审）、`scripts/build_near_groups.py`（`mine`／`merge`）、`groups/shape_stage.py`（5a.2：按注册字组里只吃字块图的方法出字形判定）。表里每对标了所在的注册字组。**没接进匹配器**：新模块不在任何 Step 的 `code_deps` 里，各书指纹不变、缺省输出不变。
+- PATCH：row_segment 书级参数 `cut_gap_guard`（缺省 0＝关，不进参数 dump）：切点选定后，选中那条不在白缝里、候选池里另有干净落在白缝里的，改用白走廊最宽的那条（`chosen_by="gap"`）。史記写本 U-Net 把上字底横、下字头判给扁字（畫/一、靈/七），Step4 照切线分墨 一→二；史記 25 页＋58 页改 11 个切点，看图 9 对 2 持平。关时殿本 vol30、全唐文 020、史記 09 row_segment 逐字节同，code_equiv `_GAP_GUARD_1117`。`scripts/code_equiv.py check` 基线检出链接本机 models/（A22，SJ r76，11-17）。
+
+- PATCH：`scripts/seg_pins_check.py` 加第 1b 节钉子列几何：压墨（钉子格线劈字，判据同 seg check `cut_through`，过 U-Net 裁判，强／中档算问题）与一格跨两字（`eval/seg_screen.two_glyphs`：格高 ≥1.2 倍字高、格里墨分两段各 ≥0.3 倍，或墨跨 ≥1.1 倍且断开）；`--geo-hint-only` 降成提示。只改检查工具，不动 Step 指纹（A22，SJ r76 切分审计，11-17）。
+
+- PATCH：seed_admit 书级减法参数 `group_flow_exclude`（如 `[shi]`）：从 `group_flow`（缺省全部 flow 组）减掉点名的组，免得书配置抄全名单；缺省空不进参数 dump。殿本 vol28 16 页 seed_admit 逐字节同，code_equiv `_GF_EXCLUDE_1116`（A22，史記 勢𫝑，A24 定方案①，11-16）。
+
+- PATCH：`scripts/train_glyph_sim_cnn.py` 支持几本书合训 5a 相似度 CNN（`--db` 给多次，同码位跨书合一类；`--per-book-classes` 按书分类）、`--resume` 按轮存档续训、`--limit` 每书限例数、`--threads`；单书用法与结果不变。`scripts/eval_sim_bench.py` 加 `cnn` 子命令（`--model <权重> --name <分数名>`）给一份 CNN 权重出逐对分。只动 scripts，不改 Step 指纹。实验结论见 ai-team `跨书通用底座-2026-11-16.md`，用法见 guji-manager `doc/参考/5a相似度模型.md`（OCR 研究 Project，11-16）。
+
+- PATCH：`table_cols` 正文只剩一列的页（史記 11:193）周期门槛下限改 1，不再整页拒（估不出走 period_prior 兜底）；文档写清列号是图上右起（产物 quad 右上原点）；A20 两处小毛病（常量位置、冲突报错打全 dict）。殿本、全唐文、北行 column_gate 逐字节同，code_equiv `_TABLE_COLS_ONE_1116`（A22，SJ 11-16 实测）。
+
+- PATCH：半文半表页按列标表格 `page_kinds.table_cols: {页: [列号…]}`（GUJI-772，SJ 台账 R030，A20 定方案；A22）：翻成 `column_gate.table_cols`（缺省空不进 dump），点名列拒收（拒因 `table_column`，GateLevel L0t），不进列宽中位与页级周期、门槛扣表格列数，Step3 出 ok=False、闸3 拒因同名，不进待审单；其余列照正文切。殿本 vol28、全唐文 020 各 16 页、北行 8 页两道闸逐字节同，code_equiv `_TABLE_COLS_1116`。
+
+- PATCH：seed_admit 书级参数 `semantic_extra`（「异体=正字,…」，缺省空不进 dump；A22，史記 r71）：叠在 VariantMap 之上补语义对，只管语义层、放行字照旧是刻形。史記 圗 不在 `variants.auto.tsv` 里，异体护栏认不出 圗、`variant_rank` 调不到，8 格照整理本放成 圖；史記配 `semantic_extra: 圗=圖` 即可。没改共用异体表（那样各书 seed_admit 指纹都变、钉语料的册要改钉）。殿本 vol28、全唐文 020 各 16 页 seed_admit 逐字节同，code_equiv `_SEM_EXTRA_1116`。
+
+- PATCH：seed_admit `follow_ref` 变体遍跳过书级钩子 `variant_rank` 按刻形放的格（史記 r71：来 14 格、圗 8 格被改回整理本 來／圖；SJ 11-16，A22）。钩子缺省 None 时没有这种格：殿本 vol28、全唐文 020 各 16 页 seed_admit 逐字节同，code_equiv `_FR_KEEP_VR_1116`。
+
+- PATCH：seed_admit 异体护栏书级钩子 `follow_ref_hooks.variant_rank`（史記，Sheldon 11-15 定 圗兾凢来 不并码位归一、改流水线放行；SJ 请求，A22）：三通道本要以 `cand_variant` 拦、`variant_norm` 也不放时再问书仓一次，钩子拿到异体在现字（名次 0）与库前 topk 名的名次，返回与放行字语义同的字就放，证据记 `lane.variant_rank=hook`、`variant_from`、`variant_ranks`。缺省 None 不调：殿本 vol28 16 页、全唐文 020 16 页 seed_admit 逐字节同，code_equiv 已登记 `_VR_HOOK_1116`、指纹不变。史記书仓覆盖了 follow_ref_hooks，照常过期；史記走 patch 线的话要把本改动 cherry-pick 到 patch 线并按本线哈希补登。
 
 ## [0.7.49] - 2026-11-16
 
-- 发版说明（ZM 11-16，殿本 patch 线）：v0.7.42 + #1587（row_segment 1.51：框线判空认闭口方框字曰日口目，不再把它们当框角记空并进邻格）。PATCH；row_segment 及其下游步指纹变，殿本各册产物判过期、按全局设置改钉后择机重跑。基于 v0.7.42，不含 dev 上 v0.7.43–48 之后的改动（史記钩子、wu/rules.yaml 等），底库仍 b27，不需配新底库。
+- 发版说明（ZM 11-16，殿本 patch 线）：v0.7.42 + #1587（row_segment 1.51 闭口方框字不当框线），PATCH。基于 v0.7.42，不含 v0.7.43–48 与 dev 上其他改动；tag 在 main 合并提交（PR #1597）；dev 以 `-s ours` 合回、树不变（#1587 已在 dev 上）。
+
+## [0.7.46] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.45 + #1583（status 过期原因分出「语料钉变了」），PATCH；不改 Step 指纹，无 code_equiv 登记。tag 在 main d73f7e4。dev 上 #1583 已在 `## [未发版]`。
+
+## [0.7.45] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.44 + #1580 移植（A22 分支 a22/semantic-extra-0744 9d9f43b），PATCH，不含 dev 线 v0.7.40／v0.7.42。tag 在 main 合并提交（PR #1581）；dev 以 `-s ours` 合回、树不变，只追加 code_equiv 本线哈希登记 `_SEM_EXTRA_0744`（seed_admit be2ed592→ffceeab9）。
+
+## [0.7.44] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.43 + #1576（A22 移植分支 f5f1a97），PATCH，不含 dev 线 v0.7.40／v0.7.42。tag 在 main 合并提交（PR #1577）；dev 以 `-s ours` 合回、树不变，只追加 code_equiv 本线哈希登记 `_FR_KEEP_VR_0743`（seed_admit 1f3cc925→be2ed592）。
+
+## [0.7.43] - 2026-11-16
+
+- 发版说明（A31 11-16，SJ 史記 patch 线）：v0.7.41 + #1573（`follow_ref_hooks.variant_rank` 钩子），PATCH，不含 dev 线 v0.7.40／v0.7.42。tag 在 main 合并提交（PR #1574）；dev 以 `-s ours` 合回、树不变，只追加 code_equiv 本线哈希登记 `_VR_HOOK_0743`（seed_admit 1f3cc925→ebd54cc7、follow_ref_hooks a73e9aaf→76f1e160）。
 
 ## [0.7.42] - 2026-11-15
 
-- 发版说明（A31 11-15，dev 线）：dev 头 `0cb4065`＝v0.7.40 + #1565（`sb-否決-卜-史記` 补 4 条），PATCH。只改 `config/groups/sb/rules.yaml`，代码指纹与 v0.7.40 同。**钉 corpus 的册（殿本、全唐文）改钉前别升含 #1558 的版本（v0.7.40 起）**：先改钉底库 **b26**（＝b24 只改 sb/rules.yaml，含 #1558＋#1565；b25 作废不用），`guji corpus pin --same-output-as <旧总号> --note '<证据>'`（配 manager ≥0.4.50），五步不过期；还钉 b24/b25 的册在本版上报 CorpusDrift。证据：A22/A24 回测 #1558 殿本五份整理本 0 变化、全唐文 kanripo 23530 处 0 变化；#1565 殿本、全唐文 0 变化。史記两次共 23 处卜判十→弃权。史記走 patch 线 v0.7.41。
+- 发版说明（A31 11-15，dev 线）：dev 头 `0cb4065`＝v0.7.40 + #1565（`sb-否決-卜-史記` 补 4 条），PATCH。只改 `config/groups/sb/rules.yaml`，代码指纹与 v0.7.40 同。**钉 corpus 的册（殿本、全唐文）改钉前别升含 #1558 的版本（v0.7.40 起）**：先改钉底库 **b27**（Ops 出，rev 1011430；＝b24／b25 只改 sb/rules.yaml，含 #1558＋#1565；**不是 b26**，b26 是史記 patch 线的底库），`guji corpus pin --same-output-as <旧总号> --note '<证据>'`（配 manager ≥0.4.50），五步不过期；还钉 b24/b25 的册在本版上报 CorpusDrift。证据：A22/A24 回测 #1558 殿本五份整理本 0 变化、全唐文 kanripo 23530 处 0 变化；#1565 殿本、全唐文 0 变化。史記两次共 23 处卜判十→弃权。史記走 patch 线 v0.7.41。
 ## [未发版]
+
+- PATCH：`guji status` 过期原因分出「语料钉变了」（SJ v0.1 预检 11-16，A31）：读语料的步（glyph_match、rare_candidates、align_ref、context_decide、seed_admit 等 `CORPUS_STEPS`）只因册的 `corpus:` 改钉而过期时，原来报「代码或版本变了」，现在报「语料钉变了：corpus 6→8（代码未变）」；代码也变了报「代码或版本变了；语料钉也变了：…」。新条目在 manifest 记 `corpus_pin`／`corpus`（不进指纹）；老条目没记就拿 `self_hash` 逐个旧总号试。只改原因文案，过期判定、`code_ok` 不变（语料变化不算「只是代码变了」）；不改任何 Step 指纹。
 
 ## [0.7.40] - 2026-11-15
 

@@ -76,6 +76,7 @@ _SAME_WRITING_KEEP = ("xu", "feng", "yi_560", "guan", "guang", "jiao", "jue")
 
 class SeedAdmitParams(BaseModel):
     variants: str = ""                  # 异体表；空 = VariantMap 默认
+    semantic_extra: str = ""            # 书级补语义对「异体=正字,…」，叠在 VariantMap 之上（如史記 圗=圖：语义同、字形层照刻形）；空＝不补、不进 dump（A22 11-16）
     solo_cov: float = 0.99              # match_solo 的 cov 闸，实测拐点
     use_context: bool = True            # 把 Step6 的定字当第三路证据
     context_margin: float = 0.70        # 用它时的 margin 门槛（生产值）
@@ -238,6 +239,10 @@ class SeedAdmitParams(BaseModel):
 
     证据写 `evidence.group`（组、入口、每个解法的给字与理由、结论）。见 `groups/flow.py`、
     doc/design/M7-字组统一流程-variant-tie改造方案.md。关着不进参数 dump（`params_hash` 不变）。"""
+    group_flow_exclude: list[str] = Field(default_factory=list)
+    """书级减法（A22 11-16，史記 勢𫝑 不可分）：从 `group_flow`（缺省＝注册表全部 flow 组）里去掉这几组，免得书配置抄全名单、
+    以后新增组跟不上。写法 `[shi]`；组 id 照 `registry.RENAMED` 换新名，不认识的组报错。空＝不减（不进参数 dump）；
+    减后的 `group_flow` 照常进 dump，产物随之过期。"""
     group_flow_freq: str = ""               # 字频表（`python -m open_guji_cv.groups.freq <工作区>` 冻结），空＝字频解法弃权
     group_flow_freq_major: int = 10         # 主形人裁数下限；其余成员须为 0（2026-10-20 sheldon 定 20→10）
     group_flow_freq_min_vols: int = 2       # 主形人裁须来自至少这么多册（表里有册数才查；0＝不查）
@@ -1626,6 +1631,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_abstain_ref_ok", None)
         if isinstance(d, dict) and not self.group_flow_ref_free:
             d.pop("group_flow_ref_free", None)
+        if isinstance(d, dict) and not self.group_flow_exclude:
+            d.pop("group_flow_exclude", None)
         if isinstance(d, dict) and self.group_flow_dissent_keep_form:
             d.pop("group_flow_dissent_keep_form", None)
         if isinstance(d, dict) and self.group_flow_same_writing_keep == list(_SAME_WRITING_KEEP):
@@ -1690,6 +1697,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.pua_rules:
             d.pop("pua_rules", None)
             d.pop("pua_rule_cov", None)
+        if isinstance(d, dict) and not self.semantic_extra:
+            d.pop("semantic_extra", None)
         if isinstance(d, dict) and not self.follow_ref_variants:
             d.pop("follow_ref_variants", None)
         if isinstance(d, dict) and not self.follow_ref_seen:
@@ -1811,6 +1820,13 @@ class SeedAdmitParams(BaseModel):
             if not self.solo_adapt_fingerprint:
                 object.__setattr__(self, "solo_adapt_fingerprint",
                                    corpus_fingerprint([self.solo_adapt_profile]) if self.solo_adapt_profile else "missing")
+        if self.group_flow_exclude:
+            from ..groups.registry import FLOW_GROUPS as _FG, flow_names as _fn
+            _ex = _fn(self.group_flow_exclude)
+            if bad := [g for g in _ex if g not in _FG]:
+                raise ValueError(f"seed_admit.group_flow_exclude 有不认识的组：{bad}")
+            object.__setattr__(self, "group_flow_exclude", list(_ex))
+            object.__setattr__(self, "group_flow", tuple(g for g in self.group_flow if g not in _ex))
         if self.group_flow:
             from ..groups.flow import check_groups
             check_groups(self.group_flow)
@@ -1997,6 +2013,8 @@ class SeedAdmitStep(Step):
         from ..variant_ledger import BookLedger
         p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
         vmap = VariantMap.load(p.variants or None)
+        if p.semantic_extra:
+            vmap = _ExtraSemanticMap(vmap, _parse_semantic_extra(p.semantic_extra))
         if p.codepoint_semantic and ctx.book.codepoints:
             vmap = _CodepointMap(vmap, ctx.book)
         ledger = BookLedger.load_or_empty(p.edition)
@@ -2677,6 +2695,7 @@ class SeedAdmitStep(Step):
                                         if (p.lane_witness3 or p.lane_coord) else None,
                                         canon=ctx.book.canonical_char if ctx.book.codepoints else None,
                                         variant_hook=_lane_variant_hook(ctx),
+                                        rank_hook=_lane_variant_hook(ctx, "variant_rank"),
                                         knn_veto=(_witness3_knn_veto_fn(p, ctx, page)
                                                   if p.witness3_knn_veto and p.group_flow_near_knn else None),
                                         lib_n=(_keben_counts(p.db_path) or None)
@@ -4592,6 +4611,8 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
         for rec in col.chars or []:
             if rec.provenance == "human":
                 continue
+            if ((rec.evidence or {}).get("lane") or {}).get("variant_rank") == "hook":
+                continue        # 书级钩子 variant_rank 按刻形放的字（史記 圗兾凢来，Sheldon 11-16）：别再按整理本改回去
             ref = coord.get(rec.id)
             if not ref:
                 ref = (amap.get(rec.id) or (None,))[0]
@@ -4787,11 +4808,12 @@ def _blind_ref_behind(m, co: str, top_cov: float, gap: float) -> bool:
 
 def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict,
                        vmap, witnesses_fn, canon=None, lib_n: dict | None = None, knn_veto=None,
-                       variant_hook=None) -> int:
+                       variant_hook=None, rank_hook=None) -> int:
     """待审补放三通道（`lane_witness3`／`lane_coord`／`lane_seal`，overview#433）。→ 放行格数。
 
     `variant_hook`：书级钩子 `follow_ref_hooks.variant_norm`（缺省 None＝不调），`lane_variant_guard` 内建例外都不放时
-    最后问一次，见该模块。
+    最后问一次，见该模块。`rank_hook`：书级钩子 `follow_ref_hooks.variant_rank`（缺省 None＝不调），`variant_hook`
+    也不放时再问一次。
     只升不降：只碰 admit=False、非人裁、不在排除名单上的格；己/已/巳 一族一律跳过。
     `witnesses_fn()` → 证人列表（只在 R1/R4 真要看证人时才调，装载与锚定都是懒的）。"""
     from pathlib import Path
@@ -5005,6 +5027,11 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                         vn := variant_hook(lane=name, char=char, form=vf, canon=canon, lib=lib)) and same(vn, char):
                     char = vn                               # 书级钩子：两形本书已归一（史記，follow_ref_hooks.variant_norm）
                     lev = {**lev, "variant_norm": "hook", "variant_from": vf}
+                elif vf is not None and rank_hook is not None and (
+                        vr := _lane_variant_rank(rank_hook, name, char, rec.char, m, p.lane_variant_topk, variant_pair, lib)
+                ) and same(vr[0], char):
+                    char = vr[0]                            # 书级钩子：异体只排库后几名（史記，follow_ref_hooks.variant_rank）
+                    lev = {**lev, "variant_rank": "hook", "variant_from": vf, "variant_ranks": vr[1]}
                 elif vf is not None:    # 图上可能是刻本异体：别把它改成通用字（#433）
                     rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "cand_variant", "form": vf, "char": char}}
                     continue
@@ -6749,12 +6776,25 @@ def _follow_ref_rival_hook(ctx: RunContext):
     return getattr(importlib.import_module(resolve(ctx.book, _FOLLOW_REF_HOOKS)), "rival_skip", None)
 
 
-def _lane_variant_hook(ctx: RunContext):
-    """书级钩子 `impl/keben/follow_ref_hooks.variant_norm`（书仓 `code/` 覆盖才有；缺省 None）。
-    书仓模块没写这个名字也当 None（11-13 前写的覆盖模块只有 rival_skip）。"""
+def _lane_variant_hook(ctx: RunContext, name: str = "variant_norm"):
+    """书级钩子 `impl/keben/follow_ref_hooks.<name>`（`variant_norm`／`variant_rank`；书仓 `code/` 覆盖才有；缺省 None）。
+    书仓模块没写这个名字也当 None（11-13 前写的覆盖模块只有 rival_skip，11-16 前的没有 variant_rank）。"""
     import importlib
     from ..core.seg_set import resolve
-    return getattr(importlib.import_module(resolve(ctx.book, _FOLLOW_REF_HOOKS)), "variant_norm", None)
+    return getattr(importlib.import_module(resolve(ctx.book, _FOLLOW_REF_HOOKS)), name, None)
+
+
+def _lane_variant_rank(hook, lane: str, char: str, cur: str | None, m, topk: int, variant_pair,
+                       lib: str | None) -> tuple[str, list] | None:
+    """调书级钩子 `variant_rank`：把 `char` 的异体在现字（名次 0）与库前 `topk` 名（名次 1…）里各排第几告诉它。
+    → (放行字, [[名次, 异体, cov|None], …])；钩子不放 → None。"""
+    cands = [(c, round(float(v), 4)) for c, v in ((m.candidates or [])[:max(topk, 0)] if m else [])]
+    forms = ([[0, cur, None]] if cur and variant_pair(cur, char) else []) + [
+        [i, c, v] for i, (c, v) in enumerate(cands, 1) if variant_pair(c, char)]
+    if not forms:
+        return None
+    vr = hook(lane=lane, char=char, forms=tuple(tuple(f) for f in forms), cur=cur, cands=tuple(cands), lib=lib)
+    return (vr, forms) if vr else None
 
 
 def _edge_pair_excluded(a: str, b: str) -> bool:
@@ -6906,6 +6946,34 @@ class _CodepointMap:
 
     def semantic(self, char: str) -> str:
         return self._base.semantic(self._book.canonical_char(char))
+
+    def __getattr__(self, name):
+        return getattr(self._base, name)
+
+
+def _parse_semantic_extra(spec: str) -> dict[str, str]:
+    """`semantic_extra`「异体=正字,…」→ {异体: 正字}；两边都要是单字，写错直接报错（书配置写错别悄悄不生效）。"""
+    out: dict[str, str] = {}
+    for item in (x.strip() for x in spec.split(",")):
+        if not item:
+            continue
+        a, sep, b = item.partition("=")
+        a, b = a.strip(), b.strip()
+        if not sep or len(a) != 1 or len(b) != 1 or a == b:
+            raise ValueError(f"semantic_extra 写法不对：{item!r}（要「异体=正字」，两边各一个字）")
+        out[a] = b
+    return out
+
+
+class _ExtraSemanticMap:
+    """VariantMap 的包装：书级 `semantic_extra` 补的对先换到正字再查语义（圗→圖 后 semantic(圗)==semantic(圖)）。
+    只管语义层，字形层（候选、放行字）照旧是刻形。"""
+
+    def __init__(self, base, extra: dict[str, str]):
+        self._base, self._extra = base, extra
+
+    def semantic(self, char: str) -> str:
+        return self._base.semantic(self._extra.get(char, char))
 
     def __getattr__(self, name):
         return getattr(self._base, name)
