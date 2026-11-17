@@ -21,6 +21,7 @@ from pathlib import Path
 
 NCOL = 9
 UNMAPPED = "〓"
+IMAGE_PH = "▣"      # 以图代字占位（缺字图占位码，见 utils/gap.py）；私用码映不上才写 UNMAPPED
 #: 只有这么几个字的半叶算「少字」（卷末「皆附存目」之类），配页与报告里和满页分开
 SHORT_CHARS = 6
 
@@ -66,7 +67,7 @@ def load_records(path: Path) -> list[dict]:
 
 
 def fix_pua(s: str, pua_map: dict | None, glyphs: dict | None = None) -> tuple[str, int]:
-    """PUA → 真字（按本条 `pua_map`），映不上的记 `〓`；本条 `glyphs` 登记的缺字图占位码也记 `〓`。
+    """PUA → 真字（按本条 `pua_map`），映不上的记 `〓`；本条 `glyphs` 登记的缺字图占位码（以图代字）记 `▣`。
     返回（新串，记成 `〓` 的个数）。"""
     if not s:
         return s, 0
@@ -75,7 +76,7 @@ def fix_pua(s: str, pua_map: dict | None, glyphs: dict | None = None) -> tuple[s
     out, miss = [], 0
     for ch in s:
         if f"U+{ord(ch):04X}" in gl:
-            out.append(UNMAPPED)
+            out.append(IMAGE_PH)
             miss += 1
         elif _is_pua(ch):
             real = pm.get(f"U+{ord(ch):04X}")
