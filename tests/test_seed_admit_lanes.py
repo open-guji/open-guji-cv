@@ -774,3 +774,70 @@ def test_variant_norm_hook_none_keeps_guard():
 def test_variant_norm_hook_must_stay_same_semantic():
     n, r = _hooked(lambda **kw: "天")         # 钩子给了语义不同的字：忽略，照旧拦
     assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+
+# ── 书级钩子 follow_ref_hooks.variant_rank（2026-11-16，史記：异体只排库后几名时按书放行，不靠码位归一）──────
+
+def _ranked(hook, cands=(("旨", 0.95), ("㫖", 0.94)), vhook=None):
+    chars = BODY[:30]
+    out = _page(chars, {5: {"doubts": ["库 unsure(cov=0.95)", "上下文 margin 不足(0.10)"], "char": "旨"}})
+    wits = [_wit(f"{k}.txt", "前" + chars[:4] + "旨" + chars[5:] + "後") for k in "dwy"]
+    p = SeedAdmitParams(db_path="x", lane_coord=True)
+    mm = {f"{B}:1:5": NS(char=None, candidates=list(cands), guard=None)}
+    n = _review_lanes_pass(p, out, mm, {}, _ids({5: "旨"}), _vm(), lambda: wits, variant_hook=vhook, rank_hook=hook)
+    return n, out[0].chars[4]
+
+
+def test_variant_rank_hook_default_none():
+    from open_guji_cv.impl.keben import follow_ref_hooks
+    assert follow_ref_hooks.variant_rank is None
+
+
+def test_variant_rank_hook_admits_and_records():
+    seen = {}
+
+    def hook(**kw):
+        seen.update(kw)
+        return kw["char"] if all(r >= 2 for r, _, _ in kw["forms"]) else None
+    n, r = _ranked(hook)
+    assert n == 1 and r.admit and r.char == "旨"
+    assert seen["lane"] == "coord_fallback" and seen["forms"] == ((2, "㫖", 0.94),) and seen["lib"] == "旨"
+    assert seen["cands"] == (("旨", 0.95), ("㫖", 0.94))
+    lane = r.evidence["lane"]
+    assert lane["variant_rank"] == "hook" and lane["variant_from"] == "㫖" and lane["variant_ranks"] == [[2, "㫖", 0.94]]
+
+
+def test_variant_rank_hook_top_variant_stays():
+    def hook(**kw):
+        return kw["char"] if all(r >= 2 for r, _, _ in kw["forms"]) else None
+    n, r = _ranked(hook, cands=(("㫖", 0.95), ("旨", 0.94)))     # 异体是库首位：前面 lib_variant 一支就拦了，钩子也不放
+    assert n == 0 and not r.admit
+
+
+def test_variant_rank_hook_after_variant_norm():
+    calls = []
+    n, r = _ranked(lambda **kw: calls.append("rank") or None, vhook=lambda **kw: calls.append("norm") or "旨")
+    assert n == 1 and calls == ["norm"] and r.evidence["lane"]["variant_norm"] == "hook"
+
+
+def test_variant_rank_hook_must_stay_same_semantic():
+    n, r = _ranked(lambda **kw: "天")
+    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+
+# ── 书级 semantic_extra（2026-11-16，史記：VariantMap 没有 圗／圖，异体护栏认不出、variant_rank 不起作用）──────
+
+def test_semantic_extra_default_empty_not_dumped():
+    assert "semantic_extra" not in SeedAdmitParams(db_path="x").model_dump()
+    assert SeedAdmitParams(db_path="x", semantic_extra="圗=圖").model_dump()["semantic_extra"] == "圗=圖"
+
+
+def test_semantic_extra_map():
+    import pytest
+
+    from open_guji_cv.steps.seed_admit import _ExtraSemanticMap, _parse_semantic_extra
+    vm = _ExtraSemanticMap(_vm(), _parse_semantic_extra("圗=圖, 兾=冀"))
+    assert vm.semantic("圗") == vm.semantic("圖") and vm.semantic("兾") == vm.semantic("冀")
+    assert vm.semantic("天") == "天"
+    with pytest.raises(ValueError):
+        _parse_semantic_extra("圗圖")
