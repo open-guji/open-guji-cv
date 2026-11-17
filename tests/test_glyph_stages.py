@@ -101,3 +101,15 @@ def test_params_dump_unchanged_when_off(tmp_path):
     from open_guji_cv.steps.glyph_match import GlyphMatchParams
     d = GlyphMatchParams(db_path=str(tmp_path / "x.db"), db_fingerprint="f").model_dump()
     assert "stages" not in d and "stages_sha" not in d
+
+
+def test_route_table_resolves_and_missing_raises(tmp_path, monkeypatch):
+    """书自己的形近字组表：相对路径按数据目录解析；找不到就报错，不悄悄退回仓里的大表。"""
+    from open_guji_cv.core import workspace
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "near_groups.json").write_text('{"pairs": {"日曰": {"src": ["human"], "core": true}}}', encoding="utf-8")
+    monkeypatch.setattr(workspace, "data_root", lambda ws=None: tmp_path)
+    c = GS.StagesConfig.from_any({"route": {"table": "config/near_groups.json", "registry": False}})
+    assert c.route.table == str(tmp_path / "config" / "near_groups.json") and c.route.registry is False
+    with pytest.raises(ValueError):
+        GS.StagesConfig.from_any({"route": {"table": "config/没有这个.json"}})

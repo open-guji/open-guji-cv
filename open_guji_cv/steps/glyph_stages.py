@@ -23,6 +23,7 @@
         sim_model: {path: models/glyph_sim_qtw/model.pt, same: 0.90, low: 0.50}   # 必须开：5a.1 用整库 CNN 嵌入
         stages:
           route: {level: core, knn_min: 1.0}     # `near_route.RouteConfig` 的字段；book 不填＝三书的表并着用
+          #       table: config/near_groups.json ＝本书自己的表（相对路径先找数据目录）；registry: false＝不按注册组拦
           final: [xb, di]                        # 本书实测够准、5a.2 可以直接定字的组（缺省空）
           shape: true                            # false＝不跑 5a.2（只分流）
 
@@ -65,11 +66,25 @@ class StagesConfig:
         bad = set(r) - {f.name for f in fields(RouteConfig)}
         if bad:
             raise ValueError(f"glyph_match.stages.route 不认识的键：{sorted(bad)}")
+        if r.get("table"):
+            r["table"] = _resolve(str(r["table"]))
         from ..groups.registry import FLOW_GROUPS
         final = frozenset(d.get("final") or ())
         if final - set(FLOW_GROUPS):
             raise ValueError(f"glyph_match.stages.final 里有没注册的字组：{sorted(final - set(FLOW_GROUPS))}")
         return cls(route=RouteConfig(**r), final=final, shape=bool(d.get("shape", True)))
+
+
+def _resolve(path: str) -> str:
+    """书自己的形近字组表：相对路径先找数据目录（随中心库走，如 `config/near_groups.json`），再找工作区、仓根。"""
+    from ..core.workspace import REPO_ROOT, data_root, workspace_root
+    q = Path(path).expanduser()
+    if q.is_absolute():
+        return str(q)
+    for base in (data_root(), workspace_root(), REPO_ROOT):
+        if base is not None and (base / q).exists():
+            return str(base / q)
+    raise ValueError(f"glyph_match.stages.route.table 找不到：{path}（数据目录、工作区、仓根都没有）")
 
 
 def _code_sha(*mods: str) -> str:
