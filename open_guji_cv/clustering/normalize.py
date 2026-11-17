@@ -19,21 +19,6 @@ import numpy as np
 NORM_SIZE = 64          # 归一化边长 S
 MARGIN_RATIO = 0.12     # 四周留白比例
 NOISE_AREA = 6          # 贴边小连通域面积阈值（像素）
-#: 细线判据（`remove_edge_specks` 规则 2）的相对笔宽上限：候选线的粗细（垂直于走向的墨段长
-#: 中位数）≤ 本图块笔宽（全部墨像素的横、纵墨段长取小者的中位数）× 这个比例才当界行／版框删。
-#: 2026-11-17 加，证据见该函数文档。`None` 关掉
-#: 这道护栏（退回只看绝对上限的旧行为，只给对照实验用）。
-LINE_STROKE_RATIO: float | None = 0.6
-#: padding 带碎屑（规则 3）的面积上限，相对最大连通体。2026-11-17 抽成常数，**值没动**：
-#: 收到 0.05 能再救回全唐文少量贴边的点（忄 的左点），但殿本的真实字块上换来更多邻字残片
-#: （vol40 抽 4108 格：变好 10、变坏 14），所以留在 0.25。
-PAD_DEBRIS_AREA_RATIO = 0.25
-#: 规则 3 对**不贴图块边**的小块另设的面积上限（缺省 `None`＝不另设，与贴边的同用上面那个）。
-#: 紧框图块里本字的点（忄 的左点）不贴边，邻字探进来的残片多半贴边。全唐文名单 569 例上
-#: 设 0.05 再多恢复 7 例、设 0.10 多 4 例；殿本两册真实字块上 0.05 是变好 6、变坏 4，
-#: 0.10 是变好 4、变坏 0。证据还薄，先留旋钮不开。
-PAD_DEBRIS_INNER_AREA_RATIO: float | None = None
-_UNSET = object()       # 「没传」哨兵（None 另有含义：关掉该护栏）
 SAUVOLA_WINDOW = 31
 #: 2026-09-16 由 0.2 降到 0.10（用户裁定）。北行日錄刻本这类**淡墨细笔**的扫描上，
 #: 0.2 太保守：细笔画大量落在灰度 140–180 这条中灰带，而 0.2 只召回其中 10.5%，
@@ -81,24 +66,8 @@ def sauvola_binarize(gray: np.ndarray, window: int = SAUVOLA_WINDOW,
 
 def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
                        margins: tuple[int, int] | None = None,
-                       strip_lines: bool = True,
-                       line_stroke_ratio: float | None = _UNSET,  # type: ignore[assignment]
-                       pad_debris_area_ratio: float | None = None) -> np.ndarray:
+                       strip_lines: bool = True) -> np.ndarray:
     """删除切分/裁切残留（P3 重写，2026-08-23）。
-
-    **2026-11-17 修：细线规则不再删本字的细笔画**（全唐文字形库 569 例残图的根因）。
-    规则 2 的绝对上限 `0.045×min(h,w)` 是按「图块 100～140px、笔画 8～14px、界行 2～5px」
-    定的。全唐文的紧框图块约 200px，上限涨到 8～9px，而它的横笔和偏旁竖笔只有 6～9px 粗：
-    懷 的忄竖、宣／望 的底横、裏／稟／平 的顶横、順 的左撇、陵 的阝竖，凡是自成一个连通体、
-    落在外带的，都被当界行删了。入库时 `to_canonical` 删一遍（库图存的就是残的），匹配前
-    `normalize_patch` 在 256 画布上再删一遍（上限 11.5px，伽 成 加、便 成 更、州 成 川）。
-    全库 3.9 万例现格原裁图里规则 2 删掉 715 个连通体，逐个量「留着」比「去掉」是否更像
-    库标的字体模板：517 个明显是真笔画，明显是杂线的只有 22 个。真界行与真笔画按
-    **相对笔宽**分得开：候选线粗细 ÷ 本图块笔宽 < 0.6 的 26 个里没有一个真笔画（13 个明显
-    是杂线），≥ 0.6 的 689 个里 517 个是真笔画。所以加护栏三。殿本、史記的图块小、绝对
-    上限本来就在笔宽的六成以下，护栏在这两套书上几乎不起作用（真实字块抽 1 万格，只 1 格变，
-    是 等 的底横回来了）。
-    全套数字与复现脚本见 guji-manager `doc/参考/字形图清边与归一.md`。
 
     `strip_lines=False` 关掉规则 2（2026-09-15 加）。规则 2 的前提是「版框/界行 2～5px、
     本书笔画 8～14px，两个分布不重叠」——这是刻本切分块的经验，对**字体渲染**不成立：
@@ -129,21 +98,11 @@ def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
        删掉，用户在库页面上看出「短笔画被消掉」。位置无关的老判据全库
        扫描：1371 处字身框内删除里，深入核心区的仅 3 处、其一为真笔画
        ——错杀率低但错杀的是字本身，必须守。
-       护栏三（2026-11-17 加）：**相对笔宽**。线的粗细（垂直于走向的墨段长
-       中位数）≤ `line_stroke_ratio` × 本图块笔宽（`stroke_width_px`）才删。
-       界行／版框比字的笔画细得多（实测比值 0.3～0.55），本字的细横、偏旁竖
-       与字的其余笔画同一个量级（≥ 0.6）。缺省取 `LINE_STROKE_RATIO`，
-       传 `None` 关掉。
     3. **padding 带碎屑**：墨 ≥80% 落在 padding 带（核心区 = bbox，
-       margins 给出带宽，缺省按 7.5% 估）且面积 < `pad_debris_area_ratio`
-       （缺省 `PAD_DEBRIS_AREA_RATIO`＝0.25）× 最大组件——
+       margins 给出带宽，缺省按 7.5% 估）且面积 < 0.25× 最大组件——
        邻字探进来的小残片。大块残片**不删**（可能是被切的本字笔画，
        归属该由切分层判）。
     """
-    if line_stroke_ratio is _UNSET:
-        line_stroke_ratio = LINE_STROKE_RATIO
-    if pad_debris_area_ratio is None:
-        pad_debris_area_ratio = PAD_DEBRIS_AREA_RATIO
     n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
     if n <= 1:
         return binary
@@ -162,7 +121,6 @@ def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
     core = np.zeros((h, w), dtype=bool)
     core[my:h - my, mx:w - mx] = True
 
-    runs = None            # (横向墨段长, 纵向墨段长, 本图块笔宽)，用到才算
     out = binary.copy()
     for i in range(1, n):
         x, y, bw, bh, area = stats[i]
@@ -184,54 +142,14 @@ def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
         # 细长笔画（壽的中横）不删
         in_band = ((vline and (cx < 0.25 * w or cx > 0.75 * w))
                    or (hline and (cy < 0.25 * h or cy > 0.75 * h)))
+        if thickness <= thin_cap and in_band                 and largest >= 1.2 * area:                     # 规则 2
+            out[labels == i] = 0
+            continue
         comp = labels == i
-        if thickness <= thin_cap and in_band and largest >= 1.2 * area:    # 规则 2
-            thin = True
-            if line_stroke_ratio is not None:                 # 护栏三：相对笔宽
-                if runs is None:
-                    hr, vr = _run_lengths(binary)
-                    runs = (hr, vr, _stroke_width(binary, hr, vr))
-                across = runs[0] if vline else runs[1]
-                thin = float(np.median(across[comp])) <= line_stroke_ratio * runs[2]
-            if thin:
-                out[comp] = 0
-                continue
         in_core = int(np.count_nonzero(comp & core))
-        cap3 = pad_debris_area_ratio
-        if not touches and PAD_DEBRIS_INNER_AREA_RATIO is not None:
-            cap3 = min(cap3, PAD_DEBRIS_INNER_AREA_RATIO)
-        if area - in_core >= 0.8 * area and area < cap3 * largest:     # 规则 3
-            out[comp] = 0
+        if area - in_core >= 0.8 * area and area < 0.25 * largest:   # 规则 3
+            out[labels == i] = 0
     return out
-
-
-def _run_lengths(binary: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """每个墨像素所在的横向、纵向连续墨段长度（非墨像素为 0）。"""
-    def horiz(b: np.ndarray) -> np.ndarray:
-        ink = b > 0
-        prev = np.zeros_like(ink)
-        prev[:, 1:] = ink[:, :-1]
-        rid = np.cumsum((ink & ~prev).ravel()).reshape(ink.shape)   # 行首起新段，段不跨行
-        rid[~ink] = 0
-        length = np.bincount(rid.ravel())
-        length[0] = 0
-        return length[rid]
-    return horiz(binary), horiz(np.ascontiguousarray(binary.T)).T
-
-
-def _stroke_width(binary: np.ndarray, hr: np.ndarray, vr: np.ndarray) -> float:
-    """图块笔宽：全部墨像素上「横、纵墨段长取小者」的中位数。按像素取中位数等于按面积
-    加权，粗笔画说了算；细长的界行占的面积小，拉不动它。"""
-    ink = binary > 0
-    if not ink.any():
-        return 0.0
-    return float(np.median(np.minimum(hr, vr)[ink]))
-
-
-def stroke_width_px(binary: np.ndarray) -> float:
-    """二值图块（1=墨）的笔宽（像素）。`remove_edge_specks` 规则 2 的相对笔宽护栏用的那把尺子。"""
-    hr, vr = _run_lengths(binary)
-    return _stroke_width(binary, hr, vr)
 
 
 def _drop_stray_components(binary: np.ndarray,
