@@ -122,7 +122,8 @@ def pin_geometry(gray, col_cells, page_pitch: float | None, judge=None) -> list[
 
     - ink（压墨）：钉子的格线劈字——同 seg check `cut_through`（切割量 ≥0.025 格高²、±0.4 格内挪得开到 1/4 以下）；
       有 U-Net 裁判就过裁判。强／中档算问题（block），弱档（挪不到 1/3 格）和没裁判时只当提示；
-    - two（一格跨两字）：`seg_screen.two_glyphs`，格高 ≥1.2 倍参照字高、格里墨分成两段各高 ≥0.3 倍，算问题。
+    - two（一格跨两字）：`seg_screen.two_glyphs`，格高 ≥1.2 倍参照字高、格里墨分成两段各高 ≥0.3 倍（或墨跨 ≥1.1 倍且断开），
+      算问题。参照字高：本页格高中位（职名页凑不够格用本列 period），夹注半格用本列半格高中位。
     空格不查两字。"""
     import numpy as np
 
@@ -135,24 +136,26 @@ def pin_geometry(gray, col_cells, page_pitch: float | None, judge=None) -> list[
                             f"挪 {t['move']:+d}px 可降到 {t['best']}px"
                             + (f"，裁判 {t['agree'][0]:.2f}→{t['agree'][1]:.2f}" if t["agree"] else "")
                             + ("" if judge is not None else "（没有 U-Net 裁判，只当提示）")})
-    main_h, sub_h = pin_ref_heights(col_cells, page_pitch)
+    main_h, sub_h = pin_ref_heights(col_cells, page_pitch or col_cells.period)   # 职名页凑不出本页格高，用本列 period
     h, w = gray.shape[:2]
     x0, x1 = (int(col_cells.content_x[0]), int(col_cells.content_x[1])) if col_cells.content_x else (0, w)
     x0, x1 = max(0, x0), min(w, max(x1, x0 + 1))
     stripped = None
-    for c in col_cells.cells:
-        if c.kind == "blank":
-            continue
+    body = [c for c in col_cells.cells if c.kind != "blank"]
+    y_first = min((c.y0 for c in body), default=None)
+    y_last = max((c.y1 for c in body), default=None)
+    for c in body:
         ref = sub_h if c.sub else main_h
         if not ref:
             continue
         if stripped is None:
             stripped = ss.strip_long_lines((gray[:, x0:x1] < 128).astype(np.uint8))
-        r = ss.two_glyphs(gray, c, (x0, x1), ref, stripped=stripped)
+        outer = "top" if c.y0 == y_first else "bottom" if c.y1 == y_last else None
+        r = ss.two_glyphs(gray, c, (x0, x1), ref, stripped=stripped, outer=outer)
         if r:
             out.append({"kind": "two", "slot": f"{c.slot}{c.sub or ''}", "level": "", "block": True,
                         "note": f"疑一格跨两字：{c.slot}{c.sub or ''} 格高 {r['ratio']} 倍{'半格' if c.sub else ''}字高，"
-                                f"墨分 {len(r['parts'])} 段（各 {'、'.join(map(str, r['parts']))} 倍），段间缝 {r['gap']}px"})
+                                f"墨分 {len(r['parts'])} 段（各 {'、'.join(map(str, r['parts']))} 倍、共跨 {r['span']} 倍），段间缝 {r['gap']}px"})
     return out
 
 

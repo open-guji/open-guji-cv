@@ -967,15 +967,20 @@ TWO_MIN_H = 1.2            # 格高 ≥ 参照字高（正文＝本页格高中�
 TWO_PART = 0.3             # 格里墨按白缝分段，至少两段各高 ≥ 参照字高这么多
 TWO_GAP = 0.05             # 段与段之间的白缝 ≥ 参照字高这么多才算断开（字内笔画间的小缝并成一段）
 TWO_ROW = 0.04             # 一行墨宽 ≥ 内容宽这么多（且 ≥ 2px）算有墨行（尘点、残笔尖不算）
+TWO_SEG_MIN = 0.07         # 段高不到参照字高这么多的不算一段（列端框线残段、霉点；扁字的一横约 0.09）
+TWO_EDGE = 0.15            # 列端格靠版框那头、矮于这么多的一段是框线残段（史記 26 册 r72 列首列尾 5 处），不算
+TWO_SPAN = 1.1             # 或：墨从头到尾跨 ≥ 参照字高这么多、中间有断开（一个字高不过一格；扁字＋一字，史記 02:108:6:3a「二／江」）
 
 
 def two_glyphs(gray: np.ndarray, cell, content_x, ref_h: float, ink_threshold: int = 128,
-               stripped: np.ndarray | None = None) -> dict | None:
+               stripped: np.ndarray | None = None, outer: str | None = None) -> dict | None:
     """一格框住了两个字（SJ r76 审计：推钉子预检只核格数，一格跨两字没人查，2026-11-17）。
 
     格高 ≥ `TWO_MIN_H`×参照字高，格内（先剥界行、版框长直线）有墨行按 ≥ `TWO_GAP` 的白缝分段，有 ≥2 段各高 ≥ `TWO_PART`
-    ×参照字高 → `{"ratio": 格高倍数, "parts": [段高倍数…], "gap": 最宽段间缝 px}`；否则 None。
+    ×参照字高，或墨从头到尾跨 ≥ `TWO_SPAN`×参照字高且分成 ≥2 段（扁字＋一字）
+    → `{"ratio": 格高倍数, "parts": [段高倍数…], "span": 墨跨倍数, "gap": 最宽段间缝 px}`；否则 None。
     `stripped`：本列内容窗 [x0, x1) 剥过长直线的墨图（同一列逐格查时先算一次传进来）。
+    `outer`：列首格给 "top"、列尾格给 "bottom"：那头矮于 `TWO_EDGE` 的一段当框线残段去掉。
     扁字（一、二、三）每段都矮、凑不到两段够高的；格高不到 1.2 倍的（呂、昌一格一字）不看。"""
     if not ref_h or ref_h <= 0:
         return None
@@ -999,9 +1004,17 @@ def two_glyphs(gray: np.ndarray, cell, content_x, ref_h: float, ink_threshold: i
             segs[-1][1] = int(y)
         else:
             segs.append([int(y), int(y)])
+    segs = [s for s in segs if s[1] - s[0] + 1 >= TWO_SEG_MIN * ref_h]
+    if segs and outer == "top" and segs[0][1] - segs[0][0] + 1 < TWO_EDGE * ref_h:
+        segs = segs[1:]
+    if segs and outer == "bottom" and segs[-1][1] - segs[-1][0] + 1 < TWO_EDGE * ref_h:
+        segs = segs[:-1]
+    if len(segs) < 2:
+        return None
     tall = [s for s in segs if s[1] - s[0] + 1 >= TWO_PART * ref_h]
-    if len(tall) < 2:
+    span = (segs[-1][1] - segs[0][0] + 1) / ref_h
+    if len(tall) < 2 and span < TWO_SPAN:
         return None
     gaps = [b[0] - a[1] - 1 for a, b in zip(segs, segs[1:])]
-    return {"ratio": round((y1 - y0) / ref_h, 2), "parts": [round((s[1] - s[0] + 1) / ref_h, 2) for s in tall],
-            "gap": int(max(gaps)) if gaps else 0}
+    return {"ratio": round((y1 - y0) / ref_h, 2), "parts": [round((s[1] - s[0] + 1) / ref_h, 2) for s in segs],
+            "span": round(span, 2), "gap": int(max(gaps))}

@@ -360,6 +360,20 @@ def test_two_glyphs_tall_cell_with_two_chars():
     g2 = _img(400)
     g2[110:290, 45:55] = 0
     assert ss.two_glyphs(g2, cell, cc.content_x, 100.0) is None
+    g3 = _img(400)
+    g3[110:120, 20:80] = 0                    # 上格扁字「二」的下横＋下面一个整字：墨跨 1.3 倍、断开（史記 02:108:6:3a）
+    g3[180:240, 30:70] = 0
+    r = ss.two_glyphs(g3, cell, cc.content_x, 100.0)
+    assert r and r["span"] == 1.3 and len(r["parts"]) == 2
+    g4 = _img(400)
+    g4[110:190, 30:70] = 0
+    g4[236:240, 10:90] = 0                    # 列端框线残段（矮于 0.07 倍）不算一段
+    assert ss.two_glyphs(g4, cell, cc.content_x, 100.0) is None
+    g5 = _img(400)
+    g5[110:190, 30:70] = 0
+    g5[230:240, 10:90] = 0                    # 列尾格底下一截框线残段（0.1 倍）：给 outer 才去掉
+    assert ss.two_glyphs(g5, cell, cc.content_x, 100.0)
+    assert ss.two_glyphs(g5, cell, cc.content_x, 100.0, outer="bottom") is None
 
 
 def test_two_glyphs_quiet_on_normal_cell_and_flat_strokes():
@@ -370,6 +384,6 @@ def test_two_glyphs_quiet_on_normal_cell_and_flat_strokes():
     assert ss.two_glyphs(g, cc.cells[0], cc.content_x, 100.0) is None
     cell = cc.cells[0].model_copy(update={"y1": 250.0})
     g2 = _img(400)
-    for y in (120, 160, 200, 240):            # 高格里几道扁横（二、三）：每段都矮
-        g2[y:y + 8, 20:80] = 0
+    for y in (120, 155, 190):                 # 高格里几道扁横（三）：每段都矮、墨跨不到 1.1 倍
+        g2[y:y + 10, 20:80] = 0
     assert ss.two_glyphs(g2, cell, cc.content_x, 100.0) is None
