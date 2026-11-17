@@ -382,7 +382,7 @@ _PINS_SRC_1112 = ("row_segment 的 pins 档格位表指纹（page_map_fingerprin
                   "指纹值不变、其余代码路径未动，故产物不变；2026-11-12（A31，史記 0244 入库）")
 
 _STAGES_1116 = ("glyph_match 加 stages 参数（库匹配之后的分段判定 steps/glyph_stages：5a.1 形近字组分流、5a.2 字形方法；缺省 None、不进参数 dump、不 import 新模块，"
-                "判决层之后多一句恒假的 if）、新方法 _stages、MatchRec 多一个为 None 不落盘的 stage 字段：全唐文 020 16 页"
+                "判决层之后多一句恒假的 if、候选改经局部变量 cands 传）、新方法 _stages、MatchRec 多一个为 None 不落盘的 stage 字段：全唐文 020 16 页"
                 "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.42-c78-g-a86e50-k9-qtw020-y1 当上游，book_defaults 开着 sim_model）"
                 "glyph_match 与 origin/dev 35692042 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn、GUJI_CODE_DRIFT=warn，2026-11-16（OCR 研究·方向 1，云端会话）")
 ENTRIES: tuple[Equiv, ...] = (
@@ -1861,7 +1861,7 @@ ENTRIES: tuple[Equiv, ...] = (
           old='ffceeab903b391ca076a2e5fa2e847aee23d9f59d84fb54248d2274f5c2cb238',
           evidence=_GF_EXCLUDE_0748),
     Equiv(module="open_guji_cv.steps.glyph_match",
-          new="3dd8c5fa7ea2c340c0dd9eda970e73dbe20981c09bdc28a66bd36af5bb74120b",
+          new="90028714f203801241758f220bdcf3a0910c6d348dbb2a889c1bba18976a2b79",
           old="fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32",
           evidence=_STAGES_1116),
 )
