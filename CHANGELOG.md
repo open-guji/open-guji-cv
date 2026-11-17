@@ -3,6 +3,11 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.58] - 2026-11-17
+
+- 发版说明（A31 11-17，殿本 patch 线，ZM 要）：v0.7.52 + #1627（dev aa68b73 cherry-pick），PATCH，**不含** dev 线 v0.7.53/56 与史記 patch 线 v0.7.54/55/57 的改动。只改 `feedback/bindings.py`（不在任何 Step 的 code_deps），产物指纹与 v0.7.52 同，殿本各册不因换版过期；底库仍 b27。
+- 绑定加迁移补锚闸（#1627，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。只有带这类补锚行的页绑定缓存重算。
+
 ## [0.7.52] - 2026-11-16
 
 - 发版说明（ZM 11-16，殿本 patch 线）：v0.7.49 + #1604（整理本缺字占位符区分：私用码 `〓`／以图代字 `▣`，`utils/gap.py`；A23 设计，Sheldon 11-16/17 审定），PATCH。`seed_admit`、`groups/flow` 判缺字改走 `is_gap`（两种语义相同：有字、读不出、不当证人）；`align_ref_coord.is_text_char` 认 `▣`（旧版会把它当标点丢掉、整列错一格）；`daizhige.fix_pua` 缺字图占位码记 `▣`；新 `scripts/dzg_placeholders.py`（整理本就地换字＋侧表）。seed_admit、align_ref 等步指纹变，殿本各册判过期，随换整理本新语料一并重跑。**换含 `▣` 的整理本必须用本版或以后的版本**。基于 v0.7.49，不含 dev 上 v0.7.50/51（史記线）及其他改动；底库不变（b27），不需配新底库。#1604 已合 dev。
