@@ -915,6 +915,10 @@ class RowSegmentParams(BaseModel):
     #: 写本 U-Net 把上字底横、下字头当邻字的（「畫/一」改选到畫底横上面的 1px 缝、「靈/七」放着 20px 字缝不用走直线劈底横），
     #: Step4 跟着折线分墨，扁字一→二。只在最终那遍切用。书级参数；0＝关（缺省，不进参数哈希）。
     cut_gap_guard: float = 0.0
+    #: **零墨折线候选**（2026-11-17，史記 r77 切分清零，`row_boundaries._free_seam`）：切点选定后选中那条仍劈开单字大小的连通块，
+    #: 在 ±这么多格内找最省墨折线（不穿墨，或穿墨 ≤ 原线一半且不再劈那块），加进候选池并改选；只修墨大半在上格的块（上字笔画伸进下格），换线后整块归上格、别的块不换边才换。
+    #: 管上字戈钩／长捺伸进下格、两字不相碰（伐/曰、城/范）。只在最终那遍切用。书级参数；0＝关（缺省，不进参数哈希）。
+    cut_free_seam: float = 0.0
     #: 原 `seal_gap_slots_empty`、`seal_inkcut`（大印下表中间空格位记空、剔印泥再切）两个书级开关 2026-11-10 搬进书级代码：
     #: 缺省实现 `impl/keben/seal_ink`（不做），史記书仓 `code/seal_ink.py` 覆盖。见 `_RETIRED`。
     #: **备选切法**（2026-11-03，史記文淵閣本第 7 轮，设计稿 https://claude.ai/artifact/NVqgK8BS2GietVShFnoqUU）：
@@ -1024,6 +1028,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("snap_cut", None)
             if not self.cut_gap_guard:
                 d.pop("cut_gap_guard", None)
+            if not self.cut_free_seam:
+                d.pop("cut_free_seam", None)
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
@@ -1149,6 +1155,8 @@ class RowSegmentStep(Step):
             raise ValueError(f"row_segment.snap_cut：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         if p.cut_gap_guard and "cut_gap_guard" not in inspect.signature(segment_column).parameters:
             raise ValueError(f"row_segment.cut_gap_guard：本册套书的 {RB.__name__}.segment_column 没有这个参数")
+        if p.cut_free_seam and "cut_free_seam" not in inspect.signature(segment_column).parameters:
+            raise ValueError(f"row_segment.cut_free_seam：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
@@ -1317,6 +1325,7 @@ class RowSegmentStep(Step):
                     **({"grid_end_fit": True} if p.grid_end_fit and final else {}),
                     **({"snap_cut": p.snap_cut} if p.snap_cut and final else {}),
                     **({"cut_gap_guard": p.cut_gap_guard} if p.cut_gap_guard and final else {}),
+                    **({"cut_free_seam": p.cut_free_seam} if p.cut_free_seam and final else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:
