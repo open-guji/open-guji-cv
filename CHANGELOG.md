@@ -3,8 +3,6 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
-- PATCH：5a.3 本书刻形近邻（`glyph_match.stages.knn`，不写＝不跑，没开 `stages` 的书不受影响）：5a.2 没定字的形近字组格，用第 7 步在用的同一份本书近邻库 `config/groups/near_knn.json` 在「5a 首位字＋形近字组表里的对家」里判，不给整理本；近邻给的就是首位字、距离比 < `ratio_max`（缺省 0.55）、字对在书级名单 `knn.final` 里才定字（`via=shape:near_knn`），否则只出证据（`MatchRec.stage.knn3`）。`STAGES` 段表每项加「这一格要不要跑」。只动 `steps/glyph_stages.py`（不在 `code_deps`）；开了 `knn` 的书 `stages_sha` 多一段近邻库指纹。各 Step `code_hash` 不变。
-
 - PATCH：`glyph_match.stages` 的 5a.1 weak_knn 格：带进候选的对手不再排到首位字前面（对手分是纯 CNN 分，候选里是融合分，直接比会把对手顶成库首位；全唐文 020 整册对比发现 碑→裨、遽→蘧）。只动 `steps/glyph_stages.py`，没开 `stages` 的书不受影响。设计文档第六节补整册对比：29688 格，放行 29664→29662，放行字 0 变。
 
 - PATCH：5a 分段接进第 5 步（Sheldon 11-16 定结构）：`glyph_match` 新参数 `stages`（缺省关，不进参数 dump），`steps/glyph_stages.py` 在判决层之后跑 5a.1 分流（same 降 unsure，落法并进匹配器现有护栏：落表 `never_match`＋对家进候选，近邻不一致 `conflict`＋对手进候选；来由记 `stage.route`，第 7 步与 manager 待审原因不用改）与 5a.2 形近字组字形方法（证据落 `MatchRec.stage`；书级 `final` 名单里的组才在这一步定字，缺省空＝全部待审）。相关模块不进 `code_deps`，开着的书靠 `stages_sha` 判过期；`glyph_match.py` 的改动登记等价（`_STAGES_1116`）。开关登记表、设计文档第三节已更新。

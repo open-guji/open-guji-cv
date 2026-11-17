@@ -14,11 +14,7 @@
     5a.2  `groups.shape_stage`：near_group 的格按首位字所属注册组的字形方法判一遍，证据记进 `MatchRec.stage`。
           **只有书级名单 `final` 里的组**、且给字的各组一致时才在这里定字（verdict 回到 same，`via="shape:<组>"`，
           字可以不是 CNN 首位字）。名单缺省空：全部只出证据、不放行。
-    5a.3  `groups.near_knn`（2026-11-16 夜）：前一段没定字的 near_group 格，用**本书刻形近邻库**（第 7 步配着整理本用的
-          同一份 `config/groups/near_knn.json`）在 {首位字, 表里对家} 里判，不给整理本；证据记进 `stage.knn3`。
-          近邻给的就是首位字、距离比 < `ratio_max`、且字对在书级名单 `knn.final` 里才定字（`via="shape:near_knn"`）。
-          一二（特征会去掉贴边的细短横）、戸尸户（区别只在一点）实测有真错，别进名单。没有近邻库的书这一段不跑。
-    5a.4… 以后的字形方法在 `STAGES` 里往后排，接口同上：吃 (`StageInput`, 配置) → (证据, 可选的定字, 来由)。
+    5a.3… 以后的字形方法在 `STAGES` 里往后排，接口同 5a.2：吃 (`StageInput`, 证据 dict) → 可选的定字。
 
 ## 书级配置
 
@@ -29,7 +25,6 @@
           route: {level: core, knn_min: 1.0}     # `near_route.RouteConfig` 的字段；book 不填＝三书的表并着用
           final: [xb, di]                        # 本书实测够准、5a.2 可以直接定字的组（缺省空）
           shape: true                            # false＝不跑 5a.2（只分流）
-          knn: {final: ["其具", "中申"], ratio_max: 0.55}   # 5a.3；不写＝不跑。final 每项是一串字，缺省空（只出证据）
 
 `final` 名单按书、按实测给（人裁刻例上不看整理本的准确率，量法见 doc/design/形近字组-5a分流与第7步对接.md 第五节），
 不从注册表推。各组的模板库、分类器可以按书另建：工作区 `config/groups/ids/<组>.json` 优先于仓里的（`ids_online.bank_path`）。
@@ -37,8 +32,7 @@
 ## 指纹
 
 本模块、`near_route`、`shape_stage`、`groups.methods` 都**不进** `glyph_match` 的 `code_deps`；开着的书靠参数 `stages_sha`
-（`stages_fingerprint`：这几个模块的代码哈希＋形近字组表＋`final` 组的模板库指纹；开了 `knn` 再加 `near_knn`、
-`rr_shape` 的代码哈希与近邻库文件指纹）判过期，不开的书不受影响。
+（`stages_fingerprint`：这几个模块的代码哈希＋形近字组表＋`final` 组的模板库指纹）判过期，不开的书不受影响。
 """
 from __future__ import annotations
 
@@ -53,32 +47,10 @@ FONT_PREFIX = "font:"
 
 
 @dataclass(frozen=True)
-class KnnConfig:
-    """5a.3：本书刻形近邻库（`groups.near_knn`，第 7 步配着整理本用的同一份）在 {首位字, 表里对家} 里判，不给整理本。"""
-    path: str = ""                    # 留空＝数据目录 config/groups/near_knn.json；找不到＝这一段不跑
-    final: frozenset = frozenset()    # 书级名单：每项是一串字（如 "其具"），首位字和用到的候选全在同一项里才许定字
-    ratio_max: float = 0.55           # 定字要的距离比（比库里放行用的 0.6 紧；全唐文 020：<0.6 错 1、<0.55 零错）
-
-    def resolved(self) -> str:
-        from ..core.workspace import REPO_ROOT, data_root, workspace_root
-        if self.path:
-            q = Path(self.path).expanduser()
-            if q.is_absolute():
-                return str(q)
-            for base in (data_root(), workspace_root(), REPO_ROOT):
-                if base is not None and (base / q).exists():
-                    return str(base / q)
-            return str(q)
-        q = (data_root() or REPO_ROOT) / "config" / "groups" / "near_knn.json"
-        return str(q) if q.exists() else ""
-
-
-@dataclass(frozen=True)
 class StagesConfig:
     route: Any = None                 # near_route.RouteConfig
     final: frozenset = frozenset()
     shape: bool = True
-    knn: "KnnConfig | None" = None    # 5a.3 本书刻形近邻；None＝不跑
 
     @classmethod
     def from_any(cls, v) -> "StagesConfig | None":
@@ -86,7 +58,7 @@ class StagesConfig:
             return None
         from ..clustering.near_route import RouteConfig
         d = {} if v is True else dict(v)
-        unknown = set(d) - {"route", "final", "shape", "knn"}
+        unknown = set(d) - {"route", "final", "shape"}
         if unknown:
             raise ValueError(f"glyph_match.stages 不认识的键：{sorted(unknown)}")
         r = dict(d.get("route") or {})
@@ -97,15 +69,7 @@ class StagesConfig:
         final = frozenset(d.get("final") or ())
         if final - set(FLOW_GROUPS):
             raise ValueError(f"glyph_match.stages.final 里有没注册的字组：{sorted(final - set(FLOW_GROUPS))}")
-        knn = None
-        if d.get("knn"):
-            k = {} if d["knn"] is True else dict(d["knn"])
-            badk = set(k) - {"path", "final", "ratio_max"}
-            if badk:
-                raise ValueError(f"glyph_match.stages.knn 不认识的键：{sorted(badk)}")
-            knn = KnnConfig(path=str(k.get("path") or ""), final=frozenset(str(s) for s in (k.get("final") or ())),
-                            ratio_max=float(k.get("ratio_max", 0.55)))
-        return cls(route=RouteConfig(**r), final=final, shape=bool(d.get("shape", True)), knn=knn)
+        return cls(route=RouteConfig(**r), final=final, shape=bool(d.get("shape", True)))
 
 
 def _code_sha(*mods: str) -> str:
@@ -130,11 +94,7 @@ def stages_fingerprint(v) -> str:
     code = _code_sha("open_guji_cv.steps.glyph_stages", "open_guji_cv.clustering.near_route", "open_guji_cv.groups.shape_stage",
                      "open_guji_cv.groups.methods", "open_guji_cv.groups.ids_online", "open_guji_cv.groups.registry")
     bank = hashlib.sha256(ids_online.fingerprint(cfg.final).encode("utf-8")).hexdigest()[:12] if cfg.final and cfg.shape else ""
-    out = f"{code}:{t}" + (f":{bank}" if bank else "")
-    if cfg.knn is not None:           # 没开 5a.3 时指纹与原来逐字相同
-        from ..groups import near_knn
-        out += f":nk{_code_sha('open_guji_cv.groups.near_knn', 'open_guji_cv.groups.rr_shape')}.{near_knn.fingerprint(cfg.knn.resolved()) or 'none'}"
-    return out
+    return f"{code}:{t}" + (f":{bank}" if bank else "")
 
 
 @dataclass
@@ -144,7 +104,6 @@ class StageInput:
     groups: tuple                     # 首位字所属的注册字组
     cands: list                       # 库候选 [(字, 分)]
     gray: Any                         # 第 4 步的灰度字块（没归一的）
-    partners: tuple = ()              # 形近字组表里首位字的对家
 
 
 @dataclass(frozen=True)
@@ -159,7 +118,7 @@ class StageOut:
 
 
 def stage_shape(inp: StageInput, cfg: StagesConfig, flow_cfg) -> tuple[dict, str | None, str | None]:
-    """5a.2：首位字所属各组的字形方法各判一遍 → (证据, 定的字或 None, 定字的来由：组名)。
+    """5a.2：首位字所属各组的字形方法各判一遍 → (证据, 定的字或 None, 定字的组)。
     定字条件：给了字的组全一致，且其中至少一组在书级 `final` 名单里。"""
     from ..groups import shape_stage
     rows, picked, finals = [], set(), []
@@ -179,34 +138,8 @@ def stage_shape(inp: StageInput, cfg: StagesConfig, flow_cfg) -> tuple[dict, str
     return ev, None, None
 
 
-def stage_knn(inp: StageInput, cfg: StagesConfig, flow_cfg) -> tuple[dict, str | None, str | None]:
-    """5a.3：本书刻形近邻在 {首位字, 对家}（没有对家时取所属组的成员）里判 → (证据, 定的字或 None, 定字的来由)。
-    定字条件：近邻给的字就是 5a 首位字（两路字形证人一致）、距离比 < `ratio_max`、首位字和用到的候选全在书级名单的同一项里。"""
-    k = cfg.knn
-    path = k.resolved() if k is not None else ""
-    if not path:
-        return {}, None, None
-    from ..groups import near_knn, rr_shape
-    cands = [inp.top, *inp.partners]
-    if len(cands) < 2:
-        from ..groups.registry import FLOW_GROUPS
-        for g in inp.groups:
-            cands += sorted(FLOW_GROUPS[g].members - set(cands))
-    r = near_knn.judge_feat(rr_shape.features(inp.gray)[0], near_knn.load(path), cands)
-    ev = {"knn3": {x: r[x] for x in ("char", "why", "votes", "ratio", "cands") if x in r}}
-    used = set(r.get("cands") or ())
-    if (r.get("char") == inp.top and r.get("ratio", 1.0) < k.ratio_max
-            and any(used <= set(item) for item in k.final)):
-        return ev, inp.top, "near_knn"
-    return ev, None, None
-
-
 # 5a.2 起的各段，按顺序跑；前一段定了字就不往后。加新段：写一个同签名的函数排进来。
-# 每项（段名, 函数, 这一格要不要跑）；函数返回 (证据, 定的字或 None, 来由)，来由写进 `via`。
-STAGES: tuple[tuple[str, Callable, Callable], ...] = (
-    ("5a.2", stage_shape, lambda cfg, inp: cfg.shape and bool(inp.groups)),
-    ("5a.3", stage_knn, lambda cfg, inp: cfg.knn is not None),
-)
+STAGES: tuple[tuple[str, Callable], ...] = (("5a.2", stage_shape),)
 
 
 class Stages:
@@ -253,15 +186,14 @@ class Stages:
                 cands.setdefault(c, 0.0)
         if r.groups:
             ev["groups"] = list(r.groups)
-        inp = StageInput(cell_id, r.top, tuple(r.groups or ()), list(m.candidates), gray, tuple(r.partners or ()))
-        for name, fn, wanted in STAGES:
-            if not wanted(self.cfg, inp):
-                continue
-            e, char, why = fn(inp, self.cfg, self._flow_cfg)
-            ev.update(e)
-            if char is not None:
-                ev["final"] = name
-                return StageOut("same", char, None, f"shape:{why}", ev)
+        if self.cfg.shape and r.groups:
+            inp = StageInput(cell_id, r.top, r.groups, list(m.candidates), gray)
+            for name, fn in STAGES:
+                e, char, gid = fn(inp, self.cfg, self._flow_cfg)
+                ev.update(e)
+                if char is not None:
+                    ev["final"] = name
+                    return StageOut("same", char, None, f"shape:{gid}", ev)
         return StageOut("unsure", None, "never_match", None, ev, _ranked(cands))
 
 
