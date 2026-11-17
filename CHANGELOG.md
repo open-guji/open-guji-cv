@@ -10,6 +10,8 @@
 ## [未发版]
 - PATCH：字形库体检加「清边不变式」（OCR 研究 Project，Sheldon 11-17 要求防再犯）：`glyph_selfcheck.clean_invariant(库)` 逐例看库图（已清过边的 canonical）在匹配前再清一遍还删不删墨，删 ≥3% 记违例，占比 ≥0.2% 报警；`run_selfcheck` 开头先跑并打印，结果进 summary 的 `clean_invariant`。只读库，两三分钟。#1617 修复前全唐文 1.16% 违例、殿本史記 0，修复后三套书都是 0。不进任何 Step 的 `code_deps`，产物指纹不变。`doc/pipeline_handbook.md` 第 4 节记这条坑和三条规矩。
 
+- 模型库登记 5a 相似度 CNN 的跨书通用底座 `models/glyph_sim_base_v1/`（殿本、史記、全唐文三书合训 59,116 例；OCR 研究 Project 11-17，Sheldon：模型应该放到模型库里）：`core/model_pack.KINDS` 加种类 `glyph_sim_base`（global），模型表与出处表同步，权重与校准表已传 R2。校准表是通用保守包络（`scripts/fit_glyph_sim_calib.py` 的 `--work`／`--cnn` 可给多次，逐点取 cov 最小）。不动任何 Step 与 `sim_cnn.py`，各书产物指纹不变；还没有书的配置指向它。用法见 guji-manager `doc/参考/5a相似度模型.md`。
+
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
 ## [0.7.57] - 2026-11-17
