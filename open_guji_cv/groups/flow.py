@@ -50,6 +50,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
+from ..utils.gap import GAP_CHARS, GAP_PUA
 from . import freq as _freq
 from .methods import KINDS, Method, MethodInput
 from .protocol import GroupVerdict
@@ -57,7 +58,8 @@ from .registry import FLOW_GROUPS as GROUPS   # 含码位归一组（`registry.C
 from .registry import PROVISIONAL
 
 CHANNEL = "group_flow"
-GAP = "〓"           # 逐列本（整理本）的生僻字占位：知道有字、不知道是哪个
+GAP = GAP_PUA        # 逐列本（整理本）的生僻字占位：知道有字、不知道是哪个（〓 私用码；▣ 以图代字同义，见 utils/gap.py）
+GAPS = GAP_CHARS
 
 
 @dataclass
@@ -232,7 +234,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     rr = ref or coord_ref
     # 现役对位缺这一格、坐标对位说是另一个字（`coord_outside_skip`）：组只会在组员里挑字，这格进组必弃权（Z01），
     # 原因该落回 L01／P02（殿本 Z01 527 格里 394 格是这样，A24 2026-11-06）。〓／空格位不算（彝 solo_margin 要进）。
-    co = coord_ref if (cfg.coord_outside_skip and not ref and coord_ref and coord_ref != GAP) else None
+    co = coord_ref if (cfg.coord_outside_skip and not ref and coord_ref and coord_ref not in GAPS) else None
 
     def _coord_out(g: str, mem) -> bool:
         pv = PROVISIONAL.get(g)                    # 暂归一的另一写法／整理本写法（點㸃 的 𭶑）算组内
@@ -464,7 +466,7 @@ def _slot_family(pv, trail: list | None, w, canon: Callable[[str], str]) -> str 
     if t is None:
         return None
     fam = lambda c: next((i for i, f in enumerate(pv.fams) if c in f or canon(c) in f), -1)  # noqa: E731
-    if w and w != GAP and (w in pv.forms or canon(w) in pv.forms):
+    if w and w not in GAPS and (w in pv.forms or canon(w) in pv.forms):
         return t if fam(w) == fam(t) else None
     v = sorted(sc.values(), reverse=True)
     return t if len(v) > 1 and v[0] - v[1] >= pv.slot_min else None
@@ -474,7 +476,7 @@ def _pv_ref_ok(g: str, cands, ref, cfg: FlowConfig, canon: Callable[[str], str])
     """整理本字（只认现役对位）与库首位都是本组暂归一的写法、首位 cov 够、领先组外最好候选够（`cfg.pv_ref_gap`）。
     两路独立证人都说是这个字，分差内的组外形近字只是陪衬（𨽻 整理本、𨽾 库首位、諫 紧咬，A24 V01 第 7 轮 20 格看图都是 𨽾）。"""
     pv = PROVISIONAL.get(g)
-    if cfg.pv_ref_gap is None or not cfg.provisional or pv is None or not ref or ref == GAP or not cands:
+    if cfg.pv_ref_gap is None or not cfg.provisional or pv is None or not ref or ref in GAPS or not cands:
         return False
     inn = lambda c: bool(c) and (c in pv.forms or canon(c) in pv.forms)  # noqa: E731
     top, c1 = cands[0]
@@ -495,7 +497,7 @@ def _provisional(g: str, mode: str, r, cands, ref, coord: str | None, cfg: FlowC
     inn = lambda c: bool(c) and (c in pv.forms or canon(c) in pv.forms)  # noqa: E731
     top, c1 = cands[0]
     w0 = ref or coord
-    if (inn(top) and c1 >= cfg.min_cov and w0 and w0 != GAP and (inn(w0) or w0 in pv.ref_forms)
+    if (inn(top) and c1 >= cfg.min_cov and w0 and w0 not in GAPS and (inn(w0) or w0 in pv.ref_forms)
             and (ref or r.id[-1:] not in ("a", "b"))):
         if not pv.fams or any((top in f_ or canon(top) in f_) and (w0 in f_ or canon(w0) in f_) for f_ in pv.fams):
             return w0, w0
@@ -517,7 +519,7 @@ def _provisional_base(g: str, mode: str, r, cands, ref, coord: str | None, cfg: 
         pv = replace(pv, to=cfg.provisional_to[g])     # 书级暂归一字形（全唐文 彝组 刻的是 彝，不归殿本的 𢑱；11-05）
     inn = lambda c: bool(c) and (c in pv.forms or canon(c) in pv.forms)  # noqa: E731
     if mode == "review":
-        if not (inn(r.char) and (not ref or ref == GAP or inn(ref))):
+        if not (inn(r.char) and (not ref or ref in GAPS or inn(ref))):
             return None
         if pv.slot_to:
             to = _slot_family(pv, trail, ref or coord, canon)
@@ -545,7 +547,7 @@ def _provisional_base(g: str, mode: str, r, cands, ref, coord: str | None, cfg: 
     w = ref or coord
     if not ref and r.id[-1:] in ("a", "b"):
         return None    # 夹注半格只有坐标对位：列尾切残的半格会把上一格的字对过来（vol20:175:7:21a 坐标对位 𨽻、刻的不是 隸）
-    if inn(w) or (w == GAP and pv.gap and c1 >= cfg.provisional_gap_cov):
+    if inn(w) or (w in GAPS and pv.gap and c1 >= cfg.provisional_gap_cov):
         if pv.slot_to:
             to = _slot_family(pv, trail, w, canon)
             return (to, w) if to else None
@@ -609,7 +611,7 @@ def _ref_pair_coord_pick(g: str, r, trail: list, coord: str | None, canon: Calla
     """联合判卡在「共字组搭档没表态」（`joint`）、现役对位缺这一格时，用坐标对位字作整理本证人（`FlowConfig.ref_pair_coord`，
     A24 Z07 差一路确认 11-07）：坐标对位字是组员、本组至少一路给了它，**没有任何解法（含搭档）给出别的字**（比 `ref_pair`
     更严：图像路反对也不取）；夹注半格、〓 不认。殿本＋全唐文 Z07 里这样的 41 格看图全对。"""
-    if not coord or coord == GAP or r.id[-1:] in ("a", "b") or not _member(g, coord, canon):
+    if not coord or coord in GAPS or r.id[-1:] in ("a", "b") or not _member(g, coord, canon):
         return None
     x = canon(coord)
     given = [t for t in trail if t.get("char") and not (":" in t["solver"] and _sname(t) == "codepoint")]   # 搭档码位解法无图像证据，不算（同 _ref_pair_pick）
@@ -627,7 +629,7 @@ def _ref_pair_pick(g: str, trail: list, ref: str | None, canon: Callable[[str], 
     ②所有给了别字的解法（含共字组搭档，名字带「组:」前缀）都是图像路（`IMG_SOLVERS`）、margin < `img_margin`——
     文意、码位、搭档的文意给了别字就不取；③没有文意支持 X 时，反对的图像路须比支持 X 的 ids 弱（margin 更小）。
     取支持它的解法给的字形。看图核对见 ai-team 待审原因深挖/Z02-判法打架.md（殿本 112 格目视：整理本×文意一致的 13 格全对）。"""
-    if not ref or ref == GAP or not _member(g, ref, canon):
+    if not ref or ref in GAPS or not _member(g, ref, canon):
         return None
     x = canon(ref)
     sup = [t for t in trail if ":" not in t["solver"] and t.get("char") and canon(t["char"]) == x]
@@ -662,7 +664,7 @@ def _dissent_keep(g: str, trail: list, char: str | None, ref: str | None, canon:
     ①至少一路解法给了放行字；②给了别字的解法全是图像路、且是弱票（`ids` 等记了 margin 的 < `weak_margin`；`yr_bars`、`bars`
     这类量笔画的不记 margin 也算弱票——数一二的横在切残的格上必错）。有文意、码位给了别字就照旧降审。
     殿本目视 36 格（遺還、圓圖、面而、傳傅、諭論、甲申、間問、曾會、一二）放行字全对。"""
-    if not char or not ref or ref == GAP or canon(ref) != canon(char):
+    if not char or not ref or ref in GAPS or canon(ref) != canon(char):
         return False
     x = canon(char)
     if not any(t.get("char") and canon(t["char"]) == x for t in trail) and not (
@@ -708,13 +710,13 @@ def _vis_try(g: str, r, trail: list, cr: str | None, cfg: FlowConfig, canon, pat
     item = {"solver": "vis", "char": None, "why": f"{conf}:{ch}", "vis_conf": conf, "vis_why": ans.get("why"), "cached": ans["cached"]}
     if conf != "high" or ch not in mem:
         return None, item
-    if cr and cr != GAP and canon(cr) != canon(ch) and canon(cr) in {canon(m) for m in mem}:
+    if cr and cr not in GAPS and canon(cr) != canon(ch) and canon(cr) in {canon(m) for m in mem}:
         # 整理本（含坐标对位）说是组里另一个字：不越过它改字。留出看图：图像＋文意 L3 都说「于」而整理本、刻形是「干」
         # （vol35:152:2:4 干文傳），两个大模型共用一套先验会一起错；整理本是组外字（悶 之类）才让图像＋证人改
         item["why"] = f"ref_dissent:{ch}"
         return None, item
     sup = []
-    if cr and cr != GAP and canon(cr) == canon(ch):
+    if cr and cr not in GAPS and canon(cr) == canon(ch):
         sup.append("ref")
     for t in trail:
         if t.get("char") == ch and t["solver"].split(":")[-1] in ("ctx", "ids"):
@@ -800,7 +802,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         if mode == "lift" and ch is None and why == "abstain" and GROUPS[g].flow.ref_margin:
             # 整理本字：现役对位，缺位时用坐标对位字（vol49 整页对位缺）；夹注半格只有坐标对位不认（列尾切残会对到上一格的字）
             wit = ref or ("" if r.id[-1:] in ("a", "b") else (veto_refs or {}).get(r.id))
-            if wit and wit != GAP:
+            if wit and wit not in GAPS:
                 ch, why, trail = _ref_lowmargin(g, ch, why, trail, wit, cfg.canon or canon)
         if why == "conflict" and (GROUPS[g].flow.ctx_over or GROUPS[g].flow.ctx_over_panel):
             ch, why, trail = _ctx_over(g, ch, why, trail)
@@ -862,13 +864,13 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # `lift_ref_missing_ctx`：整理本完全缺位时文意给的字照放（门族辶族，A24 10-28）
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
                   and not _rf(g, cfg) and (cr := veto_refs.get(r.id))
-                  and not (cr == GAP and GROUPS[g].flow.solo_margin > 0)
+                  and not (cr in GAPS and GROUPS[g].flow.solo_margin > 0)
                   and not (g in PROVISIONAL and cr in PROVISIONAL[g].forms)    # 坐标对位是同字的另一写法（蒙𫎇 的 䝉），不算组外字（A24 11-01）
                   and norm(cr) != norm(ch) and norm(cr) not in {norm(m) for m in GROUPS[g].members}
                   and not panel_ok(g, r, ch, trail)):
                 ch, why = None, "coord_dissent"   # 坐标对位说是组外另一个字：不补放（vol18 107:6:7 叔→叙）；L3 二审小组确认的文意字照放（A24 11-01）
             elif (ch is not None and mode == "lift" and GROUPS[g].flow.solo_margin > 0 and not ref
-                  and (veto_refs or {}).get(r.id) in (None, "", GAP)
+                  and (veto_refs or {}).get(r.id) in (None, "", *GAPS)
                   and not any(t["char"] == ch and (m := _margin(t)) is not None and m >= GROUPS[g].flow.solo_margin
                               for t in trail)):
                 # 整理本缺字（〓）或无对位：只凭字形，给字方法每段 margin 都够才补放（彝，A24 10-26）
