@@ -353,6 +353,10 @@ _GLYPH_GUARD = ("snap_cut 整字护栏（seg.cut_select 只加 move_keeps_glyphs
 _GUARD_TOL = ("snap_cut 整字护栏门槛 seg.cut_select.MOVE_TOL 0→0.05（只在 snap_cut>0 且有 U-Net 裁判时用；snap_cut 关不走）："
               "row_segment 在殿本 vol30 6 页（--pages 2,30,60,90,120,135）与史記 42 册 3 页（--pages 3,36,59）上与 origin/dev "
               "1244b8d 产物逐字节相同；scripts/code_equiv.py check，A22 2026-11-13")
+_GAP_GUARD_1117 = ("切点白缝护栏 cut_gap_guard（row_segment 书级参数，缺省 0＝关、不进参数 dump；row_boundaries 加 _gap_corridor／_gap_guard，"
+                   "关时 _gap_guard 直接返回）：row_segment 在殿本 vol30 10 页（2,15,30,45,60,75,90,105,120,135，r8 包当上游）、全唐文 020 8 页"
+                   "（3,20,40,60,80,100,120,150，y1 包当上游）、史記 09 册 6 页（5,41,77,113,149,180，r72 包当上游）上与 origin/dev fb2e4d5 "
+                   "产物逐字节相同；scripts/code_equiv.py check，A22 2026-11-17")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -1419,6 +1423,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='1a505f0d68bdb696936b4f89af83ad7f99d82fbd92712bfe26a401a171b56713',
           old='fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b',
           evidence=_GUARD_TOL),
+    # cut_gap_guard 书级参数（缺省关，2026-11-17，史記 r76 扁字收边坏）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='e77bf946fd955af5da1e6968140e4e17ecb9458d983ef8f878593e7726fcaa95',
+          old='6fd4a89d12f16eed8e88206f666c8680709dba5d56a73b4b7861f7250174939b',
+          evidence=_GAP_GUARD_1117),
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='8920535f9f2322a9aae44bb36024dceec6fa207b716543554b134db0a83a7cb0',
+          old='70816a6a1a2184754a1cf0e63fea6a4cf281c8f8553b5f59663f73697bab1f0a',
+          evidence=_GAP_GUARD_1117),
     # grid_end_fit 书级开关（缺省关，2026-11-09，殿本 vol28 列尾下溢）
     Equiv(module="open_guji_cv.steps.row_segment",
           new="6a3617931b93c706e43d43ccd2e1b9f5d63e1307343c424637cb0ecb77b32258",
