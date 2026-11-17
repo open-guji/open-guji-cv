@@ -226,10 +226,35 @@ def test_stroke_width_px():
 def test_inner_pad_debris_knob(monkeypatch):
     """`PAD_DEBRIS_INNER_AREA_RATIO`：不贴边的小块另设上限（缺省不开）。"""
     from open_guji_cv.clustering import normalize as N
+    monkeypatch.setattr(N, "STROKE_KEEP", None)          # 只测这个旋钮，关掉「像笔画的小块不删」
     img = _huai_like()
     img[60:100, 2:14] = 1                      # 忄 的左点：离左缘 2px，不贴边；面积约为主体的 7%
-    assert N.remove_edge_specks(img)[80, 8] == 0          # 缺省：当 padding 带碎屑删
+    assert N.remove_edge_specks(img)[80, 8] == 0          # 当 padding 带碎屑删
     monkeypatch.setattr(N, "PAD_DEBRIS_INNER_AREA_RATIO", 0.05)
     assert N.remove_edge_specks(img)[80, 8] == 1
     img[60:100, 0:14] = 1                      # 贴到左缘：照旧按 0.25 删
     assert N.remove_edge_specks(img)[80, 8] == 0
+
+
+def test_side_dot_of_radical_is_kept():
+    """忄 的左点（贴图块左缘、落在外带、面积小）是真笔画，规则 3 和 `_drop_stray_components`
+    都不该删：它和字的笔画一样粗、细长、紧挨字身（`STROKE_KEEP`，2026-11-17 第二轮）。"""
+    from open_guji_cv.clustering import normalize as N
+    for x0 in (0, 2):                           # 贴边、不贴边都留
+        img = _huai_like()
+        img[60:100, x0:x0 + 12] = 1
+        assert N.remove_edge_specks(img)[80, x0 + 6] == 1
+        assert N._drop_stray_components(N.remove_edge_specks(img))[80, x0 + 6] == 1
+
+
+def test_small_debris_is_still_removed(monkeypatch):
+    """护栏只放过像笔画的：近方的小块、比笔画细得多的小块、离字身远的小块照删。"""
+    from open_guji_cv.clustering import normalize as N
+    sw = N.stroke_width_px(_huai_like())
+    blob = _huai_like(); blob[4:14, 2:12] = 1                  # 近方小块（长宽比 1）
+    assert N.remove_edge_specks(blob)[8, 6] == 0
+    thin = _huai_like(); thin[60:100, 2:5] = 1                 # 3px 细条，远细于笔宽
+    assert sw >= 8 and N.remove_edge_specks(thin)[80, 3] == 0
+    monkeypatch.setattr(N, "STROKE_KEEP", None)                # 关掉护栏回到旧行为
+    dot = _huai_like(); dot[60:100, 0:12] = 1
+    assert N.remove_edge_specks(dot)[80, 6] == 0
