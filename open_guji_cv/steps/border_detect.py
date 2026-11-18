@@ -30,6 +30,44 @@ from ..impl.keben.column_types import classify_columns
 from ..impl.keben.pitch_rescue import rescue as pitch_rescue
 from ..seg.columns import COL_WIDTH_FLAG, ColumnSpec, check_columns
 
+#: `grid_free_fallback`：贴线字缝带，离线 [GUTTER_IN, GUTTER_OUT] 倍列距。
+GUTTER_IN, GUTTER_OUT = 0.036, 0.075
+#: 自由模式的穿字分要低于网格模式的这个比例才换。
+GRID_FREE_RATIO = 0.5
+
+
+def gutter_ink_score(res, gray, ink_threshold: int = 128) -> float:
+    """内竖线「穿字」分：内线两侧贴线字缝带的墨比例 ÷ 版心（首末线之间）的平均墨比例。
+
+    线落在字缝（或界行两侧的白缝）里≈0；线整片错位、斜穿字身时≈1 或更高。只量版框中段（页高 25%–85%），
+    版心几乎没墨（空页）记 0。坐标与 `trim_outer_columns` 同：`res.verticals` 右上原点，图上 x = W-1-x。"""
+    import numpy as np
+    v = res.verticals
+    if len(v) < 3:
+        return 0.0
+    H, W = gray.shape[:2]
+    y0, y1 = int(H * 0.25), int(H * 0.85)
+    ys = np.arange(y0, y1, 4)
+    ink = gray[ys] < ink_threshold                                       # 行抽样
+    xm = [float(line.x_at(res.height / 2.0)) for line in v]
+    pitch = float(np.median(np.diff(sorted(xm))))
+    lo, hi = int((W - 1) - max(xm)), int((W - 1) - min(xm))
+    if pitch <= 0 or hi - lo < 2:
+        return 0.0
+    page = float(ink[:, max(lo, 0):min(hi, W)].mean())
+    if page < 0.02:
+        return 0.0
+    ds = list(range(int(GUTTER_IN * pitch), int(GUTTER_OUT * pitch) + 1))
+    ds = [-d for d in ds] + ds
+    rows = np.arange(len(ys))[:, None]
+    near = []
+    for line in v[1:-1]:
+        xs = np.round((W - 1) - line.x_at(ys)).astype(int)
+        cols = np.clip(xs[:, None] + np.array(ds)[None, :], 0, W - 1)
+        near.append(float(ink[rows, cols].mean()))
+    return float(np.mean(near)) / page
+
+
 #: 页级网格页上，最外一列比内列中位窄到这个比例以下，就把外框线按中位列距往外推。
 OUTER_NARROW_FRAC = 0.8
 
@@ -211,6 +249,11 @@ class BorderDetectParams(BaseModel):
     中位列距」，先就近找细线、找不到按列距平移（`trim_outer_columns`）。给半叶图书口紧贴版框、网格模式把书口
     外沿当版框的书用（脉经，2026-11-18，GUJI-774）：`params: {border_detect: {grid_outer_trim: 1.12}}`。
     0＝关（缺省），不进参数 dump，产物与加字段前逐字节相同。"""
+    grid_free_fallback: float = 0.0
+    """书级网格模式下，内竖线穿字分（`gutter_ink_score`）高过这个值，就再用自由模式（＋列距救援）探一遍，
+    线数相同且穿字分不到网格模式的 `GRID_FREE_RATIO` 就改用自由模式的线。给界行大多没印出来、网格靠插值补线，
+    但个别页列距不匀、补出的线整片错位斜穿字的书用（脉经 02 p15、03 p40，2026-11-18，GUJI-774）：
+    `params: {border_detect: {grid_free_fallback: 0.15}}`。0＝关（缺省），不进参数 dump，产物与加字段前逐字节相同。"""
     pitch_rescue: bool = True
     """列距救援（`impl/keben/pitch_rescue`，2026-10-23 sheldon 定缺省开）：自由模式探出的页上有一条列
     < 0.7 × 中位列宽（多挑了假竖线、外侧一整列落到网外）时，先用网格模式重探，选不出版框对再
@@ -287,6 +330,8 @@ class BorderDetectParams(BaseModel):
             d.pop("grid_col_pitch", None)
         if isinstance(d, dict) and not self.grid_outer_trim:
             d.pop("grid_outer_trim", None)
+        if isinstance(d, dict) and not self.grid_free_fallback:
+            d.pop("grid_free_fallback", None)
         if isinstance(d, dict) and not self.grid_lattice_fallback:
             d.pop("grid_lattice_fallback", None)
         if isinstance(d, dict) and self.head_raise_scale == 1.0:
@@ -387,15 +432,32 @@ class BorderDetectStep(Step):
                                col_pitch=col_pitch, frame_height=ctx.book.frame_height)
         rescued = None
         col_spec = ColumnSpec.from_dict(ctx.book.columns)
-        if p.pitch_rescue and not grid:
+
+        def _rescue(r):
             # 网格模式必须带列距先验（见 border_geometry.detect_borders）；书上没写就取本页自由模式的中位列距
-            res, rescued = pitch_rescue(res, gray, lambda pitch: _detect(cols, True, col_pitch or pitch),
-                                        leaf_layout=ctx.book.leaf_layout, ink_threshold=p.ink_threshold,
-                                        spec=col_spec)
-            if rescued:
+            r, how = pitch_rescue(r, gray, lambda pitch: _detect(cols, True, col_pitch or pitch),
+                                  leaf_layout=ctx.book.leaf_layout, ink_threshold=p.ink_threshold,
+                                  spec=col_spec)
+            if how:
                 # 换了线就在新的一串直线上重拟合折线（旧形状是在错的线网上拟的，vol46 p78）
-                res = refit_bends(res, gray, ink_threshold=p.ink_threshold,
-                                  vline_polyline=ctx.book.vline_polyline, **bend_kw)
+                r = refit_bends(r, gray, ink_threshold=p.ink_threshold,
+                                vline_polyline=ctx.book.vline_polyline, **bend_kw)
+            return r, how
+
+        if p.pitch_rescue and not grid:
+            res, rescued = _rescue(res)
+        free_switched = None
+        if grid and not grid_page and p.grid_free_fallback:
+            s_grid = gutter_ink_score(res, gray, p.ink_threshold)
+            if s_grid > p.grid_free_fallback:
+                alt = _detect(cols, False)
+                how = None
+                if p.pitch_rescue:
+                    alt, how = _rescue(alt)
+                s_free = gutter_ink_score(alt, gray, p.ink_threshold)
+                if len(alt.verticals) == len(res.verticals) and s_free < GRID_FREE_RATIO * s_grid:
+                    res, rescued = alt, how
+                    free_switched = f"穿字分 {s_grid:.2f}→{s_free:.2f}"
         if page in p.vline_overrides:
             _apply_vline_override(res, p.vline_overrides[page])
         # 人裁逐列抬头（`lookup.resolved_head_raise`）：补 Step1 漏认的抬头框／去掉认错的。本页没有裁决时不动
@@ -429,6 +491,8 @@ class BorderDetectStep(Step):
             if c.col in hr_done:
                 flags.append(f"head_raise_verdict：人裁抬头 {hr_done[c.col]} 格，Step1 的抬头框已按裁决"
                              + ("补上" if hr_done[c.col] else "去掉"))
+            if free_switched:
+                flags.append(f"grid_free_fallback：网格模式补出的竖线穿字，改用自由模式的线（{free_switched}）")
             if rescued:
                 flags.append(f"pitch_rescued：页上有列宽出带（假竖线、外列落在网外或被劈半），已按列宽均匀重拟合（{rescued}）")
             if col_chk is not None and col_chk.judged and c.col in col_chk.bad:
