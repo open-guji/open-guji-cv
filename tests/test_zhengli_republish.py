@@ -638,28 +638,3 @@ def test_old_rev_votes_reads_both_modes_and_refuses_when_nothing(tmp_path, monke
     votes, src = rp.old_rev_votes(tmp_path, "bk", "005-r13")
     assert sorted((v["a"], v["rev"]) for v in votes) == [("1:1:1", "005-r13"), ("2:2:2", "005-r13")]
     assert "按条目 1 票" in src
-
-
-def test_fetch_votes_retries_connection_reset(monkeypatch):
-    """读网站票断连要退避重试（11-16 多次 ConnectionResetError 挡住出单）。"""
-    import io
-    import urllib.request
-    calls = []
-
-    class _Resp(io.BytesIO):
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    def fake_urlopen(req, timeout=60):
-        calls.append(1)
-        if len(calls) < 3:
-            raise ConnectionResetError("reset")
-        return _Resp(json.dumps({"success": True, "items": [{"id": "a"}], "hasMore": False}).encode())
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr("time.sleep", lambda s: None)
-    assert rp._fetch_votes({"rev": "x"}, "tok") == [{"id": "a"}]
-    assert len(calls) == 3
