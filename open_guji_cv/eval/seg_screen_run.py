@@ -106,7 +106,7 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
     keys = sorted(p.stem for p in store.step_dir(book, "row_segment").glob("p[0-9]*.json"))
     c = counts.setdefault(book, {k: 0 for k in CHECKS} | {"pages": 0, "layout_same_count": 0})
     from ..seg.cut_select import get_judge
-    judge = get_judge()                                            # cut_through 要 U-Net 归属裁判，没装 torch／权重就不跑这项
+    judge = get_judge(scale=getattr(rs, "cut_judge_scale", 1.0))                                            # cut_through 要 U-Net 归属裁判，没装 torch／权重就不跑这项
     if judge is None:
         c["cut_through_off"] = 1
         print(f"⚠️ {book}：没有 U-Net 归属裁判（torch／权重），cut_through 不跑", file=sys.stderr)
