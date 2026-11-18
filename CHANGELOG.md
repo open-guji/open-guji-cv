@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.64] - 2026-11-18
+
+- 发版说明（ZM 11-18，殿本 patch 线）：v0.7.58 + #1652（row_segment 1.52：框线判空认叠横画数字二三，不当框角；殿本 vol68 230:9「二」、vol63 116:9「三」），PATCH，**不含** dev 线与史記线其他改动。row_segment 及其下游步指纹变，殿本各册产物判过期、择机重跑。底库不变（b27）。
+
 ## [0.7.58] - 2026-11-17
 
 - 发版说明（A31 11-17，殿本 patch 线，ZM 要）：v0.7.52 + #1627（dev aa68b73 cherry-pick），PATCH，**不含** dev 线 v0.7.53/56 与史記 patch 线 v0.7.54/55/57 的改动。只改 `feedback/bindings.py`（不在任何 Step 的 code_deps），产物指纹与 v0.7.52 同，殿本各册不因换版过期；底库仍 b27。
