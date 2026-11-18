@@ -2,6 +2,7 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+- PATCH：`scripts/zhengli/proof_cycle.py apply` 出单带 `--allow-empty`：落完票新单 0 格也换成空单、升 book-text，旧单不再挂在线上（殿本 vol08 008-r10）。`auto_cycle` 失败原因取最后一条 ✗ 行（以前取末尾 300 字，常抄成前面的提示）。只动 scripts，不进指纹。
 - PATCH：字形库体检的清边不变式顺带核对派生归一图是不是现装 cv 算的（OCR 研究 Project，自检线 11-17 实遇）：`glyph_selfcheck.clean_invariant` 抽至多 400 例，把 `derived` 里存的归一图和现算的比，结果多 `derived_checked`、`derived_stale` 两个键；有不一致时 `guji glyph-db selfcheck` 打印一行，提示先 `guji glyph-db rebuild`。`glyph.db` 的派生是建库那一刻装着的 cv 算的，升级 cv 不会自动重算，拿旧归一图跑体检等于清边没修。只读库，不动任何 Step。
 - PATCH：`scripts/zhengli/republish.py` 的 push、add-alt、add-cell、edit-cell、add-sprites 写回后**缺省就** `guji db sync` 并触发网站发布（原来要加 `--sync`，殿本 019-r10 忘了加漏发；ZM 11-17 框架建议 1）；只写本机加 `--no-sync`，旧的 `--sync` 照收。不碰 Step，指纹不变。
 - 新书级参数 `row_segment.cut_glyph_line`（缺省 0＝关、不进参数哈希；史記 r79 ①类上下字交错，SJ 切分线 11-17）：`cut_white_row` 之后选中切线仍劈开单字大小连通块时，被劈的块按离哪边别的墨近整块归那边（一样近时按墨多的那边，少的一边 ≤35%），逐列取上格墨之下、下格墨之上离原线最近的 y（±这么多格内，不限坡度），kind `glyph_line`、`chosen_by="glyph"`；拿不准、块高过 1.15 格、某列上下墨重叠都不动。史記 32 册 103 页（与 v0.7.59 三开关同开）：改线 31 处，切坏线 105→77、新劈 0，抽 20 处看图全对。关时逐字节同，登 code_equiv `_GLYPH_LINE_1117`。建议值 0.35。
