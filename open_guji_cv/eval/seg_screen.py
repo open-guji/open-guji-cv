@@ -961,3 +961,108 @@ def cut_through(gray: np.ndarray, col_cells, ink_threshold: int = 128, *, mid: f
                     "best": int(best), "move": int(round(move)), "level": "强" if c0 >= strong * p2 else "中" if abs(move) >= CUT_WEAK_MOVE * period else "弱",
                     "agree": agree})
     return out
+
+
+TWO_MIN_H = 1.2            # 格高 ≥ 参照字高（正文＝本页格高中位，夹注半格＝本列半格高中位）这么多倍才看
+TWO_PART = 0.3             # 格里墨按白缝分段，至少两段各高 ≥ 参照字高这么多
+TWO_GAP = 0.05             # 段与段之间的白缝 ≥ 参照字高这么多才算断开（字内笔画间的小缝并成一段）
+TWO_ROW = 0.04             # 一行墨宽 ≥ 内容宽这么多（且 ≥ 2px）算有墨行（尘点、残笔尖不算）
+TWO_SEG_MIN = 0.07         # 段高不到参照字高这么多的不算一段（列端框线残段、霉点；扁字的一横约 0.09）
+TWO_EDGE = 0.15            # 列端格靠版框那头、矮于这么多的一段是框线残段（史記 26 册 r72 列首列尾 5 处），不算
+TWO_SPAN = 1.1             # 或：墨从头到尾跨 ≥ 参照字高这么多、中间有断开（一个字高不过一格；扁字＋一字，史記 02:108:6:3a「二／江」）
+
+
+def two_glyphs(gray: np.ndarray, cell, content_x, ref_h: float, ink_threshold: int = 128,
+               stripped: np.ndarray | None = None, outer: str | None = None) -> dict | None:
+    """一格框住了两个字（SJ r76 审计：推钉子预检只核格数，一格跨两字没人查，2026-11-17）。
+
+    格高 ≥ `TWO_MIN_H`×参照字高，格内（先剥界行、版框长直线）有墨行按 ≥ `TWO_GAP` 的白缝分段，有 ≥2 段各高 ≥ `TWO_PART`
+    ×参照字高，或墨从头到尾跨 ≥ `TWO_SPAN`×参照字高且分成 ≥2 段（扁字＋一字）
+    → `{"ratio": 格高倍数, "parts": [段高倍数…], "span": 墨跨倍数, "gap": 最宽段间缝 px}`；否则 None。
+    `stripped`：本列内容窗 [x0, x1) 剥过长直线的墨图（同一列逐格查时先算一次传进来）。
+    `outer`：列首格给 "top"、列尾格给 "bottom"：那头矮于 `TWO_EDGE` 的一段当框线残段去掉。
+    扁字（一、二、三）每段都矮、凑不到两段够高的；格高不到 1.2 倍的（呂、昌一格一字）不看。"""
+    if not ref_h or ref_h <= 0:
+        return None
+    y0, y1 = int(round(cell.y0)), int(round(cell.y1))
+    if (y1 - y0) < TWO_MIN_H * ref_h:
+        return None
+    h, w = gray.shape[:2]
+    x0, x1 = (int(content_x[0]), int(content_x[1])) if content_x else (0, w)
+    cx0, cx1 = max(0, int(round(cell.x0)), x0), min(w, int(round(cell.x1)), x1)
+    y0, y1 = max(0, y0), min(h, y1)
+    if cx1 - cx0 < 2 or y1 - y0 < 2:
+        return None
+    if stripped is None:
+        stripped = strip_long_lines((gray[:, x0:x1] < ink_threshold).astype(np.uint8))
+    ink = stripped[y0:y1, cx0 - x0:cx1 - x0]
+    rows = ink.sum(axis=1) >= max(2, TWO_ROW * (cx1 - cx0))
+    segs: list[list[int]] = []
+    min_gap = TWO_GAP * ref_h
+    for y in np.flatnonzero(rows):
+        if segs and y - segs[-1][1] <= min_gap:
+            segs[-1][1] = int(y)
+        else:
+            segs.append([int(y), int(y)])
+    segs = [s for s in segs if s[1] - s[0] + 1 >= TWO_SEG_MIN * ref_h]
+    if segs and outer == "top" and segs[0][1] - segs[0][0] + 1 < TWO_EDGE * ref_h:
+        segs = segs[1:]
+    if segs and outer == "bottom" and segs[-1][1] - segs[-1][0] + 1 < TWO_EDGE * ref_h:
+        segs = segs[:-1]
+    if len(segs) < 2:
+        return None
+    tall = [s for s in segs if s[1] - s[0] + 1 >= TWO_PART * ref_h]
+    span = (segs[-1][1] - segs[0][0] + 1) / ref_h
+    if len(tall) < 2 and span < TWO_SPAN:
+        return None
+    gaps = [b[0] - a[1] - 1 for a, b in zip(segs, segs[1:])]
+    return {"ratio": round((y1 - y0) / ref_h, 2), "parts": [round((s[1] - s[0] + 1) / ref_h, 2) for s in segs],
+            "span": round(span, 2), "gap": int(max(gaps))}
+
+
+# ── 1b. 钉子列几何：压墨、一格跨两字（SJ r76 切分审计，2026-11-17）───────────────
+
+def pin_ref_heights(col_cells, page_pitch: float | None) -> tuple[float | None, float | None]:
+    """钉子列查一格两字用的参照字高：(正文＝本页格高中位，夹注半格＝本列半格高中位，不到 3 个半格用本页格高中位)。"""
+    subs = sorted(c.y1 - c.y0 for c in col_cells.cells if c.sub and c.kind != "blank")
+    sub_h = subs[len(subs) // 2] if len(subs) >= 3 else page_pitch
+    return page_pitch, sub_h
+
+
+def pin_geometry(gray, col_cells, page_pitch: float | None, judge=None) -> list[dict]:
+    """钉子列（沙箱重跑后的 row_segment 那一列）的几何问题：[{kind: ink|two, slot, level, note, block}]。
+
+    - ink（压墨）：钉子的格线劈字——同 seg check `cut_through`（切割量 ≥0.025 格高²、±0.4 格内挪得开到 1/4 以下）；
+      有 U-Net 裁判就过裁判。强／中档算问题（block），弱档（挪不到 1/3 格）和没裁判时只当提示；
+    - two（一格跨两字）：`seg_screen.two_glyphs`，格高 ≥1.2 倍参照字高、格里墨分成两段各高 ≥0.3 倍（或墨跨 ≥1.1 倍且断开），
+      算问题。参照字高：本页格高中位（职名页凑不够格用本列 period），夹注半格用本列半格高中位。
+    空格不查两字。"""
+    out: list[dict] = []
+    for t in cut_through(gray, col_cells, judge=judge):
+        block = judge is not None and t["level"] in ("强", "中")
+        out.append({"kind": "ink", "slot": f"{t['slot_above']}|{t['slot_below']}", "level": t["level"], "block": block,
+                    "note": f"压墨：格线 {t['slot_above']}|{t['slot_below']}（列图 y≈{t['y']:.0f}）切割量 {t['cost']}px，"
+                            f"挪 {t['move']:+d}px 可降到 {t['best']}px"
+                            + (f"，裁判 {t['agree'][0]:.2f}→{t['agree'][1]:.2f}" if t["agree"] else "")
+                            + ("" if judge is not None else "（没有 U-Net 裁判，只当提示）")})
+    main_h, sub_h = pin_ref_heights(col_cells, page_pitch or col_cells.period)   # 职名页凑不出本页格高，用本列 period
+    h, w = gray.shape[:2]
+    x0, x1 = (int(col_cells.content_x[0]), int(col_cells.content_x[1])) if col_cells.content_x else (0, w)
+    x0, x1 = max(0, x0), min(w, max(x1, x0 + 1))
+    stripped = None
+    body = [c for c in col_cells.cells if c.kind != "blank"]
+    y_first = min((c.y0 for c in body), default=None)
+    y_last = max((c.y1 for c in body), default=None)
+    for c in body:
+        ref = sub_h if c.sub else main_h
+        if not ref:
+            continue
+        if stripped is None:
+            stripped = strip_long_lines((gray[:, x0:x1] < 128).astype(np.uint8))
+        outer = "top" if c.y0 == y_first else "bottom" if c.y1 == y_last else None
+        r = two_glyphs(gray, c, (x0, x1), ref, stripped=stripped, outer=outer)
+        if r:
+            out.append({"kind": "two", "slot": f"{c.slot}{c.sub or ''}", "level": "", "block": True,
+                        "note": f"疑一格跨两字：{c.slot}{c.sub or ''} 格高 {r['ratio']} 倍{'半格' if c.sub else ''}字高，"
+                                f"墨分 {len(r['parts'])} 段（各 {'、'.join(map(str, r['parts']))} 倍、共跨 {r['span']} 倍），段间缝 {r['gap']}px"})
+    return out
