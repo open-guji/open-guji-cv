@@ -151,7 +151,9 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_u
     if sh([*GUJI, "source", "pull", book, "-w", str(ws)], cwd=CV, env=env).returncode:
         return {"verdict": "blocked", "why": "guji source pull 失败"}
     pl = sh([sys.executable, HERE / "proof_cycle.py", "plan", "--book", book, "-w", str(ws), "--no-pull",
-             "--pack", label, "--engine", str(eng), "--reviewer", reviewer], cwd=CV, env=env)
+             "--pack", label, "--engine", str(eng), "--reviewer", reviewer,
+             # 判 go 的理由是零票：plan 照出空计划（draft 当场读网站再核一遍是 0 票，不是就拒）
+             *(["--allow-empty"] if (d.get("status") or {}).get("voted") == 0 else [])], cwd=CV, env=env)
     plan_path = ws / "reports" / book / "_cycle" / rev / "plan.json"
     if pl.returncode or not plan_path.exists():
         return {"verdict": "blocked", "why": "plan 失败：" + (pl.stdout + pl.stderr).strip()[-300:]}

@@ -19,3 +19,22 @@ def test_fail_reason_takes_last_cross_line():
 
 def test_fail_reason_falls_back_to_tail():
     assert ac.fail_reason("a\nb\nc") == "a\nb\nc"
+
+
+def test_run_book_passes_allow_empty_only_for_zero_votes(tmp_path, monkeypatch):
+    """零票判 go 的册，plan 带 --allow-empty（ZM 11-18 殿本 21–99 册）；有票的册不带。"""
+    import subprocess as sp
+    calls = []
+
+    def fake_sh(cmd, tries=3, **kw):
+        calls.append([str(c) for c in cmd])
+        return sp.CompletedProcess(cmd, 0 if "source" in calls[-1] else 1, "", "✗ 停在这里")
+    monkeypatch.setattr(ac, "sh", fake_sh)
+    monkeypatch.setattr(ac.pc, "pack_info", lambda *a, **k: {"cv_commit": "abc"})
+    monkeypatch.setattr(ac, "engine_for", lambda c: tmp_path)
+    for voted, want in ((0, True), (3, False)):
+        calls.clear()
+        d = {"main": "L", "online_rev": "021-r1", "status": {"voted": voted, "cells": 5, "done": False}}
+        ac.run_book(tmp_path, "vol21", tmp_path, d, "sheldon")
+        plan = next(c for c in calls if "plan" in c)
+        assert ("--allow-empty" in plan) is want
