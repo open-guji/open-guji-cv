@@ -74,6 +74,49 @@ def test_pad_outer_columns_leaves_normal_page():
     assert [round(v.x_at(0)) for v in r.verticals] == xs and r.vline_filled == []
 
 
+def _gray_with_rule(width, height, x_new_rule=None):
+    """白底图；给了 x_new_rule（右上原点）就在那里画一条 3px 宽、贯穿框高的细竖线。"""
+    import numpy as np
+    g = np.full((height, width), 230, np.uint8)
+    if x_new_rule is not None:
+        xo = (width - 1) - int(x_new_rule)
+        g[300:2700, xo - 1:xo + 2] = 20
+    return g
+
+
+def test_trim_outer_columns_snaps_wide_outer_column_to_thin_rule():
+    """脉经 02:50：首列把书口圈进来（宽 238）→ 收到内邻线往外一个中位列距附近的细界行上。"""
+    from open_guji_cv.steps.border_detect import trim_outer_columns
+    xs = [100, 338, 528, 718, 908, 1098, 1288, 1478, 1668, 1858]
+    r = _res(xs)
+    g = _gray_with_rule(2300, 3000, x_new_rule=150)          # 真内界线：338 − 190 = 148 附近
+    assert trim_outer_columns(r, g, 1.12, col_pitch=192) == 1
+    assert abs(r.verticals[0].x_at(0) - 150) <= 2
+    assert r.vline_filled[0] is False                         # 找到线，不算插值
+    assert [round(v.x_at(0)) for v in r.verticals[1:]] == xs[1:]
+
+
+def test_trim_outer_columns_falls_back_to_median_pitch():
+    """末列偏宽、附近没有细线：按中位列距平移，记插值。"""
+    from open_guji_cv.steps.border_detect import trim_outer_columns
+    xs = [100, 290, 480, 670, 860, 1050, 1240, 1430, 1620, 1880]
+    r = _res(xs)
+    assert trim_outer_columns(r, _gray_with_rule(2300, 3000), 1.12, col_pitch=192) == 1
+    assert round(r.verticals[-1].x_at(0)) == 1620 + 190
+    assert r.vline_filled[-1] is True and not any(r.vline_filled[:-1])
+
+
+def test_trim_outer_columns_off_or_normal_page_unchanged():
+    from open_guji_cv.steps.border_detect import trim_outer_columns
+    xs = [423, 602, 784, 970, 1154, 1328, 1515, 1696, 1882, 2060]
+    r = _res(xs)
+    assert trim_outer_columns(r, _gray_with_rule(2300, 3000), 1.12) == 0
+    assert trim_outer_columns(r, _gray_with_rule(2300, 3000), 0.0) == 0
+    assert [round(v.x_at(0)) for v in r.verticals] == xs and r.vline_filled == []
+    assert "grid_outer_trim" not in BorderDetectParams().model_dump()
+    assert BorderDetectParams(grid_outer_trim=1.12).model_dump()["grid_outer_trim"] == 1.12
+
+
 def test_head_raise_scale_passed_through_and_dropped_when_default(tmp_path, monkeypatch):
     """GUJI-748：`head_raise_scale` 传到 detect_borders；缺省 1.0 不进参数 dump（params_hash 与加字段前相同）。"""
     kw = _grid_kwargs(tmp_path, monkeypatch, {"border_detect": {"head_raise_scale": 0.7021}})

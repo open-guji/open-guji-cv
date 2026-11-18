@@ -63,6 +63,73 @@ def pad_outer_columns(res) -> int:
     return n
 
 
+#: `grid_outer_trim` 找内侧细线时，搜索窗是「内邻线 + 中位列距」两侧各这么多倍 `grid_thresholds` 的 slot_tol；
+#: 找到的线离原外框线不到这么多倍 slot_tol 就不认（窗口够得着原外框线时，联合搜索会挑回它：脉经 02:50 首列
+#: 外线 119、目标 147，slot_tol 29 的窗里最强的就是原线）。
+OUTER_TRIM_TOL = 0.5
+OUTER_TRIM_AWAY = 0.5
+
+
+#: 外列宽过内列中位这么多倍就不是「多圈进一条书口」了（列网整体不对、非正文页），不动。
+OUTER_TRIM_MAX = 1.6
+
+
+def trim_outer_columns(res, gray, ratio: float, *, n_cols: int | None = None, ink_threshold: int = 128,
+                       col_pitch: float | None = None, frame_height: float | None = None) -> int:
+    """网格模式书级开关 `grid_outer_trim`：`pad_outer_columns` 的镜像——最外一列明显**宽于**内列
+    （> `ratio` × 内列中位），说明外框线落到了版心条（书口鱼尾、书名卷次小字）外沿上，书口整条圈进了
+    首／末列（脉经 02:50 c1 列宽 238，正文 0–180、内界线≈190、书口 195–255；网格模式选版框对时无界行的
+    页各对支持数打平，按投影和挑中墨更重的鱼尾那条）。
+
+    外框线改到「内邻线往外一个中位列距」：先在那附近（± 半个 slot_tol）用联合搜索找细线（`is_thin_rule`，
+    同网格模式验线那把尺子），找到就按它定位；找不到就按中位列距平移、记插值（`vline_filled`）。
+    线形一律取内邻线平移（折线页也一样，整页同为直线或三段），只改位置。只动外框两条，内部线不动。
+    列数不等于 `n_cols`（本页版式列数）的页、外列宽过 `OUTER_TRIM_MAX` 倍的不动（序页、书衣等列网本来不对的页，
+    脉经 02 p4／p77 外推 350–415px）。返回改了几条。"""
+    import numpy as np
+    from ..impl.keben.border import _vline_to_new
+    from ..seg.grid import grid_thresholds, is_thin_rule
+    from ..seg.lines import joint_search_coarse_to_fine
+    v = res.verticals
+    if ratio <= 0 or len(v) < 5 or (n_cols is not None and len(v) != n_cols + 1):
+        return 0
+    H, W = gray.shape[:2]
+    y = res.height / 2.0
+    xs = [float(line.x_at(y)) for line in v]
+    gaps = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
+    inner = sorted(gaps[1:-1])
+    med = inner[len(inner) // 2]
+    thr = grid_thresholds(col_pitch or med, frame_height)
+    tol = OUTER_TRIM_TOL * thr["slot_tol"]
+    mask = None
+    filled = list(res.vline_filled) or [False] * len(v)
+    n = 0
+    for idx, nb, gap, sign in ((0, 1, gaps[0], -1.0), (len(v) - 1, len(v) - 2, gaps[-1], 1.0)):
+        if not ratio * med < gap <= OUTER_TRIM_MAX * med:
+            continue
+        target = xs[nb] + sign * med                     # 新坐标（右上原点）里，外框线该在的 x
+        if mask is None:
+            mask = (gray < ink_threshold).astype(np.float64)
+        c_old = (W - 1) - target                         # 换回左上原点找线
+        lo, hi = int(round(c_old - tol)), int(round(c_old + tol))
+        hit = False
+        if 0 <= lo and hi <= W - 1:
+            m = joint_search_coarse_to_fine(mask, "v", lo, hi)
+            if is_thin_rule(m, thr["min_score"], thr["max_width"]):
+                # 找到的线只取位置（框中高处），线形跟内邻线
+                found = float(_vline_to_new(m, W, H).x_at(y))
+                if abs(found - xs[idx]) >= OUTER_TRIM_AWAY * thr["slot_tol"]:
+                    target, hit = found, True
+        if not (xs[nb] < target < xs[idx] if sign > 0 else xs[idx] < target < xs[nb]):
+            continue
+        v[idx] = replace(v[nb], x_at_top=v[nb].x_at_top + (target - xs[nb]))
+        filled[idx] = not hit
+        n += 1
+    if n:
+        res.vline_filled = filled
+    return n
+
+
 def apply_head_raise_verdicts(res, verdicts: dict[int, int], n_rows: int, scale: float = 1.0) -> dict[int, int]:
     """人裁逐列抬头（`lookup.resolved_head_raise`，本页 `col → n_raised`）改写 `res.head_raise`，返回改了的列。
 
@@ -139,6 +206,11 @@ class BorderDetectParams(BaseModel):
     网格模式与自由模式结果相同、只出 8 列。写法
     `params: {border_detect: {column_grid_pages: [139], grid_col_pitch: 133, grid_lattice_fallback: true}}`。
     只管点名页；缺省关不进参数 dump，产物与加字段前逐字节相同。"""
+    grid_outer_trim: float = 0.0
+    """网格模式（书级 `column_grid` 或点名页）下，首／末列宽于内列中位这么多倍就把外框线收到「内邻线往外一个
+    中位列距」，先就近找细线、找不到按列距平移（`trim_outer_columns`）。给半叶图书口紧贴版框、网格模式把书口
+    外沿当版框的书用（脉经，2026-11-18，GUJI-774）：`params: {border_detect: {grid_outer_trim: 1.12}}`。
+    0＝关（缺省），不进参数 dump，产物与加字段前逐字节相同。"""
     pitch_rescue: bool = True
     """列距救援（`impl/keben/pitch_rescue`，2026-10-23 sheldon 定缺省开）：自由模式探出的页上有一条列
     < 0.7 × 中位列宽（多挑了假竖线、外侧一整列落到网外）时，先用网格模式重探，选不出版框对再
@@ -213,6 +285,8 @@ class BorderDetectParams(BaseModel):
         if isinstance(d, dict) and not self.column_grid_pages:
             d.pop("column_grid_pages", None)
             d.pop("grid_col_pitch", None)
+        if isinstance(d, dict) and not self.grid_outer_trim:
+            d.pop("grid_outer_trim", None)
         if isinstance(d, dict) and not self.grid_lattice_fallback:
             d.pop("grid_lattice_fallback", None)
         if isinstance(d, dict) and self.head_raise_scale == 1.0:
@@ -308,6 +382,9 @@ class BorderDetectStep(Step):
         res = _detect(cols)
         if grid_page:
             pad_outer_columns(res)
+        if grid and p.grid_outer_trim:
+            trim_outer_columns(res, gray, p.grid_outer_trim, n_cols=cols, ink_threshold=p.ink_threshold,
+                               col_pitch=col_pitch, frame_height=ctx.book.frame_height)
         rescued = None
         col_spec = ColumnSpec.from_dict(ctx.book.columns)
         if p.pitch_rescue and not grid:
