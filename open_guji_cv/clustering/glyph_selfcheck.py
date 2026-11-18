@@ -209,6 +209,7 @@ def assign_flags(f: Finding) -> Finding:
 
 CLEAN_INVARIANT_LOSS = 0.03   # 库图再清一遍删掉的墨占比到这档就算违例
 CLEAN_INVARIANT_ALARM = 0.002  # 违例占库的比例到这档就该停下来查清边规则，不是逐例撤图
+DERIVED_CHECK_SAMPLE = 400     # 抽多少例核对 derived 归一图是不是现装 cv 算的
 
 
 def clean_invariant(db_path: str | Path, loss: float = CLEAN_INVARIANT_LOSS,
@@ -225,6 +226,10 @@ def clean_invariant(db_path: str | Path, loss: float = CLEAN_INVARIANT_LOSS,
 
     只读库、不要原图，约每千例 3 秒。返回 `n`（本书刻例数）、`n_bad`、`rate`、`alarm`、
     `worst`（按删掉的墨占比从大到小，至多 `max_list` 条 `{instance_id, char, loss}`）。
+    另抽至多 `DERIVED_CHECK_SAMPLE` 例核对 **`derived` 里存的归一图是不是现装的 cv 算出来的**
+    （`derived_checked`、`derived_stale`）：`glyph.db` 是用建库那一刻装着的 cv 算派生的，之后
+    升级 cv 不会自动重算；拿旧归一图跑体检，修好的清边等于没修（2026-11-17 自检线实遇：
+    刚重入的 高、宣、享 又被报成缺笔）。不一致就先 `guji glyph-db rebuild`。
     看不到入库那一遍删了什么（库里存的已经是清过的图）；那一遍要拿原始字块量，
     见 guji-manager `doc/参考/字形图清边与归一.md`。"""
     import cv2
@@ -233,19 +238,28 @@ def clean_invariant(db_path: str | Path, loss: float = CLEAN_INVARIANT_LOSS,
     try:
         fe = {r[0] for r in c.execute("SELECT edition_tag FROM sources WHERE kind='font'")}
         rows = c.execute(
-            "SELECT e.instance_id, g.char, g.edition_tag, i.patch_png "
+            "SELECT e.instance_id, g.char, g.edition_tag, i.patch_png, d.data "
             "FROM exemplars e JOIN glyphs g ON g.glyph_id=e.glyph_id "
-            "JOIN instances i ON i.instance_id=e.instance_id").fetchall()
+            "JOIN instances i ON i.instance_id=e.instance_id "
+            "LEFT JOIN derived d ON d.instance_id=e.instance_id AND d.kind='norm'").fetchall()
     finally:
         c.close()
-    n, bad = 0, []
-    for iid, ch, ed, png in rows:
+    from .normalize import normalize_patch
+    step = max(1, len(rows) // DERIVED_CHECK_SAMPLE)
+    n, bad, checked, stale = 0, [], 0, 0
+    for k, (iid, ch, ed, png, dnorm) in enumerate(rows):
         if ed in fe or str(ed).startswith("font:"):
             continue
         gray = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
         if gray is None:
             continue
         n += 1
+        if dnorm is not None and k % step == 0:
+            old = cv2.imdecode(np.frombuffer(dnorm, np.uint8), cv2.IMREAD_GRAYSCALE)
+            now = normalize_patch(gray)
+            checked += 1
+            if old is None or old.shape != now.shape or ((old < 128) != (now > 0)).any():   # 存的是白底黑字
+                stale += 1
         b = sauvola_binarize(gray)
         total = int(b.sum())
         if not total:
@@ -258,6 +272,7 @@ def clean_invariant(db_path: str | Path, loss: float = CLEAN_INVARIANT_LOSS,
     rate = len(bad) / n if n else 0.0
     return {"n": n, "n_bad": len(bad), "rate": round(rate, 5),
             "alarm": rate >= CLEAN_INVARIANT_ALARM, "loss_th": loss,
+            "derived_checked": checked, "derived_stale": stale,
             "worst": bad[:max_list]}
 
 
@@ -363,6 +378,9 @@ def run_selfcheck(db_path: str | Path,
         print(f"清边不变式：{inv['n']} 例里库图再清一遍还删墨 ≥{inv['loss_th']:.0%} 的 {inv['n_bad']} 例"
               f"（{inv['rate']:.2%}）" + ("  ← 报警：清边规则在这本书上删真笔画，先修规则"
                                         if inv["alarm"] else ""), flush=True)
+        if inv.get("derived_stale"):
+            print(f"派生归一图过期：抽 {inv['derived_checked']} 例有 {inv['derived_stale']} 例与现装 cv 算的不一致。"
+                  "这个 glyph.db 是旧版 cv 建的，下面的体检结果不可信，先 `guji glyph-db rebuild`。", flush=True)
     vmap = VariantMap.load()
     uv = (_unihan_same(UNIHAN_SAME if unihan_variants is True else unihan_variants)
           if unihan_variants else (lambda a, b: False))

@@ -47,3 +47,12 @@ def test_clean_invariant_alarms_when_rule_eats_strokes(lib, monkeypatch):
     r = G.clean_invariant(lib)
     assert r["n_bad"] == 4 and r["alarm"]
     assert r["worst"][0]["char"] == "懷" and r["worst"][0]["loss"] >= G.CLEAN_INVARIANT_LOSS
+
+
+def test_derived_norm_staleness_is_reported(lib, monkeypatch):
+    """`glyph.db` 的派生归一图是建库时的 cv 算的。现装 cv 的清边规则变了（这里用关掉护栏模拟），
+    存着的归一图就和现算的对不上，要报出来。"""
+    r = G.clean_invariant(lib)
+    assert r["derived_checked"] == 4 and r["derived_stale"] == 0
+    monkeypatch.setattr(N, "LINE_STROKE_RATIO", None)
+    assert G.clean_invariant(lib)["derived_stale"] == 4
