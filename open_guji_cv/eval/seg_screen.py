@@ -272,6 +272,81 @@ def orphan_ink(gray: np.ndarray, boxes, ink_threshold: int = 128) -> list[dict]:
     return out
 
 
+# ── 清理吃掉字笔（全唐文切分线 2026-11-18，R033／R038 复盘）────────────────────────────────
+# 列图清界行（Step2 clean_column）与字框收墨（Step4 cell_shrink）抹掉的墨，下游所有检查都看不见：它们读的就是抹过的列图／
+# 字块。「十」剩「亠」、「恪」丢忄、单字成列的「制」丢刂，格位都对，对位、格高、漏切全不报。两条墨账补上这个盲区：
+# - erased_strokes：column_raw 有、column_image 没了的墨里，离列图两边都远、又不是贯穿多格的竖线的一块 ＝ 字的笔画被当界行抹了；
+# - bbox_drop：列图上落在某字所在那几行、却在所有字框外的一块墨 ＝ 字框收墨把偏旁收丢了（或整字被判成半格）。
+# 阈值在全唐文 001/009/014 册 11 页 99 列（b2 包）上定：7 处抹笔（十×5、四、恪）、3 处丢偏旁（制×2、使）全报，误报 0；
+# 001 册 10–60 页另 210 列（开了两个书级开关）只报 使 一处；
+# 页边列双线的虚线段（宽 ≤12px）、版框拐角碎块（高 <20px）不报。
+ERASE_MIN_PX = 40          # 被抹的一块至少这么多像素
+ERASE_EDGE = 0.05          # 碰到列图左右这么宽（× 列宽）以内的不算：界行本来就在那儿
+ERASE_MIN_W = 13           # 宽、高至少这么多 px：虚线段、框角碎块不算
+ERASE_MIN_H = 20
+ERASE_LINE = 0.8           # 原图同一 x 段上下连着（断口 ≤6 行）≥ 这么多倍列宽 ＝ 竖线，不算
+DROP_MIN_PX = 150          # 字框外丢墨一块至少这么多像素、高 ≥ DROP_MIN_H、宽 ≥ ERASE_MIN_W
+DROP_MIN_H = 30
+DROP_EDGE = 0.10           # 字框外丢墨不看列图两边这么宽（邻列字边、纸渣；001:40:5 修 左边一块邻列墨在 0.09）
+
+
+def erased_strokes(raw: np.ndarray, cleaned: np.ndarray, ink_threshold: int = 128) -> list[dict]:
+    """column_raw（清界行前）对 column_image（清后）→ 疑似被抹的字笔 `[{"bbox": [x0, y0, x1, y1], "ink": 像素}]`。"""
+    import cv2
+    if raw.shape != cleaned.shape:
+        return []
+    h, w = raw.shape
+    r = raw < ink_threshold
+    gone = r & ~(cleaned < ink_threshold)
+    n, _lab, st, _ = cv2.connectedComponentsWithStats(gone.astype(np.uint8), connectivity=8)
+    out = []
+    for i in range(1, n):
+        x, y, bw, bh, a = (int(v) for v in st[i])
+        if a < ERASE_MIN_PX or bw < ERASE_MIN_W or bh < ERASE_MIN_H:
+            continue
+        if x <= ERASE_EDGE * w or x + bw >= (1 - ERASE_EDGE) * w or y <= 40 or y + bh >= h - 40:
+            continue
+        col = r[:, x:x + bw].any(axis=1)
+        y0, y1 = y, y + bh
+        while y0 > 0 and col[max(0, y0 - 6):y0].any():
+            y0 -= 1
+        while y1 < h and col[y1:y1 + 6].any():
+            y1 += 1
+        if y1 - y0 >= ERASE_LINE * w:
+            continue                                   # 贯穿的竖线（页边列内框）
+        out.append({"bbox": [x, y, x + bw, y + bh], "ink": a})
+    return out
+
+
+def bbox_drop(gray: np.ndarray, chars, ink_threshold: int = 128) -> list[dict]:
+    """列图＋本列字框 `[(slot_label, (x0, y0, x1, y1))]` → 字所在那几行里、所有字框外的成块墨
+    `[{"slot": 所在行的字, "bbox": [...], "ink": 像素}]`。"""
+    import cv2
+    boxes = [(lab, tuple(int(round(v)) for v in b)) for lab, b in chars]
+    if not boxes:
+        return []
+    ink = gray < ink_threshold
+    h, w = ink.shape
+    cov = np.zeros_like(ink)
+    for _l, (x0, y0, x1, y1) in boxes:
+        cov[max(0, y0 - 2):y1 + 2, max(0, x0 - 2):x1 + 2] = True
+    band = np.zeros_like(ink)
+    band[max(0, min(b[1] for _l, b in boxes)):max(b[3] for _l, b in boxes), int(DROP_EDGE * w):int((1 - DROP_EDGE) * w)] = True
+    left = ink & band & ~cov
+    n, _lab, st, _ = cv2.connectedComponentsWithStats(left.astype(np.uint8), connectivity=8)
+    out = []
+    for i in range(1, n):
+        x, y, bw, bh, a = (int(v) for v in st[i])
+        if a < DROP_MIN_PX or bh < DROP_MIN_H or bw < ERASE_MIN_W:
+            continue
+        cy = y + bh / 2
+        own = [lab for lab, b in boxes if b[1] - 5 <= cy <= b[3] + 5]
+        if not own:
+            continue                                   # 不在任何字的行里：归 orphan（漏切块）
+        out.append({"slot": own[0], "bbox": [x, y, x + bw, y + bh], "ink": a})
+    return out
+
+
 # ── 史記切分快筛的格级判据（SJ `guji-manager/tools/seg_check`，2026-11-12 搬进来，《切分三方向》第 2 步） ─────
 # 判据与参数照 SJ 原样（史記 r35／r41 十册验过）；SJ 要保留的几条见各函数说明。
 
