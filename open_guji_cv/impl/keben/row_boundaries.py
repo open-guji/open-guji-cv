@@ -1680,7 +1680,7 @@ THIN_YI_W = 0.35          # ……且有一块「横向补 0.12 period 断口后
 THIN_YI_CENTER = 0.25     # ……条的中心离格窗中线不超过窗宽的这个比例（版框边在窗边，不居中）
 
 
-def _thin_bar(ink: np.ndarray, period: float, max_w: float | None = None) -> bool:
+def _thin_bar(ink: np.ndarray, period: float, max_w: float | None = None, mid_band: tuple[float, float] | None = None) -> bool:
     """这一格的墨是不是一道居中的细横（「一」）。笔画又细又断，连通域只剩碎段，改看墨的整体外包：
     横向跨度 ≥ THIN_YI_W·period、纵向跨度 ≤ 0.25·period、中心居中。"""
     h, w = ink.shape[:2]
@@ -1699,6 +1699,10 @@ def _thin_bar(ink: np.ndarray, period: float, max_w: float | None = None) -> boo
     cx = (cols[0] + cols[-1]) / 2.0
     if max_w is not None and bw > max_w * w:       # 满宽的横是框线，不是字
         return False
+    if mid_band is not None:                       # 贴格上下沿的横是版框线（列尾格顶上那一道），「一」居格中
+        cy = (rows[0] + rows[-1]) / 2.0 / h
+        if not (mid_band[0] <= cy <= mid_band[1]):
+            return False
     return bool(bw >= THIN_YI_W * period and bh <= 0.25 * period and abs(cx - w / 2.0) <= THIN_YI_CENTER * w)
 
 
