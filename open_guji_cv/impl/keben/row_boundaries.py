@@ -1675,6 +1675,27 @@ def _stacked_bars(ink: np.ndarray, frame: np.ndarray, period: float) -> bool:
     return len(bars) >= 2
 
 
+THIN_YI_MIN_INK = 0.004   # 「一」救回：格内墨占比至少这么多（再低是纸上污点）
+THIN_YI_W = 0.35          # ……且有一块「横向补 0.12 period 断口后」宽 ≥ 这么多 period、高 ≤ 0.25 period 的横条
+THIN_YI_CENTER = 0.25     # ……条的中心离格窗中线不超过窗宽的这个比例（版框边在窗边，不居中）
+
+
+def _thin_bar(ink: np.ndarray, period: float) -> bool:
+    """这一格的墨里有没有一道居中的细横（「一」）。"""
+    import cv2
+    h, w = ink.shape[:2]
+    if h < 10 or w < 10:
+        return False
+    k = max(3, int(0.12 * period))
+    closed = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (k, 1)))
+    n, _lab, st, cen = cv2.connectedComponentsWithStats(closed.astype(np.uint8), connectivity=8)
+    for i in range(1, n):
+        bw, bh = st[i, cv2.CC_STAT_WIDTH], st[i, cv2.CC_STAT_HEIGHT]
+        if bw >= THIN_YI_W * period and bh <= 0.25 * period and abs(cen[i][0] - w / 2.0) <= THIN_YI_CENTER * w:
+            return True
+    return False
+
+
 def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio: float) -> bool:
     """这一格的墨是不是只有框线（2026-09-26）：必须有跨格长竖穿过；去掉它（连同贴着它的几像素）
     后剩下的要么够不上 `min_ink_ratio`，要么只剩又矮又不宽的细横（框的上下边）。"""
@@ -2098,6 +2119,17 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             y1i = max(0, min(h, int(round(bounds[k + 1]))))
             if _dash_only(col_ink[y0i:y1i], period, float(x_hi - x_lo), h_frac, w_frac):
                 nonblank.discard(pos)
+
+    # 列中间两个有字格夹着的空白格里，墨量虽不到 `min_ink_ratio`、却是一道居中的细横——「一」字
+    # （笔画又细又断，墨比 0.006–0.011，殿本 10 列因此格数少一，用户 2026-11-18 格高异常根因）。
+    for k in range(1, n_slots - 1):
+        pos = k + 1
+        if pos in nonblank or inks[pos] < THIN_YI_MIN_INK or (pos - 1) not in nonblank or (pos + 1) not in nonblank:
+            continue
+        y0i = max(0, min(h, int(round(bounds[k]))))
+        y1i = max(0, min(h, int(round(bounds[k + 1]))))
+        if _thin_bar(col_ink[y0i:y1i], period):
+            nonblank.add(pos)
 
     runs: dict[int, float] = {}
     tail_a: set[int] = set()
