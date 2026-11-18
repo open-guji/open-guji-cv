@@ -279,6 +279,11 @@ class SeedAdmitParams(BaseModel):
     没有裁定的半格照旧受保护（本就不放行）。书级，缺省关、关时不进参数 dump、行为不变（SJ 史記 11-12：必 04:26:1:13b、解 03:46:1:4a、遲 等半格裁定放不出，半格是形近待审大头）。
     放行条件（A22 评估 11-12）：裁定记的 cell＝当前格号、裁定字＝整理本字（不走白名单）、本格无 clipped／frame_residue／jiazhu_*／split_* 疑点；放行格 evidence.half=True。
     起因的错放（men 组 06:12:5:12a）是旧在线 L3，不是现在的对话双路裁定；放行前须金标验证 0 错。"""
+    vis_ruling_ctx_subclasses: str = ""
+    """文意终审裁定（`ctx-m1`，group=O）在 Z（字组）、N（形近护栏）之外再收哪些子类，逗号分隔（书级，缺省空、空时不进参数 dump、行为不变）。
+    粗校第 4 层「AI 处理文意」：没有字组问的待审格（参校本缺字、复审、库缺例等）由两路独立对话盲判，同字且都 high、字在候选内才写
+    `admit_ok`，子类按写入方定（全唐文形近字线 11-18 用 `A`）。其余放行条件与 Z/N 相同：整理本对位字须与裁定记的一致、越过整理本要在白名单。
+    开之前须用人裁金标量这一类两路判读 0 错（Sheldon 11-18：形近字文意可以用 AI 判断，属第 4 层固定步骤）。"""
     group_flow_ruling_first: list[str] = Field(default_factory=list)
     """这几组的文意解法先查裁定库（对话裁定，`feedback.rulings`），命中就照裁定给字，不再看 L1 规则、L2 表／小头（书级，缺省空、不进参数 dump、行为不变）。
     没命中照旧走 L1 → L2 → L3。复核时（`review_fix` 的组，如己已巳）已放行格的上下文有裁定、字不同 → 改成裁定字。
@@ -1422,6 +1427,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_llm_skip_half", None)
         if isinstance(d, dict) and not self.vis_ruling_half:
             d.pop("vis_ruling_half", None)
+        if isinstance(d, dict) and not self.vis_ruling_ctx_subclasses:
+            d.pop("vis_ruling_ctx_subclasses", None)
         if isinstance(d, dict) and not self.group_flow_llm_half_groups:
             d.pop("group_flow_llm_half_groups", None)
         if isinstance(d, dict) and not self.group_flow_ruling_first:
@@ -5385,6 +5392,8 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
         r.doubts = list(dict.fromkeys(list(r.doubts or []) + ["src_code_conflict"]))
         n -= 1
     ovr = p.ruling_override_groups
+    extra = frozenset(x.strip() for x in (getattr(p, "vis_ruling_ctx_subclasses", "") or "").split(",") if x.strip())
+    specs = tuple((ver, subs | extra) if ver == "ctx-m1" else (ver, subs) for ver, subs in _VIS_RULING_SPECS) if extra else _VIS_RULING_SPECS
     skip_half = getattr(p, "group_flow_llm_skip_half", False) and not getattr(p, "vis_ruling_half", False)
     half_ok = getattr(p, "group_flow_llm_skip_half", False) and getattr(p, "vis_ruling_half", False)
     for r, left, right in todo:
@@ -5394,7 +5403,7 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
             continue                                 # 半格本身带切分疑点：不放（A22 评估 11-12）
         if skip_half and (r.id or "")[-1:] in ("a", "b"):
             continue                                 # 夹注半格不靠终审裁定放行（等金标证据再开）
-        v = next((x for ver, subs in _VIS_RULING_SPECS
+        v = next((x for ver, subs in specs
                   for x in [store.get(_VIS_RULING_GROUP, ver, left, right)]
                   if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
                   and _ruling_han(x["char"]) and x.get("subclass") in subs), None)
