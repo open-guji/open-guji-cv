@@ -3,6 +3,12 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.62] - 2026-11-18
+
+史記 patch 线：v0.7.61 + #1617 + #1635（字形图清边两次修复；SJ 字形库线请求，A22 评估 11-18）。
+
+- PATCH：`clustering/normalize.py` 清边加相对笔宽护栏（#1617，不再删本字细笔画）和 `STROKE_KEEP`（#1635，不再删贴在字身外缘的真笔画：忄／帝／常 的侧点、而／百 的顶横）。缺省生效的行为变化，**不登 code_equiv**：`normalize` 在 `glyph_match` 的 `code_deps` 里，史記 5a 起判过期（A22：只有 glyph_match 指纹变，其余 22 步同）；史記 08 抽 5467 格归一图变 45、更像 22、更不像 0。normalize.py 与 dev 逐字节同。建议与换钉字形库 g25 同轮，从 glyph_match 起重跑，换库后 `guji glyph-db rebuild`。
+
 ## [0.7.61] - 2026-11-17
 
 史記 patch 线：v0.7.59 + #1638（SJ 11-17，史記 r79）。
