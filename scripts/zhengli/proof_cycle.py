@@ -135,6 +135,7 @@ def cmd_plan(a) -> int:
     man = pack_info(ws, book, label)
     cmd = [*GUJI, "cellvotes", "draft", book, "--site-book", text_id, "--rev", rev, "--out", draft, "-w", ws]
     cmd += ["--from-kv"] if os.environ.get("CELLREVIEW_TOKEN") else []
+    cmd += ["--allow-empty"] if getattr(a, "zero_votes", False) else []     # 旧单确认零票：出空草稿（manager draft --allow-empty）
     if man:
         cmd += ["--pack", label]
     elif a.cord:
@@ -516,6 +517,8 @@ def main(argv=None) -> int:
     p.add_argument("--engine", help="出单版 cv 的 worktree（重跑用它；缺省本仓，须就是包的 cv_commit）")
     p.add_argument("--recheck-extra", help="另加复审的格（同 recheck.tsv 格式）：别处发现的疑点，拿不准的回网站再看")
     p.add_argument("--voted-pages-only", action="store_true", help="只重跑有票的页（旧做法；缺省全册 seed_admit）")
+    p.add_argument("--zero-votes", action="store_true",
+                   help="旧单确认零票（没人投过，auto_cycle 的 status voted==0）：draft 带 --allow-empty 出空草稿，不被 0 票守卫拦")
     p.add_argument("--no-pull", action="store_true")
     p = sp.add_parser("apply")
     p.add_argument("--book", required=True)
