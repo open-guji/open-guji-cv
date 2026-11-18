@@ -379,6 +379,7 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "gold_store_verdict_store": ("gold.store", "verdict_store"),
     "unmojibake": ("feedback.mojibake", "unmojibake"),
     "binarize_page": ("utils.binarized", "binarize_page"),
+    "binarized_or_none": ("utils.binarized", "binarized_or_none"),
     "read_qc": ("utils.binqc", "read_qc"),                    # 二值体检（11-18）：控制台判字块是否落进可疑区
     "canon_box_suspect": ("utils.binqc", "canon_box_suspect"),
     "page_occluded": ("steps.occlusion", "page_occluded"),
