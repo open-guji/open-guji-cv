@@ -27,6 +27,10 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.69] - 2026-11-18
+
+- 发版说明（A31 11-18，殿本 patch 线，ZM 要）：v0.7.67 + #1586（关系图补 16 对兄弟异体边：`config/variants/local_edges.json` 加 16 条 `local:keben`、`variants.json` 同步加标签；三书人裁 5b 补边清单 A 档，Sheldon 11-16 人审定），PATCH，**不含** dev 线（v0.7.65／66／68）与史記线其他改动。只动数据不动代码；`seed_admit` 读关系层判「有无直接异体边」，含这 32 字的格（殿本约 40 格）结果可能变。语料表重登（两份异体文件＋补登 `sb/rules.yaml`，sha 与 b27 一致）。**配底库 b29**（＝b27 换这两份异体文件），钉 b27 的册在本版上报 CorpusDrift，要改钉后从 `seed_admit` 起重跑。
+
 ## [0.7.68] - 2026-11-18
 
 - 发版说明（A31 11-18，**dev 线 patch**，PATCH）：v0.7.66 + #1665（`eval/seg_screen` 加两条墨账：清界行抹笔 `erased`、字框外丢墨 `bbox_drop`，全唐文 R033／R038 复盘；cherry-pick 613f201），不含 v0.7.66 之后 dev 上的其他改动（#1661 row_segment 1.53、#1664 adopt_rel 等）。只读产物与缓存，**不进任何 Step 指纹**，对 v0.7.66 产物全部仍新鲜。要配 guji-manager #667（seg check 处置「cv丢笔」）。底库不变（b27）。
