@@ -382,6 +382,9 @@ _GAP_GUARD_0750 = (_GAP_GUARD_1117 + "。史記 patch 线移植（v0.7.50 + #160
 _ADOPT_REL_1118 = ("row_segment 加书级参数 adopt_rel（大分歧扩池候选相对门槛改选，缺省 0＝关、不进参数 dump；row_boundaries 加 _adopt_rel_pick 与 segment_column 参数，"
                    "cut_select 加 ADOPT_REL_MIN／ADOPT_REL_CAP 常量）：脉经第 2 册 5、13、42、68 页 row_segment 与 origin/dev（5fe272a）产物逐字节相同；"
                    "scripts/code_equiv.py check，2026-11-18（MJ）")
+_GRID_OUTER_TRIM_1118 = ("border_detect 加书级参数 grid_outer_trim（网格模式首／末列偏宽时外框线收到内邻线往外一个中位列距，缺省 0＝关、不进参数 dump；"
+                         "新函数 trim_outer_columns）：脉经第 2 册 24、26、44、50 页 border_detect 与 origin/dev（2e80dc8）产物逐字节相同；"
+                         "scripts/code_equiv.py check，2026-11-18（MJ，GUJI-774）")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -2010,6 +2013,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="cc214ca8c0303f00362a6a326a32441149ba914b21a30b028ba05117c5208a1a",
           old="fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b",
           evidence=_ADOPT_REL_1118),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="34d4e16e6c9e4566b009b16c50afebcd7e92a5b4746c37d6d1f6df2229b1b8a6",
+          old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
+          evidence=_GRID_OUTER_TRIM_1118),
 )
 
 
