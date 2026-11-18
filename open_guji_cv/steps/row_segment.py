@@ -769,6 +769,12 @@ def _alt_same_ink_cells(main_cells, alt_cells) -> bool:
     return ink(main_cells) == ink(alt_cells)
 
 
+#: `cut_repair: true` 展开的切点修整串（史記 k24–k26 书配置原值；脉经同值）：零墨缝护栏 → 零墨折线 → 换线不劈新字 →
+#: 整行白 → 按连通块归属画线。见各参数注。
+CUT_REPAIR = {"cut_gap_guard": 0.08, "cut_free_seam": 0.35, "cut_gap_keep_glyph": True,
+              "cut_white_row": 0.35, "cut_glyph_line": 0.35}
+
+
 class RowSegmentParams(BaseModel):
     n_body_slots: int | None = None      # None = Book.chars_per_line
     n_raised: int = 0                    # 抬头多出的格数；版式先验，raised 不自动推
@@ -949,6 +955,9 @@ class RowSegmentParams(BaseModel):
     #: **雙行小注噪点段否决门槛**（2026-11-18 A22 U3，`jiazhu_split.link_runs` 的 `cc_min`）：段中位「两侧较小最大连通体」低于这么多 px
     #: 整段当纸面碎点否决。缺省 500 是殿本小字标定；脉经小字笔画细（单字最大连通体 200–600px）取 200。书级参数；500＝缺省（不进参数哈希）。
     jiazhu_cc_min: int = 500
+    #: **切点修整串一键开**（2026-11-18 A22 统一优化 U2）：史記 r76–r80 定下、脉经照抄的五个切点开关一组开，
+    #: 没单写的项取 `CUT_REPAIR` 里的值（单写了的照单写的）。书配置只写 `cut_repair: true` 一行。缺省关（不进参数哈希）。
+    cut_repair: bool = False
     #: 原 `seal_gap_slots_empty`、`seal_inkcut`（大印下表中间空格位记空、剔印泥再切）两个书级开关 2026-11-10 搬进书级代码：
     #: 缺省实现 `impl/keben/seal_ink`（不做），史記书仓 `code/seal_ink.py` 覆盖。见 `_RETIRED`。
     #: **备选切法**（2026-11-03，史記文淵閣本第 7 轮，设计稿 https://claude.ai/artifact/NVqgK8BS2GietVShFnoqUU）：
@@ -995,6 +1004,14 @@ class RowSegmentParams(BaseModel):
                 import hashlib
                 _FP_CACHE[key] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
             object.__setattr__(self, "layout_fingerprint", _FP_CACHE[key])
+        return self
+
+    @model_validator(mode="after")
+    def _apply_cut_repair(self):
+        if self.cut_repair:
+            for k_, v_ in CUT_REPAIR.items():
+                if not getattr(self, k_):
+                    object.__setattr__(self, k_, v_)
         return self
 
     @model_validator(mode="after")
@@ -1067,6 +1084,7 @@ class RowSegmentParams(BaseModel):
                     d.pop(k_, None)
             if self.jiazhu_cc_min == 500:
                 d.pop("jiazhu_cc_min", None)
+            d.pop("cut_repair", None)          # 展开后的各项照常进 dump，开关本身不进（同值的老写法指纹一致）
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
