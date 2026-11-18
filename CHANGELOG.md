@@ -24,6 +24,10 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.65] - 2026-11-18
+
+- 发版说明（A31 11-18，**dev 线 patch**，PATCH）：v0.7.60 + #1655（seed_admit 书级开关 `vis_ruling_ctx_subclasses`：文意终审裁定 ctx-m1 在 Z／N 之外再收哪些子类，缺省空、空时不进参数 dump、行为不变；cherry-pick eef87fb），不含 v0.7.60 之后 dev 上的其他改动。给全唐文形近字线（子类 `A`）。Step 指纹对 v0.7.60 只有 `seed_admit` 变（未登等价：没跑产物比对；开开关的书按参数指纹本来也要重跑 seed_admit），下游随之过期；底库不变（b27）。全量测试与 v0.7.60 失败清单一致（57 条，多为缺 guji-manager；另 3 条 corpus registry／group_flow 缺省名单／p_ref 在 dev 合 #1655 前就败）。
+
 ## [0.7.64] - 2026-11-18
 
 - 发版说明（ZM 11-18，殿本 patch 线）：v0.7.58 + #1652（row_segment 1.52 叠横画数字二三不当框线），PATCH，**不含** dev 线与史記线其他改动。tag 在 main 合并提交（PR #1653）；dev 以 `-s ours` 合回、树不变（#1652 已在 dev 上）。
