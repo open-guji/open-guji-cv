@@ -2,6 +2,7 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+- 新册配置字段 `ink`（册级墨层＋二值化，用户 11-17 定，起因脉经彩图；`utils/ink.py`）：`color` auto／luma／max／red（auto：彩图取三通道最大值压掉朱印朱批等有色记号，灰度图照旧）、`binarize` otsu（缺省）／sauvola／none（＝灰度）、`window`（可 auto 按页高放大）、`k`、`speck_area`（缺省按页高缩放去小斑）。写了 `ink` 的册 Step1 起读「墨层＋二值」页，`ink` 规范化取值进所有步的指纹（键 `ink`），`seal_detect`、`invert_detect` 读原样亮度；**没写的册行为与指纹逐位不变**（老开关 `binarized_input` 照旧）。缺省用 Otsu 不用 Sauvola 31/0.10：MJ 脉经第 1 册 8 页实测 Sauvola 放行 956→849、Otsu＋去小斑 932 且格数不变。`guji binarize` 对写了 `ink` 的册按墨层出二值副本，并顺带写体检 `binarized/<书>/<页>.qc.json`（`utils/binqc.py`：color_mark／bin_diff／speckle 区域与 halftone 页旗，原图左上原点坐标；不进指纹、不进 R2／中心库），给控制台决定哪些字块缺省看彩图。设计 `doc/design/彩图墨层与二值体检.md`。
 - PATCH：`proof_cycle plan --allow-empty`、`auto_cycle` 零票判 go 的册自动带上（ZM 11-18：殿本 21–99 册旧单没人投，swap run 整批被 `cellvotes draft`「读到 0 票」守卫拦下）。交给 `guji cellvotes draft --allow-empty`（要 guji-manager ≥0.4.59、设 CELLREVIEW_TOKEN），当场读网站按单版和按条目都是 0 条才出空计划，守卫不关；plan.json 记 `empty_confirmed`。只动 scripts，不进指纹。
 - PATCH：`scripts/zhengli/proof_cycle.py apply` 出单带 `--allow-empty`：落完票新单 0 格也换成空单、升 book-text，旧单不再挂在线上（殿本 vol08 008-r10）。`auto_cycle` 失败原因取最后一条 ✗ 行（以前取末尾 300 字，常抄成前面的提示）。只动 scripts，不进指纹。
 - PATCH：字形库体检的清边不变式顺带核对派生归一图是不是现装 cv 算的（OCR 研究 Project，自检线 11-17 实遇）：`glyph_selfcheck.clean_invariant` 抽至多 400 例，把 `derived` 里存的归一图和现算的比，结果多 `derived_checked`、`derived_stale` 两个键；有不一致时 `guji glyph-db selfcheck` 打印一行，提示先 `guji glyph-db rebuild`。`glyph.db` 的派生是建库那一刻装着的 cv 算的，升级 cv 不会自动重算，拿旧归一图跑体检等于清边没修。只读库，不动任何 Step。

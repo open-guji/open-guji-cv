@@ -241,6 +241,10 @@ class BookSpec:
     #: 都不用动（`side_floor` 比值 1.000、`FRAME_ROW_T=0.5` 仍分得开框与正文），
     #: 但这是**这一册**的结论，不能推广到四庫那种版框模糊的册。
     binarized_input: bool = False
+    #: `ink`（yaml 同名，2026-11-17 用户定）：册级墨层＋二值化（`utils/ink.InkSpec`）。写了就由它决定
+    #: Step1 起读的页：彩图先转墨色（压朱印朱批），再二值（缺省 Otsu＋去小斑）。**None＝没写＝老行为**
+    #: （灰度；`binarized_input` 照旧），指纹逐位不变。写了它 `binarized_input` 不再起作用。见 `utils/ink.py`。
+    ink: "InkSpec | None" = None
     #: `column_grid`（yaml 同名）：Step1 竖线走**网格模式**——版框定死、列距均匀、
     #: 逐槽验线、探不到的槽位按几何插值（`peak_line_search.find_vertical_lines_grid`）。
     #: 给**界行没印全**的书用：北行日錄刻本 972 个槽位里 120 个（12.3%）没有线，
@@ -489,6 +493,8 @@ class BookSpec:
             "notes": self.notes,
             "iron_gate": self.iron_gate,
             "writing_mode": self.writing_mode, "frame": self.frame, "script": self.script,
+            # 墨层：控制台据此决定字块卡缺省显示二值还是灰度（None＝没写＝老行为）
+            "ink": (self.ink.token() if self.ink is not None else None),
             # 只给个数，不外泄路径——控制台判「Step5-d 整理本锚定有没有意义」够用了
             "n_references": len(self.references),
             "reference_profile": self.reference_profile.summary(self.all_pages()),
@@ -737,6 +743,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         norm_stroke=(None if d.get("norm_stroke") is None else int(d["norm_stroke"])),
         frame_bar_strategy=str(d.get("frame_bar_strategy") or "side_gap"),
         binarized_input=bool(d.get("binarized_input", False)),
+        ink=_parse_ink(d.get("ink")),
         col_pitch=(None if d.get("col_pitch") is None else float(d["col_pitch"])),
         columns=dict(d.get("columns") or {}),
         frame_height=(None if d.get("frame_height") is None
@@ -754,6 +761,11 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         code=_parse_code_pin(d.get("code")),
         freeze=_load_freeze(d.get("freeze"), book_id),
     )
+
+
+def _parse_ink(raw):
+    from ..utils.ink import parse_ink
+    return parse_ink(raw)
 
 
 def _load_ref_profile(raw, refs, book_id: str):
