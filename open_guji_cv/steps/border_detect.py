@@ -164,9 +164,12 @@ def trim_outer_columns(res, gray, ratio: float, *, n_cols: int | None = None, in
         if gap_only and not hit:
             # `grid_outer_fix`：没找到细线、按列距平移的落点得在字缝里，不然是外列本来就宽（版框留白），不收
             between = _band_ink(gray, ink_threshold)
-            page = between(xs[0], xs[-1])
+            # 参照：本页满列字身的墨（各内列中段墨的 3/4 分位；短列、空列不拉低）。落点靠版心那半边（外半边可能
+            # 就是书口条的墨）逐列墨中位到了它的 `OUTER_TRIM_GAP_INK` 倍，就是压着字（细界行、纸面杂点只占几列，不抬中位）
+            col_ink = sorted(between(xs[i] + 0.2 * gaps[i], xs[i + 1] - 0.2 * gaps[i]) for i in range(1, len(xs) - 2))
+            ref = col_ink[(3 * len(col_ink)) // 4]
             w = GUTTER_OUT * med
-            if between(target - w, target + w) >= OUTER_TRIM_GAP_INK * page:
+            if between(target, target - sign * w, stat="median") >= OUTER_TRIM_GAP_INK * ref:
                 continue
         v[idx] = replace(v[nb], x_at_top=v[nb].x_at_top + (target - xs[nb]))
         filled[idx] = not hit
@@ -185,8 +188,8 @@ OUTER_SLIVER_INK = 0.5
 OUTER_ADD_RANGE = (0.6, 1.45)
 OUTER_ADD_TEXT = 0.6
 OUTER_ADD_INK = 0.3
-#: `grid_outer_fix` 下收外框线找不到细线、按列距平移时，落点两侧贴线带的墨得不到版心平均的这个比例（在字缝里）
-OUTER_TRIM_GAP_INK = 0.3
+#: `grid_outer_fix` 下收外框线找不到细线、按列距平移时，落点靠版心一侧贴线带的墨（逐列中位）得不到内邻列字身墨的这个比例（在字缝里）
+OUTER_TRIM_GAP_INK = 0.5
 
 
 def _band_ink(gray, ink_threshold: int):
