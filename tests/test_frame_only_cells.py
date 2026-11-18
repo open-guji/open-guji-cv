@@ -48,3 +48,21 @@ def test_closed_box_glyph_not_frame():
     cell = slice(60, 171)
     assert fr[cell].any()
     assert not RB._frame_only(ink[cell], fr[cell], P, 0.01)
+
+
+def test_numeral_two_beside_frame_not_frame():
+    """「二」「三」：窗口比字宽得多（末列）、横画端点落进框线邻域时，不得整格判空（殿本 vol68 230:9、vol63 116:9）。"""
+    ink = _col(h=300, w=220)
+    ink[0:300, 8:14] = 1                         # 版框竖线，穿过几格
+    for y in (82, 112):
+        ink[y:y + 9, 14:48] = 1                  # 两道横画，宽 34 ≈ 0.57 period，左端紧贴框线
+    fr = RB._frame_mask(ink, P)
+    cell = slice(60, 171)
+    assert fr[cell].any()
+    assert not RB._frame_only(ink[cell], fr[cell], P, 0.01)
+    # 对照：只有一道边的框角照旧判空
+    corner = _col(h=300, w=220)
+    corner[0:300, 8:14] = 1
+    corner[100:108, 14:200] = 1
+    fc = RB._frame_mask(corner, P)
+    assert RB._frame_only(corner[cell], fc[cell], P, 0.01)

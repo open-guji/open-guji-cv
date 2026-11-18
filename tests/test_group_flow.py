@@ -1281,20 +1281,3 @@ def test_ruling_first_review_fixes_released_cell(tmp_path, monkeypatch):
     monkeypatch.setenv(ctx_llm.ENV_ONLINE, "1")
     r = run(frozenset({"jys"}))
     assert r.char == "已"
-
-
-def test_group_flow_exclude_subtracts_from_default():
-    """书级减法 `group_flow_exclude`（史記 勢𫝑，A22 11-16）：从缺省全名单去掉点名的组；空时不进 dump；不认识的组报错。"""
-    from open_guji_cv.groups.registry import generic_flow_names
-    allg = generic_flow_names()                                      # 测试环境缺省 group_flow 为空，显式给全名单
-    full = SeedAdmitParams(db_path="x", group_flow=allg)
-    assert "shi" in full.group_flow
-    assert "group_flow_exclude" not in full.model_dump()
-    p = SeedAdmitParams(db_path="x", group_flow=allg, group_flow_exclude=["shi"])
-    assert "shi" not in p.group_flow
-    assert p.group_flow == tuple(g for g in generic_flow_names() if g != "shi")
-    d = p.model_dump()
-    assert d["group_flow_exclude"] == ["shi"] and "shi" not in d["group_flow"]
-    assert SeedAdmitParams(**d).group_flow == p.group_flow          # 从 dump 重建：减法幂等
-    with pytest.raises(ValueError):
-        SeedAdmitParams(db_path="x", group_flow=allg, group_flow_exclude=["no_such_group"])

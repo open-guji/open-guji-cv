@@ -43,7 +43,6 @@ def collect(a):
     files = sorted(glob.glob(f"{a.products}/*/seed_admit/p*.json"))
     random.seed(11)
     random.shuffle(files)
-    excl = {c for c in a.exclude_channels.split(",") if c}
     tot = Counter()
     for f in files:
         for col in json.load(open(f, encoding="utf-8"))["seed_admit"]["columns"]:
@@ -64,7 +63,7 @@ def collect(a):
                 if not x["admit"]:
                     want.append((x, "q"))
                 elif (ch and tot[ch] >= a.min_total and cnt[ch] < a.per_char and cv[(v, ch)] < a.per_vol
-                      and x.get("channel") not in excl and x.get("provenance") != "human"):
+                      and x.get("channel") not in ("book_knn", "near_knn", "human") and x.get("provenance") != "human"):
                     cnt[ch] += 1
                     cv[(v, ch)] += 1
                     want.append((x, "b"))
@@ -147,8 +146,6 @@ def main():
     c.add_argument("--min-total", type=int, default=5)
     c.add_argument("--per-char", type=int, default=40)
     c.add_argument("--per-vol", type=int, default=6)
-    c.add_argument("--exclude-channels", default="book_knn,near_knn,human",
-                   help="刻例不收这些放行通道（逗号分隔；缺省同原写死值；史記传 book_knn,near_knn,human,witness3,coord,seal）")
     t = sp.add_parser("train")
     t.add_argument("feats"); t.add_argument("out")
     t.add_argument("--k", type=int, default=7)
