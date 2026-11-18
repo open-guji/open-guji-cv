@@ -6,6 +6,10 @@
 
 ## [未发版]
 
+## [0.7.71] - 2026-11-18
+
+- 发版说明（A31 11-18，**dev 线 patch**，PATCH；全唐文·形近字线请求）：v0.7.68（已含 #1655、#1658、#1665）+ #1586（16 对兄弟异体边）+ #1673／#1676（库内审阅改标／撤库不再连现行人裁一起作废）+ #1677（seed_admit code_deps 加 feedback.lookup、feedback.bindings）+ #1679（回库前核验 BackfillProbe，manager 用，不进指纹）+ #1678（variants.tsv 加 𦫵→升）＋语料表补登 variants.tsv（#1678 漏跑 guji corpus registry，新 sha 已传 R2）。不含 v0.7.68 之后 dev 上的其他改动（row_segment 1.53／1.54、#1664 adopt_rel、#1670／#1680 border_detect、#1671 5a.3 pair、#1650 等）。**Step 指纹对 v0.7.68**：`seed_admit` 变（#1673、#1677 加 code_deps；dev 线所有册 seed_admit 判过期），其余步不变。**配底库 b30**（＝b29 + variants.tsv；b29＝b27 + #1586 两份异体文件），钉 b27 的册要 `guji corpus pin` 改钉 b30，否则新版 cv 拒跑。
+
 ## [0.7.68] - 2026-11-18
 
 - 发版说明（A31 11-18，**dev 线 patch**，PATCH）：v0.7.66 + #1665（`eval/seg_screen` 加两条墨账：清界行抹笔 `erased`、字框外丢墨 `bbox_drop`，全唐文 R033／R038 复盘；cherry-pick 613f201），不含 v0.7.66 之后 dev 上的其他改动（#1661 row_segment 1.53、#1664 adopt_rel 等）。只读产物与缓存，**不进任何 Step 指纹**，对 v0.7.66 产物全部仍新鲜。要配 guji-manager #667（seg check 处置「cv丢笔」）。底库不变（b27）。
