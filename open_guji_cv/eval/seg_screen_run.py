@@ -25,6 +25,9 @@
   「十」剩「亠」）；一块一行，value＝像素；没有 column_raw 缓存的列不查；
 - bbox_drop（2026-11-18，全唐文 R038）：字所在那几行里、所有字框外的成块墨（字框收墨丢了偏旁：单字成列「制」的刂；整字判成半格「使」的亻），
   value＝那一行的格号；
+- gutter_ink（2026-11-18，A22 统一优化 U6，脉经 GUJI-774）：网格模式（书级 `column_grid` 或 `border_detect.column_grid_pages` 点名页）的页，
+  内竖线穿字分（`steps/border_detect.gutter_ink_score`）> `seg_screen.GUTTER_INK_WARN`（0.5）＝插值补线整片漂进字里、斜穿字身；
+  一页一行，col 记 `-`（整页的事），value＝穿字分，note 说开没开 `grid_free_fallback`。只报，不改切分；
 - pin_stale：中心库有 active 钉子、本页产物却没用上（产物早于钉子，要从 row_segment 重跑）。
 
 钉子列（产物带 `manual_cells` 旗）只比格号、不跑墨账与端外墨（SJ 第 5 条）；有钉子而产物没用上的列照普通列查；职名列不跑端外墨。`skip` 点名的页整页不查（书配置
@@ -37,7 +40,7 @@ import sys
 
 CHECKS = ("edge_ink", "orphan", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
           "pitch_free_ignored", "cell_flags", "cell_size", "page_pitch", "half_width", "pin_slots", "pin_stale", "layout_slots", "seal_blank",
-          "cut_through", "geo_ref_ok", "block_tall", "align_drift", "inner_gap", "erased", "bbox_drop")
+          "cut_through", "geo_ref_ok", "block_tall", "align_drift", "inner_gap", "erased", "bbox_drop", "gutter_ink")
 
 
 def _engine(book: str):
@@ -114,6 +117,9 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
     if judge is None:
         c["cut_through_off"] = 1
         print(f"⚠️ {book}：没有 U-Net 归属裁判（torch／权重），cut_through 不跑", file=sys.stderr)
+    from ..steps.border_detect import BorderDetectStep, _expand_pages
+    bd = ctx.params_for(BorderDetectStep())
+    grid_pages = set(_expand_pages(bd.column_grid_pages)) if bd.column_grid_pages else set()
     margins = {}
     halves = []                                                    # 本册夹注半格宽中位要全册算，先过一遍
     for key in keys:
@@ -133,6 +139,15 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             continue
         c["pages"] += 1
         gate = store.read(book, "column_gate", page_key(page), "gate_manifest")
+        # 网格穿字只看正文页（闸收了过半的列）：书衣、空白页的版心墨是纸纹／界行本身，分数没意义（脉经 02 p2/p34/p77）
+        if b is not None and gate is not None and (ctx.book.column_grid or page in grid_pages) \
+                and sum(c_.admitted for c_ in gate.columns) >= max(1, len(gate.columns) / 2):
+            score = _gutter_ink(ctx, b, page, bd.ink_threshold)
+            if score is not None and score > ss.GUTTER_INK_WARN:
+                rows["gutter_ink"].append((book, page, "-", round(score, 2),
+                                           "网格线穿字" + ("（本册配置开了 grid_free_fallback）" if bd.grid_free_fallback
+                                                         else "（没开 grid_free_fallback）")))
+                c["gutter_ink"] += 1
         if gate is not None:
             for hit in ss.colnet_page(gate):
                 rows["colnet_page"].append((book, page, hit["col"], hit["ratio"], f"带宽 {hit['width']}px"))
@@ -304,6 +319,16 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
         rows["frame_margin"].append((book, h["page"], h["side"], h["dev"],
                                      f"外框到页边 {h['dist']}px，同奇偶页中位 {h['median']}px"))
         c["frame_margin"] += 1
+
+
+def _gutter_ink(ctx, borders, page: int, ink_threshold: int) -> float | None:
+    """网格穿字分（`border_detect.gutter_ink_score`）；读不到原页就 None。"""
+    from ..steps.border_detect import gutter_ink_score
+    try:
+        gray = ctx.raw_page(page)
+    except Exception:  # noqa: BLE001
+        return None
+    return None if gray is None else gutter_ink_score(borders.to_result(), gray, ink_threshold)
 
 
 def _geo_ref_ok(conf: dict, shifted: set, col: int, o: dict) -> bool:
