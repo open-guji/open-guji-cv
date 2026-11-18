@@ -135,6 +135,10 @@ def cmd_plan(a) -> int:
     man = pack_info(ws, book, label)
     cmd = [*GUJI, "cellvotes", "draft", book, "--site-book", text_id, "--rev", rev, "--out", draft, "-w", ws]
     cmd += ["--from-kv"] if os.environ.get("CELLREVIEW_TOKEN") else []
+    if a.allow_empty:          # 零票册（殿本 21–99 册旧单，ZM 11-18）：draft 当场读网站确认两种记法都是 0 条才出空草稿
+        if not os.environ.get("CELLREVIEW_TOKEN"):
+            sys.exit("✗ --allow-empty 要当场从网站读票确认零票：设 CELLREVIEW_TOKEN")
+        cmd += ["--allow-empty"]
     if man:
         cmd += ["--pack", label]
     elif a.cord:
@@ -159,6 +163,7 @@ def cmd_plan(a) -> int:
         "pack_cv_version": (man or {}).get("cv_version"), "cord": None if man else str(a.cord),
         "pages": pages, "full_book": not a.voted_pages_only, "engine": engine,
         "engine_commit": engine_head(Path(engine)) if engine else None,
+        **({"empty_confirmed": meta["empty_confirmed"]} if meta.get("empty_confirmed") else {}),
         "recheck": sum(1 for ln in (draft / "recheck.tsv").read_text(encoding="utf-8").splitlines()[1:] if ln.strip())
         if (draft / "recheck.tsv").exists() else 0,
         "created": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -329,7 +334,9 @@ def cmd_apply(a) -> int:
     note = (f"{book} 精校一轮：{plan['rev']} 的 {plan['ready']} 条人裁（{plan['batch']}），待审单 {new_rev}")
     issue = [sys.executable, HERE / "republish.py", "issue", "--book", book, "-w", ws, "--export-dir", export,
              "--rev", new_rev, "--book-text", a.book_text, "--note", note,
-             "--held-file", Path(plan["draft_dir"]) / "held.tsv"]
+             "--held-file", Path(plan["draft_dir"]) / "held.tsv",
+             # 落完票、新单 0 格＝这一章审完了：照样换成空单、升 book-text，别让旧单挂在线上（ZM 11-17 殿本 vol08 008-r10）
+             "--allow-empty"]
     if rows:
         issue += ["--recheck", recheck]
     if engine != CV:
@@ -514,6 +521,8 @@ def main(argv=None) -> int:
     p.add_argument("--engine", help="出单版 cv 的 worktree（重跑用它；缺省本仓，须就是包的 cv_commit）")
     p.add_argument("--recheck-extra", help="另加复审的格（同 recheck.tsv 格式）：别处发现的疑点，拿不准的回网站再看")
     p.add_argument("--voted-pages-only", action="store_true", help="只重跑有票的页（旧做法；缺省全册 seed_admit）")
+    p.add_argument("--allow-empty", action="store_true",
+                   help="这张单确实没人投也照出计划（交 guji cellvotes draft --allow-empty：要 CELLREVIEW_TOKEN，当场读网站两种记法都 0 条才放）")
     p.add_argument("--no-pull", action="store_true")
     p = sp.add_parser("apply")
     p.add_argument("--book", required=True)

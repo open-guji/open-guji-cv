@@ -130,6 +130,16 @@ def sh(cmd, tries: int = 3, **kw) -> subprocess.CompletedProcess:
     return r
 
 
+def fail_reason(out: str, tail: int = 300) -> str:
+    """失败输出里取真原因：最后一条以 ✗ 开头的行（连同它后面的几行）；没有就取末尾。以前取末尾 300 字，
+    常是前面的提示行（殿本 vol02、vol16 的 why 抄成了「vol89 … 页表 rev 不符」，真原因单子体检在后面，ZM 11-17）。"""
+    lines = out.strip().splitlines()
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].lstrip().startswith("✗"):
+            return " ".join(x.strip() for x in lines[i:i + 4])[:tail]
+    return out.strip()[-tail:]
+
+
 def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_unlanded: str = "") -> dict:
     env = {**os.environ, "GUJI_WORKSPACE": str(ws), "PYTHONIOENCODING": "utf-8"}
     label, rev = d["main"], d["online_rev"]
@@ -141,7 +151,9 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_u
     if sh([*GUJI, "source", "pull", book, "-w", str(ws)], cwd=CV, env=env).returncode:
         return {"verdict": "blocked", "why": "guji source pull 失败"}
     pl = sh([sys.executable, HERE / "proof_cycle.py", "plan", "--book", book, "-w", str(ws), "--no-pull",
-             "--pack", label, "--engine", str(eng), "--reviewer", reviewer], cwd=CV, env=env)
+             "--pack", label, "--engine", str(eng), "--reviewer", reviewer,
+             # 判 go 的理由是零票：plan 照出空计划（draft 当场读网站再核一遍是 0 票，不是就拒）
+             *(["--allow-empty"] if (d.get("status") or {}).get("voted") == 0 else [])], cwd=CV, env=env)
     plan_path = ws / "reports" / book / "_cycle" / rev / "plan.json"
     if pl.returncode or not plan_path.exists():
         return {"verdict": "blocked", "why": "plan 失败：" + (pl.stdout + pl.stderr).strip()[-300:]}
@@ -167,7 +179,7 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_u
     if ap.returncode:
         subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
         shutil.rmtree(sandbox, ignore_errors=True)
-        return {"verdict": "blocked", "why": f"apply 失败（退出码 {ap.returncode}）：" + (ap.stdout + ap.stderr).strip()[-300:],
+        return {"verdict": "blocked", "why": f"apply 失败（退出码 {ap.returncode}）：" + fail_reason(out),
                 "log": str(log)}
     new_rev = rp.next_rev(rev, rp.chapter_of(book))
     shutil.rmtree(sandbox, ignore_errors=True)       # 云端盘小：沙箱 0.3–5.6GB，用完即清
