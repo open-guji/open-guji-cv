@@ -63,7 +63,7 @@ class CellShrinkParams(BaseModel):
     `grow`）。缺省关＝旧行为。开（全唐文嘉慶本）：版框粗到 20 行，只有中间几行跨度满宽，毛边当「线外有墨」，
     第 1 列、列首、列尾格的字块整条带着框线，库首选认歪（功→可、明→所；Sheldon 11-03 标 9 格）。"""
 
-    long_rule_outer_only: bool = False
+    long_rule_outer_only: bool = True
     """剥界行／版框竖线（extractor.strip_long_rule）只认贴着图块外沿 LONG_RULE_OUTER 宽以内的一段。缺省关＝旧行为。
     开（全唐文）：单字成列（「制」「敕」）时字缘就是这个字自己，刂 落在字缘外、列首又是列尾，长竖钩连到格底，
     被当拐角框线整条抹掉（009:33:7:5、009:40:4:5，台账 R038）。"""
