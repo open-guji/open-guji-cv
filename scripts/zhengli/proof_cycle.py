@@ -135,6 +135,10 @@ def cmd_plan(a) -> int:
     man = pack_info(ws, book, label)
     cmd = [*GUJI, "cellvotes", "draft", book, "--site-book", text_id, "--rev", rev, "--out", draft, "-w", ws]
     cmd += ["--from-kv"] if os.environ.get("CELLREVIEW_TOKEN") else []
+    if a.allow_empty:          # 零票册（殿本 21–99 册旧单，ZM 11-18）：draft 当场读网站确认两种记法都是 0 条才出空草稿
+        if not os.environ.get("CELLREVIEW_TOKEN"):
+            sys.exit("✗ --allow-empty 要当场从网站读票确认零票：设 CELLREVIEW_TOKEN")
+        cmd += ["--allow-empty"]
     if man:
         cmd += ["--pack", label]
     elif a.cord:
@@ -159,6 +163,7 @@ def cmd_plan(a) -> int:
         "pack_cv_version": (man or {}).get("cv_version"), "cord": None if man else str(a.cord),
         "pages": pages, "full_book": not a.voted_pages_only, "engine": engine,
         "engine_commit": engine_head(Path(engine)) if engine else None,
+        **({"empty_confirmed": meta["empty_confirmed"]} if meta.get("empty_confirmed") else {}),
         "recheck": sum(1 for ln in (draft / "recheck.tsv").read_text(encoding="utf-8").splitlines()[1:] if ln.strip())
         if (draft / "recheck.tsv").exists() else 0,
         "created": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -303,10 +308,13 @@ def cmd_apply(a) -> int:
     if not a.dry_run:
         old_char = rp.book_text_dir(Path(a.book_text), plan["text_id"]) / f"{plan['chapter']}.char.json"
         new_char = export / f"{plan['chapter']}.char.json"
-        sp = split_changes(old_char, new_char, human_chars_of(ws, book), codepoint_map(ws, book))
+        sp = split_changes(old_char, new_char, human_chars_of(ws, book, sandbox), codepoint_map(ws, book))
         if sp["norm"] and list(_cells(old_char)) == list(_cells(new_char)):
             revert_cells(new_char, {a_: o for a_, o, _ in sp["norm"]})   # 只差码位归一的格，文本留旧字
             log.note(f"只差码位归一（不算改字、不算推翻人裁）{len(sp['norm'])} 格，文本留旧字")
+        if sp["keep"] and list(_cells(old_char)) == list(_cells(new_char)):
+            revert_cells(new_char, {a_: o for a_, o, _ in sp["keep"]})   # 机器无字（遮挡）而旧字是人裁：留人裁字、不复审
+            log.note(f"机器无字（印章遮挡等）而旧字是人裁 {len(sp['keep'])} 格，文本留人裁的字、不进复审")
         if list(_cells(old_char)) != list(_cells(new_char)) and sp["overrule"]:
             # 格号变了（增删格、改号）：按格号比的「推翻人裁」会把别的块图的字当旧字退回；交 republish 按格级对照表处理（ZM 11-10）
             log.note(f"格号有变：按格号比出的「机器推翻人裁」{len(sp['overrule'])} 格不按格号退回，交格级对照表与新单复审")
@@ -318,7 +326,7 @@ def cmd_apply(a) -> int:
                  + (f"（{'、'.join(f'{x}:{o}→{n}' for x, o, n in sp['overrule'][:10])}）" if sp["overrule"] else ""))
         dr = Path(plan["draft_dir"]) / "recheck.tsv"
         rows = [ln for ln in dr.read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if dr.exists() else []
-        rows += [f"{x}\t机器改判「{o or '□'}」→「{n or '□'}」，推翻人裁，请核\t\t\t" for x, o, n in sp["overrule"]]
+        rows += [f"{x}\t机器改判「{o or '□'}」→「{n or '□'}」，推翻人裁，请核\t\t{o}\t" for x, o, n in sp["overrule"]]   # 第 4 列旧人裁的字：出单门据此归一比对
         recheck.write_text("格位\t说明\t旧人裁\t旧人裁的字\t旧人裁时间\n" + "".join(r + "\n" for r in rows), encoding="utf-8")
 
     # 5. 一条命令出单：过出单门、换单门，传图、存包、升 book-text、推库、只发这一章、等发布、冒烟
@@ -326,7 +334,9 @@ def cmd_apply(a) -> int:
     note = (f"{book} 精校一轮：{plan['rev']} 的 {plan['ready']} 条人裁（{plan['batch']}），待审单 {new_rev}")
     issue = [sys.executable, HERE / "republish.py", "issue", "--book", book, "-w", ws, "--export-dir", export,
              "--rev", new_rev, "--book-text", a.book_text, "--note", note,
-             "--held-file", Path(plan["draft_dir"]) / "held.tsv"]
+             "--held-file", Path(plan["draft_dir"]) / "held.tsv",
+             # 落完票、新单 0 格＝这一章审完了：照样换成空单、升 book-text，别让旧单挂在线上（ZM 11-17 殿本 vol08 008-r10）
+             "--allow-empty"]
     if rows:
         issue += ["--recheck", recheck]
     if engine != CV:
@@ -372,22 +382,35 @@ def _cells(char_json: Path) -> dict[str, str]:
     return {c["a"]: c.get("c") or "" for p in d.get("pages") or [] for col in p.get("columns") or [] for c in col.get("cells") or []}
 
 
-def human_chars_of(ws: Path, book: str) -> dict[str, str]:
-    """每格最新一条定字人裁的字（{格位: 字}；无字＝""）。读数据目录事件，口径同 pending_route.deciding。"""
-    from pending_route import cell_of, deciding
-    last: dict[str, tuple[str, str]] = {}
-    if str(rp.CV) not in sys.path:
-        sys.path.insert(0, str(rp.CV))
-    from open_guji_cv.core.event_files import RevGate, iter_event_dicts
-    gate = RevGate(books_dir=rp.data_dir(ws) / "books")   # 换图源：切过的册只认锚里页表 rev 相符的
-    for e in iter_event_dicts(rp.data_dir(ws) / "feedback" / "events", gate=gate):
-        k = deciding(e)
-        c = cell_of(e, book) if k else None
-        if c and str(e.get("ts", "")) >= last.get(c, ("", ""))[0]:
-            last[c] = (str(e.get("ts", "")), (e.get("payload") or {}).get("shape") or "")
-    if gate.note():
-        print(f"  ⓘ {gate.note()}", file=sys.stderr)
-    return {c: ch for c, (_, ch) in last.items()}
+def human_chars_of(ws: Path, book: str, products: Path | None = None) -> dict[str, str]:
+    """每格**现在采信**的定字人裁（{格位（无册前缀）: 字}）。
+
+    口径只有一个：cv `feedback.lookup.human_chars`（过绑定表：valid／rebound 才认，换图源后 unanchored／review／void 的老裁决
+    不算；认字形库撤下标记、图片格作废）——seed_admit 的人裁通道用的就是它。11-13 之前这里自己读事件、只按格号取最后一条，
+    换图源后失效的老裁决也被当成「人裁」，机器一改字就写成「机器改判，推翻人裁」（殿本 vol03／05／08／09／18／20 的 14 条假复审）。
+    ``products``：绑定表对着哪份产物算（沙箱产物根，缺省工作区自己的）；出单是在重跑后的产物上，要传沙箱。"""
+    env = {"GUJI_WORKSPACE": str(ws), **({"GUJI_PRODUCTS_DIR": str(products)} if products else {})}
+    old = {k: os.environ.get(k) for k in env}
+    os.environ.update(env)
+    try:
+        if str(rp.CV) not in sys.path:
+            sys.path.insert(0, str(rp.CV))
+        from open_guji_cv.feedback.bindings import book_bindings
+        from open_guji_cv.feedback.lookup import human_chars
+        try:
+            book_bindings(book)          # human_chars 自己算绑定表出错时会悄悄退回「按格号」（旧口径）：这里先算一遍，出错就停
+        except Exception as e:           # noqa: BLE001 —— 常见：没 guji db pull（缺 glyph.db）、产物沙箱缺 Step3
+            raise RuntimeError(f"绑定表算不出来（{type(e).__name__}: {e}）：先 `guji db pull -w {ws}`（重建 glyph.db）并确认产物根 "
+                               f"{products or rp.products_root(ws)} 有 {book} 的 Step3，再重来；不能退回按格号认人裁（会把失效的老人裁当成被机器推翻）") from e
+        got = human_chars(book)
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    pre = f"{book}:"
+    return {k[len(pre):] if k.startswith(pre) else k: v for k, v in got.items()}
 
 
 def codepoint_map(ws: Path, book: str) -> dict[str, str]:
@@ -408,7 +431,8 @@ def codepoint_map(ws: Path, book: str) -> dict[str, str]:
 def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: dict[str, str] | None = None) -> dict:
     """新导出对 book-text 现文逐格比，变了的格分四种：最新人裁就是新字＝human（人裁改字）；
     旧字正是最新人裁、机器改成别的＝overrule（机器推翻人裁，留人裁的字、复审）；两边只差一个码位归一（`norm`，
-    如 别→別）＝norm（不算改字、不算推翻，文本留旧字、不上单）；其余＝machine（机器改字，按新结果）。
+    如 别→別）＝norm（不算改字、不算推翻，文本留旧字、不上单）；旧字是最新人裁、新字为空（机器无字，如印章遮挡 admit=false）
+    ＝keep（不是机器改判，文本留人裁字、不进复审）；其余＝machine（机器改字，按新结果）。
     格号两边对不上的（重切）不在这里管，交 republish 的差异单。"""
     nm = norm or {}
 
@@ -416,7 +440,7 @@ def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: d
         return nm.get(c, c)
 
     o, n = _cells(old_char), _cells(new_char)
-    out = {"human": [], "machine": [], "overrule": [], "norm": []}
+    out = {"human": [], "machine": [], "overrule": [], "norm": [], "keep": []}
     for a_ in sorted(set(o) & set(n), key=rp._key):
         if o[a_] == n[a_]:
             continue
@@ -424,6 +448,9 @@ def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: d
             out["norm"].append((a_, o[a_], n[a_]))
             continue
         h = human.get(a_)
+        if h and not n[a_] and u(h) == u(o[a_]):
+            out["keep"].append((a_, o[a_], n[a_]))
+            continue
         k = "human" if h and u(h) == u(n[a_]) else ("overrule" if h and u(h) == u(o[a_]) else "machine")
         out[k].append((a_, o[a_], n[a_]))
     return out
@@ -494,6 +521,8 @@ def main(argv=None) -> int:
     p.add_argument("--engine", help="出单版 cv 的 worktree（重跑用它；缺省本仓，须就是包的 cv_commit）")
     p.add_argument("--recheck-extra", help="另加复审的格（同 recheck.tsv 格式）：别处发现的疑点，拿不准的回网站再看")
     p.add_argument("--voted-pages-only", action="store_true", help="只重跑有票的页（旧做法；缺省全册 seed_admit）")
+    p.add_argument("--allow-empty", action="store_true",
+                   help="这张单确实没人投也照出计划（交 guji cellvotes draft --allow-empty：要 CELLREVIEW_TOKEN，当场读网站两种记法都 0 条才放）")
     p.add_argument("--no-pull", action="store_true")
     p = sp.add_parser("apply")
     p.add_argument("--book", required=True)
