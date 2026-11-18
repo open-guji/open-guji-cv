@@ -276,6 +276,11 @@ _TIGHT_BAND = ("写本界行判带收紧 tight_rule_band（column_warp 书级开
                "siku_zongmu.column clean_column 透传）：开关关着时 column_warp 在殿本 vol12 新图 31 页（每 5 页取 1）上与 origin/dev "
                "af1fa3c4 产物逐字节相同，279 张清理后列图逐字节相同；scripts/code_equiv.py check，2026-11-03")
 
+_QTW_STROKE_1118 = ("全唐文切分丢笔两个书级开关（缺省关、不进参数 dump；台账 R033／R038）：column_warp.inner_bar_span（seg.profile column_text_band 加 inner_bar_span、"
+                    "impl.keben.column clean_column 透传）、cell_shrink.long_rule_outer_only（extractor strip_long_rule 加 outer_only）：开关关着时 column_warp、"
+                    "cell_shrink 在全唐文 001 册 7 页（36,47,106,115,121,130,145）、009 册 3 页（33,40,55）、014 册 1 页（108）上与 origin/dev 30febf9d "
+                    "产物逐字节相同（上游 b2 包 cv0.7.60）；scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn，2026-11-18（全唐文·切分）")
+
 _JZ_FREE = ("雙行小注两行字数可不等 jiazhu_free_split（row_segment 书级开关，缺省关；siku_zongmu.row_boundaries 加 _free_split）："
              "开关关着时 row_segment 在殿本 vol12 新图 31 页（每 5 页取 1）上与 origin/dev 0a5ba0b7 产物逐字节相同；"
              "关着时只多一个空的 half_side 判断，全唐文等走同一 row_segment 的书同理；scripts/code_equiv.py check，2026-11-03")
@@ -1970,6 +1975,26 @@ ENTRIES: tuple[Equiv, ...] = (
           new='0dda3332a7481817a2ec5292e2e1bb9784cc5e16bc5fe3deef38d3942b20851b',
           old='fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b',
           evidence="row_segment 加书级参数 cut_judge_scale（判官画布缩放上限，缺省 1.0＝关，取值 (0.3, 1.0]；get_judge/UNetJudge/_to_canvas 加缺省参数，指纹后缀 1.0 为空串）：脉经第 2 册 10–21 页（灰纸彩图、双行小注多）row_segment 与 origin/dev（含 #1650）产物逐字节相同；scripts/code_equiv.py check，2026-11-18（MJ）"),
+    Equiv(module="open_guji_cv.steps.column_warp",
+          new="565100503a058f1d17cfd193a549dc3a2fe164adc63e1c084eaeaee1f0cb86ed",
+          old="991a42b0a7af0825750f929e9892e1a397b56a224e709b858dbbec2716724c65",
+          evidence=_QTW_STROKE_1118),
+    Equiv(module="open_guji_cv.seg.profile",
+          new="b3170e22edf3bd5301d0d2b062521a6da0de401b0f1de20f9777d7569b843855",
+          old="cf88eafeacd8a4c224239bc9e7b0e2ec5332319e5022fff13809245cd3ea2f50",
+          evidence=_QTW_STROKE_1118),
+    Equiv(module="open_guji_cv.impl.keben.column",
+          new="bcb5c0078eedd7d5ef204fc159cb0184890fb9ac0b8412eedb3d620f37658faf",
+          old="57eac44b46c0ce8126d45774bcf309f6a628aec75259f3692568ff7456a8e54b",
+          evidence=_QTW_STROKE_1118),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="dca88bf9728446c7ea5ecf372f3fd05ea88470b0dcc98273a4251fc3b8f01980",
+          old="94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e",
+          evidence=_QTW_STROKE_1118),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="69f99ac57ba0c8121a646d33bddd607d6c5a519a678ce7ce796a9faec37d377b",
+          old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
+          evidence=_QTW_STROKE_1118),
 )
 
 
