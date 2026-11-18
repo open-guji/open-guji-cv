@@ -53,6 +53,18 @@ models/glyph_sim_base_v1/   # 通用底座 v1（2026-11-17）：殿本、史記�
 底座的 `calib.json` 是通用保守包络表（对没见过的书取最不利的折算）。版本就是目录名的 `_v<N>`：并进新书重训时出 `glyph_sim_base_v2/`，
 旧目录不动，书配置里写的路径决定用哪一版。用法、门槛、重训与换版步骤见 guji-manager `doc/参考/5a相似度模型.md`。
 
+## `stroke_evidence_v1/`（5b 笔画证据，2026-11-18）
+
+册配置 `font.stroke_evidence` 开关用的三个文件（`clustering/stroke_evidence.py`，缺省关）：
+
+```
+models/stroke_evidence_v1/net.pt            # 笔段检测权重（合成数据训，不含任何书的刻例）
+models/stroke_evidence_v1/skel.npz          # GlyphWiki KAGE 骨架索引：97,681 字、149,881 个地区形
+models/stroke_evidence_v1/skel_forms.json   # 字 → 各地区形在索引里的位置
+```
+
+换权重或重建索引出 `stroke_evidence_v2/`，旧目录不动。原理、开关、证据见 `doc/design/5b-笔画证据.md`。
+
 ## `partition_unet_v2/model.pt`（11 MB，2026-09-14 起现役）
 
 Step3 候选池裁判：类别无关的逐像素归属 U-Net（`open_guji_cv/utils/cut_select.py`）。只用合成粘连对训练
