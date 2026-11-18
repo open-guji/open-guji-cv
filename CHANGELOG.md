@@ -20,6 +20,10 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.62] - 2026-11-18
+
+- 发版说明（A31 11-18，史記 patch 线，r80 用）：v0.7.61 + #1617 + #1635（清边），PATCH，不含 dev 线其他改动。normalize.py 与 dev 同；不登 code_equiv（史記 glyph_match 起过期）。tag 在 main 68ea912（#1644）。
+
 ## [0.7.61] - 2026-11-17
 
 - 发版说明（A31 11-17，史記 patch 线，r79 用）：v0.7.59 + #1638（dev 10ebd48 cherry-pick），PATCH，**不含** dev 线其他改动。冲突手解：`segment_column` 只加 `cut_glyph_line`；code_equiv 按本线重算登 `_GLYPH_LINE_0761`（row_segment a57cd50d→cb32ff35、row_boundaries 8055bbc3→158f4327）。tag 在 main 7781c20（#1639）。
