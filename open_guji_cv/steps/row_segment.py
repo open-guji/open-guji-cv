@@ -946,6 +946,9 @@ class RowSegmentParams(BaseModel):
     #: 字大（脉经 ≈156px）、笔画粗时，正确的 U-Net 引导缝常穿墨 20–55px、分歧几十到两百，绝对门槛全挡在外，格线切进下字头（善、黄、痛）。
     #: 只在最终那遍切用。书级参数；0＝关（缺省，不进参数哈希）。
     adopt_rel: float = 0.0
+    #: **雙行小注噪点段否决门槛**（2026-11-18 A22 U3，`jiazhu_split.link_runs` 的 `cc_min`）：段中位「两侧较小最大连通体」低于这么多 px
+    #: 整段当纸面碎点否决。缺省 500 是殿本小字标定；脉经小字笔画细（单字最大连通体 200–600px）取 200。书级参数；500＝缺省（不进参数哈希）。
+    jiazhu_cc_min: int = 500
     #: 原 `seal_gap_slots_empty`、`seal_inkcut`（大印下表中间空格位记空、剔印泥再切）两个书级开关 2026-11-10 搬进书级代码：
     #: 缺省实现 `impl/keben/seal_ink`（不做），史記书仓 `code/seal_ink.py` 覆盖。见 `_RETIRED`。
     #: **备选切法**（2026-11-03，史記文淵閣本第 7 轮，设计稿 https://claude.ai/artifact/NVqgK8BS2GietVShFnoqUU）：
@@ -1062,6 +1065,8 @@ class RowSegmentParams(BaseModel):
             for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
                 if not getattr(self, k_):
                     d.pop(k_, None)
+            if self.jiazhu_cc_min == 500:
+                d.pop("jiazhu_cc_min", None)
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
@@ -1198,6 +1203,8 @@ class RowSegmentStep(Step):
             raise ValueError(f"row_segment.cut_gap_guard：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         if p.cut_free_seam and "cut_free_seam" not in inspect.signature(segment_column).parameters:
             raise ValueError(f"row_segment.cut_free_seam：本册套书的 {RB.__name__}.segment_column 没有这个参数")
+        if p.jiazhu_cc_min != 500 and "jiazhu_cc_min" not in inspect.signature(segment_column).parameters:
+            raise ValueError(f"row_segment.jiazhu_cc_min：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
             if getattr(p, k_) and k_ not in inspect.signature(segment_column).parameters:
                 raise ValueError(f"row_segment.{k_}：本册套书的 {RB.__name__}.segment_column 没有这个参数")
@@ -1373,6 +1380,7 @@ class RowSegmentStep(Step):
                     **({"cut_free_seam": p.cut_free_seam} if p.cut_free_seam and final else {}),
                     **{k_: getattr(p, k_) for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel")
                        if getattr(p, k_) and final},
+                    **({"jiazhu_cc_min": p.jiazhu_cc_min} if p.jiazhu_cc_min != 500 else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:

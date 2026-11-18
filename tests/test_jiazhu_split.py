@@ -109,6 +109,13 @@ def test_link_runs_does_not_bridge_two_in_a_row():
     assert set(jz.link_runs(ents)) == set()               # 防桥接自我扩散
 
 
+def test_link_runs_cc_min_is_book_level():
+    """噪点段否决门槛可按书调（`row_segment.jiazhu_cc_min`，2026-11-18 A22 U3）：脉经小字单字最大连通体 200–600px。"""
+    small = [(i, (92.0, 300.0)) for i in range(3, 6)]
+    assert jz.link_runs(small) == {}                              # 缺省 500：当噪点
+    assert set(jz.link_runs(small, cc_min=200)) == {3, 4, 5}      # 书级 200：认成段
+
+
 def test_link_runs_vetoes_noise_run_by_median_strength():
     """纸面碎点段 span/缝/均衡全能骗过，只有连通体结构分得开。"""
     noise = [(i, (92.0, 300.0)) for i in range(3, 10)]
