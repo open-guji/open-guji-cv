@@ -2,6 +2,7 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+- Step3 `row_segment` 1.55：格位表说有字的格判空收口（A22 各书切分统一优化 U1，Sheldon 11-18 定「不怕动指纹」）。`segment_column` 读 `slot_mask`：表说有字的格，框线判空 `_frame_only` 只认「去掉跨格长竖后几乎没墨」，不认「剩下的是贴框角的细横」（1.51 曰、1.52 二三、1.53 细一、1.54 粗一四回少一格都栽在这条上）；墨不到 `min_ink_ratio` 的居中细横（「一」）不再要求两邻有字，按列端口径（宽 ≤0.85 列宽、纵向居格中 0.2–0.8）救回。`frame_only_edge_cells`（1.48）本就是「墨全贴版框线」口径，不变。没有格位表（`layout_prior` 没命中）的列逐字节不变；殿本、全唐文等用格位表的书 `row_segment` 指纹变、Step3 起过期。
 - `guji seg check` 加页级检查 `gutter_ink`（A22 各书切分统一优化 U6，Sheldon 11-18 定）：网格模式（书级 `column_grid` 或 `column_grid_pages` 点名页）的正文页（闸收了过半的列），内竖线穿字分（`border_detect.gutter_ink_score`）> 0.5 报出，一页一行、col 记 `-`。只报不改切分；新书首跑就能看见「插值线整片穿字」（脉经 02 册旧包报 p15 0.89，书衣、空白页不报）。
 - 新书级开关 `row_segment.cut_repair`（缺省关、开关本身不进参数哈希；A22 各书切分统一优化 U2，Sheldon 11-18 定）：一行开史記 k24–k26、脉经照抄的切点修整串（`cut_gap_guard` 0.08、`cut_free_seam` 0.35、`cut_gap_keep_glyph`、`cut_white_row` 0.35、`cut_glyph_line` 0.35），单写的项照单写的；展开后与逐项写参数 dump 相同、指纹一致。劈字判据 `_split_glyphs` 与两个换线护栏抽进 `seg/seam.split_blobs`／`blobs_keep_sides`（常数原值，行为不变）。
 - 新书级参数 `row_segment.jiazhu_cc_min`（px，缺省 500＝原值、不进参数哈希；A22 各书切分统一优化 U3，Sheldon 11-18 定）：雙行小注段噪点否决门槛（`jiazhu_split.link_runs` 的 `cc_min`）按书调。脉经小字单字最大连通体 200–600px，书仓 k1 为改这一个数整段抄了 `link_runs`；开了本参数后书仓钩子只需留段端收编。
