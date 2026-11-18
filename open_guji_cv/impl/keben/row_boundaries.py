@@ -1856,6 +1856,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     cut_white_row: float = 0.0,
                     cut_glyph_line: float = 0.0,
                     straight_seam_ink: bool = False,
+                    adopt_rel: float = 0.0,
                     grid_adjust=None,
                     jiazhu_heads=None,
                     half_a_left=None,
@@ -1976,6 +1977,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       墨多的那边；逐列取「上格墨最低行之下、下格墨最高行之上」离原线最近的 y（±这么多格高内、不越过上格顶下格底往里
       `FREE_SEAM_MARGIN`，不限坡度），kind `glyph_line`，`chosen_by="glyph"`。离两边一样近时按墨多的那边（少的那边
       ≤`GLYPH_LINE_MAJ`）；仍拿不准、被劈块高过 `GLYPH_LINE_TALL` 格（两字粘成一块）、某列上下墨重叠，都不动。
+    - `adopt_rel`（倍数，0＝关；2026-11-18，脉经）：L3 扩池后绝对门槛没有可选候选、现选分歧 ≥ `ADOPT_REL_MIN` 时，
+      取分歧 ≤ min(`ADOPT_REL_CAP`, adopt_rel×现选分歧) 的扩池候选（干净格线仍只换不穿墨的），见 `_adopt_expanded`。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -2435,6 +2438,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             ok = [i for i in range(n_old, len(cands))
                   if cands[i].dis_unet is not None and cands[i].dis_unet <= ADOPT_DIS
                   and cands[i].seam_ink <= ink_cap]
+            if not ok and adopt_rel > 0:
+                return _adopt_rel_pick(cands, n_old, dis_chosen, ink_cap, adopt_rel)
             if not ok:
                 return None
             return max(ok, key=lambda i: (cands[i].agree or 0.0, -cands[i].seam_ink))
@@ -2614,6 +2619,20 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
 
 GAP_CORRIDOR_Q = 10   # 白走廊取逐列白段长的这个百分位（容几个霉点、毛边列）
 GAP_INK_COLS = 0.02   # 切线压墨的列数 > max(2, 内容宽 × 这么多) 就不算在白缝里
+
+
+def _adopt_rel_pick(cands, n_old: int, dis_chosen: int, ink_cap: int, adopt_rel: float) -> int | None:
+    """`adopt_rel` 相对改选（segment_column 文档；2026-11-18 脉经）：现选分歧 ≥ `ADOPT_REL_MIN` 时，扩池候选（下标 ≥ `n_old`）里
+    分歧 ≤ min(`ADOPT_REL_CAP`, adopt_rel×现选分歧) 的取分歧最小的那条（同分取穿墨少的）；`ink_cap` 为 0（干净格线）时只认不穿墨的。
+    没有返回 None。"""
+    from ...seg.cut_select import ADOPT_REL_CAP, ADOPT_REL_MIN
+    if adopt_rel <= 0 or dis_chosen < ADOPT_REL_MIN:
+        return None
+    cap = min(ADOPT_REL_CAP, adopt_rel * dis_chosen)
+    ok = [i for i in range(n_old, len(cands))
+          if cands[i].dis_unet is not None and cands[i].dis_unet <= cap
+          and (ink_cap > 0 or cands[i].seam_ink <= 0)]
+    return min(ok, key=lambda i: (cands[i].dis_unet, cands[i].seam_ink)) if ok else None
 
 
 def _gap_corridor(ink_bin: np.ndarray, ys, y_line: float, cap: int, clean: bool = False) -> float:
