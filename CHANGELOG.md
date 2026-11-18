@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.70] - 2026-11-18
+
+- 发版说明（ZM 11-18，殿本 patch 线）：v0.7.69（＝v0.7.67 + #1586 16 对异体边）+ #1655（seed_admit 书级开关 `vis_ruling_ctx_subclasses`，缺省空、行为不变；降待审线要，殿本 patch 线此前不含）+ #1672 的 row_segment 1.54（列端表空格里居格中、没满宽的粗横「一」不当框线记空：`_blank_frame_junk` 把满宽横画行算成非 charlike，列首「一」被记空、格数少一，殿本 vol21 186:7；整册 vol21 复核只此一处变化，贴格上下沿的版框线短横不放过），PATCH，**不含** dev 线其他改动。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变。
+
 ## [0.7.69] - 2026-11-18
 
 - 发版说明（A31 11-18，殿本 patch 线，ZM 要）：v0.7.67 + #1586（关系图补 16 对兄弟异体边：`config/variants/local_edges.json` 加 16 条 `local:keben`、`variants.json` 同步加标签；三书人裁 5b 补边清单 A 档，Sheldon 11-16 人审定），PATCH，**不含** dev 线（v0.7.65／66／68）与史記线其他改动。只动数据不动代码；`seed_admit` 读关系层判「有无直接异体边」，含这 32 字的格（殿本约 40 格）结果可能变。语料表重登（两份异体文件＋补登 `sb/rules.yaml`，sha 与 b27 一致）。**配底库 b29**（＝b27 换这两份异体文件），钉 b27 的册在本版上报 CorpusDrift，要改钉后从 `seed_admit` 起重跑。
