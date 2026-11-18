@@ -10,7 +10,7 @@ from __future__ import annotations
 import inspect
 from typing import Literal
 
-from pydantic import BaseModel, model_serializer, model_validator
+from pydantic import BaseModel, field_validator, model_serializer, model_validator
 
 from ..core.book import _expand_pages
 from ..core.spec import StepSpec, column_key
@@ -1060,6 +1060,14 @@ class RowSegmentParams(BaseModel):
             if not self.page_map_overrides:
                 d.pop("page_map_overrides", None)
         return d
+
+    @field_validator("cut_judge_scale")
+    @classmethod
+    def _check_judge_scale(cls, v: float) -> float:
+        # 0.4 判官已崩（字太小），再小没有意义；大于 1 等于放大，画布装不下
+        if not (0.3 < v <= 1.0):
+            raise ValueError(f"row_segment.cut_judge_scale 要在 (0.3, 1.0] 内，给了 {v}")
+        return v
 
     @model_validator(mode="after")
     def _fill_judge_fingerprint(self):
