@@ -6,6 +6,10 @@
 
 ## [未发版]
 
+## [0.7.68] - 2026-11-18
+
+- 发版说明（A31 11-18，**dev 线 patch**，PATCH）：v0.7.66 + #1665（`eval/seg_screen` 加两条墨账：清界行抹笔 `erased`、字框外丢墨 `bbox_drop`，全唐文 R033／R038 复盘；cherry-pick 613f201），不含 v0.7.66 之后 dev 上的其他改动（#1661 row_segment 1.53、#1664 adopt_rel 等）。只读产物与缓存，**不进任何 Step 指纹**，对 v0.7.66 产物全部仍新鲜。要配 guji-manager #667（seg check 处置「cv丢笔」）。底库不变（b27）。
+
 ## [0.7.66] - 2026-11-18
 
 - 发版说明（A31 11-18，**dev 线 patch**，PATCH）：v0.7.65 + #1658（全唐文切分丢笔两个书级开关 `column_warp.inner_bar_span`、`cell_shrink.long_rule_outer_only`，台账 R033／R038；缺省关、不进参数哈希；cherry-pick 33d1991），不含 v0.7.65 之后 dev 上的其他改动。code_equiv 照 #1658 登 5 条（column_warp、seg.profile、impl.keben.column、cell_shrink、clustering.extractor）：这 5 个模块改前在 v0.7.65 与 dev 30febf9 逐字节同，本线登记后经换算与 v0.7.65 相同，**Step 指纹对 v0.7.65 不变**，开关不开的册不过期；开了开关的册按参数指纹从 column_warp 起重跑。底库不变（b27）。
