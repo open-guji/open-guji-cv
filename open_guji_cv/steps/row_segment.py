@@ -933,6 +933,11 @@ class RowSegmentParams(BaseModel):
     #: 被劈的块按离哪边别的墨近整块归那边，逐列取上格墨之下、下格墨之上离原线最近的 y（± 这么多格高内，不限坡度）。
     #: 上下字交错（上字捺尾伸进下格、下字点画顶进上格）。拿不准归哪边、某列上下墨重叠就不动。书级参数；0＝关（缺省，不进参数哈希）。
     cut_glyph_line: float = 0.0
+    #: **大分歧扩池候选相对门槛改选**（2026-11-18，脉经，`row_boundaries._adopt_expanded`）：现选与 U-Net 分歧 ≥ `ADOPT_REL_MIN`（1500px）、
+    #: 绝对门槛（`ADOPT_DIS`/`ADOPT_INK`）没有可选的扩池候选时，取分歧 ≤ min(`ADOPT_REL_CAP`, 这么多倍×现选分歧) 的那条（不限穿墨；干净格线仍只换不穿墨的）。
+    #: 字大（脉经 ≈156px）、笔画粗时，正确的 U-Net 引导缝常穿墨 20–55px、分歧几十到两百，绝对门槛全挡在外，格线切进下字头（善、黄、痛）。
+    #: 只在最终那遍切用。书级参数；0＝关（缺省，不进参数哈希）。
+    adopt_rel: float = 0.0
     #: 原 `seal_gap_slots_empty`、`seal_inkcut`（大印下表中间空格位记空、剔印泥再切）两个书级开关 2026-11-10 搬进书级代码：
     #: 缺省实现 `impl/keben/seal_ink`（不做），史記书仓 `code/seal_ink.py` 覆盖。见 `_RETIRED`。
     #: **备选切法**（2026-11-03，史記文淵閣本第 7 轮，设计稿 https://claude.ai/artifact/NVqgK8BS2GietVShFnoqUU）：
@@ -1046,7 +1051,7 @@ class RowSegmentParams(BaseModel):
                 d.pop("cut_free_seam", None)
             if self.cut_judge_scale == 1.0:
                 d.pop("cut_judge_scale", None)
-            for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line"):
+            for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
                 if not getattr(self, k_):
                     d.pop(k_, None)
             if self.page_map == "off":
@@ -1185,7 +1190,7 @@ class RowSegmentStep(Step):
             raise ValueError(f"row_segment.cut_gap_guard：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         if p.cut_free_seam and "cut_free_seam" not in inspect.signature(segment_column).parameters:
             raise ValueError(f"row_segment.cut_free_seam：本册套书的 {RB.__name__}.segment_column 没有这个参数")
-        for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line"):
+        for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
             if getattr(p, k_) and k_ not in inspect.signature(segment_column).parameters:
                 raise ValueError(f"row_segment.{k_}：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         gate: GateManifest = ctx.product("gate_manifest", page)
@@ -1358,7 +1363,7 @@ class RowSegmentStep(Step):
                     **({"snap_cut": p.snap_cut} if p.snap_cut and final else {}),
                     **({"cut_gap_guard": p.cut_gap_guard} if p.cut_gap_guard and final else {}),
                     **({"cut_free_seam": p.cut_free_seam} if p.cut_free_seam and final else {}),
-                    **{k_: getattr(p, k_) for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line")
+                    **{k_: getattr(p, k_) for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel")
                        if getattr(p, k_) and final},
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))

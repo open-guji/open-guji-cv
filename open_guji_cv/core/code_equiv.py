@@ -379,6 +379,9 @@ _R78_0759 = (_R78_1117 + "。史記 patch 线移植（v0.7.57 + #1632 → v0.7.5
 _FREE_SEAM_0757 = (_FREE_SEAM_1117 + "。史記 patch 线移植（v0.7.55 + #1624 → v0.7.57）：同一改动原样 cherry-pick（segment_column 只加 cut_free_seam，本线无 grid_adjust 等钩子），哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
 _GLYPH_LINE_0761 = (_GLYPH_LINE_1117 + "。史記 patch 线移植（v0.7.59 + #1638 → v0.7.61）：同一改动原样 cherry-pick（segment_column 只加 cut_glyph_line，本线无 grid_adjust 等钩子），哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
 _GAP_GUARD_0750 = (_GAP_GUARD_1117 + "。史記 patch 线移植（v0.7.50 + #1606 → v0.7.51）：同一改动原样 cherry-pick，哈希按本线重算，本线未另跑产物比对（A31 2026-11-17）")
+_ADOPT_REL_1118 = ("row_segment 加书级参数 adopt_rel（大分歧扩池候选相对门槛改选，缺省 0＝关、不进参数 dump；row_boundaries 加 _adopt_rel_pick 与 segment_column 参数，"
+                   "cut_select 加 ADOPT_REL_MIN／ADOPT_REL_CAP 常量）：脉经第 2 册 5、13、42、68 页 row_segment 与 origin/dev（5fe272a）产物逐字节相同；"
+                   "scripts/code_equiv.py check，2026-11-18（MJ）")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -1995,6 +1998,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="69f99ac57ba0c8121a646d33bddd607d6c5a519a678ce7ce796a9faec37d377b",
           old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
           evidence=_QTW_STROKE_1118),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="cc71724f9bd2fcec913fb44dc44393bc69d2181b20c12bdf2c4b23e72b997990",
+          old="4ae638f64a5672a57d0a8ce26154dac658c266422b6ee029da5e6bc0b69347af",
+          evidence=_ADOPT_REL_1118),
+    Equiv(module="open_guji_cv.impl.keben.row_boundaries",
+          new="3a182b122aaba3b5f1766e7cc54ae692b7891dbfedf71103c1060142db188fe6",
+          old="8ad1a3a24437f89c79a66853dda7d1fa57508d5cb53daf049a6b0f8ca5a8dd17",
+          evidence=_ADOPT_REL_1118),
+    Equiv(module="open_guji_cv.seg.cut_select",
+          new="cc214ca8c0303f00362a6a326a32441149ba914b21a30b028ba05117c5208a1a",
+          old="fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b",
+          evidence=_ADOPT_REL_1118),
 )
 
 
