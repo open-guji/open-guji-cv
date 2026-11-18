@@ -14,7 +14,12 @@
     5a.2  `groups.shape_stage`：near_group 的格按首位字所属注册组的字形方法判一遍，证据记进 `MatchRec.stage`。
           **只有书级名单 `final` 里的组**、且给字的各组一致时才在这里定字（verdict 回到 same，`via="shape:<组>"`，
           字可以不是 CNN 首位字）。名单缺省空：全部只出证据、不放行。
-    5a.3… 以后的字形方法在 `STAGES` 里往后排，接口同 5a.2：吃 (`StageInput`, 证据 dict) → 可选的定字。
+    5a.3  `groups.pair_clf`：形近字对的按书分类器（本书刻例上按对训的逻辑回归，吃 5a.1 已算好的嵌入）。书配置写了
+          `pair` 才跑。near_group 的格、以及 5a.1 没拦但首位字在分类器文件里有对的格（同字异形的对不在形近字组表里），
+          把文件里含首位字的对逐对问一遍，证据记进 `MatchRec.stage.pair`。只有 `pair.final` 开着、有分类器的各对都给了字
+          且一致、其中有按册留出验收过的对（档 3）、且没有一对归文意时才定字（`via="pair:<对>"`，字可以不是 CNN 首位）。
+          归文意的对（己已巳这类刻本混用的，或刻例够了仍分不开的）只记 `tier: context`。`final` 关着时判决层结论一格不变。
+    5a.4… 以后的字形方法在 `STAGES` 里往后排，接口同 5a.2：吃 (`StageInput`, 证据 dict) → 可选的定字。
 
 ## 书级配置
 
@@ -26,6 +31,8 @@
           #       table: config/near_groups.json ＝本书自己的表（相对路径先找数据目录）；registry: false＝不按注册组拦
           final: [xb, di]                        # 本书实测够准、5a.2 可以直接定字的组（缺省空）
           shape: true                            # false＝不跑 5a.2（只分流）
+          pair: {model: config/groups/pair_clf.json, final: false}   # 5a.3，不写不跑；model 相对路径先找数据目录；
+          #       final: true＝档 3 的对可以在 5a 直接定字（缺省 false：只出证据）
 
 `final` 名单按书、按实测给（人裁刻例上不看整理本的准确率，量法见 doc/design/形近字组-5a分流与第7步对接.md 第五节），
 不从注册表推。各组的模板库、分类器可以按书另建：工作区 `config/groups/ids/<组>.json` 优先于仓里的（`ids_online.bank_path`）。
@@ -33,7 +40,8 @@
 ## 指纹
 
 本模块、`near_route`、`shape_stage`、`groups.methods` 都**不进** `glyph_match` 的 `code_deps`；开着的书靠参数 `stages_sha`
-（`stages_fingerprint`：这几个模块的代码哈希＋形近字组表＋`final` 组的模板库指纹）判过期，不开的书不受影响。
+（`stages_fingerprint`：这几个模块的代码哈希＋形近字组表＋`final` 组的模板库指纹；写了 `pair` 再加 `pair_clf`
+的代码哈希、分类器文件哈希与 `final` 开关）判过期，不开的书不受影响。
 """
 from __future__ import annotations
 
@@ -52,6 +60,8 @@ class StagesConfig:
     route: Any = None                 # near_route.RouteConfig
     final: frozenset = frozenset()
     shape: bool = True
+    pair: str | None = None           # 5a.3 分类器文件（已解析成绝对路径）；None＝不跑
+    pair_final: bool = False
 
     @classmethod
     def from_any(cls, v) -> "StagesConfig | None":
@@ -59,7 +69,7 @@ class StagesConfig:
             return None
         from ..clustering.near_route import RouteConfig
         d = {} if v is True else dict(v)
-        unknown = set(d) - {"route", "final", "shape"}
+        unknown = set(d) - {"route", "final", "shape", "pair"}
         if unknown:
             raise ValueError(f"glyph_match.stages 不认识的键：{sorted(unknown)}")
         r = dict(d.get("route") or {})
@@ -72,11 +82,21 @@ class StagesConfig:
         final = frozenset(d.get("final") or ())
         if final - set(FLOW_GROUPS):
             raise ValueError(f"glyph_match.stages.final 里有没注册的字组：{sorted(final - set(FLOW_GROUPS))}")
-        return cls(route=RouteConfig(**r), final=final, shape=bool(d.get("shape", True)))
+        pr = d.get("pair")
+        pair, pair_final = None, False
+        if pr not in (None, False):
+            pr = {} if pr is True else dict(pr)
+            if set(pr) - {"model", "final"}:
+                raise ValueError(f"glyph_match.stages.pair 不认识的键：{sorted(set(pr) - {'model', 'final'})}")
+            from ..groups.pair_clf import REL_PATH
+            pair, pair_final = _resolve(str(pr.get("model") or REL_PATH), "glyph_match.stages.pair.model"), bool(pr.get("final", False))
+            if not Path(pair).is_file():
+                raise ValueError(f"glyph_match.stages.pair.model 找不到：{pair}")
+        return cls(route=RouteConfig(**r), final=final, shape=bool(d.get("shape", True)), pair=pair, pair_final=pair_final)
 
 
-def _resolve(path: str) -> str:
-    """书自己的形近字组表：相对路径先找数据目录（随中心库走，如 `config/near_groups.json`），再找工作区、仓根。"""
+def _resolve(path: str, what: str = "glyph_match.stages.route.table") -> str:
+    """书自己的文件（形近字组表、5a.3 分类器）：相对路径先找数据目录（随中心库走，如 `config/near_groups.json`），再找工作区、仓根。"""
     from ..core.workspace import REPO_ROOT, data_root, workspace_root
     q = Path(path).expanduser()
     if q.is_absolute():
@@ -84,7 +104,7 @@ def _resolve(path: str) -> str:
     for base in (data_root(), workspace_root(), REPO_ROOT):
         if base is not None and (base / q).exists():
             return str(base / q)
-    raise ValueError(f"glyph_match.stages.route.table 找不到：{path}（数据目录、工作区、仓根都没有）")
+    raise ValueError(f"{what} 找不到：{path}（数据目录、工作区、仓根都没有）")
 
 
 def _code_sha(*mods: str) -> str:
@@ -109,7 +129,11 @@ def stages_fingerprint(v) -> str:
     code = _code_sha("open_guji_cv.steps.glyph_stages", "open_guji_cv.clustering.near_route", "open_guji_cv.groups.shape_stage",
                      "open_guji_cv.groups.methods", "open_guji_cv.groups.ids_online", "open_guji_cv.groups.registry")
     bank = hashlib.sha256(ids_online.fingerprint(cfg.final).encode("utf-8")).hexdigest()[:12] if cfg.final and cfg.shape else ""
-    return f"{code}:{t}" + (f":{bank}" if bank else "")
+    out = f"{code}:{t}" + (f":{bank}" if bank else "")
+    if cfg.pair:
+        from ..groups import pair_clf
+        out += f":pair={_code_sha('open_guji_cv.groups.pair_clf')}.{pair_clf.fingerprint(cfg.pair)}.{int(cfg.pair_final)}"
+    return out
 
 
 @dataclass
@@ -119,6 +143,8 @@ class StageInput:
     groups: tuple                     # 首位字所属的注册字组
     cands: list                       # 库候选 [(字, 分)]
     gray: Any                         # 第 4 步的灰度字块（没归一的）
+    emb: Any = None                   # 5a.1 算好的相似度嵌入
+    partners: tuple = ()              # 形近字组表里首位字的对家
 
 
 @dataclass(frozen=True)
@@ -153,8 +179,19 @@ def stage_shape(inp: StageInput, cfg: StagesConfig, flow_cfg) -> tuple[dict, str
     return ev, None, None
 
 
+def stage_pair(inp: StageInput, cfg: StagesConfig, flow_cfg) -> tuple[dict, str | None, str | None]:
+    """5a.3：按书的形近字对分类器 → (证据, 定的字或 None, 定字的对)。没配 `pair` 或这一格没有相关的对时不出证据。"""
+    if not cfg.pair or inp.emb is None:
+        return {}, None, None
+    from ..groups import pair_clf
+    model = pair_clf.load(cfg.pair)
+    rows, char, key = pair_clf.decide(model, inp.top, inp.emb, cfg.pair_final)
+    return ({"pair": rows} if rows else {}), char, key
+
+
 # 5a.2 起的各段，按顺序跑；前一段定了字就不往后。加新段：写一个同签名的函数排进来。
-STAGES: tuple[tuple[str, Callable], ...] = (("5a.2", stage_shape),)
+# 第三项是 `via` 的前缀；第四项说这一段要不要首位字属于注册字组才跑。
+STAGES: tuple[tuple[str, Callable, str, bool], ...] = (("5a.2", stage_shape, "shape", True), ("5a.3", stage_pair, "pair", False))
 
 
 class Stages:
@@ -181,9 +218,12 @@ class Stages:
         if verdict != "same":
             return StageOut()
         ex = [self._pos[j] for j in (self._m._same_cell_rows(exclude_id) if exclude_id is not None else ()) if j in self._pos]
-        r = self.router.decide(self._embed(self._net, [norm])[0], ex)
-        if r.reason is None or r.reason == "empty":
+        emb = self._embed(self._net, [norm])[0]
+        r = self.router.decide(emb, ex)
+        if r.reason == "empty":
             return StageOut()
+        if r.reason is None:
+            return self._pair_only(r.top, m, emb, cell_id, gray)
         ev: dict = {"route": "weak_knn" if r.reason == "weak" else r.reason, "top": r.top, "knn": round(r.knn, 3)}
         cands = dict(m.candidates)
         if r.reason == "weak":
@@ -201,15 +241,30 @@ class Stages:
                 cands.setdefault(c, 0.0)
         if r.groups:
             ev["groups"] = list(r.groups)
-        if self.cfg.shape and r.groups:
-            inp = StageInput(cell_id, r.top, r.groups, list(m.candidates), gray)
-            for name, fn in STAGES:
-                e, char, gid = fn(inp, self.cfg, self._flow_cfg)
-                ev.update(e)
-                if char is not None:
-                    ev["final"] = name
-                    return StageOut("same", char, None, f"shape:{gid}", ev)
+        inp = StageInput(cell_id, r.top, r.groups or (), list(m.candidates), gray, emb, tuple(r.partners or ()))
+        for name, fn, via, need_groups in STAGES:
+            if need_groups and not (self.cfg.shape and r.groups):
+                continue
+            e, char, gid = fn(inp, self.cfg, self._flow_cfg)
+            ev.update(e)
+            if char is not None:
+                ev["final"] = name
+                return StageOut("same", char, None, f"{via}:{gid}", ev)
         return StageOut("unsure", None, "never_match", None, ev, _ranked(cands))
+
+
+    def _pair_only(self, top, m, emb, cell_id, gray) -> StageOut:
+        """5a.1 没拦的格（照常放行的）：首位字在本书分类器里有对的，5a.3 照样问一遍。同字异形的对（淸清、眞真）
+        不在形近字组表里，CNN 首位又常是库里刻例多的那一形，只有这里能按刻形改过来。只在定了字且不是首位字时改判决；
+        其余只留证据。"""
+        if not self.cfg.pair or top is None:
+            return StageOut()
+        e, char, key = stage_pair(StageInput(cell_id, top, (), list(m.candidates), gray, emb), self.cfg, self._flow_cfg)
+        if not e:
+            return StageOut()
+        if char is None or char == top:
+            return StageOut(stage=e)
+        return StageOut("same", char, None, f"pair:{key}", {"top": top, **e, "final": "5a.3"})
 
 
 def _ranked(cands: dict) -> list:
