@@ -2044,7 +2044,8 @@ class SeedAdmitStep(Step):
             # 按入库时的编号记的人裁，先过绑定表找回现在对应的格（总览/15；重切后挂错格的根治）
             from ..feedback.bindings import rebind_library_shapes
             human_shapes = rebind_library_shapes(
-                ctx.book.id, human_shapes, lost=_lost_lib if p.human_unbound_review else None)
+                ctx.book.id, human_shapes, lost=_lost_lib if p.human_unbound_review else None,
+                relabeled_at=_human_relabeled_at(p.db_path))
         # 事件侧的人裁定字（2026-09-20）：勾了「字形不入库」的裁决不进字形库，上面那份就
         # 没有它——但字是定了的，文本采信不能丢。见 `feedback/lookup.human_chars`。
         from ..feedback.lookup import human_chars
@@ -6198,6 +6199,36 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
         r.admit, r.channel, r.provenance, r.char, r.doubts, r.evidence = admit0, ch0, pv0, char0, doubts0, ev0
         net -= 1
     return net
+
+
+@lru_cache(maxsize=4)
+def _human_relabeled_at(db_path: str) -> dict[str, str]:
+    """库内审阅改标（`glyph_audit relabel`）重进的人裁刻例 → 入库时刻。`{裸 id: admitted_at}`。
+
+    给 `bindings.rebind_library_shapes` 判「作废之后又改标重进」用：只认 `evidence.via == "glyph_audit"`，
+    旧 confirm 事件重放进库的不算（那是被作废的旧裁决）。"""
+    import json
+    import sqlite3
+    from pathlib import Path
+    if not Path(db_path).exists():
+        return {}
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        rows = conn.execute("SELECT instance_id, evidence, admitted_at FROM admissions "
+                            "WHERE provenance='human' AND instance_id LIKE 'v2:%' "
+                            "AND evidence LIKE '%glyph_audit%'").fetchall()
+        conn.close()
+    except sqlite3.Error:
+        return {}
+    out: dict[str, str] = {}
+    for iid, ev, at in rows:
+        try:
+            via = (json.loads(ev) or {}).get("via") if ev else None
+        except (TypeError, ValueError):
+            via = None
+        if via == "glyph_audit" and at:
+            out[iid[3:]] = str(at)
+    return out
 
 
 @lru_cache(maxsize=4)
