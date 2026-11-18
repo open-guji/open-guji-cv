@@ -323,7 +323,11 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     # （Step1 版框、Step2 矫正、Step3 切格、Step4 收框…），没法靠某一步的
     # `book_deps` 覆盖全，所以在这里统一进指纹。
     # 只在开启时写这个键：关着的册（四庫等）指纹逐位不变，不触发全量重跑。
-    if getattr(book, "binarized_input", False):
+    if getattr(book, "ink", None) is not None:
+        # 册级墨层（`utils/ink.py`，用户 11-17 定）：同 `bin_input` 的理由，换的是 `ctx.raw_page` 本身，统一进指纹；
+        # 写了 `ink` 时 `binarized_input` 不起作用，所以不再写 `bin_input`。没写 `ink` 的册指纹逐位不变。
+        payload["ink"] = book.ink.token()
+    elif getattr(book, "binarized_input", False):
         payload["bin_input"] = True
     # Step5-b 的字表语料由册配置 `rare_charset` 指定（参校本属性 C 块）：只在写了的册加键，没写的册指纹逐位不变
     # （不进 `book_deps`，那会让所有册指纹变，见 core/ref_profile.py 模块头）。
@@ -743,6 +747,7 @@ class Engine:
         跑完就清，下一步照样现算。"""
         run_perf = getattr(self, "_perf", None)
         self._sp = run_perf.step(step.spec.id, len(pages), jobs) if run_perf is not None else None
+        prev_step_id, self.ctx.step_id = self.ctx.step_id, step.spec.id   # `RunContext.LUMA_STEPS`：写了 ink 的册上认印读原样亮度
         try:
             if getattr(self, "_pcache", None) is not None:   # 已在 status() 之类的缓存范围里
                 return self._run_one_step_pages(step, pages, report, force, stop_on_error, total, done, jobs)
@@ -752,6 +757,7 @@ class Engine:
             finally:
                 self._pcache = self.ctx._params_memo = None
         finally:
+            self.ctx.step_id = prev_step_id
             if self._sp is not None:
                 self._sp.finish()
             self._sp = None
@@ -1192,6 +1198,7 @@ def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
     _worker_step = STEPS[step_id]
     _worker_ctx = RunContext(book, ProductStore(store_root), ImageCache(cache_root, cache_limit),
                              params, log=lambda s: None, pipeline=pipeline)
+    _worker_ctx.step_id = step_id
     _worker_ctx._params_memo = {}         # worker 只跑这一步：参数每进程构造一次（同 `Engine._run_one_step`）
 
 
