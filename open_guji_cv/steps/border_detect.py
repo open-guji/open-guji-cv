@@ -569,6 +569,12 @@ class BorderDetectStep(Step):
                     free_switched = f"穿字分 {s_grid:.2f}→{s_free:.2f}"
         outer_fixed = None
         if grid and not grid_page and p.grid_outer_fix:
+            if p.pitch_rescue and not rescued:
+                # 列宽均匀是强约束：网格（或换过线的）列网仍有列宽出带，就照自由模式那样做一遍列宽均匀拟合；
+                # 拟合的外列带宽（≤1.3 倍）会把书口条圈回来，所以放在去窄条、收外框线之前
+                res2, how = _rescue(res)
+                if how:
+                    res, rescued = res2, how
             n_sliver = fix_outer_sliver(res, gray, n_cols=cols, ink_threshold=p.ink_threshold)
             n_trim = (trim_outer_columns(res, gray, p.grid_outer_trim, n_cols=cols, ink_threshold=p.ink_threshold,
                                          col_pitch=col_pitch, frame_height=ctx.book.frame_height, gap_only=True)

@@ -247,3 +247,18 @@ def test_trim_gap_only_keeps_wide_outer_column_with_text_at_target():
     g = _text_page(2300, 3000, [195 + 190 * i for i in range(9)] + [1910 + 125], char_w=150)
     assert trim_outer_columns(_res(xs), g, 1.12, col_pitch=192, gap_only=True) == 0
     assert trim_outer_columns(_res(xs), g, 1.12, col_pitch=192) == 1
+
+
+def test_grid_outer_fix_runs_column_fit_in_grid_mode(tmp_path, monkeypatch):
+    """grid_outer_fix：网格模式下也跑列宽均匀拟合（原先只在自由模式跑）。"""
+    import open_guji_cv.steps.border_detect as bd
+    seen = []
+    monkeypatch.setattr(bd, "detect_borders", lambda gray, **kw: _res(_GF_XS))
+    monkeypatch.setattr(bd, "pitch_rescue", lambda r, *a, **k: (seen.append(1), (r, None))[1])
+    for fix, want in ((False, 0), (True, 1)):
+        seen.clear()
+        ctx = make_ctx(tmp_path / str(fix), make_book(params={"border_detect": {"grid_outer_fix": fix}},
+                                                      column_grid=True, col_pitch=192, expected_cols=10),
+                       raw={PAGE: _text_page(2300, 3000, _GF_CENTERS)})
+        STEPS["border_detect"].run_page(ctx, PAGE)
+        assert len(seen) == want
