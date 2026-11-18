@@ -143,3 +143,18 @@ def test_orders_rank_union_and_fuse_as_extra_route():
     assert [h["char"] for h in _fuse([], [], cls, emb, 10, stroke_order=order, stroke_w=0.0)] == off      # 权重 0 = 没这一路
     on = [h["char"] for h in _fuse([], [], cls, emb, 10, stroke_order=order, stroke_w=40.0)]
     assert sorted(on) == sorted(off) and on[0] == "王"
+
+
+def test_canonical_input_squares_pipeline_patches_and_keeps_library_ones():
+    """管线 `char_patch` 是贴格裁的长方块，检测前要转成入库那种 256 方画布；已经是的原样用。"""
+    tight = np.full((170, 220), 255, np.uint8)
+    tight[10:160, 100:120] = 0                            # 一竖，贴着上下边
+    tight[80:95, 5:215] = 0                               # 一横，贴着左右边
+    out = SE.canonical_input(tight)
+    assert out.shape == (256, 256) and out.dtype == np.uint8
+    ys, xs = np.nonzero(out < 128)
+    assert xs.min() > 10 and xs.max() < 245 and ys.min() > 10 and ys.max() < 245   # 留出了白边
+    w, h = xs.max() - xs.min(), ys.max() - ys.min()
+    assert abs(w / h - 210 / 150) < 0.1                    # 等比，没被压成方的
+    assert SE.canonical_input(out) is out
+    assert SE.canonical_input(np.dstack([tight] * 3)).shape == (256, 256)
