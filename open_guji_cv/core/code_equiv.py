@@ -1962,6 +1962,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='fbb1d8d6f6a0e386c1747f8d1d33c8c7d33d569c9294c5952b3899c6696a3a31',
           old='5983f2059782aa6f4de8ea1c0197e2c892fd550eb324f994994c1aa1936613f9',
           evidence=_GAP_GUARD_0750),
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='502a821d299fc2e97db27877e3fc1d8dc6e8aeeaf6fb5efde1c7679b0d1ce75c',
+          old='6480cad715637b20fb85f2c2d958d526b01640ddc5d9a1ebee0d96bdf40c816c',
+          evidence="row_segment 加书级参数 cut_judge_scale（判官画布缩放上限，缺省 1.0＝关，取值 (0.3, 1.0]；get_judge/UNetJudge/_to_canvas 加缺省参数，指纹后缀 1.0 为空串）：脉经第 2 册 10–21 页（灰纸彩图、双行小注多）row_segment 与 origin/dev（含 #1650）产物逐字节相同；scripts/code_equiv.py check，2026-11-18（MJ）"),
+    Equiv(module='open_guji_cv.seg.cut_select',
+          new='0dda3332a7481817a2ec5292e2e1bb9784cc5e16bc5fe3deef38d3942b20851b',
+          old='fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b',
+          evidence="row_segment 加书级参数 cut_judge_scale（判官画布缩放上限，缺省 1.0＝关，取值 (0.3, 1.0]；get_judge/UNetJudge/_to_canvas 加缺省参数，指纹后缀 1.0 为空串）：脉经第 2 册 10–21 页（灰纸彩图、双行小注多）row_segment 与 origin/dev（含 #1650）产物逐字节相同；scripts/code_equiv.py check，2026-11-18（MJ）"),
 )
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import inspect
 from typing import Literal
 
-from pydantic import BaseModel, model_serializer, model_validator
+from pydantic import BaseModel, field_validator, model_serializer, model_validator
 
 from ..core.book import _expand_pages
 from ..core.spec import StepSpec, column_key
@@ -18,7 +18,7 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.cells import CellRec, ColumnCells, CutPointCandidates, PageCells, SeamCandidate
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
-from ..seg.cut_select import ckpt_fingerprint, get_judge
+from ..seg.cut_select import ckpt_fingerprint, get_judge, scale_suffix
 from ..seg.profile import frame_only_edge_cells as _frame_only_edge_cells
 from ..impl.keben.row_grid import fit_page_grids
 from ..impl.keben.row_boundaries import slot_mask_from_occupied
@@ -773,6 +773,10 @@ class RowSegmentParams(BaseModel):
     cut_judge: str = "unet"              # 候选池裁判：unet（seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
     #                                      | unet_f64：同一判官双精度前向＋双精度缩放，跨 CPU 逐位一致（S9，慢约 4 倍，改产物）
     judge_fingerprint: str = ""          # 裁判权重指纹，自动填（进 Step 指纹：换权重 → Step3 产物自动 stale）
+    #: **判官画布缩放上限**（2026-11-18，《脉经》MJ，`seg/cut_select.scale_suffix`）：判官窗口缩到不超过这么多倍才进 U-Net。
+    #: 字比判官训练集（字高≈110px）大的书判官会失灵（脉经字高≈156px，escalate 76%），脉经取 0.7。只改判官看到的画布。
+    #: 书级参数；1.0＝关（缺省，不进参数哈希；seg check 的 cut_through 同用）。白底靠册配置 ink（cv #1650）。
+    cut_judge_scale: float = 1.0
     detect_bottom_bar: bool = True       # 列里还躺着下版框线时下界改用它（row_boundaries.find_bottom_frame_bar）
     #: **职名页分支**（overview#450，S4，2026-10-06）：列在这里的页不走固定格数 DP，改走
     #: `impl/keben/roster_segment`（不定字数、二维递归切）。默认空 = 关，别的书别的页产物逐字节不变。
@@ -1040,6 +1044,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("cut_gap_guard", None)
             if not self.cut_free_seam:
                 d.pop("cut_free_seam", None)
+            if self.cut_judge_scale == 1.0:
+                d.pop("cut_judge_scale", None)
             for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line"):
                 if not getattr(self, k_):
                     d.pop(k_, None)
@@ -1055,13 +1061,22 @@ class RowSegmentParams(BaseModel):
                 d.pop("page_map_overrides", None)
         return d
 
+    @field_validator("cut_judge_scale")
+    @classmethod
+    def _check_judge_scale(cls, v: float) -> float:
+        # 0.4 判官已崩（字太小），再小没有意义；大于 1 等于放大，画布装不下
+        if not (0.3 < v <= 1.0):
+            raise ValueError(f"row_segment.cut_judge_scale 要在 (0.3, 1.0] 内，给了 {v}")
+        return v
+
     @model_validator(mode="after")
     def _fill_judge_fingerprint(self):
         # 与 glyph_match.GlyphMatchParams.db_fingerprint 同一套路：模型是外部可变状态，
         # 不进指纹的话换了权重产物还显示 fresh。权重缺失时为空串 → 与裁判可用时指纹不同。
         if self.cut_judge in ("unet", "unet_f64") and not self.judge_fingerprint:
             fp = ckpt_fingerprint()
-            object.__setattr__(self, "judge_fingerprint", fp + (":f64" if fp and self.cut_judge == "unet_f64" else ""))
+            object.__setattr__(self, "judge_fingerprint", fp + (":f64" if fp and self.cut_judge == "unet_f64" else "")
+                               + (scale_suffix(self.cut_judge_scale) if fp else ""))
         # 字形库精修：只在开关开着时解析库路径、填指纹——关着时参数逐字段不变（同 seed_admit.human_fingerprint）
         if self.roster_glyph_refine:
             if not self.roster_glyph_db:
@@ -1191,7 +1206,8 @@ class RowSegmentStep(Step):
         book_forced_main = ov.forced_main    # 「正文当小注」：别拆
         book_head_raise = ov.head_raise      # 逐列抬头级数（Step1 按同一张表补框；表级数不同时 _reraise）
         # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
-        judge = get_judge(f64=p.cut_judge == "unet_f64") if p.cut_judge in ("unet", "unet_f64") else None
+        judge = (get_judge(f64=p.cut_judge == "unet_f64", scale=p.cut_judge_scale)
+                 if p.cut_judge in ("unet", "unet_f64") else None)
         book_pins = ov.pins              # 人拖过的切线钉住（只收带页面坐标的裁决）
         if p.page_map != "off" and not _ref_has_column(ctx.book):
             layout = {}                      # 册配置说整册没有逐列参照：没东西可配页

@@ -255,6 +255,16 @@ def main(argv=None) -> int:
     return 3 if bad else 0
 
 
+def _judge_scale(book: str) -> float:
+    """本册 row_segment 的判官画布缩放（`cut_judge_scale`，缺省 1.0），压墨判据与 Step3 用同一个判官。"""
+    try:
+        from open_guji_cv.eval.seg_screen_run import _engine
+        from open_guji_cv.steps.row_segment import RowSegmentStep
+        return float(getattr(_engine(book).ctx.params_for(RowSegmentStep()), "cut_judge_scale", 1.0))
+    except Exception:  # noqa: BLE001 —— 取不到册配置就按缺省
+        return 1.0
+
+
 def _geometry(lines: list[str], book: str, store, cache, cols) -> tuple[int, int]:
     """第 1b 节：钉子列沙箱重跑后的 row_segment 格网，查压墨与一格跨两字。返回 (问题数, 提示数)。"""
     import cv2
@@ -264,7 +274,7 @@ def _geometry(lines: list[str], book: str, store, cache, cols) -> tuple[int, int
     from open_guji_cv.seg.cut_select import get_judge
     from open_guji_cv.utils.image_io import imread
     lines += ["## 一b、钉子列几何：压墨、一格跨两字", ""]
-    judge = get_judge() if cols else None
+    judge = get_judge(scale=_judge_scale(book)) if cols else None
     if cols and judge is None:
         lines.append("- ⚠️ 没有 U-Net 归属裁判（torch／权重），压墨只当提示")
     nb = nh = 0
