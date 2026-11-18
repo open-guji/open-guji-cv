@@ -1658,48 +1658,6 @@ def _closed_box_glyph(ink: np.ndarray, frame: np.ndarray) -> bool:
     return runs >= 2
 
 
-STACK_BAR_W = (0.3, 0.85)   # 数字「二」「三」的横画：宽占 period 的这个范围（末列窗口比字宽得多，不能按格宽比；版框的上下边宽过窗口，不在内）
-
-
-def _stacked_bars(ink: np.ndarray, frame: np.ndarray, period: float) -> bool:
-    """「二」「三」：去掉长竖后剩 ≥2 道又薄又不满宽的分离横画（2026-11-17）。框角只有一道边，双边框的两道边是满宽的；
-    这类格贴着版框竖线时（末列），横画端点落进框线邻域，被 `_frame_only` 当框角整格判空（殿本 vol68 230:9 的「二」、
-    vol63 116:9 的「三」，格数少于整理本字数）。"""
-    import cv2
-    h, w = ink.shape[:2]
-    rest = ink & (1 - cv2.dilate(frame, np.ones((5, 5), np.uint8)))
-    n, _lab, st, _ = cv2.connectedComponentsWithStats(rest.astype(np.uint8), connectivity=8)
-    bars = [i for i in range(1, n)
-            if st[i, cv2.CC_STAT_AREA] >= 20 and st[i, cv2.CC_STAT_HEIGHT] < FRAME_THIN_H * period
-            and STACK_BAR_W[0] * period <= st[i, cv2.CC_STAT_WIDTH] <= STACK_BAR_W[1] * period]
-    return len(bars) >= 2
-
-
-THIN_YI_MIN_INK = 0.004   # 「一」救回：格内墨占比至少这么多（再低是纸上污点）
-THIN_YI_W = 0.35          # ……且有一块「横向补 0.12 period 断口后」宽 ≥ 这么多 period、高 ≤ 0.25 period 的横条
-THIN_YI_CENTER = 0.25     # ……条的中心离格窗中线不超过窗宽的这个比例（版框边在窗边，不居中）
-
-
-def _thin_bar(ink: np.ndarray, period: float) -> bool:
-    """这一格的墨是不是一道居中的细横（「一」）。笔画又细又断，连通域只剩碎段，改看墨的整体外包：
-    横向跨度 ≥ THIN_YI_W·period、纵向跨度 ≤ 0.25·period、中心居中。"""
-    h, w = ink.shape[:2]
-    if h < 10 or w < 10:
-        return False
-    ys, xs = np.nonzero(ink)
-    if len(xs) == 0:
-        return False
-    # 去掉离群的零星点：按行/列至少 2 个墨点的范围算外包
-    rows = np.nonzero(ink.sum(1) >= 2)[0]
-    cols = np.nonzero(ink.sum(0) >= 1)[0]
-    if len(rows) == 0:
-        return False
-    bh = rows[-1] - rows[0] + 1
-    bw = cols[-1] - cols[0] + 1
-    cx = (cols[0] + cols[-1]) / 2.0
-    return bool(bw >= THIN_YI_W * period and bh <= 0.25 * period and abs(cx - w / 2.0) <= THIN_YI_CENTER * w)
-
-
 def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio: float) -> bool:
     """这一格的墨是不是只有框线（2026-09-26）：必须有跨格长竖穿过；去掉它（连同贴着它的几像素）
     后剩下的要么够不上 `min_ink_ratio`，要么只剩又矮又不宽的细横（框的上下边）。"""
@@ -1707,7 +1665,7 @@ def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio
     h, w = ink.shape[:2]
     if h < 10 or w < 10 or not frame.any():
         return False
-    if _closed_box_glyph(ink, frame) or _stacked_bars(ink, frame, period):
+    if _closed_box_glyph(ink, frame):
         return False
     rest = ink & (1 - cv2.dilate(frame, np.ones((5, 5), np.uint8)))
     if float(rest.mean()) < min_ink_ratio:
@@ -1850,6 +1808,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     grid_end_fit: bool = False,
                     snap_cut: float = 0.0,
                     snap_gap_ok=None,
+                    cut_gap_guard: float = 0.0,
                     grid_adjust=None,
                     jiazhu_heads=None,
                     half_a_left=None,
@@ -1945,7 +1904,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       缺省 None＝不调（2026-11-10 起实现在史記书仓 `code/jiazhu_step.py`，原 `_free_split`）。
     - `snap_cut`（书级，2026-11-13，史記写本字距不匀）：格线定下后（等距格网落缝、DP 格网、下版框之后，人钉切线之前），
       还劈着字的格线按墨块切割量在 ±`snap_cut` 格内补挪（`snap_by_cut`；等距格网以名义格线为中心，DP 格网以 DP 格线为中心）；
-      0＝关（缺省）。`snap_gap_ok` 是它的去处护栏（字内白缝不当字缝）；缺省 None 时有 `cut_judge` 就用 U-Net 整字护栏
+      0＝关（缺省）。`cut_gap_guard`（格高倍数，0＝关）：切点选定后（规则、U-Net 改选、扩池自动改选之后，人裁不动），
+      选中那条不在白缝里（白走廊 < 这么多格高）而池里另有一条在白缝里（≥ 这么多格高）的，改用白走廊最宽的那条，
+      `chosen_by="gap"`（`_gap_corridor`；史記 r76 扁字收边坏，2026-11-17）。`snap_gap_ok` 是它的去处护栏（字内白缝不当字缝）；缺省 None 时有 `cut_judge` 就用 U-Net 整字护栏
       （`seg.cut_select.move_keeps_glyphs`，2026-11-13），没有裁判就不拦。
     - `grid_adjust`／`jiazhu_heads`／`half_a_left`／`jiazhu_pair_ok`（书级钩子 `impl/keben/row_hooks`，2026-11-12／13）：
       缺省 None＝不调。`grid_adjust` 在 `grid_bounds` 落缝前改格线；`jiazhu_heads` 在段端收编前补认段头；`half_a_left` 给只有
@@ -2097,17 +2058,6 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             y1i = max(0, min(h, int(round(bounds[k + 1]))))
             if _dash_only(col_ink[y0i:y1i], period, float(x_hi - x_lo), h_frac, w_frac):
                 nonblank.discard(pos)
-
-    # 列中间两个有字格夹着的空白格里，墨量虽不到 `min_ink_ratio`、却是一道居中的细横——「一」字
-    # （笔画又细又断，墨比 0.006–0.011，殿本 10 列因此格数少一，用户 2026-11-18 格高异常根因）。
-    for k in range(1, n_slots - 1):
-        pos = k + 1
-        if pos in nonblank or inks[pos] < THIN_YI_MIN_INK or (pos - 1) not in nonblank or (pos + 1) not in nonblank:
-            continue
-        y0i = max(0, min(h, int(round(bounds[k]))))
-        y1i = max(0, min(h, int(round(bounds[k + 1]))))
-        if _thin_bar(col_ink[y0i:y1i], period):
-            nonblank.add(pos)
 
     runs: dict[int, float] = {}
     tail_a: set[int] = set()
@@ -2455,6 +2405,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     continue
                 cands = [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)]
                 cands, chosen, chosen_by, escalate, escalate_reason = _resolve_and_probe(cands, 0, up[0], dn[0], k, clean=True)
+                chosen, chosen_by = _gap_guard(cands, chosen, chosen_by, ink_bin, float(bounds[k]), period, cut_gap_guard)
                 origin = "split_suspect" if suspect else "clean_probe"
                 if escalate_reason:
                     escalate_reason = origin + " " + escalate_reason
@@ -2544,6 +2495,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             #    U-Net，记一致率与分歧块；池 ≥2 时按门槛改选；所选分歧块 ≥ ESCALATE_BLOB 标 `escalate`（人裁过的
             #    不标）。只记录不改选法：拿不准的交下游再审。两步都在 `_resolve_and_probe` 里，与 L0′ 嫌疑切点共用。
             cands, chosen, chosen_by, escalate, escalate_reason = _resolve_and_probe(cands, chosen, up[0], dn[0], k)
+            chosen, chosen_by = _gap_guard(cands, chosen, chosen_by, ink_bin, float(bounds[k]), period, cut_gap_guard)
             cp = CutPointCandidates(k=k, y=float(bounds[k]),
                                     slot_above=up[0].slot, slot_below=dn[0].slot,
                                     candidates=cands, chosen=chosen, chosen_by=chosen_by,
@@ -2555,6 +2507,58 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         result.cut_candidates = cut_cands
     result.cells = cells
     return result
+
+
+GAP_CORRIDOR_Q = 10   # 白走廊取逐列白段长的这个百分位（容几个霉点、毛边列）
+GAP_INK_COLS = 0.02   # 切线压墨的列数 > max(2, 内容宽 × 这么多) 就不算在白缝里
+
+
+def _gap_corridor(ink_bin: np.ndarray, ys, y_line: float, cap: int, clean: bool = False) -> float:
+    """一条切线（`ys`：逐列 y，None＝直线 `y_line`）的白走廊宽：每列从切线那一行往上下数连续白像素（各至多 `cap` 行），
+    取逐列白段长的 `GAP_CORRIDOR_Q` 百分位。直线落在整行白的字缝里≈字缝宽；贴着笔画绕的折线、字内两笔之间的窄缝都小。
+    `clean`：切线压墨的列超过 `GAP_INK_COLS`（容几点霉点）就记 0——换过去的那条要干净（细竖笔只占几列，百分位看不出来）；
+    现选那条不加这条（压着几列细笔画、两边是宽字缝的直线，本来就对）。"""
+    h, w = ink_bin.shape
+    if w == 0:
+        return 0.0
+    yv = np.full(w, int(round(y_line)), dtype=np.int64) if ys is None else np.asarray(ys, dtype=np.int64)[:w]
+    if len(yv) < w:
+        yv = np.concatenate([yv, np.full(w - len(yv), yv[-1] if len(yv) else int(round(y_line)))])
+    yv = np.clip(yv, 0, h - 1)
+    if clean and int(ink_bin[yv, np.arange(w)].sum()) > max(2, GAP_INK_COLS * w):
+        return 0.0
+    runs = np.zeros(w)
+    for x in range(w):
+        col = ink_bin[:, x]
+        y = int(yv[x])
+        if col[y]:
+            continue
+        a = y
+        while a > 0 and y - a < cap and not col[a - 1]:
+            a -= 1
+        b = y
+        while b < h - 1 and b - y < cap and not col[b + 1]:
+            b += 1
+        runs[x] = b - a + 1
+    return float(np.percentile(runs, GAP_CORRIDOR_Q))
+
+
+def _gap_guard(cands, chosen: int, chosen_by: str, ink_bin: np.ndarray, y_line: float, period: float,
+               guard: float) -> tuple[int, str]:
+    """`cut_gap_guard`：选中的切线不在白缝里（白走廊 < 门槛），池里另有干净地落在白缝里的，改用白走廊最宽的那条（同宽取池里靠前的）。
+    选中那条已在白缝里的不动，哪怕别的更宽：试过「窄缝换宽缝」（走廊宽 2 倍就换），史記 09／26 册把「多」的撇、「之」的捺劈开
+    （32:117:2、01:64:8），宽的那条常是字内大白（A22 11-17）。"""
+    if guard <= 0 or period <= 0 or chosen_by == "human" or len(cands) < 2:
+        return chosen, chosen_by
+    need = guard * period
+    cap = int(np.ceil(period))
+    cor = [_gap_corridor(ink_bin, c.y, y_line, cap, clean=i != chosen) for i, c in enumerate(cands)]
+    if cor[chosen] >= need:
+        return chosen, chosen_by
+    best = max(range(len(cands)), key=lambda i: (cor[i], -i))
+    if cor[best] < need or best == chosen:
+        return chosen, chosen_by
+    return best, "gap"
 
 
 def _slot_to_pos_local(slot: int, n_raised: int) -> int:
