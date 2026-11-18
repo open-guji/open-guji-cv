@@ -3,11 +3,9 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
-## [0.7.63] - 2026-11-17
+## [0.7.64] - 2026-11-18
 
-- 发版说明（A31 11-17，殿本 patch 线，ZM 要）：v0.7.58 + #1643 + #1646（dev cherry-pick），PATCH，**只动 scripts/zhengli，指纹与 v0.7.58／v0.7.52 相同**，殿本册不用改钉、不过期。为殿本 21–99 册零票换单。
-- PATCH：`proof_cycle plan --allow-empty`、`auto_cycle` 零票判 go 的册自动带上（ZM 11-18：旧单没人投，swap run 整批被 `cellvotes draft`「读到 0 票」守卫拦下）。交给 `guji cellvotes draft --allow-empty`（要 guji-manager ≥0.4.59、设 CELLREVIEW_TOKEN），当场读网站按单版和按条目都是 0 条才出空计划，守卫不关；plan.json 记 `empty_confirmed`。
-- PATCH：`proof_cycle apply` 出单带 `--allow-empty`：落完票新单 0 格也换成空单、升 book-text，旧单不再挂在线上（殿本 vol08 008-r10）。`auto_cycle` 失败原因取最后一条 ✗ 行。
+- 发版说明（ZM 11-18，殿本 patch 线）：v0.7.58 + #1652（row_segment 1.52：框线判空认叠横画数字二三，不当框角；殿本 vol68 230:9「二」、vol63 116:9「三」），PATCH，**不含** dev 线与史記线其他改动。row_segment 及其下游步指纹变，殿本各册产物判过期、择机重跑。底库不变（b27）。
 
 ## [0.7.58] - 2026-11-17
 
