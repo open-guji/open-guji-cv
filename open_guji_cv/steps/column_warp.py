@@ -42,6 +42,12 @@ class ColumnWarpParams(BaseModel):
     起因：写本字贴着界行写，「以」的左竖细高、跟右半「人」之间的缝比界行与字之间的缝还白，
     判带取窗口最低点、或把它当内框，都连界行一起抹白，Step4 拿到的字就缺一笔（SJ r5，02:27:1:4b、02:112:2:2b）。"""
 
+    inner_bar_span: bool = False
+    """贴边界行内侧的「孤立窄条」要像线才抹（全唐文开）：离边超过 0.13 列宽、本横条里有墨的行不到一半的，
+    是字贴着界行的竖笔，不当第二道线（`column_text_band` inner_bar_span）。缺省关＝旧行为。
+    起因：全唐文「十」的竖、「恪」的忄贴着界行，`strip_column_rules` 按 240 行横条判带，把它们当内框连界行一起抹白，
+    Step4 拿到「亠」（001:121:1:6a、001:106:9:6a、014:108:3，台账 R033／R038）。"""
+
     ruled_warp: bool = False
     """列图不做射影，改「竖向线性、横向逐行按左右线插值」（`seg.warp.ruled_src_coords`，2026-11-08 A22）。缺省关＝射影。
     射影把左右线不平行（梯形）当透视，竖向按 1/(a+by) 伸缩。殿本 Commons 新图（第 7 轮换源）版面有真实弯曲，
@@ -57,6 +63,8 @@ class ColumnWarpParams(BaseModel):
             d.pop("ruled_warp", None)
         if isinstance(d, dict) and not self.tight_rule_band:
             d.pop("tight_rule_band", None)
+        if isinstance(d, dict) and not self.inner_bar_span:
+            d.pop("inner_bar_span", None)
         if isinstance(d, dict) and not self.det_warp:
             d.pop("det_warp", None)
         return d
@@ -165,7 +173,8 @@ class ColumnWarpStep(Step):
             layers=(int(fl.get("top", 1)), int(fl.get("bottom", 1))),
             layer_gap=(og.get("top"), og.get("bottom")),
             inner_bottom=win.border_bottom_in_column,
-            **({"bar_after_min_peak": TIGHT_INNER_BAR_PEAK, "first_valley": True} if p.tight_rule_band else {}))
+            **({"bar_after_min_peak": TIGHT_INNER_BAR_PEAK, "first_valley": True} if p.tight_rule_band else {}),
+            **({"inner_bar_span": True} if p.inner_bar_span else {}))
         return raw, cleaned, diag, warped
 
     # ── Step 接口 ─────────────────────────────────────────────────────
