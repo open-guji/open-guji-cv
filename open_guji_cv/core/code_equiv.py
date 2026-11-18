@@ -388,6 +388,10 @@ _GRID_OUTER_TRIM_1118 = ("border_detect 加书级参数 grid_outer_trim（网格
 _GRID_FREE_FALLBACK_1118 = ("border_detect 加书级参数 grid_free_fallback（网格补线穿字时换自由模式＋列距救援，缺省 0＝关、不进参数 dump；"
                             "新函数 gutter_ink_score，列距救援收成内部函数 _rescue）：脉经第 2 册 15、24、50、63 页 border_detect 与 origin/dev（59deab6）"
                             "产物逐字节相同；scripts/code_equiv.py check，2026-11-18（MJ，GUJI-774）")
+_GRID_OUTER_FIX_1118 = ("border_detect 加书级参数 grid_outer_fix（外列空白窄条去线补对侧版框、收外框线挪到换线之后且只收进字缝，"
+                        "缺省关、不进参数 dump；新函数 fix_outer_sliver、_band_ink，trim_outer_columns 加 gap_only）：脉经第 2 册 15、24、50、63 页"
+                        "（书配置开着 grid_free_fallback、grid_outer_trim）border_detect 与 origin/dev（7cbc2bc）产物逐字节相同；"
+                        "scripts/code_equiv.py check，2026-11-18（MJ，GUJI-774）")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -2024,6 +2028,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="41b578276bd03922e53ffd56a9e23fe3c89e82875b6a1845e4e1ac6cb030e805",
           old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
           evidence=_GRID_FREE_FALLBACK_1118),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="9e292550e51fe2e503b8ad9abdb17d6ecf313d893521f12cb30ae6449c3084cd",
+          old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
+          evidence=_GRID_OUTER_FIX_1118),
 )
 
 
