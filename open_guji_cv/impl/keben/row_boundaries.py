@@ -1681,19 +1681,23 @@ THIN_YI_CENTER = 0.25     # ……条的中心离格窗中线不超过窗宽的�
 
 
 def _thin_bar(ink: np.ndarray, period: float) -> bool:
-    """这一格的墨里有没有一道居中的细横（「一」）。"""
-    import cv2
+    """这一格的墨是不是一道居中的细横（「一」）。笔画又细又断，连通域只剩碎段，改看墨的整体外包：
+    横向跨度 ≥ THIN_YI_W·period、纵向跨度 ≤ 0.25·period、中心居中。"""
     h, w = ink.shape[:2]
     if h < 10 or w < 10:
         return False
-    k = max(3, int(0.12 * period))
-    closed = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (k, 1)))
-    n, _lab, st, cen = cv2.connectedComponentsWithStats(closed.astype(np.uint8), connectivity=8)
-    for i in range(1, n):
-        bw, bh = st[i, cv2.CC_STAT_WIDTH], st[i, cv2.CC_STAT_HEIGHT]
-        if bw >= THIN_YI_W * period and bh <= 0.25 * period and abs(cen[i][0] - w / 2.0) <= THIN_YI_CENTER * w:
-            return True
-    return False
+    ys, xs = np.nonzero(ink)
+    if len(xs) == 0:
+        return False
+    # 去掉离群的零星点：按行/列至少 2 个墨点的范围算外包
+    rows = np.nonzero(ink.sum(1) >= 2)[0]
+    cols = np.nonzero(ink.sum(0) >= 1)[0]
+    if len(rows) == 0:
+        return False
+    bh = rows[-1] - rows[0] + 1
+    bw = cols[-1] - cols[0] + 1
+    cx = (cols[0] + cols[-1]) / 2.0
+    return bool(bw >= THIN_YI_W * period and bh <= 0.25 * period and abs(cx - w / 2.0) <= THIN_YI_CENTER * w)
 
 
 def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio: float) -> bool:
