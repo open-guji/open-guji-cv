@@ -69,6 +69,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import jiazhu_split
+from ...seg import seam as _seam
 
 #: 空白格的**下界**（× period）。空白格代表「这里本该有个字、但它是空的」，
 #: 所以它的高度应当接近一格；此前只给了上界 1.25·period，没有下界，于是 DP 可以
@@ -1863,6 +1864,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     cut_glyph_line: float = 0.0,
                     straight_seam_ink: bool = False,
                     adopt_rel: float = 0.0,
+                    jiazhu_cc_min: float = jiazhu_split.CC_MIN,
                     grid_adjust=None,
                     jiazhu_heads=None,
                     half_a_left=None,
@@ -1983,6 +1985,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       墨多的那边；逐列取「上格墨最低行之下、下格墨最高行之上」离原线最近的 y（±这么多格高内、不越过上格顶下格底往里
       `FREE_SEAM_MARGIN`，不限坡度），kind `glyph_line`，`chosen_by="glyph"`。离两边一样近时按墨多的那边（少的那边
       ≤`GLYPH_LINE_MAJ`）；仍拿不准、被劈块高过 `GLYPH_LINE_TALL` 格（两字粘成一块）、某列上下墨重叠，都不动。
+    - `jiazhu_cc_min`（px，缺省 `jiazhu_split.CC_MIN`；2026-11-18 A22 U3）：雙行小注段噪点否决门槛，书级 `row_segment.jiazhu_cc_min`。
     - `adopt_rel`（倍数，0＝关；2026-11-18，脉经）：L3 扩池后绝对门槛没有可选候选、现选分歧 ≥ `ADOPT_REL_MIN` 时，
       取分歧 ≤ min(`ADOPT_REL_CAP`, adopt_rel×现选分歧) 的扩池候选（干净格线仍只换不穿墨的），见 `_adopt_expanded`。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
@@ -2156,7 +2159,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 if p in nonblank else None)
             for p in sorted(patches)
         ]
-        runs = jiazhu_split.link_runs(entries)
+        runs = jiazhu_split.link_runs(entries, cc_min=jiazhu_cc_min)
         # 人指认的雙行小注：不看判据，从中间拆（见 `forced_jiazhu` 说明）。**必须在 `adopt_run_tails`
         # 之前并进 runs**：紧随其后的奇数字末行（右半单字）才会被当段尾收成 `jiazhu_a`，而不是自成單行小注。
         for pos in sorted(nonblank):
@@ -2697,14 +2700,15 @@ def _gap_guard(cands, chosen: int, chosen_by: str, ink_bin: np.ndarray, y_line: 
     return best, "gap"
 
 
-FREE_SEAM_FRAC = 0.2        # 劈字判据：被劈连通块两边各至少占这么多面积
-FREE_SEAM_EXT = 0.25        # 同上：两边各伸出至少这么多格高
-FREE_SEAM_HMAX = 1.3        # 高过这么多格高的连通块不算单字（版框残段、两字以上粘连），不管
-FREE_SEAM_MIN_AREA = 0.015  # 小于这么多格高² 的墨点不管
+# 劈字判据与换线护栏在 `seg/seam`（split_blobs／blobs_keep_sides，2026-11-18 A22 U2 抽出，常数原值）
+FREE_SEAM_FRAC = _seam.SPLIT_FRAC
+FREE_SEAM_EXT = _seam.SPLIT_EXT
+FREE_SEAM_HMAX = _seam.SPLIT_HMAX
+FREE_SEAM_MIN_AREA = _seam.SPLIT_MIN_AREA
 FREE_SEAM_ZERO = 2          # 折线穿墨 ≤ 这么多像素算不穿墨（容毛边、霉点）
 FREE_SEAM_KEEP = 0.5        # 找不到零墨路时：穿墨 ≤ 原线这么多倍、且不再劈原来那块，才换
 FREE_SEAM_MARGIN = 0.25     # 折线不越过上格顶、下格底往里这么多格高
-FREE_SEAM_SIDE = 0.05       # 被劈的块换线后另一边至多留这么多（面积比）
+FREE_SEAM_SIDE = _seam.SIDE_TOL  # 被劈的块换线后另一边至多留这么多（面积比）
 
 
 def _line_ys(ys, y_line: float, w: int) -> np.ndarray:
@@ -2715,27 +2719,8 @@ def _line_ys(ys, y_line: float, w: int) -> np.ndarray:
 
 
 def _split_glyphs(lab: np.ndarray, stats: np.ndarray, yv: np.ndarray, period: float) -> set[int]:
-    """切线 `yv`（逐列 y，行 < y 属上格）劈开的单字大小连通块（两边各 ≥`FREE_SEAM_FRAC` 面积、各伸出 ≥`FREE_SEAM_EXT` 格高）。"""
-    h, w = lab.shape
-    xs = np.arange(w)
-    ids = set(np.unique(lab[np.clip(yv, 0, h - 1), xs]).tolist()) | set(np.unique(lab[np.clip(yv - 1, 0, h - 1), xs]).tolist())
-    ids.discard(0)
-    out: set[int] = set()
-    min_a = FREE_SEAM_MIN_AREA * period * period
-    for i in ids:
-        x, y, cw, ch, a = (int(v) for v in stats[i])
-        if a < min_a or ch > FREE_SEAM_HMAX * period:
-            continue
-        comp = lab[y:y + ch, x:x + cw] == i
-        up = comp & (np.arange(y, y + ch)[:, None] < yv[x:x + cw][None, :])
-        dn = comp & ~up
-        nu, nd = int(up.sum()), int(dn.sum())
-        if min(nu, nd) < FREE_SEAM_FRAC * a:
-            continue
-        ru, rd = np.nonzero(up.any(1))[0], np.nonzero(dn.any(1))[0]
-        if ru[-1] - ru[0] + 1 >= FREE_SEAM_EXT * period and rd[-1] - rd[0] + 1 >= FREE_SEAM_EXT * period:
-            out.add(int(i))
-    return out
+    """切线 `yv` 劈开的单字大小连通块（`seg.seam.split_blobs`）。"""
+    return _seam.split_blobs(lab, stats, yv, period)
 
 
 def _free_seam_path(ink_bin: np.ndarray, lo: int, hi: int, y_line: float) -> tuple[int, np.ndarray] | None:
@@ -2809,22 +2794,7 @@ def _free_seam_keeps_sides(lab: np.ndarray, stats: np.ndarray, cur: np.ndarray, 
     史記 42 册 14 处看图：墨大半在上格的 6 处（或/在、滅/詩、城/范 戈钩，子/峻 钩，十/篇 竖尾，無/字）全对；墨大半在下格的
     8 处对错各半（通/共 零墨路走进甬与辶之间、整个辶给了下字，急/政 心给了下字，穆/清、以/次），分不开，不做。
     U-Net 一致率也分不开（两类换线后都掉 0.07–0.15），只记不拦。"""
-    h, w = lab.shape
-    lo, hi = int(max(0, min(cur.min(), new.min()) - 1)), int(min(h, max(cur.max(), new.max()) + 1))
-    min_a = FREE_SEAM_MIN_AREA * period * period
-    ids = set(np.unique(lab[lo:hi]).tolist()) - {0}
-    for i in ids:
-        x, y, cw, ch, a = (int(v) for v in stats[i])
-        comp = lab[y:y + ch, x:x + cw] == i
-        rows = np.arange(y, y + ch)[:, None]
-        up0 = int((comp & (rows < cur[x:x + cw][None, :])).sum()) / a
-        up1 = int((comp & (rows < new[x:x + cw][None, :])).sum()) / a
-        if i in split:
-            if up0 < 0.5 or up1 < 1 - FREE_SEAM_SIDE:
-                return False
-        elif a >= min_a and (up0 >= 0.5) != (up1 >= 0.5):
-            return False
-    return True
+    return _seam.blobs_keep_sides(lab, stats, cur, new, split, period, split_to="up")
 
 
 GAP_DOWN_SPAN = 0.35   # `cut_gap_keep_glyph`：换线后从上格划给下格的墨，上下跨这么多格高就不换
@@ -2899,22 +2869,7 @@ def _white_row_ok(lab: np.ndarray, stats: np.ndarray, cur: np.ndarray, new: np.n
                   period: float) -> bool:
     """`cut_white_row` 护栏：被原线劈开的块整块（≥ 1−`FREE_SEAM_SIDE`）归它原来墨多的那边；别的单字大小的块不换边
     （墨大半从一边挪到另一边）。挡字内白缝：线挪进「二」两横之间、「言」亠下面，上横／亠会整块换到上格。"""
-    h, w = lab.shape
-    lo, hi = int(max(0, min(cur.min(), new.min()) - 1)), int(min(h, max(cur.max(), new.max()) + 1))
-    min_a = FREE_SEAM_MIN_AREA * period * period
-    ids = set(np.unique(lab[lo:hi]).tolist()) - {0}
-    for i in ids:
-        x, y, cw, ch, a = (int(v) for v in stats[i])
-        comp = lab[y:y + ch, x:x + cw] == i
-        rows = np.arange(y, y + ch)[:, None]
-        up0 = int((comp & (rows < cur[x:x + cw][None, :])).sum()) / a
-        up1 = int((comp & (rows < new[x:x + cw][None, :])).sum()) / a
-        if i in split:
-            if (up1 if up0 >= 0.5 else 1 - up1) < 1 - FREE_SEAM_SIDE:
-                return False
-        elif a >= min_a and (up0 >= 0.5) != (up1 >= 0.5):
-            return False
-    return True
+    return _seam.blobs_keep_sides(lab, stats, cur, new, split, period, split_to="major")
 
 
 SETTLE_NEAR = 0.05      # `cut_glyph_line`：被劈块离两边别的墨的距离差不到这么多格高，拿不准归哪边，不动

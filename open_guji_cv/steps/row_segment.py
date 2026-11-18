@@ -769,6 +769,12 @@ def _alt_same_ink_cells(main_cells, alt_cells) -> bool:
     return ink(main_cells) == ink(alt_cells)
 
 
+#: `cut_repair: true` 展开的切点修整串（史記 k24–k26 书配置原值；脉经同值）：零墨缝护栏 → 零墨折线 → 换线不劈新字 →
+#: 整行白 → 按连通块归属画线。见各参数注。
+CUT_REPAIR = {"cut_gap_guard": 0.08, "cut_free_seam": 0.35, "cut_gap_keep_glyph": True,
+              "cut_white_row": 0.35, "cut_glyph_line": 0.35}
+
+
 class RowSegmentParams(BaseModel):
     n_body_slots: int | None = None      # None = Book.chars_per_line
     n_raised: int = 0                    # 抬头多出的格数；版式先验，raised 不自动推
@@ -778,7 +784,7 @@ class RowSegmentParams(BaseModel):
     detect_jiazhu: bool = True
     only_admitted: bool = True           # 只切过闸的列
     seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（seg/seam.py）
-    cut_judge: str = "unet"              # 候选池裁判：unet（seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
+    cut_judge: str = "unet_f64"          # 候选池裁判：unet_f64（双精度、跨 CPU 逐位一致；2026-11-18 起缺省，A22 开关收敛 11-13 定）| unet（单精度，seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
     #                                      | unet_f64：同一判官双精度前向＋双精度缩放，跨 CPU 逐位一致（S9，慢约 4 倍，改产物）
     judge_fingerprint: str = ""          # 裁判权重指纹，自动填（进 Step 指纹：换权重 → Step3 产物自动 stale）
     #: **判官画布缩放上限**（2026-11-18，《脉经》MJ，`seg/cut_select.scale_suffix`）：判官窗口缩到不超过这么多倍才进 U-Net。
@@ -946,6 +952,12 @@ class RowSegmentParams(BaseModel):
     #: 字大（脉经 ≈156px）、笔画粗时，正确的 U-Net 引导缝常穿墨 20–55px、分歧几十到两百，绝对门槛全挡在外，格线切进下字头（善、黄、痛）。
     #: 只在最终那遍切用。书级参数；0＝关（缺省，不进参数哈希）。
     adopt_rel: float = 0.0
+    #: **雙行小注噪点段否决门槛**（2026-11-18 A22 U3，`jiazhu_split.link_runs` 的 `cc_min`）：段中位「两侧较小最大连通体」低于这么多 px
+    #: 整段当纸面碎点否决。缺省 500 是殿本小字标定；脉经小字笔画细（单字最大连通体 200–600px）取 200。书级参数；500＝缺省（不进参数哈希）。
+    jiazhu_cc_min: int = 500
+    #: **切点修整串一键开**（2026-11-18 A22 统一优化 U2）：史記 r76–r80 定下、脉经照抄的五个切点开关一组开，
+    #: 没单写的项取 `CUT_REPAIR` 里的值（单写了的照单写的）。书配置只写 `cut_repair: true` 一行。缺省关（不进参数哈希）。
+    cut_repair: bool = False
     #: 原 `seal_gap_slots_empty`、`seal_inkcut`（大印下表中间空格位记空、剔印泥再切）两个书级开关 2026-11-10 搬进书级代码：
     #: 缺省实现 `impl/keben/seal_ink`（不做），史記书仓 `code/seal_ink.py` 覆盖。见 `_RETIRED`。
     #: **备选切法**（2026-11-03，史記文淵閣本第 7 轮，设计稿 https://claude.ai/artifact/NVqgK8BS2GietVShFnoqUU）：
@@ -992,6 +1004,14 @@ class RowSegmentParams(BaseModel):
                 import hashlib
                 _FP_CACHE[key] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
             object.__setattr__(self, "layout_fingerprint", _FP_CACHE[key])
+        return self
+
+    @model_validator(mode="after")
+    def _apply_cut_repair(self):
+        if self.cut_repair:
+            for k_, v_ in CUT_REPAIR.items():
+                if not getattr(self, k_):
+                    object.__setattr__(self, k_, v_)
         return self
 
     @model_validator(mode="after")
@@ -1062,6 +1082,9 @@ class RowSegmentParams(BaseModel):
             for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
                 if not getattr(self, k_):
                     d.pop(k_, None)
+            if self.jiazhu_cc_min == 500:
+                d.pop("jiazhu_cc_min", None)
+            d.pop("cut_repair", None)          # 展开后的各项照常进 dump，开关本身不进（同值的老写法指纹一致）
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
@@ -1198,6 +1221,8 @@ class RowSegmentStep(Step):
             raise ValueError(f"row_segment.cut_gap_guard：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         if p.cut_free_seam and "cut_free_seam" not in inspect.signature(segment_column).parameters:
             raise ValueError(f"row_segment.cut_free_seam：本册套书的 {RB.__name__}.segment_column 没有这个参数")
+        if p.jiazhu_cc_min != 500 and "jiazhu_cc_min" not in inspect.signature(segment_column).parameters:
+            raise ValueError(f"row_segment.jiazhu_cc_min：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
             if getattr(p, k_) and k_ not in inspect.signature(segment_column).parameters:
                 raise ValueError(f"row_segment.{k_}：本册套书的 {RB.__name__}.segment_column 没有这个参数")
@@ -1373,6 +1398,7 @@ class RowSegmentStep(Step):
                     **({"cut_free_seam": p.cut_free_seam} if p.cut_free_seam and final else {}),
                     **{k_: getattr(p, k_) for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel")
                        if getattr(p, k_) and final},
+                    **({"jiazhu_cc_min": p.jiazhu_cc_min} if p.jiazhu_cc_min != 500 else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:

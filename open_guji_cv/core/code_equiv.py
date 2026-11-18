@@ -2032,6 +2032,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="9e292550e51fe2e503b8ad9abdb17d6ecf313d893521f12cb30ae6449c3084cd",
           old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
           evidence=_GRID_OUTER_FIX_1118),
+    Equiv(module="open_guji_cv.steps.column_warp",
+          new="7d315de47ad1f2ae258c2428f9e919f17fe5996a0469df85c1d711581aa8305e",
+          old="991a42b0a7af0825750f929e9892e1a397b56a224e709b858dbbec2716724c65",
+          evidence="det_warp／cut_judge unet_f64 转缺省（A22 切分开关收敛 U4，A20 11-18）：显式写了的书 params 不变；column_warp、row_segment 在全唐文 010 8 页（--pages 20,23,27,34,41,50,64,72；book_defaults 显式 det_warp: true、cut_judge: unet_f64）上与 origin/dev 7cbc2bc 产物逐字节相同；scripts/code_equiv.py check，2026-11-18"),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="a96031700cd3fff4d753cbb8a08e996ea66b6a83255f79113affff71499bd8d8",
+          old="b4d7f96c05eb7291d3d7d844d4a0e94c178a59f5986b65e233d3b40b7a15238d",
+          evidence="det_warp／cut_judge unet_f64 转缺省（A22 切分开关收敛 U4，A20 11-18）：显式写了的书 params 不变；column_warp、row_segment 在全唐文 010 8 页（--pages 20,23,27,34,41,50,64,72；book_defaults 显式 det_warp: true、cut_judge: unet_f64）上与 origin/dev 7cbc2bc 产物逐字节相同；scripts/code_equiv.py check，2026-11-18"),
 )
 
 

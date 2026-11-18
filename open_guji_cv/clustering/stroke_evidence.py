@@ -136,6 +136,18 @@ def _decode(heat, reg, thr: float, st: int = 2) -> list[np.ndarray]:
     return out
 
 
+def canonical_input(im: np.ndarray) -> np.ndarray:
+    """检测网络吃的是字形库那种 canonical 字块（256 方画布、等比、墨迹质心居中、清过边）。
+    管线的 `char_patch` 是贴着格子裁的长方块（如 173×217），直接压成方图会把字拉变形、贴边，
+    笔段位置全偏：全唐文 020 整册 A/B 里这样接，5-b 首位变了 2,130 格，其中 1,927 格原来和整理本一致。
+    所以不是 canonical 的输入先过 `to_canonical`（和入库同一条路）；已经是的原样用，不再清第二遍。"""
+    from .canonical import is_canonical, to_canonical
+    if im.ndim == 3:
+        import cv2
+        im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+    return im if is_canonical(im) else to_canonical(im, clean=True)
+
+
 def normalize_strokes(det: np.ndarray, thr: float = DET_THR) -> tuple[np.ndarray, np.ndarray] | None:
     """检测输出 [n, 8] → `(类 [m], 点 [m, 6])`，点按全部点的外框归一到 0–1。不足 `MIN_STROKES` 段返回 None。"""
     det = det[det[:, 0] > thr]
@@ -219,10 +231,7 @@ class StrokeEvidence:
 
             def detect(imgs: list) -> list[np.ndarray]:
                 import cv2
-                xs = []
-                for im in imgs:
-                    g = im if im.ndim == 2 else cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-                    xs.append(cv2.resize(255 - g, (128, 128), interpolation=cv2.INTER_AREA))
+                xs = [cv2.resize(255 - canonical_input(im), (128, 128), interpolation=cv2.INTER_AREA) for im in imgs]
                 out: list[np.ndarray] = []
                 with torch.no_grad():
                     for i in range(0, len(xs), 64):
