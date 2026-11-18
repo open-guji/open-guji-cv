@@ -3,6 +3,12 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.63] - 2026-11-17
+
+- 发版说明（A31 11-17，殿本 patch 线，ZM 要）：v0.7.58 + #1643 + #1646（dev cherry-pick），PATCH，**只动 scripts/zhengli，指纹与 v0.7.58／v0.7.52 相同**，殿本册不用改钉、不过期。为殿本 21–99 册零票换单。
+- PATCH：`proof_cycle plan --allow-empty`、`auto_cycle` 零票判 go 的册自动带上（ZM 11-18：旧单没人投，swap run 整批被 `cellvotes draft`「读到 0 票」守卫拦下）。交给 `guji cellvotes draft --allow-empty`（要 guji-manager ≥0.4.59、设 CELLREVIEW_TOKEN），当场读网站按单版和按条目都是 0 条才出空计划，守卫不关；plan.json 记 `empty_confirmed`。
+- PATCH：`proof_cycle apply` 出单带 `--allow-empty`：落完票新单 0 格也换成空单、升 book-text，旧单不再挂在线上（殿本 vol08 008-r10）。`auto_cycle` 失败原因取最后一条 ✗ 行。
+
 ## [0.7.58] - 2026-11-17
 
 - 发版说明（A31 11-17，殿本 patch 线，ZM 要）：v0.7.52 + #1627（dev aa68b73 cherry-pick），PATCH，**不含** dev 线 v0.7.53/56 与史記 patch 线 v0.7.54/55/57 的改动。只改 `feedback/bindings.py`（不在任何 Step 的 code_deps），产物指纹与 v0.7.52 同，殿本各册不因换版过期；底库仍 b27。

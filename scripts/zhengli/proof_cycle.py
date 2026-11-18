@@ -329,7 +329,9 @@ def cmd_apply(a) -> int:
     note = (f"{book} 精校一轮：{plan['rev']} 的 {plan['ready']} 条人裁（{plan['batch']}），待审单 {new_rev}")
     issue = [sys.executable, HERE / "republish.py", "issue", "--book", book, "-w", ws, "--export-dir", export,
              "--rev", new_rev, "--book-text", a.book_text, "--note", note,
-             "--held-file", Path(plan["draft_dir"]) / "held.tsv"]
+             "--held-file", Path(plan["draft_dir"]) / "held.tsv",
+             # 落完票、新单 0 格＝这一章审完了：照样换成空单、升 book-text，别让旧单挂在线上（ZM 11-17 殿本 vol08 008-r10）
+             "--allow-empty"]
     if rows:
         issue += ["--recheck", recheck]
     if engine != CV:
