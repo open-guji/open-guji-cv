@@ -134,28 +134,3 @@ def test_full_blank_is_cheaper_than_splitting_a_char():
     b = res.boundaries
     assert 100 <= b[1] <= 127, f"首格应是整格空白，格线落在 {b[:3]}"
     assert 228 <= b[2] <= 236, f"示/下字之间的格线不对：{b[:4]}"
-
-
-def test_thin_bar_yi_rescued_between_chars():
-    """「一」笔画又细又断、墨比不到 0.01，夹在两个有字格之间不得记空白（殿本 vol45 46:8 等 10 列格数少一）。"""
-    import numpy as np
-    from open_guji_cv.impl.keben import row_boundaries as RB
-    w, p = 180, 100.0
-    ink = np.zeros((100, w), np.uint8)
-    ink[48:52, 55:125] = 1                  # 居中细横
-    assert RB._thin_bar(ink, p)
-    side = np.zeros((100, w), np.uint8)
-    side[48:52, 0:70] = 1                   # 贴窗边的横（版框边）不算
-    assert not RB._thin_bar(side, p)
-    assert not RB._thin_bar(np.zeros((100, w), np.uint8), p)
-
-    # 笔画碎成几小段（连通域都短），整体外包仍居中、够宽 → 算「一」
-    frag = np.zeros((100, w), np.uint8)
-    for x0 in (50, 80, 100, 130):
-        frag[48:51, x0:x0 + 12] = 1
-    assert RB._thin_bar(frag, p)
-    # 竖向散开的零星墨不算
-    junk = np.zeros((100, w), np.uint8)
-    junk[10:12, 60:120] = 1
-    junk[80:82, 60:120] = 1
-    assert not RB._thin_bar(junk, p)

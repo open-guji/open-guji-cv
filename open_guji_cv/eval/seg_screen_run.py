@@ -21,6 +21,10 @@
   value＝split／pair／run（＋page），note＝格态串（O 对上、B 对不上、R 生僻字通道、N 没配到参校字，小写＝没放行）；钉子列不查；
 - inner_gap（2026-11-14，史記 R002）：字内落缝——格线挨着对不上参校字且没放行的格（b／n），落在窄白缝里，旁边 0.15–0.55 格高
   另有宽得多的白缝（字间缝），一条线一行，value＝`上|下`，note＝缝宽、宽缝挪多少、格态；钉子列也查（切分线旧钉子也犯过，manager 记「已钉·复核」）；
+- erased（2026-11-18，全唐文 R033）：column_raw 有、column_image 没了的墨，离列图两边都远、又不是贯穿多格的竖线（清界行把字笔当界行抹了，
+  「十」剩「亠」）；一块一行，value＝像素；没有 column_raw 缓存的列不查；
+- bbox_drop（2026-11-18，全唐文 R038）：字所在那几行里、所有字框外的成块墨（字框收墨丢了偏旁：单字成列「制」的刂；整字判成半格「使」的亻），
+  value＝那一行的格号；
 - pin_stale：中心库有 active 钉子、本页产物却没用上（产物早于钉子，要从 row_segment 重跑）。
 
 钉子列（产物带 `manual_cells` 旗）只比格号、不跑墨账与端外墨（SJ 第 5 条）；有钉子而产物没用上的列照普通列查；职名列不跑端外墨。`skip` 点名的页整页不查（书配置
@@ -33,7 +37,7 @@ import sys
 
 CHECKS = ("edge_ink", "orphan", "edge_frame_only", "colnet_page", "frame_margin", "layout_col_shift", "layout_fallback",
           "pitch_free_ignored", "cell_flags", "cell_size", "page_pitch", "half_width", "pin_slots", "pin_stale", "layout_slots", "seal_blank",
-          "cut_through", "geo_ref_ok", "block_tall", "align_drift", "inner_gap")
+          "cut_through", "geo_ref_ok", "block_tall", "align_drift", "inner_gap", "erased", "bbox_drop")
 
 
 def _engine(book: str):
@@ -143,6 +147,7 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
                                                if ch.cell_type != "empty"}
         chars_by_col = {} if ci is None else {cc_.col: [ch for ch in cc_.chars if ch.cell_type == "char"]
                                               for cc_ in ci.columns if cc_.ok}
+        all_by_col = {} if ci is None else {cc_.col: [ch for ch in cc_.chars if ch.bbox_col] for cc_ in ci.columns if cc_.ok}
         wins = store.read(book, "column_warp", key, "column_windows") if cell_checks else None
         win_by_col = {} if wins is None else {w.col: w for w in wins.columns}
         lay_page = {col: r for (pg, col), r in layout.items() if pg == page}
@@ -195,6 +200,14 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
             if gray is None:
                 continue
             boxes = [ch.bbox_col for ch in chars]
+            raw = _img(ctx, book, "column_raw", column_key(page, cc.col))
+            if raw is not None:           # 清界行吃掉字笔（R033）：抹掉的墨下游谁也看不见，只有对 column_raw 才量得出
+                for o in ss.erased_strokes(raw, gray):
+                    rows["erased"].append((book, page, cc.col, o["ink"], f"bbox {o['bbox']}"))
+                    c["erased"] += 1
+            for o in ss.bbox_drop(gray, [(f"{ch.slot}{ch.sub or ''}", ch.bbox_col) for ch in all_by_col.get(cc.col) or []]):
+                rows["bbox_drop"].append((book, page, cc.col, o["slot"], f"墨 {o['ink']}px bbox {o['bbox']}"))
+                c["bbox_drop"] += 1
             if boxes:                     # 漏切块：人定字框、职名列也查（墨不在任何字格里与怎么切无关）
                 for o in ss.orphan_ink(gray, boxes):
                     rows["orphan"].append((book, page, cc.col, o["ratio"],
