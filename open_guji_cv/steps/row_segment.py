@@ -784,7 +784,7 @@ class RowSegmentParams(BaseModel):
     detect_jiazhu: bool = True
     only_admitted: bool = True           # 只切过闸的列
     seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（seg/seam.py）
-    cut_judge: str = "unet"              # 候选池裁判：unet（seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
+    cut_judge: str = "unet_f64"          # 候选池裁判：unet_f64（双精度、跨 CPU 逐位一致；2026-11-18 起缺省，A22 开关收敛 11-13 定）| unet（单精度，seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
     #                                      | unet_f64：同一判官双精度前向＋双精度缩放，跨 CPU 逐位一致（S9，慢约 4 倍，改产物）
     judge_fingerprint: str = ""          # 裁判权重指纹，自动填（进 Step 指纹：换权重 → Step3 产物自动 stale）
     #: **判官画布缩放上限**（2026-11-18，《脉经》MJ，`seg/cut_select.scale_suffix`）：判官窗口缩到不超过这么多倍才进 U-Net。
