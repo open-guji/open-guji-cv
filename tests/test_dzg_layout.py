@@ -502,8 +502,9 @@ def test_blank_frame_junk_keeps_centered_bar_yi():
     img = np.full((400, 100), 255, np.uint8)
     img[45:55, 20:80] = 0                      # 第 1 格：居中、占 0.6 宽的粗横（一）
     img[320:330, 0:100] = 0                    # 第 4 格：满宽版框线
+    img[290:297, 20:80] = 0                    # 第 3 格下沿：贴格边的短横（版框线残段）→ 不放过
     img[140:200, 30:70] = 0                    # 第 2 格：字
     mk = lambda slot, y0: C(slot=slot, y0=y0, y1=y0 + 100, kind="char", sub=None)
     cells = [mk(1, 0), mk(2, 100), mk(3, 200), mk(4, 300)]
-    n = _blank_frame_junk(img, cells, {2, 3}, (0, 100), 128, 100.0)
-    assert cells[0].kind == "char" and cells[3].kind == "blank" and n == 1
+    n = _blank_frame_junk(img, cells, {2}, (0, 100), 128, 100.0)
+    assert cells[0].kind == "char" and cells[2].kind == "blank" and cells[3].kind == "blank" and n == 2
