@@ -139,3 +139,69 @@ def test_grid_lattice_fallback_only_on_grid_pages_and_dropped_when_off(tmp_path,
     assert "grid_lattice_fallback" not in BorderDetectParams().model_dump()
     assert BorderDetectParams(column_grid_pages=[139], grid_lattice_fallback=True
                               ).model_dump()["grid_lattice_fallback"] is True
+
+
+def _text_page(width, height, x_new_cols, char_w=150):
+    """白底图：在给定列心（右上原点 x）画一串 char_w 宽、竖向断续的「字」。"""
+    import numpy as np
+    g = np.full((height, width), 230, np.uint8)
+    for xc in x_new_cols:
+        xo = (width - 1) - int(xc)
+        for y0 in range(300, 2700, 160):
+            g[y0:y0 + 130, xo - char_w // 2:xo + char_w // 2] = 30
+    return g
+
+
+_GF_XS = [100 + 192 * i for i in range(11)]               # 10 列、列距 192
+_GF_CENTERS = [x + 96 for x in _GF_XS[:-1]]
+
+
+def test_gutter_ink_score_low_in_gutters_high_across_text():
+    """脉经 02 p15：网格补线整片错半列、斜穿字身 → 穿字分高；线在字缝里 ≈ 0。"""
+    from open_guji_cv.steps.border_detect import gutter_ink_score
+    g = _text_page(2300, 3000, _GF_CENTERS)
+    assert gutter_ink_score(_res(_GF_XS), g) < 0.05
+    assert gutter_ink_score(_res([x + 96 for x in _GF_XS]), g) > 0.8
+    assert gutter_ink_score(_res([100, 300]), g) == 0.0       # 线太少不量
+
+
+def _fallback_run(tmp_path, monkeypatch, params, grid_xs, free_xs):
+    import open_guji_cv.steps.border_detect as bd
+    calls = []
+
+    def fake(gray, **kw):
+        calls.append(kw["column_grid"])
+        return _res(grid_xs if kw["column_grid"] else free_xs)
+
+    monkeypatch.setattr(bd, "detect_borders", fake)
+    monkeypatch.setattr(bd, "pitch_rescue", lambda r, *a, **k: (r, None))
+    ctx = make_ctx(tmp_path, make_book(params=params, column_grid=True, col_pitch=192, expected_cols=10),
+                   raw={PAGE: _text_page(2300, 3000, _GF_CENTERS)})
+    out = STEPS["border_detect"].run_page(ctx, PAGE)
+    return calls, out
+
+
+def test_grid_free_fallback_switches_when_grid_lines_cross_text(tmp_path, monkeypatch):
+    calls, out = _fallback_run(tmp_path, monkeypatch, {"border_detect": {"grid_free_fallback": 0.15}},
+                               [x + 96 for x in _GF_XS], _GF_XS)
+    assert calls == [True, False]
+    xs = [round(v.x_at_top) for v in out["borders"].verticals]
+    assert xs == _GF_XS
+    assert any("grid_free_fallback" in f for ln in out["line_index"].lines for f in ln.flags)
+
+
+def test_grid_free_fallback_off_or_clean_grid_unchanged(tmp_path, monkeypatch):
+    calls, _ = _fallback_run(tmp_path, monkeypatch, {}, [x + 96 for x in _GF_XS], _GF_XS)
+    assert calls == [True]                                     # 缺省关：不跑自由模式
+    calls, out = _fallback_run(tmp_path, monkeypatch, {"border_detect": {"grid_free_fallback": 0.15}},
+                               _GF_XS, [x + 96 for x in _GF_XS])
+    assert calls == [True]                                     # 网格线本来就在字缝里：不试
+    assert "grid_free_fallback" not in BorderDetectParams().model_dump()
+    assert BorderDetectParams(grid_free_fallback=0.15).model_dump()["grid_free_fallback"] == 0.15
+
+
+def test_grid_free_fallback_keeps_grid_when_free_has_other_line_count(tmp_path, monkeypatch):
+    calls, out = _fallback_run(tmp_path, monkeypatch, {"border_detect": {"grid_free_fallback": 0.15}},
+                               [x + 96 for x in _GF_XS], _GF_XS[:-1])
+    assert calls == [True, False]
+    assert [round(v.x_at_top) for v in out["borders"].verticals] == [x + 96 for x in _GF_XS]
