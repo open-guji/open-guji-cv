@@ -178,7 +178,7 @@ class RareCandidatesStep(Step):
                        struct_probe=p.struct_probe or None, real_proto=book_real_proto(ctx.book.font),
                        gw_enabled=book_gw_variant(ctx.book.font))
         # 笔画证据（`font.stroke_evidence`，缺省关）的检测网络与骨架索引不在这里预热：
-        # 开着的书由各 worker 第一页时各自加载（约 1 秒、150 MB）。
+        # 开着的书由各 worker 第一页时各自加载（约 1 秒，内存峰值多约 450 MB）。
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.cnn_candidates import book_gw_variant, book_real_proto
