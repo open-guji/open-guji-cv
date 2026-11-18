@@ -1658,6 +1658,23 @@ def _closed_box_glyph(ink: np.ndarray, frame: np.ndarray) -> bool:
     return runs >= 2
 
 
+STACK_BAR_W = (0.3, 0.85)   # 数字「二」「三」的横画：宽占 period 的这个范围（末列窗口比字宽得多，不能按格宽比；版框的上下边宽过窗口，不在内）
+
+
+def _stacked_bars(ink: np.ndarray, frame: np.ndarray, period: float) -> bool:
+    """「二」「三」：去掉长竖后剩 ≥2 道又薄又不满宽的分离横画（2026-11-17）。框角只有一道边，双边框的两道边是满宽的；
+    这类格贴着版框竖线时（末列），横画端点落进框线邻域，被 `_frame_only` 当框角整格判空（殿本 vol68 230:9 的「二」、
+    vol63 116:9 的「三」，格数少于整理本字数）。"""
+    import cv2
+    h, w = ink.shape[:2]
+    rest = ink & (1 - cv2.dilate(frame, np.ones((5, 5), np.uint8)))
+    n, _lab, st, _ = cv2.connectedComponentsWithStats(rest.astype(np.uint8), connectivity=8)
+    bars = [i for i in range(1, n)
+            if st[i, cv2.CC_STAT_AREA] >= 20 and st[i, cv2.CC_STAT_HEIGHT] < FRAME_THIN_H * period
+            and STACK_BAR_W[0] * period <= st[i, cv2.CC_STAT_WIDTH] <= STACK_BAR_W[1] * period]
+    return len(bars) >= 2
+
+
 def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio: float) -> bool:
     """这一格的墨是不是只有框线（2026-09-26）：必须有跨格长竖穿过；去掉它（连同贴着它的几像素）
     后剩下的要么够不上 `min_ink_ratio`，要么只剩又矮又不宽的细横（框的上下边）。"""
@@ -1665,7 +1682,7 @@ def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio
     h, w = ink.shape[:2]
     if h < 10 or w < 10 or not frame.any():
         return False
-    if _closed_box_glyph(ink, frame):
+    if _closed_box_glyph(ink, frame) or _stacked_bars(ink, frame, period):
         return False
     rest = ink & (1 - cv2.dilate(frame, np.ones((5, 5), np.uint8)))
     if float(rest.mean()) < min_ink_ratio:
