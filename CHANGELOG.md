@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 - PATCH：`scripts/zhengli/proof_cycle.py apply` 出单带 `--allow-empty`：落完票新单 0 格也换成空单、升 book-text，旧单不再挂在线上（殿本 vol08 008-r10）。`auto_cycle` 失败原因取最后一条 ✗ 行（以前取末尾 300 字，常抄成前面的提示）。只动 scripts，不进指纹。
+- PATCH：字形库体检的清边不变式顺带核对派生归一图是不是现装 cv 算的（OCR 研究 Project，自检线 11-17 实遇）：`glyph_selfcheck.clean_invariant` 抽至多 400 例，把 `derived` 里存的归一图和现算的比，结果多 `derived_checked`、`derived_stale` 两个键；有不一致时 `guji glyph-db selfcheck` 打印一行，提示先 `guji glyph-db rebuild`。`glyph.db` 的派生是建库那一刻装着的 cv 算的，升级 cv 不会自动重算，拿旧归一图跑体检等于清边没修。只读库，不动任何 Step。
 - PATCH：`scripts/zhengli/republish.py` 的 push、add-alt、add-cell、edit-cell、add-sprites 写回后**缺省就** `guji db sync` 并触发网站发布（原来要加 `--sync`，殿本 019-r10 忘了加漏发；ZM 11-17 框架建议 1）；只写本机加 `--no-sync`，旧的 `--sync` 照收。不碰 Step，指纹不变。
 - 新书级参数 `row_segment.cut_glyph_line`（缺省 0＝关、不进参数哈希；史記 r79 ①类上下字交错，SJ 切分线 11-17）：`cut_white_row` 之后选中切线仍劈开单字大小连通块时，被劈的块按离哪边别的墨近整块归那边（一样近时按墨多的那边，少的一边 ≤35%），逐列取上格墨之下、下格墨之上离原线最近的 y（±这么多格内，不限坡度），kind `glyph_line`、`chosen_by="glyph"`；拿不准、块高过 1.15 格、某列上下墨重叠都不动。史記 32 册 103 页（与 v0.7.59 三开关同开）：改线 31 处，切坏线 105→77、新劈 0，抽 20 处看图全对。关时逐字节同，登 code_equiv `_GLYPH_LINE_1117`。建议值 0.35。
 - PATCH：清边不再删贴在字身外缘的真笔画（忄／帝／常 的侧点、而／百 的顶横；OCR 研究 Project，Sheldon 11-17「残墨彻底修好」）：`clustering/normalize.py` 加 `STROKE_KEEP`，规则 3（padding 带碎屑）和 `_drop_stray_components` 要删的连通体，粗细 ≥0.7×本图块笔宽、面积 ≥2×笔宽²、长宽比 ≥2、离其余墨 ≤3 笔宽的留下。管线真实字块实测（按该格定字的字体模板量）：全唐文 009 抽 9407 格变 173、更像 9、更不像 0；史記 08 抽 5467 格变 45、更像 22、更不像 0；殿本 vol05＋vol40 抽 1.76 万格变 83、更像 11、更不像 7。`normalize` 在 `glyph_match` 的 `code_deps` 里，各书 5a 判过期（与 #1617 同一波）。原理见 guji-manager `doc/参考/字形图清边与归一.md`。
@@ -19,6 +20,10 @@
 - 模型库登记 5a 相似度 CNN 的跨书通用底座 `models/glyph_sim_base_v1/`（殿本、史記、全唐文三书合训 59,116 例；OCR 研究 Project 11-17，Sheldon：模型应该放到模型库里）：`core/model_pack.KINDS` 加种类 `glyph_sim_base`（global），模型表与出处表同步，权重与校准表已传 R2。校准表是通用保守包络（`scripts/fit_glyph_sim_calib.py` 的 `--work`／`--cnn` 可给多次，逐点取 cov 最小）。不动任何 Step 与 `sim_cnn.py`，各书产物指纹不变；还没有书的配置指向它。用法见 guji-manager `doc/参考/5a相似度模型.md`。
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
+
+## [0.7.62] - 2026-11-18
+
+- 发版说明（A31 11-18，史記 patch 线，r80 用）：v0.7.61 + #1617 + #1635（清边），PATCH，不含 dev 线其他改动。normalize.py 与 dev 同；不登 code_equiv（史記 glyph_match 起过期）。tag 在 main 68ea912（#1644）。
 
 ## [0.7.61] - 2026-11-17
 
