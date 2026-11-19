@@ -514,6 +514,21 @@ class RowBoundaryResult:
     bottom_bar_y: float | None = None
     """列图里 `border_bottom` 之上认出的下版框线上沿（`find_bottom_frame_bar`）；
     认出来了 DP 的下界就是它，没认出来为 None（下界照旧用 `border_bottom`）。"""
+    row_split_extra: int = 0
+    """书级 `row_split`（雙行小注按小字分行）让本列比大字格网多出的格数；0＝没切过（`boundaries` 就是物理格线）。"""
+
+
+#: 列旗：书级 `jiazhu_step.row_split` 切过的列（后接 +N＝多出的格号数）。Step3 写、闸3 认，见 `row_split_extra`。
+ROW_SPLIT_FLAG = "jiazhu_row_split"
+
+
+def row_split_extra(flags) -> int:
+    """列旗里 `row_split` 多出的格号数（没切过为 0）。"""
+    for f in flags or ():
+        if f.startswith(ROW_SPLIT_FLAG):
+            num = f[len(ROW_SPLIT_FLAG):].split("：", 1)[0]
+            return int(num) if num.lstrip("+-").isdigit() else 0
+    return 0
 
 
 _PAIR_MEMO: "dict[tuple, dict]" = {}
@@ -1854,6 +1869,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     grid_bounds: "Sequence[float] | None" = None,
                     jiazhu_rows: bool = False,
                     free_split=None,
+                    row_split=None,
                     grid_end_fit: bool = False,
                     snap_cut: float = 0.0,
                     snap_gap_ok=None,
@@ -1959,6 +1975,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       调它，签名 `(ink_col, n, long_sub, cxi, top, bot, anchor) -> {sub: 格线} | None`：多出的那个字归段尾格墨多的那行，
       短的那行在自己墨的范围里少切一格，格号照「本行第几字」从段首数，段尾那格只发长的那行；返回 None 照旧两行都切 n 格。
       缺省 None＝不调（2026-11-10 起实现在史記书仓 `code/jiazhu_step.py`，原 `_free_split`）。
+    - `row_split`（要 `jiazhu_rows`；书级代码 `jiazhu_step.row_split`，脉经写本小字比大字矮，2026-11-19 GUJI-774）：
+      雙行小注段每行调一次，签名 `(ink, top, bot, n_grid, period) -> [格线…] | None`，`ink` 是这一行（a＝缝右、b＝缝左）
+      的二值墨（整列高），返回从 top 到 bot 的 k+1 条格线＝这一行切 k 个字，**k 可以多于段占的大字格数 n_grid**。
+      两行都返回 None 就照旧；只一行返回时另一行照旧切 n_grid 格。段内格号照「本行第几字」从段首数，段占
+      max(a 行字数, b 行字数) 个格号，段后各格格号整体顺延；`boundaries` 也换成逻辑格线（段内 m 格均分段高），
+      `pos`／`slot`／`boundaries` 三者对得上，下游照常按格号认。缺省 None＝不调，别的书逐字节不变。
     - `snap_cut`（书级，2026-11-13，史記写本字距不匀）：格线定下后（等距格网落缝、DP 格网、下版框之后，人钉切线之前），
       还劈着字的格线按墨块切割量在 ±`snap_cut` 格内补挪（`snap_by_cut`；等距格网以名义格线为中心，DP 格网以 DP 格线为中心）；
       0＝关（缺省）。`cut_gap_guard`（格高倍数，0＝关）：切点选定后（规则、U-Net 改选、扩池自动改选之后，人裁不动），
@@ -2224,6 +2246,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     # 另一行被拦腰切（史記 02:12:6「州上洛縣」）。格号不变，只是 a、b 的 y0/y1 可以不同。
     side_y: dict[tuple[int, str], tuple[float, float]] = {}
     half_side: dict[int, str] = {}       # free_split：段尾单半格发哪一半
+    split_groups: dict[int, tuple[list[int], int, dict[str, list[float]]]] = {}   # row_split：段首 pos → (段, 缝, {sub: 格线})
     if jiazhu_rows and runs:
         from ...seg.seam import fit_row_cuts
         ink_col = col_gray[:, x_lo:x_hi] < ink_threshold
@@ -2235,6 +2258,26 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             else:
                 groups.append([p_])
         for g in groups:
+            if row_split is not None and not (tail_a & set(g)) and not (one_half & set(g)):
+                cxi = int(round(float(np.median([runs[p_] for p_ in g]))))
+                if cxi >= 4 and x_hi - x_lo - cxi >= 4:
+                    top_f, bot_f = float(bounds[g[0] - 1]), float(bounds[g[-1]])
+                    by_sub: dict[str, list[float]] = {}
+                    for sub, xs, xe in (("a", cxi, x_hi - x_lo), ("b", 0, cxi)):
+                        cuts = row_split(ink_col[:, xs:xe], top_f, bot_f, len(g), period)
+                        if cuts is not None and len(cuts) >= 2:
+                            by_sub[sub] = [float(y) for y in cuts]
+                    if by_sub:
+                        for sub, xs, xe in (("a", cxi, x_hi - x_lo), ("b", 0, cxi)):
+                            if sub in by_sub:
+                                continue
+                            rows = ink_col[:, xs:xe].sum(axis=1) / float(xe - xs)
+                            cuts = fit_row_cuts(rows, int(round(top_f)), int(round(bot_f)), len(g),
+                                                anchor=[float(bounds[p_ - 1]) for p_ in g] + [bot_f])
+                            by_sub[sub] = ([float(y) for y in cuts] if cuts is not None
+                                           else [float(bounds[p_ - 1]) for p_ in g] + [bot_f])
+                        split_groups[g[0]] = (g, cxi, by_sub)
+                        continue
             if len(g) < 2:
                 continue
             cxi = int(round(float(np.median([runs[p_] for p_ in g]))))
@@ -2262,10 +2305,38 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     side_y[(p_, sub)] = (cuts[i_], cuts[i_ + 1])
 
     cells: list[Cell] = []
+    in_split = {p_ for g_, _c, _s in split_groups.values() for p_ in g_}
+    shift = 0                            # row_split：段后格号顺延量
+    new_bounds = [float(bounds[0])]      # row_split：逻辑格线（段内 m 格均分）
     for k in range(n_slots):
         pos = k + 1
-        slot = _pos_to_slot(pos, n_raised)
+        if pos in split_groups:
+            g, cxi, by_sub = split_groups[pos]
+            m = max(len(c_) - 1 for c_ in by_sub.values())
+            top_f, bot_f = float(bounds[g[0] - 1]), float(bounds[g[-1]])
+            raised = top_f < border_top - raise_tol
+            cx = float(x_lo + cxi)
+            for i_ in range(m):
+                slot_i = _pos_to_slot(pos + shift + i_, n_raised)
+                for sub, kind, xs, xe in (("a", "jiazhu_a", cxi, x_hi - x_lo), ("b", "jiazhu_b", 0, cxi)):
+                    cuts = by_sub[sub]
+                    if i_ >= len(cuts) - 1:
+                        continue
+                    hy0, hy1 = cuts[i_], cuts[i_ + 1]
+                    half = col_gray[int(round(hy0)):int(round(hy1)), x_lo + xs:x_lo + xe]
+                    if int((half < ink_threshold).sum()) < jiazhu_split.HALF_MIN_INK:
+                        continue
+                    cells.append(Cell(slot=slot_i, y0=hy0, y1=hy1, x0=float(x_lo + xs), x1=float(x_lo + xe),
+                                      kind=kind, gap_center=cx, raised=raised,
+                                      ink_ratio=round(_ink_ratio(half, ink_threshold), 4)))
+                new_bounds.append(top_f + (bot_f - top_f) * (i_ + 1) / m)
+            shift += m - len(g)
+            continue
+        if pos in in_split:
+            continue
+        slot = _pos_to_slot(pos + shift, n_raised)
         y0, y1 = float(bounds[k]), float(bounds[k + 1])
+        new_bounds.append(y1)
         raised = y0 < border_top - raise_tol   # 纯几何量，跟 kind 判定分开算
         if pos in solo:
             # 單行小注：一格只发一个 Cell，占 [小注左缘, x_hi]，sub 为 None。
@@ -2316,6 +2387,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         kind = "blank" if pos not in nonblank else "char"
         cells.append(Cell(slot=slot, y0=y0, y1=y1, x0=float(x_lo), x1=float(x_hi),
                           kind=kind, raised=raised, ink_ratio=round(inks[pos], 4)))
+    if split_groups:
+        # row_split 改了格数：格线换成逻辑格线，后面的折线切分、下游按格号认都照它
+        bounds = new_bounds
+        result.boundaries = new_bounds
+        result.row_split_extra = shift
+        n_slots = len(new_bounds) - 1
 
     for i, c in enumerate(reading_order(cells), start=1):
         c.order = i
