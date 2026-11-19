@@ -264,3 +264,36 @@ def test_grid_outer_fix_runs_column_fit_in_grid_mode(tmp_path, monkeypatch):
             raw={PAGE: _text_page(2300, 3000, _GF_CENTERS)})
         STEPS["border_detect"].run_page(ctx, PAGE)
         assert seen == want
+
+
+def _edge_page():
+    import numpy as np
+    H, W = 400, 1200
+    g = np.full((H, W), 255, np.uint8)
+    g[40:360, 100] = 0                       # 左框线（只在版框内）
+    g[40:360, 1060] = 0                      # 右细内框线
+    for x in range(1130, 1180, 3):             # 书口条：贯穿天头到页底的一束竖黑条
+        g[:, x] = 0
+    g[100:300, 200:220] = 0                  # 一块字
+    return g
+
+
+def test_strip_page_edge_erases_edge_stripes_only():
+    from open_guji_cv.steps.border_detect import strip_page_edge
+    g = _edge_page()
+    out, left, right = strip_page_edge(g, 128)
+    assert left == 0 and right > 0
+    assert (out[:, 1130:] == 255).all()      # 书口条抹掉
+    assert (out[40:360, 1060] == 0).all()    # 细框线留着
+    assert (out[100:300, 200:220] == 0).all()
+    assert (g[:, 1130] == 0).all()           # 不改入参
+
+
+def test_strip_page_edge_leaves_clean_page_and_param_dropped_when_off():
+    import numpy as np
+    from open_guji_cv.steps.border_detect import strip_page_edge
+    g = np.full((400, 600), 255, np.uint8); g[40:360, 100] = 0
+    out, left, right = strip_page_edge(g, 128)
+    assert out is g and left == right == 0
+    assert "edge_strip" not in BorderDetectParams().model_dump()
+    assert BorderDetectParams(edge_strip=True).model_dump()["edge_strip"] is True
