@@ -2051,6 +2051,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="4db2a99d60fa9e626b970d6276d965abc067f3d79ef2105e9eb430a62abde0c2",
           old="c007e49e89d7adc65bac5b96e4305f23e0c759b7d640b66122a92a1d84040fdc",
           evidence=_GRID_RESCUE_FORCE_1119),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="15b819ac2d99e213dcf3a2e2116d46b6ea816b27ab854cda59a1b19ed9849b5f",
+          old="9fad332d6361d422ab9dbd0b475c94716b1e91ad644a15e81df27179fc34c0ef",
+          evidence="seed_admit 在殿本 vol05 6 页（2,30,60,100,146,180）＋vol21 6 页（1,90,105,146,190,214，含 D 类图片字与原私用码格）上与 976c77b（dev）产物逐字节相同；未钉 pua_table_pin 时行为不变（cv #1699 PUA 码表共享层读取侧，A23；ZM 11-19 跑 scripts/code_equiv.py check）"),
+    Equiv(module="open_guji_cv.utils.pua_v2_codes",
+          new="d94f1f281ae362d1277b6a353036b86dc97be63c44e13f7601957757e4ed3f1e",
+          old="909be2f3c3054883a2666af3e775e9baaa5a6e0f9ba73f3f04f99137dffde528",
+          evidence="seed_admit 在殿本 vol05 6 页（2,30,60,100,146,180）＋vol21 6 页（1,90,105,146,190,214，含 D 类图片字与原私用码格）上与 976c77b（dev）产物逐字节相同；未钉 pua_table_pin 时行为不变（cv #1699 PUA 码表共享层读取侧，A23；ZM 11-19 跑 scripts/code_equiv.py check）"),
 )
 
 
