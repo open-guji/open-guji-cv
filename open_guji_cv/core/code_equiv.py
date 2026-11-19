@@ -433,6 +433,8 @@ _STAGES_1116 = ("glyph_match 加 stages 参数（库匹配之后的分段判定 
 _LIB_TIER_1118 = ("5-b 库字档（册配置 font.charset.lib_chars，缺省关；rare_for_batch 多一支只在开着时走，cnn_candidates 加 real_chars 读库里人裁字）："
                   "全唐文 010 全册 182 页（26,928 格，c1 包 cv0.7.68-c80-g-794884-k11-qtw010-c1 当上游）rare_candidates 与 origin/dev 5c276aa 产物逐字节相同；"
                   "两版各手工跑 guji step --force 比逐页 sha256，GUJI_CORPUS_DRIFT=warn，2026-11-18（OCR 研究 Project）")
+_LIB_TIER_0774 = (_LIB_TIER_1118 + "。dev 线 patch 移植（v0.7.73 + #1701 → v0.7.74）：同一改动原样 cherry-pick，rare_panel 哈希按本线重算（本线 rare_panel 无 #1684 等 dev 改动），本线未另跑产物比对（A31 2026-11-19）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2082,6 +2084,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='844fee294f0b7aff260394be89c64f08a6066addc82c63501773efdc0b7503f2',
           old='9fad332d6361d422ab9dbd0b475c94716b1e91ad644a15e81df27179fc34c0ef',
           evidence='seed_admit 在脉经 01 3 页（--pages 6,20,40）上与 origin/dev 产物逐字节相同'),
+    # v0.7.74（dev 线 patch，v0.7.73 + #1701）本线 rare_panel 哈希
+    Equiv(module="open_guji_cv.clustering.rare_panel",
+          new="0c533bac27ab77b83f4e3368f6420ab4d2802eb79f21308431d6a69ae685ad07",
+          old="abedaa8300975c80f6384cb5aa0a20307775a82f420250809f51e1540e46e689",
+          evidence=_LIB_TIER_0774),
 )
 
 

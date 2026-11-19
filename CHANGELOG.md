@@ -47,6 +47,10 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.74] - 2026-11-19
+
+- 发版说明（A31 11-19，**dev 线 patch**，PATCH；全唐文·总览请求，Sheldon 已批全唐文开）：v0.7.73 + #1701（5-b 库字档 `font.charset.lib_chars`：本书字形库人裁过、5-b 给不出来的字另开一档进候选；缺省关；cherry-pick eef4214），不含 v0.7.73 之后 dev 上的其他改动（#1684 stroke_evidence 等）。code_equiv：cnn_candidates 照 #1701 原登记；rare_panel 按本线哈希重登（本线未另跑产物比对，dev 上证据为全唐文 010 全册逐字节同）。**Step 指纹对 v0.7.73 全不变**；开了 `lib_chars` 的册 rare_candidates 指纹多带库内容指纹，按此过期。底库不变（b30）。
+
 ## [0.7.73] - 2026-11-19
 
 - 发版说明（A31 11-19，**dev 线 patch**，PATCH；全唐文·形近字线请求）：v0.7.72 + #1707（seed_admit 书级开关 `lane_lib_veto`：witness3／coord_fallback 两条补放通道遇字形库首位 cov ≥ 阈值且不同字、非异体 → 送审；缺省 0＝关、不进参数 dump；cherry-pick 304d4b6，无冲突），不含 v0.7.72 之后 dev 上的其他改动。Step 指纹对 v0.7.72 只有 `seed_admit` 变（未登 code_equiv：没跑产物比对；开开关的书按参数指纹本来要重跑 seed_admit），下游随之过期。底库不变（b30）。
