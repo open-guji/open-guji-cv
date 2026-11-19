@@ -395,6 +395,12 @@ _GRID_OUTER_FIX_1118 = ("border_detect 加书级参数 grid_outer_fix（外列�
 _GRID_RESCUE_FORCE_1119 = ("border_detect grid_outer_fix 加「按版式列数强拟列宽均匀、不查旧线护栏，出带更少才采用」，pitch_rescue.rescue 加 n_lines、keep_guard 参数"
                            "（缺省 None／True 行为不变）：grid_outer_fix 关着时脉经第 2 册 15、24、50、63 页（书配置开着 grid_free_fallback、grid_outer_trim）"
                            "border_detect 与 origin/dev 16a2972 产物逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
+_EDGE_STRIP_1119 = ("border_detect 加书级参数 edge_strip（探竖线前抹掉页边书口条、抹与不抹两版挑出带少／穿字分低的；run_page 拆出 _run_page，"
+                    "缺省关、不进参数 dump）：关着时脉经第 2 册 15、24、50、63 页 border_detect 与 origin/dev 5c276aa 产物逐字节相同；"
+                    "scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
+_JZ_SPAN_T_1119 = ("row_segment 加书级参数 jiazhu_span_t（雙行小注单格判据跨度下限，jiazhu_split.gap_center 加 span_t、segment_column 加 jiazhu_span_t，"
+                   "缺省 0.75＝原常数、不进参数 dump）：缺省时脉经第 1 册 13、20、40 页 row_segment 与 origin/dev a205648 产物逐字节相同；"
+                   "scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -430,6 +436,12 @@ _STAGES_1116 = ("glyph_match 加 stages 参数（库匹配之后的分段判定 
 _LIB_TIER_1118 = ("5-b 库字档（册配置 font.charset.lib_chars，缺省关；rare_for_batch 多一支只在开着时走，cnn_candidates 加 real_chars 读库里人裁字）："
                   "全唐文 010 全册 182 页（26,928 格，c1 包 cv0.7.68-c80-g-794884-k11-qtw010-c1 当上游）rare_candidates 与 origin/dev 5c276aa 产物逐字节相同；"
                   "两版各手工跑 guji step --force 比逐页 sha256，GUJI_CORPUS_DRIFT=warn，2026-11-18（OCR 研究 Project）")
+_LIB_TIER_0774 = (_LIB_TIER_1118 + "。dev 线 patch 移植（v0.7.73 + #1701 → v0.7.74）：同一改动原样 cherry-pick，rare_panel 哈希按本线重算（本线 rare_panel 无 #1684 等 dev 改动），本线未另跑产物比对（A31 2026-11-19）")
+
+_ROW_SPLIT_1119 = ("书级钩子 jiazhu_step.row_split（缺省 None、不调；segment_column 多一支恒假的段循环与格号顺延、闸3 只认 jiazhu_row_split 列旗）："
+                   "row_segment 在史記 02 30 页（5-34，jiazhu_rows＋书仓 free_split／逐步切，包 cv0.7.59-c10-g23-m2-k25-job5106）、"
+                   "脉经 02 40 页（1-40，夹注多）与 origin/dev a205648 产物逐字节相同；闸3 row_segment_gate 史記 02 30 页、"
+                   "column_gate（row_boundaries）史記 02 30 页逐字节相同；变基到 dev 2ea07b2（#1712 jiazhu_span_t）后 row_segment、闸3 史記 02 20 页再核逐字节同；scripts/code_equiv.py check，2026-11-19（A22）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2070,11 +2082,49 @@ ENTRIES: tuple[Equiv, ...] = (
           new="84455fc813eefa560dead835acc262242eb312b773927b9fff11d8e469959379",
           old="f65058caf059fff6dbf2dde610a1086a027672532a920d500eb62b1c3b1ac472",
           evidence=_LIB_TIER_1118),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="b2712a678431ec3cd412257e09f365c68203783aa7283ca82590fd829d0cf566",
+          old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
+          evidence=_EDGE_STRIP_1119),
     # 无参校本页 no_ref_pages／no_ref_params（脉经 林億序、牒文，2026-11-19）：两个字段缺省空、不进 dump，没配的书逐字节不变
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='844fee294f0b7aff260394be89c64f08a6066addc82c63501773efdc0b7503f2',
           old='9fad332d6361d422ab9dbd0b475c94716b1e91ad644a15e81df27179fc34c0ef',
           evidence='seed_admit 在脉经 01 3 页（--pages 6,20,40）上与 origin/dev 产物逐字节相同'),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="8ed4c43c545066616337d5bce38f4b2d88d66b8fd7995420e7f8f3f17bebeb40",
+          old="90a4a5fe8a50a4d0a3b1bd80e68328d5405d7e58a7b2a947054d67ca670fe959",
+          evidence=_JZ_SPAN_T_1119),
+    Equiv(module="open_guji_cv.impl.keben.row_boundaries",
+          new="8d57d4feb00ea92307c893c3bce04cbe08ff24f040b20e0b1639cd3e057b5c09",
+          old="ff1538485290289410fc7a706eb3d8b861b7fb21b9d1d172703d63650505e8e6",
+          evidence=_JZ_SPAN_T_1119),
+    Equiv(module="open_guji_cv.impl.keben.jiazhu_split",
+          new="3e437917ab534ce2478cc5f559b8fac91b3e18c045d03c7268b394aae04cfa2f",
+          old="fe3d9465f14ded8062effe5cc54b89ce3f6548bf4678d02886f29396868d2a70",
+          evidence=_JZ_SPAN_T_1119),
+    # v0.7.74（dev 线 patch，v0.7.73 + #1701）本线 rare_panel 哈希
+    Equiv(module="open_guji_cv.clustering.rare_panel",
+          new="0c533bac27ab77b83f4e3368f6420ab4d2802eb79f21308431d6a69ae685ad07",
+          old="abedaa8300975c80f6384cb5aa0a20307775a82f420250809f51e1540e46e689",
+          evidence=_LIB_TIER_0774),
+    # 书级钩子 jiazhu_step.row_split（雙行小注按小字分行、格号顺延；缺省 None 不调，GUJI-774 脉经第 1 册，2026-11-19 A22）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="5a6a488b7e3b79c1fc9370fa8949cb6ff9c093f4f29f22e246f728564d1b86a0",
+          old="8ed4c43c545066616337d5bce38f4b2d88d66b8fd7995420e7f8f3f17bebeb40",
+          evidence=_ROW_SPLIT_1119),
+    Equiv(module="open_guji_cv.impl.keben.row_boundaries",
+          new="168e6473126ecdb818b031ecd398875fa77099e41d461368c2f0a48a60a2280d",
+          old="8d57d4feb00ea92307c893c3bce04cbe08ff24f040b20e0b1639cd3e057b5c09",
+          evidence=_ROW_SPLIT_1119),
+    Equiv(module="open_guji_cv.impl.keben.jiazhu_step",
+          new="e4a7c5097c9d70c9aefed760539349402d98ae547849b127eccc8d82d25a3d07",
+          old="095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67",
+          evidence=_ROW_SPLIT_1119),
+    Equiv(module="open_guji_cv.gates.row_segment_gate",
+          new="572d8c2b55e110674112b42450e9a7c29d666dfafe8517e2ff0598f40274b083",
+          old="814bd02de64f51372289b29a7f97c8460651b313c75a879048c021e9db93cd10",
+          evidence=_ROW_SPLIT_1119),
 )
 
 

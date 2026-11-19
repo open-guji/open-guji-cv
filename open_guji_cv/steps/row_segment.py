@@ -21,7 +21,7 @@ from ..products.kinds.gate import GateManifest
 from ..seg.cut_select import ckpt_fingerprint, get_judge, scale_suffix
 from ..seg.profile import frame_only_edge_cells as _frame_only_edge_cells
 from ..impl.keben.row_grid import fit_page_grids
-from ..impl.keben.row_boundaries import slot_mask_from_occupied, _thin_bar, YI_LISTEND_MAX_W, YI_LISTEND_MID
+from ..impl.keben.row_boundaries import slot_mask_from_occupied, _thin_bar, ROW_SPLIT_FLAG, YI_LISTEND_MAX_W, YI_LISTEND_MID
 
 #: 行切分正门（`segment_column` 等）所在的缺省模块。套书可复制一份到 books/<套书>/ 并在 `core/seg_set.OVERRIDES`
 #: 登记覆盖（全唐文 books/quantangwen，2026-11-04）；`run_page` 按册取（`_row_boundaries`）。
@@ -951,6 +951,10 @@ class RowSegmentParams(BaseModel):
     #: **雙行小注噪点段否决门槛**（2026-11-18 A22 U3，`jiazhu_split.link_runs` 的 `cc_min`）：段中位「两侧较小最大连通体」低于这么多 px
     #: 整段当纸面碎点否决。缺省 500 是殿本小字标定；脉经小字笔画细（单字最大连通体 200–600px）取 200。书级参数；500＝缺省（不进参数哈希）。
     jiazhu_cc_min: int = 500
+    #: **雙行小注单格判据的跨度下限**（2026-11-19 MJ，`jiazhu_split.gap_center` 的 `span_t`）：墨跨度/列距不到这么多的格不当双行小注。
+    #: 缺省 0.75 是殿本标定（正文字跨度中位 0.59）；脉经字宽，正文字跨度中位 0.79、73% 过 0.75，左右结构的字（肺、脉、謂、師）
+    #: 中缝一宽就被劈成 a/b，取 0.82。只影响切分（`segment_column`），交接闸的 `column_frac` 不变。书级参数；0.75＝缺省（不进参数哈希）。
+    jiazhu_span_t: float = 0.75
     #: **切点修整串一键开**（2026-11-18 A22 统一优化 U2）：史記 r76–r80 定下、脉经照抄的五个切点开关一组开，
     #: 没单写的项取 `CUT_REPAIR` 里的值（单写了的照单写的）。书配置只写 `cut_repair: true` 一行。缺省关（不进参数哈希）。
     cut_repair: bool = False
@@ -1080,6 +1084,8 @@ class RowSegmentParams(BaseModel):
                     d.pop(k_, None)
             if self.jiazhu_cc_min == 500:
                 d.pop("jiazhu_cc_min", None)
+            if self.jiazhu_span_t == 0.75:
+                d.pop("jiazhu_span_t", None)
             d.pop("cut_repair", None)          # 展开后的各项照常进 dump，开关本身不进（同值的老写法指纹一致）
             if self.page_map == "off":
                 d.pop("page_map", None)
@@ -1219,6 +1225,8 @@ class RowSegmentStep(Step):
             raise ValueError(f"row_segment.cut_free_seam：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         if p.jiazhu_cc_min != 500 and "jiazhu_cc_min" not in inspect.signature(segment_column).parameters:
             raise ValueError(f"row_segment.jiazhu_cc_min：本册套书的 {RB.__name__}.segment_column 没有这个参数")
+        if p.jiazhu_span_t != 0.75 and "jiazhu_span_t" not in inspect.signature(segment_column).parameters:
+            raise ValueError(f"row_segment.jiazhu_span_t：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
             if getattr(p, k_) and k_ not in inspect.signature(segment_column).parameters:
                 raise ValueError(f"row_segment.{k_}：本册套书的 {RB.__name__}.segment_column 没有这个参数")
@@ -1265,6 +1273,7 @@ class RowSegmentStep(Step):
         _step_impl = importlib.import_module(resolve(ctx.book, _JZ_STEP))
         _seal_impl = importlib.import_module(resolve(ctx.book, _SEAL_INK))
         free_split = getattr(_step_impl, "free_split", None)
+        row_split = getattr(_step_impl, "row_split", None)
         # 雙行小注逐步切（史記）：本页各列整理本的夹注段分法；缺省实现返回 None（不切）
         step_notes = None
         if p.jiazhu_rows and p.roster_ref_corpus and p.roster_ref_pins:
@@ -1385,6 +1394,7 @@ class RowSegmentStep(Step):
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({"jiazhu_rows": True} if p.jiazhu_rows and final else {}),
                     **({"free_split": free_split} if p.jiazhu_rows and free_split is not None and final else {}),
+                    **({"row_split": row_split} if p.jiazhu_rows and row_split is not None and final else {}),
                     **({"jiazhu_single_head": True} if p.jiazhu_single_head and _legacy_qtw else {}),
                     **({"jiazhu_half_a": True} if p.jiazhu_half_a and _legacy_qtw else {}),
                     **hook_kw,
@@ -1395,6 +1405,7 @@ class RowSegmentStep(Step):
                     **{k_: getattr(p, k_) for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel")
                        if getattr(p, k_) and final},
                     **({"jiazhu_cc_min": p.jiazhu_cc_min} if p.jiazhu_cc_min != 500 else {}),
+                    **({"jiazhu_span_t": p.jiazhu_span_t} if p.jiazhu_span_t != 0.75 else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:
@@ -1645,7 +1656,8 @@ class RowSegmentStep(Step):
                 mapper = None
                 if wrec is not None:
                     mapper = ColumnMapper.of(page_w, wrec)
-                n_total = n_body_col + n_raised_col
+                # 雙行小注按小字分行（书级 `jiazhu_step.row_split`）会让一列的格数多于大字格网，按逻辑格线数算
+                n_total = max(n_body_col + n_raised_col, len(r.boundaries) - 1)
                 # 列端格只有版框线（P5，2026-11-10，各书一律）：物理首／末格里的墨全贴着上／下版框线 → 记空。
                 # 表说那格有字也照记（表在该格是错的），人裁整列（manual_cells）不走这里。
                 edge_fo = []
@@ -1688,6 +1700,11 @@ class RowSegmentStep(Step):
                 flags: list[str] = list(prior_flags)
                 if edge_fo:
                     flags.append(f"edge_frame_only：列端第 {'、'.join(map(str, edge_fo))} 格只有版框线，记空")
+                extra = int(getattr(r, "row_split_extra", 0) or 0)
+                if extra:
+                    # 书级 `jiazhu_step.row_split`：n_body_slots 写逻辑格数（下游「排满」等按格号比），闸3 用 `row_split_extra` 还原物理格数
+                    flags.append(f"{ROW_SPLIT_FLAG}{extra:+d}：雙行小注按小字分行，本列比大字格网多 {extra} 个格号，段后格号顺延")
+                    base = dict(base, n_body_slots=int(base["n_body_slots"]) + extra)
                 if r.bottom_bar_y is not None:
                     # 下界换成了列里认出的下版框线（2026-09-28，overview#266）。border_bottom
                     # 一并改写：Step4 拿它当 frame_bottom 提示，把条带开到这里、在它附近找框——
