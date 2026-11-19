@@ -162,6 +162,33 @@ SKIP_DONE = ("done",)
 SKIP_STOPPED = ("guard-stop", "blocked")
 
 
+CELLS_DIRS = ("ai-team/domain/CV/图源迁移/siku-qiefen-v2/results/old_new_cells",)
+
+
+def default_cells(book: str, given: str = "") -> str:
+    """--cells 没给时找格级对照表目录（ZM 换单提速第 1 项：旧单出在换图源之前，票按表对新格）：
+    GUJI_OLD_NEW_CELLS，或 ~/ai-team、/home/user/ai-team 下的 siku-qiefen-v2 对照表。只在目录里有本册的表时才用；
+    只有旧单真出在换图源之前，republish 换单门才读它，别的册传了也不碍事。"""
+    if given:
+        return given
+    cands = [os.environ.get("GUJI_OLD_NEW_CELLS") or ""]
+    for root in (Path.home(), Path("/home/user")):
+        cands += [str(root / d) for d in CELLS_DIRS]
+    for c in cands:
+        if c and any((Path(c) / f"{book}{ext}").exists() for ext in (".tsv.gz", ".tsv")):
+            return c
+    return ""
+
+
+def unmapped_votes(ws: Path, book: str, new_rev: str) -> dict | None:
+    """换单门写的「旧单票无法对位」清单（不拦，交复审）：{n, tsv}；没有就 None。"""
+    f = ws / "reports" / book / "_publish" / new_rev / "旧单票无法对位.tsv"
+    if not f.exists():
+        return None
+    n = sum(1 for ln in f.read_text(encoding="utf-8").splitlines()[1:] if ln.strip())
+    return {"n": n, "tsv": str(f)} if n else None
+
+
 def drop_sandbox(sandbox: Path, book: str) -> None:
     """只清本册的沙箱 <_packs/标签>/<册>；标签目录空了再删。同标签各册共用 _packs/<标签>，整目录删会删掉别的册（vol43）。"""
     shutil.rmtree(sandbox / book, ignore_errors=True)
@@ -286,19 +313,28 @@ def guard_list(ws: Path, book: str, cycle_dir: Path, out: str) -> dict:
 
 def write_guard_report(ws: Path, state: dict, day: str, book_text: Path, text_id: str) -> Path | None:
     rows = {b: v for b, v in state["books"].items() if v.get("verdict") == "guard-stop"}
-    if not rows:
+    um = {b: v["unmapped"] for b, v in state["books"].items() if v.get("verdict") == "done" and v.get("unmapped")}
+    if not rows and not um:
         return None
-    md = [f"# 待重挂锚点清单（auto_cycle 守卫拦下，{day}）", "",
-          "线上单没换（守卫在推库之前），新单已出在 reports/<册>/_publish/。修好后跑同一条 auto_cycle 加 `--resume-guard`，"
-          "或单册：`guji swap book-text --books <册> -w <工作区> --book-text <检出> --text-id <书ID> --push --sheet`。", "",
-          "| 册 | 交谁 | 问题 | 留待重挂 | 清单 | 对照表 |", "|---|---|---|---|---|---|"]
+    md = [f"# 待重挂锚点清单（auto_cycle，{day}）"]
+    if rows:
+        md += ["", "## 守卫拦下的册", "",
+               "线上单没换（守卫在推库之前），新单已出在 reports/<册>/_publish/。修好后跑同一条 auto_cycle 加 `--resume-guard`，"
+               "或单册：`guji swap book-text --books <册> -w <工作区> --book-text <检出> --text-id <书ID> --push --sheet`。", "",
+               "| 册 | 交谁 | 问题 | 留待重挂 | 清单 | 对照表 |", "|---|---|---|---|---|---|"]
     for b, v in sorted(rows.items()):
         g = v.get("guard") or {}
         md.append(f"| {b} | {'、'.join(g.get('to') or [])} | {str(g.get('problem', v.get('why', ''))).replace('|', '／')[:300]} "
                   f"| {g.get('left', '?')} | `{g.get('left_tsv', '')}` | `{g.get('table') or ''}` |")
-    md += ["", "补落命令（修好后）：", "", "```",
-           f"python scripts/zhengli/auto_cycle.py --books {','.join(sorted(rows))} -w {ws} --book-text {book_text} --resume-guard",
-           "```", ""]
+    if rows:
+        md += ["", "补落命令（修好后）：", "", "```",
+               f"python scripts/zhengli/auto_cycle.py --books {','.join(sorted(rows))} -w {ws} --book-text {book_text} --resume-guard",
+               "```"]
+    if um:
+        md += ["", "## 旧单票无法对位（换图源前出的旧单，按格级对照表对不到新格；没拦，交复审）", "",
+               "| 册 | 格数 | 清单 |", "|---|---|---|"]
+        md += [f"| {b} | {u['n']} | `{u['tsv']}` |" for b, u in sorted(um.items())]
+    md.append("")
     p = ws / "reports" / "_auto_cycle" / f"待重挂-{day}.md"
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text("\n".join(md), encoding="utf-8")
@@ -330,6 +366,7 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_u
     if not man or not man.get("cv_commit"):
         return {"verdict": "blocked", "why": f"main 包 {label} 的 manifest 没有 cv_commit"}
     eng = engine_for(man["cv_commit"])
+    cells_dir = default_cells(book, cells_dir)
     # 页表／原图：登记过的册从 R2 取，几秒
     if sh([*GUJI, "source", "pull", book, "-w", str(ws)], cwd=CV, env=env).returncode:
         return {"verdict": "blocked", "why": "guji source pull 失败"}
@@ -374,7 +411,10 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_u
                 "log": str(log)}
     new_rev = rp.next_rev(rev, rp.chapter_of(book))
     drop_sandbox(sandbox, book)       # 云端盘小：沙箱 0.3–5.6GB，用完即清（只清本册）
-    return {"verdict": "done", "why": f"写人裁 {plan['ready']} 条，挂起 {plan['held']}", "new_rev": new_rev, "log": str(log)}
+    um = unmapped_votes(ws, book, new_rev)
+    return {"verdict": "done", "why": f"写人裁 {plan['ready']} 条，挂起 {plan['held']}"
+            + (f"；旧单票无法对位 {um['n']} 格（交复审，{um['tsv']}）" if um else ""),
+            "new_rev": new_rev, "log": str(log), **({"unmapped": um} if um else {})}
 
 
 def publish_all(books_done: list[tuple[str, str]], text_id: str) -> dict[str, str]:
