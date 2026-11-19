@@ -14,7 +14,7 @@ import open_guji_cv.steps  # noqa: F401  —— 注册 Step / 产物种类
 from helpers import make_book, run_keben_chain
 from open_guji_cv.core.step import STEPS
 from open_guji_cv.products.kinds.cells import CellRec, ColumnCells, PageCells
-from open_guji_cv.impl.keben.roster_segment import (prepare, segment_roster_column,
+from open_guji_cv.impl.keben.roster_segment import (RosterItem, grid_slots, prepare, segment_roster_column,
                                                segment_roster_page)
 
 W = 180          # 列图宽
@@ -135,8 +135,8 @@ def test_page_level_em_from_isolated_big_glyphs():
 
 # ── Step3 分支 / 闸3 / Step4 ──────────────────────────────────────────────
 
-def _chain(tmp_path, monkeypatch, roster: bool, through: str):
-    params = {"row_segment": {"roster_pages": ["1"]}} if roster else {}
+def _chain(tmp_path, monkeypatch, roster: bool, through: str, grid: bool = False):
+    params = {"row_segment": {"roster_pages": ["1"], **({"roster_grid_slots": True} if grid else {})}} if roster else {}
     book = make_book(expected_cols=4, chars_per_line=21, params=params)
     # synth_page 的 col_n_chars 按界行 x 从左往右数；Step2 起列号从右往左（1 = 最右）
     return run_keben_chain(tmp_path, monkeypatch, book=book, through=through, h=2000,
@@ -396,3 +396,61 @@ def test_frame_bar_residue_at_column_end_dropped():
     g[1300:1308, 40:140] = 0                    # 列中「一」
     rc = _seg_one(g)
     assert len(rc.items) == 8 and rc.items[0].y0 == ys[0]
+
+
+# ── 按格网位置编号（roster_grid_slots，Sheldon 2026-11-19）────────────────────
+
+def _it(y0, y1, kind="char"):
+    x0, x1 = {"char": (10, 90), "jiazhu_a": (50, 90), "jiazhu_b": (10, 48)}[kind]
+    return RosterItem(y0, x0, y1, x1, kind)
+
+
+def test_grid_slots_spread_title_counts_leading_and_inner_blanks():
+    # 21 格、格高 100：字距拉开的官衔（字心 250、650、1050）＋臣＋两字人名贴底
+    items = [_it(210, 290), _it(610, 690), _it(1010, 1090), _it(1810, 1880), _it(1910, 1990), _it(2010, 2090)]
+    assert grid_slots(items, 0, 2100, 21) == ([3, 7, 11, 19, 20, 21], False)
+
+
+def test_grid_slots_crowded_cell_shifts_down_and_stays_inside_grid():
+    # 两字挤进同一格往后顺延；挤到列尾超出 21 格的从尾往回收空号
+    items = [_it(10, 60), _it(60, 95), _it(1910, 1960), _it(1960, 2000), _it(2040, 2080), _it(2080, 2099)]
+    slots, over = grid_slots(items, 0, 2100, 21)
+    assert not over and slots == [1, 2, 18, 19, 20, 21]
+
+
+def test_grid_slots_more_glyphs_than_cells_overflow():
+    items = [_it(20 + 70 * k, 80 + 70 * k) for k in range(30)]
+    slots, over = grid_slots(items, 0, 2100, 21)
+    assert over and slots == list(range(1, 31))
+
+
+def test_grid_slots_dense_double_line_uses_run_pitch_and_left_line_offset():
+    # 雙行小字字距 70（比格高 100 密）：右行 8 字、空一字、再 2 字；左行比右行低一字起
+    a = [_it(120 + 70 * k, 180 + 70 * k, "jiazhu_a") for k in list(range(8)) + [9, 10]]
+    b = [_it(190 + 70 * k, 250 + 70 * k, "jiazhu_b") for k in range(9)]
+    items = a + b + [_it(1300, 1390)]
+    slots, over = grid_slots(items, 0, 2100, 21)
+    assert slots[:10] == [2, 3, 4, 5, 6, 7, 8, 9, 11, 12]        # 段首字心 150 在第 2 格；空一字距加 2
+    assert slots[10:19] == list(range(3, 12))                     # 左行从 3 起（比右行低一字）
+    assert slots[19] == 14 and not over                           # 大字字心 1345 在第 14 格，不与雙行段共号
+
+
+def test_grid_slots_one_per_cell_double_line_follows_grid_and_interleaved_order():
+    # 一格一字的雙行（字距≈格高）按格网；人裁整列格 a/b 交错排也一样
+    a = [_it(110 + 100 * k, 190 + 100 * k, "jiazhu_a") for k in range(4)]
+    b = [_it(210 + 100 * k, 290 + 100 * k, "jiazhu_b") for k in range(4)]
+    seq = grid_slots(a + b, 0, 2100, 21)[0]
+    inter = [x for pair in zip(a, b) for x in pair]
+    assert seq == [2, 3, 4, 5, 3, 4, 5, 6]
+    assert grid_slots(inter, 0, 2100, 21)[0] == [2, 3, 3, 4, 4, 5, 5, 6]
+
+
+def test_roster_grid_slots_param_numbers_by_grid(tmp_path, monkeypatch):
+    _, off = _chain(tmp_path / "off", monkeypatch, roster=True, through="row_segment")
+    _, on = _chain(tmp_path / "on", monkeypatch, roster=True, through="row_segment", grid=True)
+    for a, b in zip(off["cells"].columns, on["cells"].columns):
+        assert [(c.y0, c.y1) for c in a.cells] == [(c.y0, c.y1) for c in b.cells]   # 切法不变，只改号
+        assert [c.pos for c in b.cells] == sorted({c.pos for c in b.cells}) and b.n_body_slots == 21
+        assert all(c.slot == c.pos for c in b.cells)
+    assert any([c.pos for c in a.cells] != [c.pos for c in b.cells]
+               for a, b in zip(off["cells"].columns, on["cells"].columns))
