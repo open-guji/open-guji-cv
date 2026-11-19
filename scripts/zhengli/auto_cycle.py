@@ -143,7 +143,7 @@ def fail_reason(out: str, tail: int = 300) -> str:
     return out.strip()[-tail:]
 
 
-def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_unlanded: str = "") -> dict:
+def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_unlanded: str = "", cells_dir: str = "") -> dict:
     env = {**os.environ, "GUJI_WORKSPACE": str(ws), "PYTHONIOENCODING": "utf-8"}
     label, rev = d["main"], d["online_rev"]
     man = pc.pack_info(ws, book, label)
@@ -167,7 +167,8 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_u
     ap = sh([sys.executable, HERE / "proof_cycle.py", "apply", "--book", book, "-w", str(ws),
              "--plan", str(plan_path), "--hash", plan["hash"], "--book-text", str(book_text),
              "--reuse-products", str(sandbox), "--no-web",
-             *(["--ack-unlanded-votes", ack_unlanded] if ack_unlanded else [])], cwd=CV, env=env)
+             *(["--ack-unlanded-votes", ack_unlanded] if ack_unlanded else []),
+             *(["--cells", cells_dir] if cells_dir else [])], cwd=CV, env=env)
     log = plan_path.parent / "执行记录.md"
     out = ap.stdout + ap.stderr
     (plan_path.parent / "apply.out").write_text(out, encoding="utf-8")
@@ -218,6 +219,7 @@ def main(argv=None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="同 --only-decide")
     ap.add_argument("--max", type=int, default=0, help="最多重出几册（试跑用）")
     ap.add_argument("--no-publish", action="store_true", help="最后不统一发网站")
+    ap.add_argument("--cells", default="", help="旧单出在换图源之前时的格级对照表目录（old_new_cells/，内有 <册>.tsv.gz），透传 apply --cells")
     ap.add_argument("--land-votes", action="store_true",
                     help="线上单有票没投完的册也换：plan 把票落成人裁；落不了（如页图与页表对不上）的由 apply 票账门拦下列出，不丢票")
     ap.add_argument("--ack-unlanded-votes", default="", metavar="原因",
@@ -236,7 +238,7 @@ def main(argv=None) -> int:
         d = decide(ws, book, a.land_votes)
         print(f"{book}\t{d['verdict']}\t{d['why']}", flush=True)
         if d["verdict"] == "go" and not (a.only_decide or a.dry_run) and (not a.max or len(done) < a.max):
-            d = {**d, **run_book(ws, book, Path(a.book_text), d, a.reviewer, a.ack_unlanded_votes)}
+            d = {**d, **run_book(ws, book, Path(a.book_text), d, a.reviewer, a.ack_unlanded_votes, a.cells)}
             print(f"{book}\t→ {d['verdict']}\t{d['why']}", flush=True)
             if d["verdict"] == "done":
                 done.append((book, d["new_rev"]))
