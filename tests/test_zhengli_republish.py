@@ -681,3 +681,22 @@ def test_sync_is_default_and_no_sync_opts_out(cmd, extra, monkeypatch):
     rp.main(base + ["--sync"])
     rp.main(base + ["--no-sync"])
     assert seen == [True, True, False]
+
+
+def _tab(rev, pages, from_rev=None, H=None):
+    return {"rev": rev, "pages": [{"page": p, "sha256": s, **({"from_rev": {"rev": from_rev, "H": H}} if from_rev else {})}
+                                  for p, s in pages]}
+
+
+def test_same_pixels_relabel_only_is_not_predates(tmp_path):
+    """殿本 r003→r004 只把 staged 转 final（sha、页号不变，H 单位阵）：r3 上出的旧单不算换源前（ZM 11-18 vol37/43/55…）。"""
+    I = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    tabs = {3: _tab(3, [(1, "a"), (2, "b")], 2, [[1.4, 0, 0], [0, 1.4, 0], [0, 0, 1]]),
+            4: _tab(4, [(1, "a"), (2, "b")], 3, I)}
+    assert rp.same_pixels(tmp_path, "vol37", 3, 4, read=tabs.__getitem__)
+    tabs[4]["pages"][1]["sha256"] = "c"                       # 换了像素
+    assert not rp.same_pixels(tmp_path, "vol37", 3, 4, read=tabs.__getitem__)
+    tabs[4]["pages"][1]["sha256"] = "b"
+    tabs[4]["pages"][1]["from_rev"]["H"] = [[1.4, 0, 0], [0, 1.4, 0], [0, 0, 1]]   # H 不是单位阵
+    assert not rp.same_pixels(tmp_path, "vol37", 3, 4, read=tabs.__getitem__)
+    assert not rp.same_pixels(tmp_path, "vol37", 2, 4, read=lambda r: (_ for _ in ()).throw(FileNotFoundError(r)))
