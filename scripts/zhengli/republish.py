@@ -281,6 +281,13 @@ def _migrated_from_cell(e: dict, book: str, cell: str) -> str | None:
     return None
 
 
+def figure_ruling(e: dict) -> bool:
+    """网站图形票／「认不出的字」票落成的人裁（confirm v=figure，带 alt 或 unk）：票账里算这格已落。
+    `pending_route.deciding` 不认 figure（出单路由另有图片格处理），票账单独认（ZM 11-19 vol20 43:5:17、70:1:21 已写成事件仍报未落）。"""
+    pl = e.get("payload") or {}
+    return e.get("kind") == "confirm" and pl.get("v") == "figure" and pl.get("source") != "vision"
+
+
 def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict], held=None,
                   predates: str | None = None, cells: str | Path | None = None) -> dict:
     """一张单的票账（1.0 发布标准 G0）：每格最后一票归到 写入／与已有人裁一致／看不出／挂起／未落 之一。
@@ -307,7 +314,7 @@ def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]
     from open_guji_cv.core.event_files import RevGate, iter_event_dicts
     gate = RevGate(books_dir=data_dir(ws) / "books")      # 换图源：切过的册只认锚里页表 rev 相符的
     for e in iter_event_dicts(data_dir(ws) / "feedback" / "events", gate=gate):
-        c = cell_of(e, book) if deciding(e) else None
+        c = cell_of(e, book) if (deciding(e) or figure_ruling(e)) else None
         if c:
             try:
                 t = dt.datetime.fromisoformat(str(e.get("ts")).replace("Z", "+00:00")).timestamp()

@@ -638,3 +638,11 @@ def test_old_rev_votes_reads_both_modes_and_refuses_when_nothing(tmp_path, monke
     votes, src = rp.old_rev_votes(tmp_path, "bk", "005-r13")
     assert sorted((v["a"], v["rev"]) for v in votes) == [("1:1:1", "005-r13"), ("2:2:2", "005-r13")]
     assert "按条目 1 票" in src
+
+
+def test_figure_ruling_counts_as_landed():
+    """图形票／认不出的字票落成的 confirm v=figure 人裁，票账算已落（ZM 11-19 vol20）；vision 来源不算；普通定字仍走 deciding。"""
+    assert rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "alt": "篆字"}})
+    assert rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "unk": "无法识别"}})
+    assert not rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "source": "vision"}})
+    assert not rp.figure_ruling({"kind": "confirm", "payload": {"v": "confirm", "shape": "甲"}})
