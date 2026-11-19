@@ -267,12 +267,61 @@ def sheet_predates_source(ws: Path, book: str, sheet: dict | None, override: int
             same = int(got) == want
         except (TypeError, ValueError):
             same = False
-        return None if same else f"单子记的页表 rev {got} ≠ 册 yaml source_rev {want}"
+        if same or same_pixels(ws, book, int(got), want):
+            return None
+        return f"单子记的页表 rev {got} ≠ 册 yaml source_rev {want}"
     ts = str(sheet.get("routed_as_of") or "")
     if not ts or ts < LEGACY_SWITCH_BEFORE:
         return (f"单子没记页表 rev，出单于 {ts or '（没记时刻）'}，早于换图源（{LEGACY_SWITCH_BEFORE}），"
                 f"格号是旧页号（册 yaml source_rev {want}）")
     return None
+
+
+def _pages_same(prev: dict, cur: dict) -> bool:
+    """cur 这版页表相对 prev 只换了 rev：页数、逐页页号与 sha 都不变，from_rev 指着 prev 且 H 是单位阵。"""
+    a, b = prev.get("pages") or [], cur.get("pages") or []
+    if not a or len(a) != len(b):
+        return False
+    for x, y in zip(a, b):
+        fr = y.get("from_rev") or {}
+        H = fr.get("H")
+        if x.get("page") != y.get("page") or x.get("sha256") != y.get("sha256"):
+            return False
+        if fr and (int(fr.get("rev", -1)) != int(prev.get("rev", -2))
+                   or (H is not None and H != [[1, 0, 0], [0, 1, 0], [0, 0, 1]])):
+            return False
+    return True
+
+
+def same_pixels(ws: Path, book: str, got: int, want: int, read=None) -> bool:
+    """单子记的页表 rev 与册 yaml 不同，但中间各版都只换 rev、不换像素和页号（殿本 r003→r004：文淵閣景印本页表
+    由 staged 转 final，A20 11-09）：格号还是同一套，不算「换图源前出的旧单」。读不到页表一律 False（照旧拦）。
+    ZM 11-18 vol37/43/55… 的旧单都是 r3、yaml 是 r4：被当成换源前的单，又拿 siku-qiefen-v2（r1→r2）的对照表去对，
+    票全落进「无法对位」。"""
+    if got >= want:
+        return False
+    try:
+        if read is None:
+            from guji_manager.datastore import sources as S
+            src = S._client()
+            text_id = text_id_of(ws)
+            n = int(chapter_of(book))
+
+            def read(rev):
+                for vol in (f"{n:02d}", f"{n:03d}"):
+                    try:
+                        return S.read_table(src, text_id, vol, rev)
+                    except FileNotFoundError:
+                        continue
+                raise FileNotFoundError(f"{text_id}/{n} r{rev}")
+        tabs = [read(r) for r in range(got, want + 1)]
+    except Exception as e:  # noqa: BLE001
+        print(f"  ⓘ 核页表 r{got}→r{want} 是否只换 rev 失败（{e}），按换源前的旧单处理", file=sys.stderr)
+        return False
+    ok = all(_pages_same(tabs[i], tabs[i + 1]) for i in range(len(tabs) - 1))
+    if ok:
+        print(f"  ⓘ 单子出自页表 r{got}，册 yaml 是 r{want}：中间只换 rev、像素和页号都没变，按同一套格号比", file=sys.stderr)
+    return ok
 
 
 def _cells_table(cells: str | Path | None, book: str) -> Path | None:
