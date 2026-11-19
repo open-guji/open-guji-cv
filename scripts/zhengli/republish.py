@@ -352,10 +352,10 @@ def _migrated_from_cell(e: dict, book: str, cell: str) -> str | None:
 
 
 def figure_ruling(e: dict) -> bool:
-    """网站图形票／「认不出的字」票落成的人裁（confirm v=figure，带 alt 或 unk）：票账里算这格已落。
-    `pending_route.deciding` 不认 figure（出单路由另有图片格处理），票账单独认（ZM 11-19 vol20 43:5:17、70:1:21 已写成事件仍报未落）。"""
-    pl = e.get("payload") or {}
-    return e.get("kind") == "confirm" and pl.get("v") == "figure" and pl.get("source") != "vision"
+    """图形票／认不出的字票落成的人裁，票账算已落（ZM 11-19 vol20 43:5:17、70:1:21）；口径同 `pending_route.figure_ruling`。"""
+    sys.path.insert(0, str(HERE))
+    from pending_route import figure_ruling as fr
+    return fr(e)
 
 
 def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict], held=None,
