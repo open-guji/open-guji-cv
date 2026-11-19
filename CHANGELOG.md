@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.75] - 2026-11-19
+
+- 发版说明（A31 11-19，**殿本 patch 线**，PATCH；ZM 报 vol20 换单 020-r13→r14 出单门拦 5 格 overturn_empty）：v0.7.70 + #1715（`scripts/zhengli/proof_cycle.py`：新导出里机器没认出的 □（`lacuna` 无 `guess_c`）与 〓／▣ 占位算「机器无字」，旧字是现行人裁就留人裁字、不复审；排除名单判残的 □、图片格、无法识别字、原刻残带推测字仍算推翻人裁，复审说明写「□（判残）」等，出单门不拦；退回成字时去掉阙文／组字标记），**不含** dev 线其他改动。只改编排脚本，不进 code_deps，**Step 指纹对 v0.7.70 全不变**；底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1715 已在 dev）。
+
 ## [0.7.70] - 2026-11-18
 
 - 发版说明（ZM 11-18，殿本 patch 线）：v0.7.69（＝v0.7.67 + #1586 16 对异体边）+ #1655（seed_admit 书级开关 `vis_ruling_ctx_subclasses`，缺省空、行为不变；降待审线要，殿本 patch 线此前不含）+ #1672 的 row_segment 1.54（列端表空格里居格中、没满宽的粗横「一」不当框线记空：`_blank_frame_junk` 把满宽横画行算成非 charlike，列首「一」被记空、格数少一，殿本 vol21 186:7；整册 vol21 复核只此一处变化，贴格上下沿的版框线短横不放过），PATCH，**不含** dev 线其他改动。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变。
