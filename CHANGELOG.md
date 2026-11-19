@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.76] - 2026-11-19
+
+- 发版说明（A31 11-19，**殿本 patch 线**，PATCH；ZM vol20 116:6:15 图形票台账记未落）：v0.7.75 + #1703（`scripts/zhengli/republish.py` 票账：网站图形票／认不出的字票落成的 `confirm v=figure` 人裁算已落；vision 来源不算；cherry-pick cd93723e，测试只带本条），**不含** dev 线其他改动。只改编排脚本，不进 code_deps，**Step 指纹对 v0.7.75（＝v0.7.70）全不变**；底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1703 已在 dev）。
+
 ## [0.7.75] - 2026-11-19
 
 - 发版说明（A31 11-19，**殿本 patch 线**，PATCH；ZM 报 vol20 换单 020-r13→r14 出单门拦 5 格 overturn_empty）：v0.7.70 + #1715（`scripts/zhengli/proof_cycle.py`：新导出里机器没认出的 □（`lacuna` 无 `guess_c`）与 〓／▣ 占位算「机器无字」，旧字是现行人裁就留人裁字、不复审；排除名单判残的 □、图片格、无法识别字、原刻残带推测字仍算推翻人裁，复审说明写「□（判残）」等，出单门不拦；退回成字时去掉阙文／组字标记），**不含** dev 线其他改动。只改编排脚本，不进 code_deps，**Step 指纹对 v0.7.70 全不变**；底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1715 已在 dev）。
