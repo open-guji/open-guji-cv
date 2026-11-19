@@ -162,3 +162,13 @@ def test_overridden_old_ruling_is_not_counted():
     got = pr.decided_cells([old, new], "vol01", "2026-11-14T00:00:00Z")
     assert set(got) == {"88:4:18"}
     assert set(pr.decided_cells([old], "vol01", "2026-11-14T00:00:00Z")) == {"88:4:19"}
+
+
+def test_figure_ruling_counts_as_decided_for_sheet():
+    """图形票／认不出的字票落成的 confirm v=figure 人裁，出单扣格（ZM 11-19 vol20 116:6:15：cycle 用现成包不重跑
+    seed_admit，格仍以 group_abstain 留单）；不算「定了字」（deciding 仍 None）；看图结论 source=vision 不算。"""
+    fig = ev("116:6:15", "figure", "2026-11-19T10:00:00Z")
+    assert pr.deciding(fig) is None and pr.figure_ruling(fig) and pr.decided_kind(fig) == "figure"
+    vis = ev("116:6:16", "figure", "2026-11-19T10:00:00Z", source="vision")
+    got = pr.decided_cells([fig, vis], "vol01", "2026-11-20T00:00:00Z")
+    assert dict(got) == {"116:6:15": [("2026-11-19T10:00:00Z", "figure")]}
