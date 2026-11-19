@@ -449,6 +449,8 @@ _ALT_NOJZ_1119 = ("row_segment 加书级开关 alt_nojz（缺省关、不进参�
                   "（只在 alt_select=admit 且有 alt_columns 时走）、seed_admit 不分行参照页按 equal 字数与放行率挑备选（只在有备选候选列时走）："
                   "脉经第 1 册 13、17、24、40 页（夹注密、左右结构大字被劈的三列）row_segment、align_ref、seed_admit 与 origin/dev 405aad0 产物"
                   "逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
+_ALT_BACKED_1119 = ("seed_admit 加书级开关 alt_backed_gain（缺省 0 关、不进参数 dump；_pick_alt_cols 多一条恒假的 by_backed）：脉经第 1 册"
+                    "10、13、17、24 页 seed_admit 与 origin/dev ea18b31 产物逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2154,6 +2156,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="3145d60fdccd18931cad669a39f9d6818f2df58dd3784abc3395bca868fc536e",
           old="64d25e9fcecdaca35dda2a900cb9f526df248aeaaf5f7e2d6d8802aa25d5a47d",
           evidence=_ALT_NOJZ_1119),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="c35cb14a7728d4ccb99ebd5ef61b479195eed3a95041002ad9cd303e88193320",
+          old="64d25e9fcecdaca35dda2a900cb9f526df248aeaaf5f7e2d6d8802aa25d5a47d",
+          evidence=_ALT_BACKED_1119),
 )
 
 
