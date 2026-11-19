@@ -204,6 +204,12 @@ def _with_book_real_proto(p: BaseModel, ctx: "RunContext") -> BaseModel:
     return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
 
 
+def _with_pua_table_pin(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """册 yaml `pua_table_pin: N` → 码表内容指纹进参数（见 `core/pua_table_pin.py`）。"""
+    from .pua_table_pin import with_pua_table_pin
+    return with_pua_table_pin(p, ctx.book)
+
+
 def _with_corpus_pin(p: BaseModel, ctx: "RunContext") -> BaseModel:
     """册 yaml `corpus: N` → 语料类内容指纹换成 `corpus-vN`（见 `core/corpus_pin.py`）。"""
     from .corpus_pin import with_corpus_pin
@@ -421,6 +427,7 @@ class RunContext:
         p = _with_book_step6_ai(p, self)
         p = _with_book_ledger(p, self)  # 用字账按书选（缺省键是殿本的账）
         p = _with_glyph_pin(p, self)    # 册钉了字形库：人裁、近似字指纹换成钉号
+        p = _with_pua_table_pin(p, self)  # 册钉了 PUA 码表共享层版本：码表内容指纹进参数
         p = _with_corpus_pin(p, self)   # 必须最后：册钉了语料库版本，内容指纹整体换成版本号
         if memo is not None:
             memo[step.spec.id] = p
