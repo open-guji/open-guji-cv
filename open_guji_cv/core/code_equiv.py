@@ -427,6 +427,9 @@ _STAGES_1116 = ("glyph_match 加 stages 参数（库匹配之后的分段判定 
                 "判决层之后多一句恒假的 if、候选改经局部变量 cands 传）、新方法 _stages、MatchRec 多一个为 None 不落盘的 stage 字段：全唐文 020 16 页"
                 "（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，main 包 cv0.7.42-c78-g-a86e50-k9-qtw020-y1 当上游，book_defaults 开着 sim_model）"
                 "glyph_match 与 origin/dev 35692042 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn、GUJI_CODE_DRIFT=warn，2026-11-16（OCR 研究·方向 1，云端会话）")
+_LIB_TIER_1118 = ("5-b 库字档（册配置 font.charset.lib_chars，缺省关；rare_for_batch 多一支只在开着时走，cnn_candidates 加 real_chars 读库里人裁字）："
+                  "全唐文 010 全册 182 页（26,928 格，c1 包 cv0.7.68-c80-g-794884-k11-qtw010-c1 当上游）rare_candidates 与 origin/dev 5c276aa 产物逐字节相同；"
+                  "两版各手工跑 guji step --force 比逐页 sha256，GUJI_CORPUS_DRIFT=warn，2026-11-18（OCR 研究 Project）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2051,6 +2054,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="4db2a99d60fa9e626b970d6276d965abc067f3d79ef2105e9eb430a62abde0c2",
           old="c007e49e89d7adc65bac5b96e4305f23e0c759b7d640b66122a92a1d84040fdc",
           evidence=_GRID_RESCUE_FORCE_1119),
+    Equiv(module="open_guji_cv.clustering.rare_panel",
+          new="eed176405099cafe3c71f1ded408edf1396b1cc42f52231226b734c8984ca3db",
+          old="bbbb60ab8b4e1774da6ea9fd1193468310b8ce6c8424435aa157707916207ead",
+          evidence=_LIB_TIER_1118),
+    Equiv(module="open_guji_cv.clustering.cnn_candidates",
+          new="84455fc813eefa560dead835acc262242eb312b773927b9fff11d8e469959379",
+          old="f65058caf059fff6dbf2dde610a1086a027672532a920d500eb62b1c3b1ac472",
+          evidence=_LIB_TIER_1118),
 )
 
 
