@@ -205,3 +205,34 @@ def test_overturn_rows_carry_prior_char():
     """机器推翻人裁的复审行第 4 列要带旧人裁的字（出单门归一比对、网站「已有判断」都靠它）。"""
     import inspect
     assert '\\t\\t{o}\\t' in inspect.getsource(pc.cmd_apply)
+
+
+def _char_raw(tmp_path, name, cells):
+    f = tmp_path / name
+    f.write_text(json.dumps({"pages": [{"page": 3, "columns": [{"col": 1, "cells": cells}]}]}, ensure_ascii=False), encoding="utf-8")
+    return f
+
+
+def test_split_changes_unread_box_keeps_human_but_verdicts_overrule(tmp_path):
+    """新导出里「没认出」的 □（lacuna、无 guess_c）与 〓／▣ 占位＝机器无字→keep；排除名单判残的 □（不带 lacuna）、
+    图片格、无法识别字、原刻残带推测字是判定→照算 overrule，复审行写明判定（殿本 vol20 020-r13 5 格 overturn_empty）。"""
+    old = _char(tmp_path, "old.json", [(f"3:1:{i}", ch) for i, ch in enumerate("蒺曰出因子甲乙丙", 1)])
+    new = _char_raw(tmp_path, "new.json", [
+        {"a": "3:1:1", "c": "□", "lacuna": True},
+        {"a": "3:1:2", "c": "〓", "zi": "⿰口曰"},
+        {"a": "3:1:3", "c": "▣"},
+        {"a": "3:1:4", "c": "□"},
+        {"a": "3:1:5", "c": "□", "fig": "f1"},
+        {"a": "3:1:6", "c": "□", "unk": "从口"},
+        {"a": "3:1:7", "c": "□", "lacuna": True, "guess_c": "乙"},
+        {"a": "3:1:8", "c": "□", "lacuna": True},
+    ])
+    human = {f"3:1:{i}": ch for i, ch in enumerate("蒺曰出因子甲乙", 1)}
+    sp = pc.split_changes(old, new, human)
+    assert [x for x, _, _ in sp["keep"]] == ["3:1:1", "3:1:2", "3:1:3"]
+    assert [x for x, _, _ in sp["overrule"]] == ["3:1:4", "3:1:5", "3:1:6", "3:1:7"]
+    assert sp["machine"] == [("3:1:8", "丙", "□")]      # 旧字不是人裁：机器无字照进文本
+    assert pc._verdicts(new) == {"3:1:4": "判残", "3:1:5": "图片格", "3:1:6": "无法识别字", "3:1:7": "原刻残"}
+    pc.revert_cells(new, {a: o for a, o, _ in sp["keep"]})
+    cells = {c["a"]: c for c in json.loads(new.read_text(encoding="utf-8"))["pages"][0]["columns"][0]["cells"]}
+    assert cells["3:1:1"] == {"a": "3:1:1", "c": "蒺"} and cells["3:1:2"] == {"a": "3:1:2", "c": "曰"}
