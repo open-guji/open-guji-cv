@@ -21,7 +21,7 @@ from ..products.kinds.gate import GateManifest
 from ..seg.cut_select import ckpt_fingerprint, get_judge, scale_suffix
 from ..seg.profile import frame_only_edge_cells as _frame_only_edge_cells
 from ..impl.keben.row_grid import fit_page_grids
-from ..impl.keben.row_boundaries import slot_mask_from_occupied, _thin_bar
+from ..impl.keben.row_boundaries import slot_mask_from_occupied, _thin_bar, ROW_SPLIT_FLAG
 
 #: 行切分正门（`segment_column` 等）所在的缺省模块。套书可复制一份到 books/<套书>/ 并在 `core/seg_set.OVERRIDES`
 #: 登记覆盖（全唐文 books/quantangwen，2026-11-04）；`run_page` 按册取（`_row_boundaries`）。
@@ -1277,6 +1277,7 @@ class RowSegmentStep(Step):
         _step_impl = importlib.import_module(resolve(ctx.book, _JZ_STEP))
         _seal_impl = importlib.import_module(resolve(ctx.book, _SEAL_INK))
         free_split = getattr(_step_impl, "free_split", None)
+        row_split = getattr(_step_impl, "row_split", None)
         # 雙行小注逐步切（史記）：本页各列整理本的夹注段分法；缺省实现返回 None（不切）
         step_notes = None
         if p.jiazhu_rows and p.roster_ref_corpus and p.roster_ref_pins:
@@ -1397,6 +1398,7 @@ class RowSegmentStep(Step):
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({"jiazhu_rows": True} if p.jiazhu_rows and final else {}),
                     **({"free_split": free_split} if p.jiazhu_rows and free_split is not None and final else {}),
+                    **({"row_split": row_split} if p.jiazhu_rows and row_split is not None and final else {}),
                     **({"jiazhu_single_head": True} if p.jiazhu_single_head and _legacy_qtw else {}),
                     **({"jiazhu_half_a": True} if p.jiazhu_half_a and _legacy_qtw else {}),
                     **hook_kw,
@@ -1658,7 +1660,8 @@ class RowSegmentStep(Step):
                 mapper = None
                 if wrec is not None:
                     mapper = ColumnMapper.of(page_w, wrec)
-                n_total = n_body_col + n_raised_col
+                # 雙行小注按小字分行（书级 `jiazhu_step.row_split`）会让一列的格数多于大字格网，按逻辑格线数算
+                n_total = max(n_body_col + n_raised_col, len(r.boundaries) - 1)
                 # 列端格只有版框线（P5，2026-11-10，各书一律）：物理首／末格里的墨全贴着上／下版框线 → 记空。
                 # 表说那格有字也照记（表在该格是错的），人裁整列（manual_cells）不走这里。
                 edge_fo = []
@@ -1701,6 +1704,11 @@ class RowSegmentStep(Step):
                 flags: list[str] = list(prior_flags)
                 if edge_fo:
                     flags.append(f"edge_frame_only：列端第 {'、'.join(map(str, edge_fo))} 格只有版框线，记空")
+                extra = int(getattr(r, "row_split_extra", 0) or 0)
+                if extra:
+                    # 书级 `jiazhu_step.row_split`：n_body_slots 写逻辑格数（下游「排满」等按格号比），闸3 用 `row_split_extra` 还原物理格数
+                    flags.append(f"{ROW_SPLIT_FLAG}{extra:+d}：雙行小注按小字分行，本列比大字格网多 {extra} 个格号，段后格号顺延")
+                    base = dict(base, n_body_slots=int(base["n_body_slots"]) + extra)
                 if r.bottom_bar_y is not None:
                     # 下界换成了列里认出的下版框线（2026-09-28，overview#266）。border_bottom
                     # 一并改写：Step4 拿它当 frame_bottom 提示，把条带开到这里、在它附近找框——

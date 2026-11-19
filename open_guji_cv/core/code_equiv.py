@@ -438,6 +438,10 @@ _LIB_TIER_1118 = ("5-b 库字档（册配置 font.charset.lib_chars，缺省关�
                   "两版各手工跑 guji step --force 比逐页 sha256，GUJI_CORPUS_DRIFT=warn，2026-11-18（OCR 研究 Project）")
 _LIB_TIER_0774 = (_LIB_TIER_1118 + "。dev 线 patch 移植（v0.7.73 + #1701 → v0.7.74）：同一改动原样 cherry-pick，rare_panel 哈希按本线重算（本线 rare_panel 无 #1684 等 dev 改动），本线未另跑产物比对（A31 2026-11-19）")
 
+_ROW_SPLIT_1119 = ("书级钩子 jiazhu_step.row_split（缺省 None、不调；segment_column 多一支恒假的段循环与格号顺延、闸3 只认 jiazhu_row_split 列旗）："
+                   "row_segment 在史記 02 30 页（5-34，jiazhu_rows＋书仓 free_split／逐步切，包 cv0.7.59-c10-g23-m2-k25-job5106）、"
+                   "脉经 02 40 页（1-40，夹注多）与 origin/dev a205648 产物逐字节相同；闸3 row_segment_gate 史記 02 30 页、"
+                   "column_gate（row_boundaries）史記 02 30 页逐字节相同；变基到 dev 2ea07b2（#1712 jiazhu_span_t）后 row_segment、闸3 史記 02 20 页再核逐字节同；scripts/code_equiv.py check，2026-11-19（A22）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2104,6 +2108,23 @@ ENTRIES: tuple[Equiv, ...] = (
           new="0c533bac27ab77b83f4e3368f6420ab4d2802eb79f21308431d6a69ae685ad07",
           old="abedaa8300975c80f6384cb5aa0a20307775a82f420250809f51e1540e46e689",
           evidence=_LIB_TIER_0774),
+    # 书级钩子 jiazhu_step.row_split（雙行小注按小字分行、格号顺延；缺省 None 不调，GUJI-774 脉经第 1 册，2026-11-19 A22）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="5a6a488b7e3b79c1fc9370fa8949cb6ff9c093f4f29f22e246f728564d1b86a0",
+          old="8ed4c43c545066616337d5bce38f4b2d88d66b8fd7995420e7f8f3f17bebeb40",
+          evidence=_ROW_SPLIT_1119),
+    Equiv(module="open_guji_cv.impl.keben.row_boundaries",
+          new="168e6473126ecdb818b031ecd398875fa77099e41d461368c2f0a48a60a2280d",
+          old="8d57d4feb00ea92307c893c3bce04cbe08ff24f040b20e0b1639cd3e057b5c09",
+          evidence=_ROW_SPLIT_1119),
+    Equiv(module="open_guji_cv.impl.keben.jiazhu_step",
+          new="e4a7c5097c9d70c9aefed760539349402d98ae547849b127eccc8d82d25a3d07",
+          old="095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67",
+          evidence=_ROW_SPLIT_1119),
+    Equiv(module="open_guji_cv.gates.row_segment_gate",
+          new="572d8c2b55e110674112b42450e9a7c29d666dfafe8517e2ff0598f40274b083",
+          old="814bd02de64f51372289b29a7f97c8460651b313c75a879048c021e9db93cd10",
+          evidence=_ROW_SPLIT_1119),
 )
 
 
