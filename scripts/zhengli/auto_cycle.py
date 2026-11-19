@@ -18,6 +18,19 @@
   python scripts/zhengli/auto_cycle.py --books vol20-vol98 -w $WS --book-text <book-text 仓> [--dry-run] [--only-decide]
 结果追加到 <工作区>/reports/_auto_cycle/<日期>.tsv；每册一行：册、结论、旧 rev、新 rev、格数、原因。
 全部册跑完后统一触发一次网站发布（proofing-sync，不限 only），等跑完，再对每个新单做读者侧冒烟。
+
+断点续跑（A31 11-18，ZM 换单提速第 4–6 项）：
+  * 状态写 <工作区>/reports/_auto_cycle/state.json（--state 可改）：每册结论、main 标签、新 rev、发布冒烟结果。
+    同一条命令再跑：已 done 的册不再动；guard-stop／blocked 的册缺省跳过（--retry-blocked 重试）；
+    上次跑到一半被杀（状态 running）的册先清 book-text 未提交改动和本册沙箱再重做。
+  * --max-minutes N：到时不再开新册（后台命令 2 小时上限时给 100 左右），状态留着，同一条命令接着跑。
+  * 网站只在「这次给的册全都有了结论」时统一发一次，发的是历次 done 而还没发布冒烟过的册；--publish-now 不等。
+  * 每册沙箱只清本册（<工作区>/_packs/<标签>/<册>）：同标签各册共用 _packs/<标签>，以前清整个目录会删掉别的册的产物
+    （vol43 吃过亏）。每册开跑前查盘：剩余空间不足 GUJI_CYCLE_MIN_FREE_GB（缺省 8）就停在这册之前；
+    同一工作区同时只许一个 auto_cycle（reports/_auto_cycle/.lock）。
+  * 守卫拦下（guard-stop）的册自动出「待重挂锚点清单」：reports/_auto_cycle/待重挂-<日期>.md（汇总，含修好后的补落命令）
+    和 reports/<册>/_cycle/<rev>/待重挂锚点.tsv；修好后 `--resume-guard` 对这些册跑 `guji swap book-text --push --sheet`，
+    推好的册算 done，最后随其它册一起发站冒烟。
 """
 from __future__ import annotations
 
@@ -143,6 +156,209 @@ def fail_reason(out: str, tail: int = 300) -> str:
     return out.strip()[-tail:]
 
 
+PACK_MARK = ".pack.json"        # guji_manager.datastore.packs.MARK：取包核过 sha、解完才写
+MIN_FREE_GB = float(os.environ.get("GUJI_CYCLE_MIN_FREE_GB") or 8)   # 一册沙箱 0.3–5.6GB，外加导出与 db sync
+SKIP_DONE = ("done",)
+SKIP_STOPPED = ("guard-stop", "blocked")
+
+
+CELLS_DIRS = ("ai-team/domain/CV/图源迁移/siku-qiefen-v2/results/old_new_cells",)
+
+
+def default_cells(book: str, given: str = "") -> str:
+    """--cells 没给时找格级对照表目录（ZM 换单提速第 1 项：旧单出在换图源之前，票按表对新格）：
+    GUJI_OLD_NEW_CELLS，或 ~/ai-team、/home/user/ai-team 下的 siku-qiefen-v2 对照表。只在目录里有本册的表时才用；
+    只有旧单真出在换图源之前，republish 换单门才读它，别的册传了也不碍事。"""
+    if given:
+        return given
+    cands = [os.environ.get("GUJI_OLD_NEW_CELLS") or ""]
+    for root in (Path.home(), Path("/home/user")):
+        cands += [str(root / d) for d in CELLS_DIRS]
+    for c in cands:
+        if c and any((Path(c) / f"{book}{ext}").exists() for ext in (".tsv.gz", ".tsv")):
+            return c
+    return ""
+
+
+def unmapped_votes(ws: Path, book: str, new_rev: str) -> dict | None:
+    """换单门写的「旧单票无法对位」清单（不拦，交复审）：{n, tsv}；没有就 None。"""
+    f = ws / "reports" / book / "_publish" / new_rev / "旧单票无法对位.tsv"
+    if not f.exists():
+        return None
+    n = sum(1 for ln in f.read_text(encoding="utf-8").splitlines()[1:] if ln.strip())
+    return {"n": n, "tsv": str(f)} if n else None
+
+
+def drop_sandbox(sandbox: Path, book: str) -> None:
+    """只清本册的沙箱 <_packs/标签>/<册>；标签目录空了再删。同标签各册共用 _packs/<标签>，整目录删会删掉别的册（vol43）。"""
+    shutil.rmtree(sandbox / book, ignore_errors=True)
+    try:
+        sandbox.rmdir()
+    except OSError:
+        pass
+
+
+def free_gb(path: Path) -> float:
+    p = Path(path)
+    while not p.exists() and p != p.parent:
+        p = p.parent
+    return shutil.disk_usage(p).free / 2 ** 30
+
+
+class Lock:
+    """同一工作区同时只许一个 auto_cycle：两个进程共用 book-text 检出和 _packs，会互相 checkout／清掉对方的东西。"""
+
+    def __init__(self, path: Path):
+        self.path = path
+
+    def __enter__(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path.exists():
+            try:
+                pid = int(self.path.read_text().split()[0])
+                os.kill(pid, 0)
+                cmd = Path(f"/proc/{pid}/cmdline")
+                if cmd.exists() and b"auto_cycle" not in cmd.read_bytes():
+                    pid = None                  # 容器重启后 pid 被别的进程占了：不是 auto_cycle，当死锁
+            except (ValueError, IndexError, ProcessLookupError, PermissionError, OSError):
+                pid = None
+            if pid and pid != os.getpid():
+                raise SystemExit(f"✗ 这个工作区已有 auto_cycle 在跑（pid {pid}，{self.path}）；等它跑完，或确认它已死后删掉锁文件")
+        self.path.write_text(f"{os.getpid()} {dt.datetime.now(dt.timezone.utc).isoformat()}\n")
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            self.path.unlink()
+        except OSError:
+            pass
+
+
+def load_state(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"books": {}}
+
+
+def save_state(path: Path, state: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def keep_untracked(book_text: Path, dest: Path) -> list[str]:
+    """book-text 里 Book/ 下未跟踪的文件（待重标清单 NNN.punct-stale.json 等）拷到 dest 留底，返回相对路径。"""
+    r = subprocess.run(["git", "ls-files", "--others", "--exclude-standard", "--", "Book"], cwd=book_text,
+                       capture_output=True, text=True)
+    got = []
+    for rel in (r.stdout or "").splitlines():
+        src = Path(book_text) / rel
+        if src.is_file():
+            (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dest / rel)
+            got.append(rel)
+    return got
+
+
+def clean_book_text(book_text: Path) -> None:
+    subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
+    subprocess.run(["git", "clean", "-fdq", "--", "Book"], cwd=book_text)
+
+
+def recover_running(ws: Path, state: dict, book_text: Path) -> list[str]:
+    """上次跑到一半被杀（状态还是 running）的册：清 book-text 未提交改动和本册沙箱，状态退回待做。返回这些册。"""
+    hit = [b for b, v in state["books"].items() if v.get("verdict") == "running"]
+    if hit:
+        clean_book_text(book_text)
+    for b in hit:
+        lab = state["books"][b].get("main")
+        if lab:
+            drop_sandbox(ws / "_packs" / lab, b)
+        state["books"][b] = {**state["books"][b], "verdict": "interrupted", "why": "上次跑到一半被中断，已清 book-text 与本册沙箱，重做"}
+    return hit
+
+
+_GUARD_RE = re.compile(r"✗ book-text[^\n]*这步失败：([^\n]*)")
+
+
+def guard_list(ws: Path, book: str, cycle_dir: Path, out: str) -> dict:
+    """守卫拦下（guard-stop）时出「待重挂锚点清单」：问题原文、留待重挂的锚点（cellmap/left_volNN.tsv）、格级对照表，
+    并写 <cycle>/待重挂锚点.tsv。切坏（人裁账不平：受保护的格在新包里没了／落字≠人裁）交切分线，挪不了的标点专名交 A33。"""
+    m = list(_GUARD_RE.finditer(out))
+    problem = m[-1].group(1).strip() if m else fail_reason(out)
+    left_rows: list[str] = []
+    header = "层\t条目\t旧锚\t新锚\t内容\t原因码｜说明"
+    for f in sorted((cycle_dir / "cellmap").glob("left_vol*.tsv")):
+        lines = f.read_text(encoding="utf-8").splitlines()
+        if lines:
+            header = lines[0]
+        left_rows += [ln for ln in lines[1:] if ln.strip()]
+    table = next(iter(sorted((cycle_dir / "cellmap").glob("old_new_cells_vol*.tsv"))), None)
+    stale = sorted(cycle_dir.glob("export/*.punct-stale.json")) + sorted(cycle_dir.glob("book-text-未提交/**/*.punct-stale.json"))
+    out_tsv = cycle_dir / "待重挂锚点.tsv"
+    out_tsv.write_text(header + "\n" + "".join(r + "\n" for r in left_rows), encoding="utf-8")
+    to = []
+    if "人裁账不平" in problem or "框" in problem:
+        to.append("切分线（切坏／人裁格在新包里没了）")
+    if re.search(r"标点|专名", problem) or left_rows:
+        to.append("A33（标点专名锚点挪不了）")
+    to = to or ["先看 apply.out"]
+    return {"problem": problem[:600], "left": len(left_rows), "left_tsv": str(out_tsv),
+            "table": str(table) if table else None, "stale": [str(x) for x in stale],
+            "export": str(cycle_dir / "export"), "to": to,
+            "summary": f"待重挂锚点 {len(left_rows)} 条（{out_tsv}），交 {'、'.join(to)}"}
+
+
+def write_guard_report(ws: Path, state: dict, day: str, book_text: Path, text_id: str) -> Path | None:
+    rows = {b: v for b, v in state["books"].items() if v.get("verdict") == "guard-stop"}
+    um = {b: v["unmapped"] for b, v in state["books"].items() if v.get("verdict") == "done" and v.get("unmapped")}
+    if not rows and not um:
+        return None
+    md = [f"# 待重挂锚点清单（auto_cycle，{day}）"]
+    if rows:
+        md += ["", "## 守卫拦下的册", "",
+               "线上单没换（守卫在推库之前），新单已出在 reports/<册>/_publish/。修好后跑同一条 auto_cycle 加 `--resume-guard`，"
+               "或单册：`guji swap book-text --books <册> -w <工作区> --book-text <检出> --text-id <书ID> --push --sheet`。", "",
+               "| 册 | 交谁 | 问题 | 留待重挂 | 清单 | 对照表 |", "|---|---|---|---|---|---|"]
+    for b, v in sorted(rows.items()):
+        g = v.get("guard") or {}
+        md.append(f"| {b} | {'、'.join(g.get('to') or [])} | {str(g.get('problem', v.get('why', ''))).replace('|', '／')[:300]} "
+                  f"| {g.get('left', '?')} | `{g.get('left_tsv', '')}` | `{g.get('table') or ''}` |")
+    if rows:
+        md += ["", "补落命令（修好后）：", "", "```",
+               f"python scripts/zhengli/auto_cycle.py --books {','.join(sorted(rows))} -w {ws} --book-text {book_text} --resume-guard",
+               "```"]
+    if um:
+        md += ["", "## 旧单票无法对位（换图源前出的旧单，按格级对照表对不到新格；没拦，交复审）", "",
+               "| 册 | 格数 | 清单 |", "|---|---|---|"]
+        md += [f"| {b} | {u['n']} | `{u['tsv']}` |" for b, u in sorted(um.items())]
+    md.append("")
+    p = ws / "reports" / "_auto_cycle" / f"待重挂-{day}.md"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("\n".join(md), encoding="utf-8")
+    return p
+
+
+def resume_guard(ws: Path, book: str, book_text: Path, text_id: str) -> dict:
+    """守卫拦下的册修好后：guji swap book-text --push --sheet（按格级对照表重落 book-text、补推已出的新单、db sync）。"""
+    env = {**os.environ, "GUJI_WORKSPACE": str(ws), "PYTHONIOENCODING": "utf-8", "GUJI_DB_NO_GLYPH": "1"}
+    r = sh([*GUJI, "swap", "book-text", "--books", book, "-w", str(ws), "--book-text", str(book_text),
+            "--text-id", text_id, "--cv", str(CV), "--push", "--sheet"], cwd=CV, env=env)
+    out = r.stdout + r.stderr
+    try:
+        res = json.loads(r.stdout[r.stdout.index("{"):]).get(book, {})
+    except (ValueError, AttributeError):
+        res = {}
+    sheet = str(res.get("sheet", ""))
+    if res.get("status") == "pushed" and sheet.startswith("pushed"):
+        return {"verdict": "done", "why": f"守卫拦下后补落 book-text 并补推新单（{sheet}）", "new_rev": sheet.split()[1]}
+    if res.get("status") == "guard-stop":
+        return {"verdict": "guard-stop", "why": "补落仍被守卫拦下：" + str(res.get("why", ""))[:300]}
+    return {"verdict": "blocked", "why": f"补落没成（{res.get('status')}，{sheet}）：" + fail_reason(out)}
+
+
 def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_unlanded: str = "", cells_dir: str = "") -> dict:
     env = {**os.environ, "GUJI_WORKSPACE": str(ws), "PYTHONIOENCODING": "utf-8"}
     label, rev = d["main"], d["online_rev"]
@@ -150,6 +366,7 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_u
     if not man or not man.get("cv_commit"):
         return {"verdict": "blocked", "why": f"main 包 {label} 的 manifest 没有 cv_commit"}
     eng = engine_for(man["cv_commit"])
+    cells_dir = default_cells(book, cells_dir)
     # 页表／原图：登记过的册从 R2 取，几秒
     if sh([*GUJI, "source", "pull", book, "-w", str(ws)], cwd=CV, env=env).returncode:
         return {"verdict": "blocked", "why": "guji source pull 失败"}
@@ -164,6 +381,10 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_u
     sandbox = ws / "_packs" / label
     if not (sandbox / book).is_dir():
         return {"verdict": "blocked", "why": f"plan 之后没有产物沙箱 {sandbox}"}
+    if not (sandbox / book / PACK_MARK).exists():
+        # 取包核过 sha、解完才写 .pack.json；没有＝上次解到一半被杀或被别的进程清过，不拿半截产物换单
+        drop_sandbox(sandbox, book)
+        return {"verdict": "blocked", "why": f"产物沙箱 {sandbox / book} 不完整（没有 {PACK_MARK}），已清；再跑会重新取包"}
     ap = sh([sys.executable, HERE / "proof_cycle.py", "apply", "--book", book, "-w", str(ws),
              "--plan", str(plan_path), "--hash", plan["hash"], "--book-text", str(book_text),
              "--reuse-products", str(sandbox), "--no-web",
@@ -175,20 +396,25 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_u
     if ap.returncode and re.search(r"book-text.{0,8}这步失败|工作区有未提交的改动", out):
         # book-text 这步没过（格级对照表守卫拦下、或本地检查不过）：线上单还没换（这步在推库之前）；清掉未提交的改动。
         # 切坏的（框对不上）交切分线重出包，切分没错、锚点挪不了的交 A33；修好后 `guji swap book-text --books <册> --push --sheet` 补落文本、补推单
+        keep_untracked(book_text, plan_path.parent / "book-text-未提交")   # 待重标清单 punct-stale 等先留底，下面要清
         subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
         subprocess.run(["git", "clean", "-fdq", "--", "Book"], cwd=book_text)      # 待重标清单 NNN.punct-stale.json 是未跟踪文件，不清会混进下一册的提交
-        shutil.rmtree(sandbox, ignore_errors=True)      # 守卫拦下也清沙箱（0.3–5.6GB，不清云端盘会写满）；产物在 reports/<册>/_cycle/<rev>/export，交 A33 用
-        return {"verdict": "guard-stop", "why": "book-text 守卫／本地检查不过，线上单未换；看 apply.out 与对照表，"
-                "切坏交切分线、锚点交 A33，修好后 guji swap book-text --sheet",
-                "log": str(log)}
+        drop_sandbox(sandbox, book)      # 守卫拦下也清沙箱（0.3–5.6GB，不清云端盘会写满）；产物在 reports/<册>/_cycle/<rev>/export，交 A33 用
+        gl = guard_list(ws, book, plan_path.parent, out)
+        return {"verdict": "guard-stop", "why": "book-text 守卫／本地检查不过，线上单未换；" + gl["summary"]
+                + "；修好后 auto_cycle --resume-guard（即 guji swap book-text --push --sheet）",
+                "log": str(log), "guard": gl}
     if ap.returncode:
         subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
-        shutil.rmtree(sandbox, ignore_errors=True)
+        drop_sandbox(sandbox, book)
         return {"verdict": "blocked", "why": f"apply 失败（退出码 {ap.returncode}）：" + fail_reason(out),
                 "log": str(log)}
     new_rev = rp.next_rev(rev, rp.chapter_of(book))
-    shutil.rmtree(sandbox, ignore_errors=True)       # 云端盘小：沙箱 0.3–5.6GB，用完即清
-    return {"verdict": "done", "why": f"写人裁 {plan['ready']} 条，挂起 {plan['held']}", "new_rev": new_rev, "log": str(log)}
+    drop_sandbox(sandbox, book)       # 云端盘小：沙箱 0.3–5.6GB，用完即清（只清本册）
+    um = unmapped_votes(ws, book, new_rev)
+    return {"verdict": "done", "why": f"写人裁 {plan['ready']} 条，挂起 {plan['held']}"
+            + (f"；旧单票无法对位 {um['n']} 格（交复审，{um['tsv']}）" if um else ""),
+            "new_rev": new_rev, "log": str(log), **({"unmapped": um} if um else {})}
 
 
 def publish_all(books_done: list[tuple[str, str]], text_id: str) -> dict[str, str]:
@@ -209,6 +435,12 @@ def publish_all(books_done: list[tuple[str, str]], text_id: str) -> dict[str, st
     return out
 
 
+def to_publish(state: dict) -> list[tuple[str, str]]:
+    """历次 done 而还没发布冒烟成功的册。"""
+    return [(b, v["new_rev"]) for b, v in sorted(state["books"].items())
+            if v.get("verdict") == "done" and v.get("new_rev") and v.get("publish") != "ok"]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--books", required=True, help="如 vol20-vol98 或 vol23,vol24")
@@ -224,35 +456,95 @@ def main(argv=None) -> int:
                     help="线上单有票没投完的册也换：plan 把票落成人裁；落不了（如页图与页表对不上）的由 apply 票账门拦下列出，不丢票")
     ap.add_argument("--ack-unlanded-votes", default="", metavar="原因",
                     help="旧单上的票没落完也照换（写明原因），原样交给 proof_cycle apply → republish issue；swap run 透传")
+    ap.add_argument("--state", default="", help="状态文件（缺省 <工作区>/reports/_auto_cycle/state.json）")
+    ap.add_argument("--fresh", action="store_true", help="不看旧状态，从头判（旧状态改名留底）")
+    ap.add_argument("--retry-blocked", action="store_true", help="上次 guard-stop／blocked 的册也重跑（缺省跳过）")
+    ap.add_argument("--resume-guard", action="store_true",
+                    help="只处理上次 guard-stop 的册：修好后 guji swap book-text --push --sheet 补落文本、补推新单，成了算 done")
+    ap.add_argument("--max-minutes", type=float, default=0,
+                    help="跑满这么多分钟就不再开新册（后台命令 2 小时上限，给 100 左右）；同一条命令再跑接着做")
+    ap.add_argument("--publish-now", action="store_true", help="还有册没跑完也先把已 done 的发站冒烟")
     a = ap.parse_args(argv)
     from ensure_manager import ensure as _ensure_manager  # 搬去 manager 的命令要它（拆分 P2）
     _ensure_manager()
     ws = Path(a.workspace).resolve()
+    book_text = Path(a.book_text).resolve()
     day = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
     outdir = ws / "reports" / "_auto_cycle"
     outdir.mkdir(parents=True, exist_ok=True)
     tsv = outdir / f"{day}.tsv"
-    done: list[tuple[str, str]] = []
-    rows: dict[str, dict] = {}
-    for book in parse_books(a.books):
-        d = decide(ws, book, a.land_votes)
-        print(f"{book}\t{d['verdict']}\t{d['why']}", flush=True)
-        if d["verdict"] == "go" and not (a.only_decide or a.dry_run) and (not a.max or len(done) < a.max):
-            d = {**d, **run_book(ws, book, Path(a.book_text), d, a.reviewer, a.ack_unlanded_votes, a.cells)}
-            print(f"{book}\t→ {d['verdict']}\t{d['why']}", flush=True)
-            if d["verdict"] == "done":
-                done.append((book, d["new_rev"]))
-        rows[book] = d
-        with tsv.open("a", encoding="utf-8") as f:
-            f.write("\t".join([book, d["verdict"], str(d.get("online_rev", "")), str(d.get("new_rev", "")),
-                               str(d["why"]).replace("\t", " ").replace("\n", " ")[:300]]) + "\n")
-    if done and not a.no_publish:
-        res = publish_all(done, rp.text_id_of(ws))
-        for b, s in res.items():
-            print(f"{b}\t发布/冒烟\t{s}", flush=True)
+    sp = Path(a.state) if a.state else outdir / "state.json"
+    if a.fresh and sp.exists():
+        sp.rename(sp.with_name(f"{sp.stem}-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.json"))
+    started = time.monotonic()
+    books = parse_books(a.books)
+    with Lock(outdir / ".lock"):
+        state = load_state(sp)
+        state.setdefault("books", {})
+        hit = recover_running(ws, state, book_text)
+        if hit:
+            print(f"上次中断的册已清理、重做：{','.join(hit)}", flush=True)
+            save_state(sp, state)
+        text_id = rp.text_id_of(ws)
+        stopped_early, ran = False, 0
+        for book in books:
+            prev = state["books"].get(book) or {}
+            if a.resume_guard:
+                if prev.get("verdict") != "guard-stop":
+                    continue
+            elif prev.get("verdict") in SKIP_DONE:
+                print(f"{book}\t→ done\t（状态文件：已做）{prev.get('why', '')}", flush=True)
+                continue
+            elif prev.get("verdict") in SKIP_STOPPED and not a.retry_blocked:
+                print(f"{book}\t→ {prev['verdict']}\t（状态文件：上次拦下，--retry-blocked 重试）{str(prev.get('why', ''))[:200]}", flush=True)
+                continue
+            if a.max_minutes and (time.monotonic() - started) / 60 >= a.max_minutes:
+                print(f"已跑满 {a.max_minutes:g} 分钟，停在 {book} 之前；同一条命令再跑接着做", flush=True)
+                stopped_early = True
+                break
+            if a.resume_guard:
+                d = {**prev, **resume_guard(ws, book, book_text, text_id), "at": dt.datetime.now(dt.timezone.utc).isoformat()}
+                print(f"{book}\t→ {d['verdict']}\t{d['why']}", flush=True)
+            else:
+                d = decide(ws, book, a.land_votes)
+                print(f"{book}\t{d['verdict']}\t{d['why']}", flush=True)
+                if d["verdict"] == "go" and not (a.only_decide or a.dry_run) and (not a.max or ran < a.max):
+                    ran += 1
+                    gb = free_gb(ws)
+                    if gb < MIN_FREE_GB:
+                        print(f"✗ 盘只剩 {gb:.1f}GB（要 ≥ {MIN_FREE_GB:g}，GUJI_CYCLE_MIN_FREE_GB 可调）：停在 {book} 之前，"
+                              f"先清 {ws / '_packs'}、cache、旧 export", flush=True)
+                        stopped_early = True
+                        break
+                    state["books"][book] = {**d, "verdict": "running", "at": dt.datetime.now(dt.timezone.utc).isoformat()}
+                    save_state(sp, state)
+                    d = {**d, **run_book(ws, book, book_text, d, a.reviewer, a.ack_unlanded_votes, a.cells)}
+                    print(f"{book}\t→ {d['verdict']}\t{d['why']}", flush=True)
+                d["at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+            if not (a.only_decide or a.dry_run):
+                state["books"][book] = d
+                save_state(sp, state)
             with tsv.open("a", encoding="utf-8") as f:
-                f.write(f"{b}\t发布冒烟\t\t\t{s}\n")
-    return 1 if any(r["verdict"] in ("blocked",) for r in rows.values()) else 0
+                f.write("\t".join([book, d["verdict"], str(d.get("online_rev", "")), str(d.get("new_rev", "")),
+                                   str(d["why"]).replace("\t", " ").replace("\n", " ")[:300]]) + "\n")
+        rep = write_guard_report(ws, state, day, book_text, text_id)
+        if rep:
+            print(f"待重挂锚点清单：{rep}", flush=True)
+        left = [b for b in books if (state["books"].get(b) or {}).get("verdict") in (None, "running", "interrupted", "go")]
+        pending_pub = [x for x in to_publish(state) if x[0] in books]
+        if pending_pub and not a.no_publish and not (a.only_decide or a.dry_run):
+            if (left or stopped_early) and not a.publish_now:
+                print(f"还有 {len(left)} 册没跑完：已换好的 {len(pending_pub)} 册先不发站，跑完再统一发（--publish-now 不等）", flush=True)
+            else:
+                res = publish_all(pending_pub, text_id)
+                for b, s_ in res.items():
+                    print(f"{b}\t发布/冒烟\t{s_}", flush=True)
+                    state["books"][b]["publish"] = s_
+                    with tsv.open("a", encoding="utf-8") as f:
+                        f.write(f"{b}\t发布冒烟\t\t\t{s_}\n")
+                save_state(sp, state)
+    rows = {b: state["books"].get(b) or {} for b in books}
+    return 1 if any(r.get("verdict") in ("blocked",) for r in rows.values()) else 0
 
 
 if __name__ == "__main__":
