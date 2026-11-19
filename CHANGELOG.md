@@ -2,6 +2,8 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+- 页型表加 `no_ref`（无参校本页，Sheldon 11-19 定：参校本里本来就没有的文字，如脉经 01 林億序、06 牒文）：册 yaml `page_kinds: {no_ref: ["5-7"]}` → `seed_admit.no_ref_pages`；书级 `seed_admit.no_ref_params`（如 `{solo_5b_cov: 0.95, solo_5b_min_n: 1}`）只在这些页叠在第 7 步参数上，别的页不变。两个字段缺省空、不进参数 dump；`seed_admit` 已登记 `code_equiv`（脉经 01 3 页与 origin/dev 逐字节相同），没配的书不过期。脉经 5 页 322 格待审试跑放出 149 格，看图错 1 格。`kinds_from_params` 遇到形状错的 `params`（某步不是 dict）不再先崩，交给后面的校验报。
+- PATCH：PUA 码表共享层读取侧（ZM 11-19，A23）：书配置（`book_defaults.yaml`／册 yaml）加 `pua_table_pin: N`（或 `vN`），seed_admit 的 `pua_code_table`／`pua_code_admit` 读中心库只读共享层 `pua-wyg` 的 `v<N>`（`guji db pull` 拉的副本，`core/pua_table_pin.py`；副本缺或 sha 不符报错，不读空表）；码表内容指纹 `pua_table_digest` 进 seed_admit 参数，**没钉的书参数 dump 不变、仍读本书 `config/pua/pua_table.jsonl`**。改了 `seed_admit`／`utils.pua_v2_codes` 模块代码，未跑 `scripts/code_equiv.py check`（云端没有产物），登记前各书 seed_admit 会判过期，需有产物的机器补跑并登记 `code_equiv`。写入侧在 guji-manager（`guji pua-table publish`）。
 - 形近字对按刻形改字两件（OCR 研究方向 2，Sheldon 11-18「同意，按这个继续做」；都缺省关、关着时输出不变）：①`glyph_match.stages.pair.unsure: true`——5a 判 unsure 的格也逐候选对问一遍分类器，证据落 `stage.pair`（`on: unsure`，不改判决；写了才进 `stages_sha`，带 `.u`）；②`seed_admit.pair_form`（归属表路径，`-`＝所有对按刻形，试验用）——放行字与证据里过门槛的 `char` 不同时改成刻形字，通道、admit、provenance 不动，人裁不动，册码位表归走的字不改；归属表 `config/groups/pair_attribution.yaml`（`groups/pair_attr.py` 只读）里 `attr` 非 shape 的对不改，没标 `variant: true` 的异字对只记 `evidence.pair_form_review` 进复审。全唐文 020 册 34 页真跑：unsure 格出证据 781 格；`pair_form` 开后第 7 步只变 26 格（清→淸 22、寇→𡨥 3、著→蓍 1，对应全唐文回库后仍照整理本的 13 格等）。**`glyph_stages.py`、`seed_admit.py` 改了，开着 `stages`／跑第 7 步的书代码哈希变、产物判过期**。
 - `guji seg check` 加页级检查 `gutter_ink`（A22 各书切分统一优化 U6，Sheldon 11-18 定）：网格模式（书级 `column_grid` 或 `column_grid_pages` 点名页）的正文页（闸收了过半的列），内竖线穿字分（`border_detect.gutter_ink_score`）> 0.5 报出，一页一行、col 记 `-`。只报不改切分；新书首跑就能看见「插值线整片穿字」（脉经 02 册旧包报 p15 0.89，书衣、空白页不报）。
 - 新书级开关 `row_segment.cut_repair`（缺省关、开关本身不进参数哈希；A22 各书切分统一优化 U2，Sheldon 11-18 定）：一行开史記 k24–k26、脉经照抄的切点修整串（`cut_gap_guard` 0.08、`cut_free_seam` 0.35、`cut_gap_keep_glyph`、`cut_white_row` 0.35、`cut_glyph_line` 0.35），单写的项照单写的；展开后与逐项写参数 dump 相同、指纹一致。劈字判据 `_split_glyphs` 与两个换线护栏抽进 `seg/seam.split_blobs`／`blobs_keep_sides`（常数原值，行为不变）。
@@ -44,6 +46,10 @@
 - 模型库登记 5a 相似度 CNN 的跨书通用底座 `models/glyph_sim_base_v1/`（殿本、史記、全唐文三书合训 59,116 例；OCR 研究 Project 11-17，Sheldon：模型应该放到模型库里）：`core/model_pack.KINDS` 加种类 `glyph_sim_base`（global），模型表与出处表同步，权重与校准表已传 R2。校准表是通用保守包络（`scripts/fit_glyph_sim_calib.py` 的 `--work`／`--cnn` 可给多次，逐点取 cov 最小）。不动任何 Step 与 `sim_cnn.py`，各书产物指纹不变；还没有书的配置指向它。用法见 guji-manager `doc/参考/5a相似度模型.md`。
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
+
+## [0.7.72] - 2026-11-19
+
+- 发版说明（A20 11-19，**dev 线 patch**，PATCH；A23 请求，史記、殿本用三书合训底座跑 5a 新相似度 A/B）：v0.7.71 + #1631（模型表登记 `glyph_sim_base_v1`；cherry-pick 78c29c0b），**不含** v0.7.71 之后 dev 上的其他改动。不动任何 Step，各步 `code_hash` 不变；不配新底库。tag 在 main 合并提交（PR #1704）；dev 以 `-s ours` 合回、只加本节。
 
 ## [0.7.71] - 2026-11-18
 
