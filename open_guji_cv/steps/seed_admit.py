@@ -1180,6 +1180,11 @@ class SeedAdmitParams(BaseModel):
     照旧送审（`lane_skip.why=lib_veto`）。47 册命中 61 格，看图约 12 格默认字是错的（整理本错字
     兀/元、新/浙、一/十、門/開，及 vol40 p2 整页错位）。题列套语不受此限。0＝关。"""
     lane_seal_lib_veto_second: bool = True
+    lane_lib_veto: float = 0.0
+    """witness3／coord_fallback 两条补放通道的库否决（2026-11-19，全唐文·形近字线；Sheldon 11-19 同意）：要放的字与
+    字形库首位不同（语义也不同、不是异体对），而库首位覆盖度 ≥ 此值 → 不放，照旧送审（`lane_skip.why=lib_veto`，
+    doubt `lane_lib_veto`）。维基文库 Page 版对比 001–015 发现这两条通道无视库首位放错（位/蝗、刺/殯、戸/吏…）。
+    `lib_coord_primary`（放的就是库首位）不受影响。只降不升。0＝关（缺省，不进参数 dump）。"""
     """库否决放宽（2026-10-31，A32）：默认字正是字形库第二名时不否决（印泥压着，近形两字分差常不到 0.01）。
     vol20–99 r3 包里库否决 340 格，看图默认字错的约 10 格，全在「默认字不在库前二」那一档；默认字是第二名的 150 格看图未见错。"""
     lane_seal_lib_veto_min_n: int = 2
@@ -1696,6 +1701,8 @@ class SeedAdmitParams(BaseModel):
                       "lane_witness_fingerprint", "lane_variant_guard",
                       "lane_variant_topk", "lane_variant_keep_rare"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.lane_lib_veto:
+            d.pop("lane_lib_veto", None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal or self.rare_ref):
             d.pop("lane_keep_ref_review", None)
         if isinstance(d, dict) and not self.lane_header_formula:
@@ -5015,6 +5022,14 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
             if hit is None:
                 continue
             name, char, lev = hit
+            if p.lane_lib_veto and char and name in ("witness3", "coord_fallback"):
+                m = mmap.get(rec.id)
+                top = (m.candidates[0] if m and m.candidates else None)
+                if top and float(top[1]) >= p.lane_lib_veto and top[0] != char and not same(top[0], char):
+                    rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "lib_veto", "lib": top[0],
+                                                        "cov": round(float(top[1]), 4)}}
+                    rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["lane_lib_veto"]))
+                    continue
             if p.lane_group_img_veto is not None and char and (
                     gv := _group_img_dissent(ev.get("group"), char, p.lane_group_img_veto)):
                 rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "group_img", **gv}}
