@@ -793,6 +793,11 @@ class RowSegmentParams(BaseModel):
     #: 只在册配置里点名开（`params: {row_segment: {roster_pages: ["89-132"]}}`），不自动判页型——
     #: 闸1 判不出职名页（见 row_segment_gate 模块头 L0u 一节），点名是人定的。
     roster_pages: list[int | str] = []
+    #: **按列的职名列**（2026-11-19，《脉经》）：`{页: [列号…]}`，点名的列走职名页分支（不定字数、不定字高），
+    #: 本页其余列照正文切。正文页里夹一两列职名（《脉经》各卷卷端「朝散大夫……臣林億等類次」25 字挤在 20 格的列里）时用；
+    #: 整页都是职名用 `roster_pages`。册配置里写 `page_kinds: {roster_cols: {11: [2]}}`（`core/page_kinds.py` 翻成本参数）。
+    #: 只有一两列量不出全页「臣」行，字形库细切（`roster_glyph_refine`）改把整列当官衔区。缺省空，空时不进参数 dump。
+    roster_cols: dict[int, list[int | str]] = {}
     #: **列端虚线残段记空白**（overview#376 后续，2026-10-07）：缺省关，关时产物逐字节不变。开了以后，
     #: 首格/末格/抬头格里墨的外接框竖向 ≤ `dash_h_frac`×period 且横向 ≤ `dash_w_frac`×列宽的，kind 记 `blank`
     #: 而不是没字的 `char`。阈值未经真图标定（云端没有原图），先按 S2 实测「虚线跨度 ≤29 行 ≈ 0.25 period」取。
@@ -1057,6 +1062,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("layout_tail_empty", None)
             if not self.jiazhu_rows:
                 d.pop("jiazhu_rows", None)
+            if not self.roster_cols:
+                d.pop("roster_cols", None)
             if not self.jiazhu_single_head:
                 d.pop("jiazhu_single_head", None)
             if not self.jiazhu_half_a:
@@ -1744,6 +1751,7 @@ class RowSegmentStep(Step):
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
         pc = self._header_ref_flags(ctx, p, page, pc)
+        pc = self._roster_cols(ctx, p, page, gate, wins, pc)
         pc = _apply_manual_cells(pc, manual, gate, wins)
         if alt_out:
             # 卷端标题列、人工指定的列已换掉主切法，备选不再有意义：只留主切法仍是本步切出来那份的列
@@ -1815,6 +1823,20 @@ class RowSegmentStep(Step):
             out.append(new)
         return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=out)
 
+    def _roster_cols(self, ctx: RunContext, p: RowSegmentParams, page: int,
+                     gate: GateManifest, wins: PageWindows, pc: PageCells) -> PageCells:
+        """`roster_cols` 点名的列换成职名页分支切出的（不定字数）；没点名本页原样返回。
+
+        格号从 1 数（职名列不跟格网）。只切点名的列，全页 em 也只按这几列量。职名分支切失败（ok=False）的列留格网切的。"""
+        spec = p.roster_cols.get(page) if p.roster_cols else None
+        cols = set(_expand_pages(list(spec))) if spec else set()
+        cols &= {cc.col for cc in pc.columns}
+        if not cols:
+            return pc
+        got = {cc.col: cc for cc in self._run_roster(ctx, p, page, gate, wins, only=cols, chen_fallback=True).columns
+               if cc.ok}
+        return pc.model_copy(update={"columns": [got.get(cc.col, cc) for cc in pc.columns]})
+
     @staticmethod
     def _header_ref_flags(ctx: RunContext, p: RowSegmentParams, page: int, pc: PageCells) -> PageCells:
         """`header_ref_flag`：整理本这一列是题列套语（`史記卷N`、`X第N[篇名]`）的列，列旗追加 `header_ref:<整理本行>`
@@ -1839,7 +1861,7 @@ class RowSegmentStep(Step):
     # ── 职名页分支 ────────────────────────────────────────────────────
     def _run_roster(self, ctx: RunContext, p: RowSegmentParams, page: int,
                     gate: GateManifest, wins: PageWindows, only: set[int] | None = None,
-                    despeckle: set[int] | None = None) -> PageCells:
+                    despeckle: set[int] | None = None, chen_fallback: bool = False) -> PageCells:
         """职名页：每列字数不定，`n_body_slots` = 本列实际位数，`boundaries` 为空（没有格线）。
 
         雙行小字配对成同一物理位：右行第 i 字（jiazhu_a）与左行第 i 字（jiazhu_b）共用 pos，
@@ -1890,6 +1912,10 @@ class RowSegmentStep(Step):
                 kw["drops"] = drops
         if p.roster_top_dash:
             kw["top_dash"] = True
+        if chen_fallback and scorer is not None:
+            import inspect
+            if "chen_fallback" in inspect.signature(segment_roster_page).parameters:   # 书仓自己的职名实现可以没有
+                kw["chen_fallback"] = True
         results = dict(zip((gc.col for gc in admitted),
                            segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer, **kw)))
         col_img = {gc.col: im for gc, (im, _cx) in zip(admitted, imgs)}
