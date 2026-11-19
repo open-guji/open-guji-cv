@@ -388,7 +388,7 @@ _GRID_OUTER_TRIM_1118 = ("border_detect 加书级参数 grid_outer_trim（网格
 _GRID_FREE_FALLBACK_1118 = ("border_detect 加书级参数 grid_free_fallback（网格补线穿字时换自由模式＋列距救援，缺省 0＝关、不进参数 dump；"
                             "新函数 gutter_ink_score，列距救援收成内部函数 _rescue）：脉经第 2 册 15、24、50、63 页 border_detect 与 origin/dev（59deab6）"
                             "产物逐字节相同；scripts/code_equiv.py check，2026-11-18（MJ，GUJI-774）")
-_GRID_OUTER_FIX_1118 = ("border_detect 加书级参数 grid_outer_fix（外列空白窄条去线补对侧版框、收外框线挪到换线之后且只收进字缝，"
+_GRID_OUTER_FIX_1118 = ("border_detect 加书级参数 grid_outer_fix（外列空白窄条去线补对侧版框、收外框线挪到换线之后且只收进字缝、网格模式下也跑列宽均匀拟合，"
                         "缺省关、不进参数 dump；新函数 fix_outer_sliver、_band_ink，trim_outer_columns 加 gap_only）：脉经第 2 册 15、24、50、63 页"
                         "（书配置开着 grid_free_fallback、grid_outer_trim）border_detect 与 origin/dev（7cbc2bc 及合并后的 dev）产物逐字节相同；"
                         "scripts/code_equiv.py check，2026-11-18（MJ，GUJI-774）")
@@ -2029,7 +2029,7 @@ ENTRIES: tuple[Equiv, ...] = (
           old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
           evidence=_GRID_FREE_FALLBACK_1118),
     Equiv(module="open_guji_cv.steps.border_detect",
-          new="56fab91e77969f5d2877766de977c8a30be2a0602684a982dd2bd574dd235390",
+          new="c91867a1da4993fa9312c1f3b33a18234ac095c54b1165f1cdf459969df0f88d",
           old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
           evidence=_GRID_OUTER_FIX_1118),
     Equiv(module="open_guji_cv.steps.column_warp",
