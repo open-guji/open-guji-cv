@@ -6,6 +6,11 @@
 
 ## [未发版]
 
+## [0.7.72] - 2026-11-19
+
+- 发版说明（A20 11-19，**dev 线 patch**，PATCH；A23 请求，史記、殿本用三书合训底座跑 5a 新相似度 A/B）：v0.7.71 + #1631（模型表登记 `glyph_sim_base_v1`；cherry-pick 78c29c0b），**不含** v0.7.71 之后 dev 上的其他改动。不动任何 Step，19 步 `code_hash` 不变；不动语料底库文件，不配新底库。
+- 模型库登记 5a 相似度 CNN 的跨书通用底座 `models/glyph_sim_base_v1/`（殿本、史記、全唐文三书合训 59,116 例；OCR 研究 Project 11-17，Sheldon：模型应该放到模型库里）：`core/model_pack.KINDS` 加种类 `glyph_sim_base`（global），模型表与出处表同步，权重与校准表已传 R2。校准表是通用保守包络（`scripts/fit_glyph_sim_calib.py` 的 `--work`／`--cnn` 可给多次，逐点取 cov 最小）。不动任何 Step 与 `sim_cnn.py`，各书产物指纹不变；还没有书的配置指向它。用法见 guji-manager `doc/参考/5a相似度模型.md`。
+
 ## [0.7.71] - 2026-11-18
 
 - 发版说明（A31 11-18，**dev 线 patch**，PATCH；全唐文·形近字线请求）：v0.7.68（已含 #1655、#1658、#1665）+ #1586（16 对兄弟异体边）+ #1673／#1676（库内审阅改标／撤库不再连现行人裁一起作废）+ #1677（seed_admit code_deps 加 feedback.lookup、feedback.bindings）+ #1679（回库前核验 BackfillProbe，manager 用，不进指纹）+ #1678（variants.tsv 加 𦫵→升）＋语料表补登 variants.tsv（#1678 漏跑 guji corpus registry，新 sha 已传 R2）。不含 v0.7.68 之后 dev 上的其他改动（row_segment 1.53／1.54、#1664 adopt_rel、#1670／#1680 border_detect、#1671 5a.3 pair、#1650 等）。**Step 指纹对 v0.7.68**：`seed_admit` 变（#1673、#1677 加 code_deps；dev 线所有册 seed_admit 判过期），其余步不变。**配底库 b30**（＝b29 + variants.tsv；b29＝b27 + #1586 两份异体文件），钉 b27 的册要 `guji corpus pin` 改钉 b30，否则新版 cv 拒跑。
