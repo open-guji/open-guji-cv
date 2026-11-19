@@ -250,15 +250,17 @@ def test_trim_gap_only_keeps_wide_outer_column_with_text_at_target():
 
 
 def test_grid_outer_fix_runs_column_fit_in_grid_mode(tmp_path, monkeypatch):
-    """grid_outer_fix：网格模式下也跑列宽均匀拟合（原先只在自由模式跑）。"""
+    """grid_outer_fix：网格模式下列宽出带就按版式列数强拟（原先只在自由模式跑）；列宽都在带里不拟。"""
     import open_guji_cv.steps.border_detect as bd
     seen = []
-    monkeypatch.setattr(bd, "detect_borders", lambda gray, **kw: _res(_GF_XS))
-    monkeypatch.setattr(bd, "pitch_rescue", lambda r, *a, **k: (seen.append(1), (r, None))[1])
-    for fix, want in ((False, 0), (True, 1)):
+    bad = list(_GF_XS); bad[5] += 45                           # 一条内线偏 45px：两列出带
+    for fix, xs, want in ((False, bad, []), (True, _GF_XS, []), (True, bad, [{"n_lines": 11, "keep_guard": False}])):
         seen.clear()
-        ctx = make_ctx(tmp_path / str(fix), make_book(params={"border_detect": {"grid_outer_fix": fix}},
-                                                      column_grid=True, col_pitch=192, expected_cols=10),
-                       raw={PAGE: _text_page(2300, 3000, _GF_CENTERS)})
+        monkeypatch.setattr(bd, "detect_borders", lambda gray, _xs=xs, **kw: _res(_xs))
+        monkeypatch.setattr(bd, "pitch_rescue", lambda r, *a, **k: (seen.append(
+            {x: k[x] for x in ("n_lines", "keep_guard") if x in k}), (r, None))[1])
+        ctx = make_ctx(tmp_path / f"{fix}{len(seen)}{xs[5]}", make_book(
+            params={"border_detect": {"grid_outer_fix": fix}}, column_grid=True, col_pitch=192, expected_cols=10),
+            raw={PAGE: _text_page(2300, 3000, _GF_CENTERS)})
         STEPS["border_detect"].run_page(ctx, PAGE)
-        assert len(seen) == want
+        assert seen == want

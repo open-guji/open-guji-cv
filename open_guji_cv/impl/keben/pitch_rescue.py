@@ -96,11 +96,16 @@ def _straight(r):
 
 
 def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single", ink_threshold: int = 128,
-           spec: ColumnSpec = ColumnSpec()) -> tuple[object, str | None]:
+           spec: ColumnSpec = ColumnSpec(), n_lines: int | None = None,
+           keep_guard: bool = True) -> tuple[object, str | None]:
     """`detect_grid(pitch)` 用网格模式重探。返回 (结果, 'fit'|None)。列宽都在带里、正文列太少不判、或拟合不出／
     不过护栏时原样返回、None。
 
-    先按原投影拟合；拟不出再减本页底色（`FLOOR_PCT` 分位）重拟一次。第一遍拟得出的页结果与 2.0 逐位相同。"""
+    先按原投影拟合；拟不出再减本页底色（`FLOOR_PCT` 分位）重拟一次。第一遍拟得出的页结果与 2.0 逐位相同。
+
+    `n_lines`：给了就按这么多条线拟（书级版式列数 + 1；缺省取原网与网格网线数多的那个）。`keep_guard=False`：
+    不查「列宽合格、附近有界行残段的旧线不许动」（`keeps_good_lines`），只留「新网至少一半线与原线重合」——
+    书级网格模式 `grid_outer_fix` 用（脉经 04 p37：拟出的一串列宽全匀，被护栏挡回；06 p24 原网少三条线）。"""
     if spec.uniform != "strict":
         return res, None
     xs = line_xs(res)
@@ -114,13 +119,14 @@ def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single", i
             grids[p] = detect_grid(p)
         return grids[p]
     for floor in (None, FLOOR_PCT):
-        out, how = _fit(res, gray, grid_once, xs, chk, spec, ink_threshold, floor)
+        out, how = _fit(res, gray, grid_once, xs, chk, spec, ink_threshold, floor, n_lines, keep_guard)
         if how:
             return out, how
     return res, None
 
 
-def _fit(res, gray, detect_grid, xs, chk, spec: ColumnSpec, ink_threshold: int, floor_pct):
+def _fit(res, gray, detect_grid, xs, chk, spec: ColumnSpec, ink_threshold: int, floor_pct,
+         n_lines: int | None = None, keep_guard: bool = True):
     pitch = chk.pitch
     H, W = gray.shape[:2]
     top = float(res.top.y_at(0.0)) if res.top is not None else 0.0
@@ -199,13 +205,13 @@ def _fit(res, gray, detect_grid, xs, chk, spec: ColumnSpec, ink_threshold: int, 
         if any(TOL < sign * (r - outer) <= FRAME_REACH * pitch for r in ridges):
             return (outer + inner) / 2.0
         return None
-    n = max(len(xs), len(gx))
+    n = n_lines or max(len(xs), len(gx))
     chain = fit_columns(cands, n, pitch, spec,
                         first_max=bound(xs[0], xs[1], -1), last_min=bound(xs[-1], xs[-2], 1))
     if chain is None:
         return res, None
     new_xs = [c.x for c in chain]
-    if n_shared(new_xs, xs) * 2 < len(xs) or not keeps_good_lines(xs, new_xs, chk.bad, ridges=ridges):
+    if n_shared(new_xs, xs) * 2 < len(xs) or (keep_guard and not keeps_good_lines(xs, new_xs, chk.bad, ridges=ridges)):
         return res, None
     out = replace(res, verticals=[c.payload[0] for c in chain],
                   verticals_straight=[c.payload[1] for c in chain],

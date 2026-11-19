@@ -542,11 +542,13 @@ class BorderDetectStep(Step):
         rescued = None
         col_spec = ColumnSpec.from_dict(ctx.book.columns)
 
-        def _rescue(r):
+        def _rescue(r, force: bool = False):
             # 网格模式必须带列距先验（见 border_geometry.detect_borders）；书上没写就取本页自由模式的中位列距
+            # force（grid_outer_fix）：按版式列数拟、不查旧线护栏（见 pitch_rescue.rescue）
+            kw = {"n_lines": cols + 1, "keep_guard": False} if force and cols else {}
             r, how = pitch_rescue(r, gray, lambda pitch: _detect(cols, True, col_pitch or pitch),
                                   leaf_layout=ctx.book.leaf_layout, ink_threshold=p.ink_threshold,
-                                  spec=col_spec)
+                                  spec=col_spec, **kw)
             if how:
                 # 换了线就在新的一串直线上重拟合折线（旧形状是在错的线网上拟的，vol46 p78）
                 r = refit_bends(r, gray, ink_threshold=p.ink_threshold,
@@ -569,16 +571,37 @@ class BorderDetectStep(Step):
                     free_switched = f"穿字分 {s_grid:.2f}→{s_free:.2f}"
         outer_fixed = None
         if grid and not grid_page and p.grid_outer_fix:
-            if p.pitch_rescue and not rescued:
-                # 列宽均匀是强约束：网格（或换过线的）列网仍有列宽出带，就照自由模式那样做一遍列宽均匀拟合；
-                # 拟合的外列带宽（≤1.3 倍）会把书口条圈回来，所以放在去窄条、收外框线之前
-                res2, how = _rescue(res)
-                if how:
-                    res, rescued = res2, how
-            n_sliver = fix_outer_sliver(res, gray, n_cols=cols, ink_threshold=p.ink_threshold)
-            n_trim = (trim_outer_columns(res, gray, p.grid_outer_trim, n_cols=cols, ink_threshold=p.ink_threshold,
+            import copy
+
+            def _outer(r):
+                ns = fix_outer_sliver(r, gray, n_cols=cols, ink_threshold=p.ink_threshold)
+                nt = (trim_outer_columns(r, gray, p.grid_outer_trim, n_cols=cols, ink_threshold=p.ink_threshold,
                                          col_pitch=col_pitch, frame_height=ctx.book.frame_height, gap_only=True)
                       if p.grid_outer_trim else 0)
+                return ns, nt
+
+            def _n_bad(r):
+                # 与下面列宽检查同一口径：x 取版框中高处
+                ty = float(r.top.y_at(0.0)) if r.top is not None else 0.0
+                by = float(r.bottom.y_at(0.0)) if r.bottom is not None else float(H - 1)
+                xs_ = [float(v.x_at((ty + by) / 2.0)) for v in r.verticals]
+                skip = {c.col for c in classify_columns(xs_, leaf_layout=ctx.book.leaf_layout) if c.kind != "body"}
+                chk_ = check_columns(xs_, col_spec, skip=skip)
+                return len(chk_.bad) if chk_.judged else 0
+
+            # A：只重定外框线。B：先按版式列数强拟列宽均匀（列宽均匀是强约束；网格模式原先不跑），再重定外框线。
+            # 拟合的外列带宽到 1.3 倍，书口条会被圈回来、内线跟着挪（02 p24），所以 A 已经全在带里就用 A；
+            # 否则 B 出带的列更少才用 B。
+            a = copy.deepcopy(res)
+            n_sliver, n_trim = _outer(a)
+            pick, how_b = a, None
+            if p.pitch_rescue and _n_bad(a):
+                b, how_b = _rescue(copy.deepcopy(res), force=True)
+                if how_b:
+                    ns_b, nt_b = _outer(b)
+                    if _n_bad(b) < _n_bad(a):
+                        pick, n_sliver, n_trim, rescued = b, ns_b, nt_b, how_b
+            res = pick
             if n_sliver or n_trim:
                 outer_fixed = f"去窄条补对侧版框 {n_sliver} 处、收外框线 {n_trim} 条"
         if page in p.vline_overrides:
