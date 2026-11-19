@@ -372,6 +372,12 @@ class BookSpec:
     #: 或 `manifest: <快照 manifest.json 路径，相对工作区>`。登记后 `close-check` 1a 改比快照
     #: 产物 sha，不再因 cv 升版、人裁进库报过期。不进 `book_deps`、不进指纹；空 = 草稿册。
     freeze: dict = field(default_factory=dict)
+    #: 缺页（yaml 的 `gaps:`，2026-11-18 用户定）：**只按图片页号记**，不另立书上页号。一段连续缺的写一条：
+    #: `after_page`（缺在这张图之后）、`what`（照书上说缺了什么，如「卷九叶九、叶十」）、
+    #: `kind`（`原书缺`＝藏本本身没有 / `未拍`＝书里有、图没拍到）、`est_chars`（估计缺多少字，可缺）、
+    #: `evidence`（怎么定的、谁、哪天，可缺）。图片页号、产物、人裁、字位 id 一概不动；
+    #: 不进任何 Step 的指纹（没有 Step 读它），只给导出（`NNN.gaps.json`）、对勘报告和网站用。
+    gaps: list[dict] = field(default_factory=list)
 
     def canonical_char(self, ch: str) -> str:
         """`ch` 是本书 `codepoints` 配置里「该统一掉的那个码位」时，返回本书指定的
@@ -760,6 +766,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         model=_parse_model_pin(d.get("model")),
         code=_parse_code_pin(d.get("code")),
         freeze=_load_freeze(d.get("freeze"), book_id),
+        gaps=load_gaps(d.get("gaps"), book_id),
     )
 
 
@@ -827,6 +834,65 @@ def _load_freeze(v, book_id: str) -> dict:
         raise ValueError(f"册 {book_id} 的 freeze: 应是映射（at、cv_version、snapshot 或 manifest），"
                          f"现在是 {type(v).__name__}：{v!r}")
     return {str(k): x for k, x in v.items()}
+
+
+GAP_KINDS = ("原书缺", "未拍")
+_GAP_KEYS = {"after_page", "what", "kind", "est_chars", "evidence"}
+
+
+def load_gaps(v, book_id: str) -> list[dict]:
+    """册 yaml 的 `gaps:` → 校验过的缺页记录（按 `after_page` 排序）。写错了给一句清楚的错（`BookConfigError`）。
+
+    `after_page` 可以是 0（缺在第一张图之前）；同一页后面只许一条（一段连续缺页写成一条）。"""
+    from .book_config import BookConfigError
+    if not v:
+        return []
+    if not isinstance(v, list):
+        raise BookConfigError(f"册 {book_id} 的 gaps: 应是列表，每条一段缺页；现在是 {type(v).__name__}")
+    out, seen = [], set()
+    for i, g in enumerate(v):
+        where = f"册 {book_id} 的 gaps 第 {i + 1} 条"
+        if not isinstance(g, dict):
+            raise BookConfigError(f"{where} 应是映射（after_page、what、kind…），现在是 {g!r}")
+        extra = set(g) - _GAP_KEYS
+        if extra:
+            raise BookConfigError(f"{where} 有不认识的键 {sorted(extra)}；只认 {sorted(_GAP_KEYS)}")
+        ap = g.get("after_page")
+        if isinstance(ap, bool) or not isinstance(ap, int) or ap < 0:
+            raise BookConfigError(f"{where}：after_page 要写图片页号（≥0 的整数），现在是 {ap!r}")
+        what = g.get("what")
+        if not isinstance(what, str) or not what.strip():
+            raise BookConfigError(f"{where}：what 必填，照书上写缺了什么（如「卷九叶九、叶十」）")
+        kind = g.get("kind", "原书缺")
+        if kind not in GAP_KINDS:
+            raise BookConfigError(f"{where}：kind 只能是 {'／'.join(GAP_KINDS)}，现在是 {kind!r}")
+        if ap in seen:
+            raise BookConfigError(f"{where}：第 {ap} 页之后已有一条缺页；连续缺的合成一条")
+        seen.add(ap)
+        rec = {"after_page": ap, "what": what.strip(), "kind": kind}
+        if g.get("est_chars") is not None:
+            n = g["est_chars"]
+            if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+                raise BookConfigError(f"{where}：est_chars 要是 ≥0 的整数，现在是 {n!r}")
+            rec["est_chars"] = n
+        if g.get("evidence") is not None:
+            rec["evidence"] = str(g["evidence"])
+        out.append(rec)
+    return sorted(out, key=lambda r: r["after_page"])
+
+
+def gaps_for_pages(gaps: list[dict], pages: list[int]) -> list[dict]:
+    """一批导出页（一章）里落着的缺页：`after_page` 是这批里的页（缺在章末的也归这一章），
+    `after_page` = 0（缺在第一张图之前）归含第 1 页的那一批。"""
+    ps = set(pages)
+    return [g for g in gaps if g["after_page"] in ps or (g["after_page"] == 0 and 1 in ps)]
+
+
+def gap_note(g: dict) -> str:
+    """缺页在文字版里的一行注记，如「〔原书此处缺卷九叶九、叶十，约 830 字〕」（网站文字版与 Step9 稿同一写法）。"""
+    head = "原书此处缺" if g.get("kind", "原书缺") == "原书缺" else "此处未拍"
+    n = g.get("est_chars")
+    return f"〔{head}{g['what']}" + (f"，约 {n} 字" if n else "") + "〕"
 
 
 def list_books(books_dir: Path | None = None) -> list[str]:

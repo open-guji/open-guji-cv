@@ -153,6 +153,7 @@ def main(argv=None) -> int:
             for e in cc.crop_figures(fig, new[f"{a.chapter}.cord.json"], _image_loader(a), a.out):
                 print(f"   ✗ {e}")
         cc.write_files(new, a.out)
+        _write_gaps(a, plist)
         st = cc.stats(new[f"{a.chapter}.char.json"], new[f"{a.chapter}.cord.json"])
         fr = rep["figures"]
         print(f"{a.book} 章 {a.chapter}（char-cord，keys={a.keys}）：{st['pages']} 页、{st['cells']} 格（有框 {st['boxed']}）、"
@@ -166,6 +167,7 @@ def main(argv=None) -> int:
     if a.only == "pages":
         files = {k: v for k, v in files.items() if k.endswith(".pages.json")}
     gf.write_files(files, a.out)
+    _write_gaps(a, plist)
     n_cells = sum(len(p["cells"]) for p in pj["pages"])
     n_box = sum(1 for p in pj["pages"] for c in p["cells"] if c.get("box"))
     print(f"{a.book} 章 {a.chapter}：{len(pages)} 页、{pj['n_chars']} 字元、{n_cells} 格（有框 {n_box}）→ {a.out}")
@@ -175,6 +177,26 @@ def main(argv=None) -> int:
             _, rep = gf.reattach(load(path), idx, md)
             print(f"   {name}：按锚点 {rep['by_anchor']}、退到偏移 {rep['by_offset']}、对不上 {len(rep['lost'])}")
     return 1 if bad else 0
+
+
+GAPS_SCHEMA = "guji-gaps/0.1"
+
+
+def _write_gaps(a, plist: list[int]) -> None:
+    """册 yaml `gaps:` 里落在这一章的缺页 → `NNN.gaps.json`（没有就不写，也删掉同名旧文件）。
+
+    单立一个文件，不进 lines.md／char.json：那两样是纯字流，坐标口径（页:列:格）和 book-text 校验器都按它走，
+    插一行注记会把格位算错。网站读这个文件，在 `after_page` 那张图之后画缺页卡、文字版插 `note` 那一行。"""
+    from open_guji_cv.core.book import gap_note, gaps_for_pages, load_book
+    gaps = gaps_for_pages(load_book(a.book).gaps, plist)
+    path = Path(a.out) / f"{a.chapter}.gaps.json"
+    if not gaps:
+        path.unlink(missing_ok=True)
+        return
+    doc = {"schema": GAPS_SCHEMA, "book": a.book, "chapter": a.chapter,
+           "gaps": [{**g, "note": gap_note(g)} for g in gaps]}
+    path.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    print(f"   缺页 {len(gaps)} 处 → {path.name}")
 
 
 def _image_loader(a):

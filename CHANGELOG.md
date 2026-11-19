@@ -2,6 +2,7 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+- 册 yaml 新字段 `gaps:` 记缺页（Sheldon 11-18 定：只按图片页号记，不另立书上页号）：每条 `after_page`／`what`／`kind`（原书缺／未拍）／`est_chars`／`evidence`，`load_gaps` 校验，只许写在册 yaml。`guji export format` 有缺页的章另写 `NNN.gaps.json`（`guji-gaps/0.1`，lines.md、char.json 不动），`guji export md` 在缺处单起一行〔原书此处缺…〕。没有 Step 读它、不进任何 Step 的 `code_deps`，各书指纹不变。格式 `doc/formats/缺页.md`。
 - `guji seg check` 加页级检查 `gutter_ink`（A22 各书切分统一优化 U6，Sheldon 11-18 定）：网格模式（书级 `column_grid` 或 `column_grid_pages` 点名页）的正文页（闸收了过半的列），内竖线穿字分（`border_detect.gutter_ink_score`）> 0.5 报出，一页一行、col 记 `-`。只报不改切分；新书首跑就能看见「插值线整片穿字」（脉经 02 册旧包报 p15 0.89，书衣、空白页不报）。
 - 新书级开关 `row_segment.cut_repair`（缺省关、开关本身不进参数哈希；A22 各书切分统一优化 U2，Sheldon 11-18 定）：一行开史記 k24–k26、脉经照抄的切点修整串（`cut_gap_guard` 0.08、`cut_free_seam` 0.35、`cut_gap_keep_glyph`、`cut_white_row` 0.35、`cut_glyph_line` 0.35），单写的项照单写的；展开后与逐项写参数 dump 相同、指纹一致。劈字判据 `_split_glyphs` 与两个换线护栏抽进 `seg/seam.split_blobs`／`blobs_keep_sides`（常数原值，行为不变）。
 - 新书级参数 `row_segment.jiazhu_cc_min`（px，缺省 500＝原值、不进参数哈希；A22 各书切分统一优化 U3，Sheldon 11-18 定）：雙行小注段噪点否决门槛（`jiazhu_split.link_runs` 的 `cc_min`）按书调。脉经小字单字最大连通体 200–600px，书仓 k1 为改这一个数整段抄了 `link_runs`；开了本参数后书仓钩子只需留段端收编。
