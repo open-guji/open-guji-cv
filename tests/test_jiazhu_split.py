@@ -343,3 +343,19 @@ def test_link_runs_matches_production_on_same_input():
     ]
     for ents in cases:
         assert jz.link_runs(ents) == flag_jiazhu_runs(ents)
+
+
+def test_gap_center_span_t_rejects_wide_left_right_char():
+    """字宽的书（脉经）：左右结构正文字跨度约 0.8 列距、中缝够宽，缺省 0.75 当成双行；调到 0.82 就不认。"""
+    p = _blank()
+    _box(p, 20, 80, 15, 95)            # 左部件（月）
+    _box(p, 90, 165, 15, 95)           # 右部件（市），跨度 145/185≈0.78
+    assert jz.gap_center(p, ref_w=W) is not None
+    assert jz.gap_center(p, ref_w=W, span_t=0.82) is None
+    assert jz.gap_center(_jiazhu_patch(seam=92), ref_w=W, span_t=0.82) is not None
+
+
+def test_row_segment_jiazhu_span_t_dropped_from_dump_when_default():
+    from open_guji_cv.steps.row_segment import RowSegmentParams
+    assert "jiazhu_span_t" not in RowSegmentParams().model_dump()
+    assert RowSegmentParams(jiazhu_span_t=0.82).model_dump()["jiazhu_span_t"] == 0.82

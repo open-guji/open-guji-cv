@@ -105,7 +105,7 @@ def _binary(patch: np.ndarray, ink_threshold: int = INK_THRESHOLD) -> np.ndarray
 
 
 def gap_center(patch: np.ndarray, ref_w: float | None = None,
-               ink_threshold: int = INK_THRESHOLD) -> tuple[float, float] | None:
+               ink_threshold: int = INK_THRESHOLD, span_t: float = SPAN_T) -> tuple[float, float] | None:
     """单格判据：图块若呈「双列小字」形态，返回 `(缝中心 x, strength)`。
 
     `patch` 是**内容窗口内的格框图块**（界行已剥掉、未裁紧），返回的 x 是
@@ -133,7 +133,7 @@ def gap_center(patch: np.ndarray, ref_w: float | None = None,
         return None
     x0, x1 = int(ink[0]), int(ink[-1])
     span = x1 - x0 + 1
-    if span / float(ref_w or w) < SPAN_T:
+    if span / float(ref_w or w) < span_t:
         return None
     runs: list[tuple[int, int]] = []
     start = None
