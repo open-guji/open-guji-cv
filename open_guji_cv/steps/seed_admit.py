@@ -473,6 +473,16 @@ class SeedAdmitParams(BaseModel):
     笔画判全对（形近字线 11-13）。空＝关（缺省，不进参数 dump，行为不变）。"""
     stroke_veto_fingerprint: str = ""
     """笔画护栏模型文件指纹，由校验器填，进 params_hash（模型换了产物判过期）。"""
+    pair_form: str = ""
+    """放行字按刻形改（2026-11-19，形近字线，第 5／7 步统一方案第 3 步，缺省关）：形近字对归属表路径（相对路径先找数据目录，
+    如 `config/groups/pair_attribution.yaml`；写 `-` ＝不用表、所有对都按刻形）。已放行、非人裁的格，第 5 步 5a.3 在
+    `glyph_match.stage.pair` 里给了字（`pair.unsure` 开着时 unsure 格也有；把握过该对的门槛，档 ≥2），该字与放行字是同一对里的两个字，
+    且这对在表里归刻形（缺省）→ **改放那个字**（通道、provenance 不变，`evidence.pair_form` 留 {from, to, pair, p, tier, rank}）。
+    不改：人裁；归文意／暂归一的对；同一格里同含放行字的几对给了不同的字；改成的字被册 `codepoints:` 归一走（簡→𥳑、候→𠋫）；
+    库没有那个字。解决 `witness3`／`match_ref` 照整理本放行字、库改了也不变的格（全唐文 020 册 41 个目标格 13 格如此）。
+    空＝关（不进参数 dump，行为不变）。"""
+    pair_form_fingerprint: str = ""
+    """归属表文件指纹，由校验器填，进 params_hash。"""
     ruling_override_groups: tuple[str, ...] | None = None
     """越过参校本的白名单（书级；A20 对照表第 4 条，A24 第 5 轮）：`ctx-m1` 终审裁定的字≠整理本对位字时，管线再核一遍——
     这个字与整理本字须同属白名单里的某个字组（`groups.registry.FLOW_GROUPS` 成员），否则不放行、留审。
@@ -1675,6 +1685,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_pair_shape_nm_5b", None)
         if isinstance(d, dict) and not self.group_flow_near_knn:
             d.pop("group_flow_near_knn", None)
+        if isinstance(d, dict) and not self.pair_form:
+            d.pop("pair_form", None)
+            d.pop("pair_form_fingerprint", None)
         if isinstance(d, dict) and not self.stroke_veto:
             d.pop("stroke_veto", None)
             d.pop("stroke_veto_fingerprint", None)
@@ -1881,6 +1894,11 @@ class SeedAdmitParams(BaseModel):
                 if _ids_fp(self.group_flow):        # IDS 模板库＋判法（方案 S7）；没有在线 IDS 的组不加，旧指纹不变
                     parts.append(_ids_fp(self.group_flow))
                 object.__setattr__(self, "group_flow_fingerprint", ":".join(parts))
+        if self.pair_form and not self.pair_form_fingerprint:
+            from ..groups.pair_attr import fingerprint as _pf_fp
+            if self.pair_form != "-":
+                object.__setattr__(self, "pair_form", _resolve_data_path(self.pair_form))
+            object.__setattr__(self, "pair_form_fingerprint", _pf_fp(self.pair_form) if self.pair_form != "-" else "all-shape")
         if self.stroke_veto and not self.stroke_veto_fingerprint:
             from ..groups.stroke_veto import fingerprint as _sv_fp
             object.__setattr__(self, "stroke_veto", _resolve_data_path(self.stroke_veto))
@@ -1918,7 +1936,7 @@ class SeedAdmitStep(Step):
                    # L2 答案表、量横、入人八字形分类器、字频
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.freq", "open_guji_cv.groups.registry", "open_guji_cv.groups.edge_pairs",
                    "open_guji_cv.groups.methods",
-                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.book_knn", "open_guji_cv.groups.near_knn", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
+                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.book_knn", "open_guji_cv.groups.near_knn", "open_guji_cv.groups.pair_attr", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
                    "open_guji_cv.groups.prompt_template", "open_guji_cv.feedback.rulings",
                    # 人裁取字与撤下标记、绑定重挂（human_chars／stale_human_rules／rebind_library_shapes）：
                    # 这两处改了，有作废记录或重绑的格输出就变，要让第 7 步判过期（#1673、#1676 之后补，A31 11-18）。
@@ -1955,7 +1973,7 @@ class SeedAdmitStep(Step):
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
                      "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_wu_shape", "group_flow_part_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn",
-                     "solo_adapt_profile", "stroke_veto"),
+                     "solo_adapt_profile", "stroke_veto", "pair_form"),
     )
 
     def parallel_warm(self, ctx: RunContext) -> None:
@@ -2847,6 +2865,9 @@ class SeedAdmitStep(Step):
             d_sv = _stroke_veto_pass(p, out, ctx, page, patch_missing)
             n_auto -= d_sv
             n_review += d_sv
+        if p.pair_form:
+            # 放行字按刻形改（升前的字、不降审）：5a.3 在第 5 步给了字的格，放行字是同一对里的另一个字 → 改放刻形字（缺省关）
+            _pf_n = _pair_form_pass(p, out, mmap, ctx)
         if human_lost:
             # 顺移豁免对位表：现役对位为主，缺格的补坐标对位字（coord_fallback 放行的格没有现役对位；史記 2026-11-03）
             d_hu = _human_unbound_pass(ctx, page, out, human_lost,
@@ -5952,6 +5973,46 @@ def _resolve_data_path(v: str) -> str:
     if droot is not None and (droot / q).exists():
         return str(droot / q)
     return str((workspace_root() or REPO_ROOT) / q)
+
+
+def _pair_form_pass(p, out: list, mmap: dict, ctx=None) -> int:
+    """放行字按刻形改（`SeedAdmitParams.pair_form`，`groups.pair_clf` 的证据 `glyph_match.stage.pair`）。→ 改字的格数。
+
+    只改字，不改 admit／通道／provenance。读第 5 步 5a.3 的证据行 `{pair, tier, p, lean, char?, cand, rank}`：`char` 只在把握过该对的
+    门槛（档 ≥2）时才有。条件见参数说明；同一格里含放行字的几对给了不同的字就都不动（宁缺不错）。"""
+    from ..groups import pair_attr
+    table = {} if p.pair_form == "-" else pair_attr.load(p.pair_form)
+    canon = ctx.book.canonical_char if (ctx is not None and getattr(ctx.book, "codepoints", None)) else None
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if not rec.admit or not rec.char or rec.provenance == "human" or rec.channel == "human":
+                continue
+            m = mmap.get(rec.id)
+            rows = ((getattr(m, "stage", None) or {}).get("pair") or []) if m is not None else []
+            want: dict[str, dict] = {}
+            for r in rows:
+                pr, ch = r.get("pair"), r.get("char")
+                if not ch or len(pr or "") != 2 or rec.char not in pr or ch == rec.char or ch not in pr:
+                    continue
+                if pair_attr.attr_of(table, pr[0], pr[1]) != "shape":
+                    continue
+                want[ch] = r
+            if len(want) != 1:
+                continue
+            new, row = next(iter(want.items()))
+            if canon is not None and canon(new) != new:
+                continue
+            if p.pair_form != "-" and not (table.get(pair_attr.pair_key(*row["pair"])) or {}).get("variant"):
+                # 异字对（表里没标 variant: true）：字形与放行字相反只记证据进复审，不自动改（Sheldon 11-18 同意）
+                rec.evidence = {**(rec.evidence or {}), "pair_form_review": {"from": rec.char, "to": new, "pair": row["pair"], "p": row.get("p")}}
+                continue
+            rec.evidence = {**(rec.evidence or {}),
+                            "pair_form": {"from": rec.char, "to": new, "pair": row["pair"], "tier": row.get("tier"),
+                                          "p": row.get("p"), "rank": row.get("rank")}}
+            rec.char = new
+            n += 1
+    return n
 
 
 def _stroke_veto_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
