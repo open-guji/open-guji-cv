@@ -33,6 +33,7 @@
           shape: true                            # false＝不跑 5a.2（只分流）
           pair: {model: config/groups/pair_clf.json, final: false}   # 5a.3，不写不跑；model 相对路径先找数据目录；
           #       final: true＝档 3 的对可以在 5a 直接定字（缺省 false：只出证据）
+          #       unsure: true＝判决层是 unsure 的格也出证据（前两名候选的对，只出证据不改判决；缺省 false）
 
 `final` 名单按书、按实测给（人裁刻例上不看整理本的准确率，量法见 doc/design/形近字组-5a分流与第7步对接.md 第五节），
 不从注册表推。各组的模板库、分类器可以按书另建：工作区 `config/groups/ids/<组>.json` 优先于仓里的（`ids_online.bank_path`）。
@@ -62,6 +63,7 @@ class StagesConfig:
     shape: bool = True
     pair: str | None = None           # 5a.3 分类器文件（已解析成绝对路径）；None＝不跑
     pair_final: bool = False
+    pair_unsure: bool = False         # 5a.3 也给判决层是 unsure 的格出证据（只出证据，不改判决）
 
     @classmethod
     def from_any(cls, v) -> "StagesConfig | None":
@@ -83,16 +85,17 @@ class StagesConfig:
         if final - set(FLOW_GROUPS):
             raise ValueError(f"glyph_match.stages.final 里有没注册的字组：{sorted(final - set(FLOW_GROUPS))}")
         pr = d.get("pair")
-        pair, pair_final = None, False
+        pair, pair_final, pair_unsure = None, False, False
         if pr not in (None, False):
             pr = {} if pr is True else dict(pr)
-            if set(pr) - {"model", "final"}:
-                raise ValueError(f"glyph_match.stages.pair 不认识的键：{sorted(set(pr) - {'model', 'final'})}")
+            if set(pr) - {"model", "final", "unsure"}:
+                raise ValueError(f"glyph_match.stages.pair 不认识的键：{sorted(set(pr) - {'model', 'final', 'unsure'})}")
             from ..groups.pair_clf import REL_PATH
-            pair, pair_final = _resolve(str(pr.get("model") or REL_PATH), "glyph_match.stages.pair.model"), bool(pr.get("final", False))
+            pair, pair_final, pair_unsure = (_resolve(str(pr.get("model") or REL_PATH), "glyph_match.stages.pair.model"),
+                                             bool(pr.get("final", False)), bool(pr.get("unsure", False)))
             if not Path(pair).is_file():
                 raise ValueError(f"glyph_match.stages.pair.model 找不到：{pair}")
-        return cls(route=RouteConfig(**r), final=final, shape=bool(d.get("shape", True)), pair=pair, pair_final=pair_final)
+        return cls(route=RouteConfig(**r), final=final, shape=bool(d.get("shape", True)), pair=pair, pair_final=pair_final, pair_unsure=pair_unsure)
 
 
 def _resolve(path: str, what: str = "glyph_match.stages.route.table") -> str:
@@ -132,7 +135,7 @@ def stages_fingerprint(v) -> str:
     out = f"{code}:{t}" + (f":{bank}" if bank else "")
     if cfg.pair:
         from ..groups import pair_clf
-        out += f":pair={_code_sha('open_guji_cv.groups.pair_clf')}.{pair_clf.fingerprint(cfg.pair)}.{int(cfg.pair_final)}"
+        out += f":pair={_code_sha('open_guji_cv.groups.pair_clf')}.{pair_clf.fingerprint(cfg.pair)}.{int(cfg.pair_final)}{'.u' if cfg.pair_unsure else ''}"
     return out
 
 
@@ -215,6 +218,8 @@ class Stages:
         self._flow_cfg = FlowConfig(groups=tuple(FLOW_GROUPS))
 
     def apply(self, verdict: str, m, norm: np.ndarray, gray, cell_id: str, exclude_id: str | None) -> StageOut:
+        if verdict == "unsure" and self.cfg.pair and self.cfg.pair_unsure:
+            return self._pair_unsure(m, norm, cell_id, gray)
         if verdict != "same":
             return StageOut()
         ex = [self._pos[j] for j in (self._m._same_cell_rows(exclude_id) if exclude_id is not None else ()) if j in self._pos]
@@ -252,6 +257,28 @@ class Stages:
                 return StageOut("same", char, None, f"{via}:{gid}", ev)
         return StageOut("unsure", None, "never_match", None, ev, _ranked(cands))
 
+
+    def _pair_unsure(self, m, norm: np.ndarray, cell_id: str, gray) -> StageOut:
+        """判决层是 unsure 的格（2026-11-19，统一方案第 2 步）：库候选前两名各自在本书分类器里的对都问一遍，只出证据
+        （`stage.pair`，每行带 `cand`＝是哪个候选的对），**不改判决、不改候选、不定字**。第 7 步读这份证据。
+        020 册 841 个基准格里 638 格在第 5 步是 unsure，形近对的格多数本来就交第 7 步，只给 same 格出证据碰不到它们。"""
+        from ..groups import pair_clf
+        tops = []
+        for c, _s in list(m.candidates)[:2]:
+            if c not in tops:
+                tops.append(c)
+        model = pair_clf.load(self.cfg.pair)
+        if not any(pair_clf.pairs_for(model, c) for c in tops):
+            return StageOut()
+        emb = self._embed(self._net, [norm])[0]
+        rows, seen = [], set()
+        for rank, c in enumerate(tops, 1):
+            for r in pair_clf.decide(model, c, emb, False)[0]:
+                if r["pair"] in seen:
+                    continue
+                seen.add(r["pair"])
+                rows.append({**r, "cand": c, "rank": rank})
+        return StageOut(stage={"pair": rows, "on": "unsure"}) if rows else StageOut()
 
     def _pair_only(self, top, m, emb, cell_id, gray) -> StageOut:
         """5a.1 没拦的格（照常放行的）：首位字在本书分类器里有对的，5a.3 照样问一遍。同字异形的对（淸清、眞真）

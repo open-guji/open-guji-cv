@@ -205,3 +205,62 @@ def test_grid_free_fallback_keeps_grid_when_free_has_other_line_count(tmp_path, 
                                [x + 96 for x in _GF_XS], _GF_XS[:-1])
     assert calls == [True, False]
     assert [round(v.x_at_top) for v in out["borders"].verticals] == [x + 96 for x in _GF_XS]
+
+
+def _sliver_page(width=2300, height=3000):
+    """脉经 02 p15 的样子：右上原点 x 100 起 10 列字（列距 190），左侧（新坐标大端）粗框条贴着最后一列字外 70px。"""
+    import numpy as np
+    centers = [195 + 190 * i for i in range(10)]
+    g = _text_page(width, height, centers, char_w=140)
+    xo = (width - 1) - (100 + 190 * 10 + 70)                  # 粗框条（新坐标 2070 处）
+    g[300:2700, xo - 20:xo + 1] = 20
+    xo = (width - 1) - 100                                    # 右版框细线（新坐标 100）
+    g[300:2700, xo - 1:xo + 2] = 20
+    return g
+
+
+def test_fix_outer_sliver_drops_blank_strip_and_adds_frame_on_other_side():
+    from open_guji_cv.steps.border_detect import fix_outer_sliver
+    xs = [290 + 190 * i for i in range(10)] + [2070]          # 少认了右框（100），左边多了框条外线（2070）
+    r = _res(xs)
+    assert fix_outer_sliver(r, _sliver_page(), n_cols=10) == 1
+    got = [round(v.x_at(0)) for v in r.verticals]
+    assert len(got) == 11 and abs(got[0] - 100) <= 6 and got[-1] == 290 + 190 * 9
+    assert r.vline_filled == [False] * 11
+
+
+def test_fix_outer_sliver_leaves_normal_or_inky_outer_column():
+    from open_guji_cv.steps.border_detect import fix_outer_sliver
+    xs = [100 + 190 * i for i in range(11)]
+    r = _res(xs)
+    assert fix_outer_sliver(r, _sliver_page(), n_cols=10) == 0
+    assert [round(v.x_at(0)) for v in r.verticals] == xs
+    assert fix_outer_sliver(_res(xs[:-1] + [xs[-2] + 60]), _sliver_page(), n_cols=10) == 0   # 窄条里有字：不动
+    assert "grid_outer_fix" not in BorderDetectParams().model_dump()
+    assert BorderDetectParams(grid_outer_fix=True).model_dump()["grid_outer_fix"] is True
+
+
+def test_trim_gap_only_keeps_wide_outer_column_with_text_at_target():
+    """gap_only：找不到细线、按列距平移的落点压着字，就不收（外列本来就宽、是版框留白）。"""
+    from open_guji_cv.steps.border_detect import trim_outer_columns
+    xs = [100 + 190 * i for i in range(10)] + [100 + 190 * 9 + 250]
+    g = _text_page(2300, 3000, [195 + 190 * i for i in range(9)] + [1910 + 125], char_w=150)
+    assert trim_outer_columns(_res(xs), g, 1.12, col_pitch=192, gap_only=True) == 0
+    assert trim_outer_columns(_res(xs), g, 1.12, col_pitch=192) == 1
+
+
+def test_grid_outer_fix_runs_column_fit_in_grid_mode(tmp_path, monkeypatch):
+    """grid_outer_fix：网格模式下列宽出带就按版式列数强拟（原先只在自由模式跑）；列宽都在带里不拟。"""
+    import open_guji_cv.steps.border_detect as bd
+    seen = []
+    bad = list(_GF_XS); bad[5] += 45                           # 一条内线偏 45px：两列出带
+    for fix, xs, want in ((False, bad, []), (True, _GF_XS, []), (True, bad, [{"n_lines": 11, "keep_guard": False}])):
+        seen.clear()
+        monkeypatch.setattr(bd, "detect_borders", lambda gray, _xs=xs, **kw: _res(_xs))
+        monkeypatch.setattr(bd, "pitch_rescue", lambda r, *a, **k: (seen.append(
+            {x: k[x] for x in ("n_lines", "keep_guard") if x in k}), (r, None))[1])
+        ctx = make_ctx(tmp_path / f"{fix}{len(seen)}{xs[5]}", make_book(
+            params={"border_detect": {"grid_outer_fix": fix}}, column_grid=True, col_pitch=192, expected_cols=10),
+            raw={PAGE: _text_page(2300, 3000, _GF_CENTERS)})
+        STEPS["border_detect"].run_page(ctx, PAGE)
+        assert seen == want

@@ -388,6 +388,13 @@ _GRID_OUTER_TRIM_1118 = ("border_detect 加书级参数 grid_outer_trim（网格
 _GRID_FREE_FALLBACK_1118 = ("border_detect 加书级参数 grid_free_fallback（网格补线穿字时换自由模式＋列距救援，缺省 0＝关、不进参数 dump；"
                             "新函数 gutter_ink_score，列距救援收成内部函数 _rescue）：脉经第 2 册 15、24、50、63 页 border_detect 与 origin/dev（59deab6）"
                             "产物逐字节相同；scripts/code_equiv.py check，2026-11-18（MJ，GUJI-774）")
+_GRID_OUTER_FIX_1118 = ("border_detect 加书级参数 grid_outer_fix（外列空白窄条去线补对侧版框、收外框线挪到换线之后且只收进字缝、网格模式下也跑列宽均匀拟合，"
+                        "缺省关、不进参数 dump；新函数 fix_outer_sliver、_band_ink，trim_outer_columns 加 gap_only）：脉经第 2 册 15、24、50、63 页"
+                        "（书配置开着 grid_free_fallback、grid_outer_trim）border_detect 与 origin/dev（7cbc2bc 及合并后的 dev）产物逐字节相同；"
+                        "scripts/code_equiv.py check，2026-11-18（MJ，GUJI-774）")
+_GRID_RESCUE_FORCE_1119 = ("border_detect grid_outer_fix 加「按版式列数强拟列宽均匀、不查旧线护栏，出带更少才采用」，pitch_rescue.rescue 加 n_lines、keep_guard 参数"
+                           "（缺省 None／True 行为不变）：grid_outer_fix 关着时脉经第 2 册 15、24、50、63 页（书配置开着 grid_free_fallback、grid_outer_trim）"
+                           "border_detect 与 origin/dev 16a2972 产物逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -2024,6 +2031,26 @@ ENTRIES: tuple[Equiv, ...] = (
           new="41b578276bd03922e53ffd56a9e23fe3c89e82875b6a1845e4e1ac6cb030e805",
           old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
           evidence=_GRID_FREE_FALLBACK_1118),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="c91867a1da4993fa9312c1f3b33a18234ac095c54b1165f1cdf459969df0f88d",
+          old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
+          evidence=_GRID_OUTER_FIX_1118),
+    Equiv(module="open_guji_cv.steps.column_warp",
+          new="7d315de47ad1f2ae258c2428f9e919f17fe5996a0469df85c1d711581aa8305e",
+          old="991a42b0a7af0825750f929e9892e1a397b56a224e709b858dbbec2716724c65",
+          evidence="det_warp／cut_judge unet_f64 转缺省（A22 切分开关收敛 U4，A20 11-18）：显式写了的书 params 不变；column_warp、row_segment 在全唐文 010 8 页（--pages 20,23,27,34,41,50,64,72；book_defaults 显式 det_warp: true、cut_judge: unet_f64）上与 origin/dev 7cbc2bc 产物逐字节相同；scripts/code_equiv.py check，2026-11-18"),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="a96031700cd3fff4d753cbb8a08e996ea66b6a83255f79113affff71499bd8d8",
+          old="b4d7f96c05eb7291d3d7d844d4a0e94c178a59f5986b65e233d3b40b7a15238d",
+          evidence="det_warp／cut_judge unet_f64 转缺省（A22 切分开关收敛 U4，A20 11-18）：显式写了的书 params 不变；column_warp、row_segment 在全唐文 010 8 页（--pages 20,23,27,34,41,50,64,72；book_defaults 显式 det_warp: true、cut_judge: unet_f64）上与 origin/dev 7cbc2bc 产物逐字节相同；scripts/code_equiv.py check，2026-11-18"),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="74454edd04181d9a222b3346fc4f17d1d5ecf55614090ee28c54e32e454e1133",
+          old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
+          evidence=_GRID_RESCUE_FORCE_1119),
+    Equiv(module="open_guji_cv.impl.keben.pitch_rescue",
+          new="4db2a99d60fa9e626b970d6276d965abc067f3d79ef2105e9eb430a62abde0c2",
+          old="c007e49e89d7adc65bac5b96e4305f23e0c759b7d640b66122a92a1d84040fdc",
+          evidence=_GRID_RESCUE_FORCE_1119),
 )
 
 

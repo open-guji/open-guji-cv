@@ -369,7 +369,8 @@ def main() -> int:
     from open_guji_cv.feedback.lookup import resolved_cuts as _resolved_cuts
     from open_guji_cv.seg.cut_select import get_judge
     book_resolved = _resolved_cuts(book)
-    judge = get_judge(scale=p.cut_judge_scale) if p.cut_judge == "unet" else None
+    judge = (get_judge(f64=p.cut_judge == "unet_f64", scale=p.cut_judge_scale)
+             if p.cut_judge in ("unet", "unet_f64") else None)
     rulers = Counter(); rulers_base = Counter()
     mismatch = 0; n_cols = 0; n_fail = 0; skipped_no_y = 0
     mismatch_cols: list[str] = []
