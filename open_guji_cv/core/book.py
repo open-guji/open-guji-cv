@@ -359,6 +359,10 @@ class BookSpec:
     #: seed_admit 的人裁、近似字指纹在 `params_for` 里换成 `glyph-gN`，别处人裁进库不让本册过期；
     #: 不写 = 照旧按库内容哈希，行为与加这个字段之前逐位相同。
     glyph_pin: int | None = None
+    #: 本册钉住的 PUA 码表共享层版本（yaml 的 `pua_table_pin: 1` 或 `v1`；中心库 `pua-wyg`，见 `core/pua_table_pin.py`）。
+    #: 钉了之后 seed_admit 的码表（`pua_code_table`）读共享层这一版、码表内容指纹进参数；不写 = 读本书 `config/pua/pua_table.jsonl`，
+    #: 行为与加这个字段之前逐位相同。
+    pua_table_pin: int | None = None
     #: 本册钉住的模型总号（yaml 的 `model: 1` 或 `m1`；见 `core/model_pack.py`）。钉了之后读模型的步
     #: 起跑前校验清单；同时钉了 `corpus:` 的册，`group_flow_fingerprint` 并上模型内容（补缺口）。
     #: 不写 = 行为与加这个字段之前逐位相同。
@@ -757,6 +761,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         corpus=_parse_corpus_pin(d.get("corpus")),
         corpus_dev=bool(d.get("corpus_dev", False)),
         glyph_pin=_parse_glyph_pin(d.get("glyph_pin")),
+        pua_table_pin=_parse_pua_table_pin(d.get("pua_table_pin")),
         model=_parse_model_pin(d.get("model")),
         code=_parse_code_pin(d.get("code")),
         freeze=_load_freeze(d.get("freeze"), book_id),
@@ -811,6 +816,11 @@ def _parse_model_pin(v) -> int | None:
 
 def _parse_corpus_pin(v) -> int | None:
     from .corpus_pin import parse_pin
+    return parse_pin(v)
+
+
+def _parse_pua_table_pin(v) -> int | None:
+    from .pua_table_pin import parse_pin
     return parse_pin(v)
 
 

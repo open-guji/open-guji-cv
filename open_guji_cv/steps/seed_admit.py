@@ -634,6 +634,9 @@ class SeedAdmitParams(BaseModel):
     一码多字的码（`families`，如 F1001 乖垂埀）：放行字在族内就认，不按码改；落到族外 → 降审 `src_code_conflict`。
     人裁格不动。这一遍在 `vis_rulings` 之前，所以旧的窗口键降审（src-1 code_conflict）对已改字的格不再触发，也不靠窗口命中。
     每页统计：`PageAdmit.n_code_fix`（改字格数）、`n_code_mismatch`（这一遍之后放行字仍≠码表字的格数，如人裁与码表冲突；族内字不算）。"""
+    pua_table_digest: str = ""
+    """册钉了 `pua_table_pin`（PUA 码表共享层版本）时由 `core/pua_table_pin.with_pua_table_pin` 填的码表内容指纹（`pua-v<N>-<sha 前 16 位>`）；
+    没钉为空、空时不进参数 dump（没钉的书指纹不变）。不是书级旋钮，别手写。"""
     pua_code_keep_channels: str = ""
     """`pua_code_table` 的书级旋钮（缺省空、空时不进参数 dump；A24 11-06 X01 参数化）：逗号分隔的放行通道，这些通道放行的字**不按码改**
     （如某本书想保留 `group_flow` 选的异体、只纠 `pua_rule`／`context`），仍计入 `n_code_mismatch`。人裁格本来就不改。"""
@@ -1421,6 +1424,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("vis_rulings", None)
         if isinstance(d, dict) and not self.pua_code_table:
             d.pop("pua_code_table", None)
+        if isinstance(d, dict) and not self.pua_table_digest:
+            d.pop("pua_table_digest", None)
         if isinstance(d, dict) and not self.pua_code_keep_channels:
             d.pop("pua_code_keep_channels", None)
         if isinstance(d, dict) and self.pua_code_family_demote:
@@ -2805,12 +2810,12 @@ class SeedAdmitStep(Step):
         n_code_fix = n_code_mismatch = 0
         if p.pua_code_table:
             # 5b' code_table（改字，不降审）：格的私用码在码表里、非人裁放行字≠码表字 → 改放码表字；族外字降审。放在 vis_ruling 之前
-            n_code_fix, n_code_mismatch, d_cd = _pua_code_pass(out, amap, p=p)
+            n_code_fix, n_code_mismatch, d_cd = _pua_code_pass(out, amap, p=p, pin=_pua_pin(ctx))
             n_auto -= d_cd
             n_review += d_cd
             if p.pua_code_admit:
                 # 5b'' code_table 放行（升）：未放行格，码表字＝库首位 → 放（缺省关）
-                d_ca = _pua_code_admit_pass(out, amap, mmap, p=p)
+                d_ca = _pua_code_admit_pass(out, amap, mmap, p=p, pin=_pua_pin(ctx))
                 n_auto += d_ca
                 n_review -= d_ca
         if p.vis_rulings:
@@ -5291,7 +5296,12 @@ def _override_ok(groups, a: str, b: str) -> bool:
     return any(g in FLOW_GROUPS and a in FLOW_GROUPS[g].members and b in FLOW_GROUPS[g].members for g in groups)
 
 
-def _pua_code_pass(out: list, amap: dict, store=None, table=None, p=None) -> tuple[int, int, int]:
+def _pua_pin(ctx) -> int | None:
+    """册钉的 PUA 码表共享层版本（`Book.pua_table_pin`）；没钉或没有 ctx 给 None（读本书码表）。"""
+    return getattr(getattr(ctx, "book", None), "pua_table_pin", None)
+
+
+def _pua_code_pass(out: list, amap: dict, store=None, table=None, p=None, pin=None) -> tuple[int, int, int]:
     """按私用码表放字（`SeedAdmitParams.pua_code_table`）。→ (改字格数, 遍后仍不一致格数, 降审格数)。
 
     格→码对应来自裁定库 `src-2`（按格号取，见 `RulingStore.cell_codes`）；对位字 `ref` 与现对位不同的不认（重切后格号可能挪了）。
@@ -5306,7 +5316,7 @@ def _pua_code_pass(out: list, amap: dict, store=None, table=None, p=None) -> tup
         return 0, 0, 0
     if table is None:
         from ..core.workspace import ws_config_dir
-        table = load_table(ws_config_dir())
+        table = load_table(ws_config_dir(), pin=pin)
     codes, fams = table
     keep = {c.strip() for c in (getattr(p, "pua_code_keep_channels", "") or "").split(",") if c.strip()}
     fam_demote = getattr(p, "pua_code_family_demote", True)
@@ -5343,7 +5353,7 @@ def _pua_code_pass(out: list, amap: dict, store=None, table=None, p=None) -> tup
 
 
 
-def _pua_code_admit_pass(out: list, amap: dict, mmap: dict, store=None, table=None, p=None) -> int:
+def _pua_code_admit_pass(out: list, amap: dict, mmap: dict, store=None, table=None, p=None, pin=None) -> int:
     """`SeedAdmitParams.pua_code_admit`：未放行格按私用码表＋库首位互证放行。→ 放行格数。
 
     只升不降：只碰 admit=False、非人裁、不在排除名单、没遮挡、没有硬疑问（`_LANE_HARD`）的格。格→码同 `_pua_code_pass`
@@ -5357,7 +5367,7 @@ def _pua_code_admit_pass(out: list, amap: dict, mmap: dict, store=None, table=No
         return 0
     if table is None:
         from ..core.workspace import ws_config_dir
-        table = load_table(ws_config_dir())
+        table = load_table(ws_config_dir(), pin=pin)
     codes, fams = table
     all_T = set(codes.values())
     min_cov = float(getattr(p, "pua_code_admit_cov", 0.85) if p is not None else 0.85)
