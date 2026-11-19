@@ -2070,6 +2070,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="84455fc813eefa560dead835acc262242eb312b773927b9fff11d8e469959379",
           old="f65058caf059fff6dbf2dde610a1086a027672532a920d500eb62b1c3b1ac472",
           evidence=_LIB_TIER_1118),
+    # 无参校本页 no_ref_pages／no_ref_params（脉经 林億序、牒文，2026-11-19）：两个字段缺省空、不进 dump，没配的书逐字节不变
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='844fee294f0b7aff260394be89c64f08a6066addc82c63501773efdc0b7503f2',
+          old='9fad332d6361d422ab9dbd0b475c94716b1e91ad644a15e81df27179fc34c0ef',
+          evidence='seed_admit 在脉经 01 3 页（--pages 6,20,40）上与 origin/dev 产物逐字节相同'),
 )
 
 
