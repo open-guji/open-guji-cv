@@ -409,6 +409,16 @@ class AltDraft(BaseModel):
     coord_cols: list[int] = Field(default_factory=list)
     coord_fallback: dict[str, str] = Field(default_factory=dict)
     coord_conflict_ids: list[str] = Field(default_factory=list)
+    #: 不分行参照（`ref_kind="text"`，脉经 `alt_nojz`，2026-11-19）：候选列按备选切法重做的 8-gram 对位字（只含候选列）。
+    #: 坐标对位的书恒空、不落盘（产物逐字节不变）。
+    chars: list[AlignRec] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_chars(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not d.get("chars"):
+            d.pop("chars", None)
+        return d
 
 
 PageAlignRef.model_rebuild()

@@ -6507,6 +6507,22 @@ def _unmatched(adm: PageAdmit, col: int, ref) -> int:
     return sum(1 for r in (c.chars if c else []) if r.id not in have and "excluded" not in r.evidence)
 
 
+ALT_TEXT_EQ_GAIN = 2         # 不分行参照页：备选那份这一列与参照文字 equal 的字至少多这么多
+ALT_TEXT_RATE_SLACK = 0.05   # 不分行参照页：备选那份这一列放行率比主切法低这么多以内
+
+
+def _admit_rate(adm: PageAdmit, col: int) -> float:
+    """一列放行格占非排除格的比例。"""
+    c = adm.column(col)
+    rs = [r for r in (c.chars if c else []) if "excluded" not in r.evidence]
+    return sum(1 for r in rs if r.admit) / len(rs) if rs else 0.0
+
+
+def _eq_count(ref, col: int) -> int:
+    """一列里对齐到参照文字、且是 equal 段的字数（`align_ref.chars`）。"""
+    return sum(1 for r in (getattr(ref, "chars", None) or []) if r.col == col and r.align_op == "equal")
+
+
 def _pick_alt_cols(cand, main: PageAdmit, alt: PageAdmit, ref_main, ref_alt, chars_main, chars_alt,
                    require_matched: bool = False) -> list[int]:
     """逐列比两遍准入（错格闸已在 align_ref 剔过候选）：待审少 ≥ `ALT_ADMIT_MIN_GAIN`；与坐标字冲突的放行格不多；
@@ -6518,7 +6534,16 @@ def _pick_alt_cols(cand, main: PageAdmit, alt: PageAdmit, ref_main, ref_alt, cha
         ra, ba, ka = _col_stats(alt, col, ref_alt)
         cv_a, _ = _ink_cv(chars_alt, col)
         cv_m, _ = _ink_cv(chars_main, col)
-        if not (ra <= rm - ALT_ADMIT_MIN_GAIN and (ba >= bm or not ALT_REQUIRE_BACKED) and ka <= km):
+        by_text = False
+        if getattr(ref_main, "ref_kind", None) == "text":
+            # 不分行参照页（没有坐标字）：放行率不能降（02 24:2 整列真小注换成大字格，格少了待审也少，放行率 13/40→0/20）；
+            # 备选那份这一列与参照文字逐字相合（equal）的多出 ALT_TEXT_EQ_GAIN、待审不多，也换——大字被劈成小注时半字
+            # 常常也是字、照样放行（「肺」→「月」「巿」），只比待审数挑不出来（脉经 02 31:3 待审 3→2）
+            if _admit_rate(alt, col) < _admit_rate(main, col) - ALT_TEXT_RATE_SLACK:
+                continue
+            em, ea = _eq_count(ref_main, col), _eq_count(ref_alt, col)
+            by_text = ea >= em + ALT_TEXT_EQ_GAIN and ra <= rm and ka <= km
+        if not by_text and not (ra <= rm - ALT_ADMIT_MIN_GAIN and (ba >= bm or not ALT_REQUIRE_BACKED) and ka <= km):
             continue
         if cv_a is not None and cv_m is not None and (cv_a > cv_m * ALT_CV_RATIO or cv_a > ALT_CV_MAX):
             continue

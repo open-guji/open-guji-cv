@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 - Step3 `row_segment` 1.55：格位表说有字的格判空收口（A22 各书切分统一优化 U1，Sheldon 11-18 定「不怕动指纹」）。`segment_column` 读 `slot_mask`：表说有字的格，框线判空 `_frame_only` 只认「去掉跨格长竖后几乎没墨」，不认「剩下的是贴框角的细横」（1.51 曰、1.52 二三、1.53 细一、1.54 粗一四回少一格都栽在这条上）；墨不到 `min_ink_ratio` 的居中细横（「一」）不再要求两邻有字，按列端口径（宽 ≤0.85 列宽、纵向居格中 0.2–0.8）救回。`frame_only_edge_cells`（1.48）本就是「墨全贴版框线」口径，不变。没有格位表（`layout_prior` 没命中）的列逐字节不变；殿本、全唐文等用格位表的书 `row_segment` 指纹变、Step3 起过期。
+- PATCH：新书级开关 `row_segment.alt_nojz`（MJ，GUJI-774，缺省关）：认出雙行小注的列另按同样格网、不认小注再切一份放进 `alt_columns`，下游按列挑。脉经左右结构的大字（則何肺脉眩瞤臥）中间有白缝，被认成雙行小注劈成 a/b，墨高、缝宽、连通体都和真小注重叠分不开。配套：不分行参照页（`ref_kind="text"`）也能按列挑备选——align_ref 在 `alt_select: admit` 时逐列换成备选重做 8-gram 对位（库匹配高分格占比比主切法低 5 个点以上的列不进候选），草稿对位字记 `AltDraft.chars`（空不落盘）；seed_admit 不分行参照页要求备选那份放行率不降，与参照文字 equal 的字多 ≥2、待审不多也换（半字照样放行，只比待审挑不出）。脉经第 1 册送审 463→448（17:5、24:1、40:6 换对），第 2 册 846→830（6 列换对，看图无误换）。row_segment、align_ref、seed_admit 登记 code_equiv。
 - PATCH：页型表加按列的 `roster_cols`（MJ，GUJI-774 脉经第 1 册卷端「朝散大夫……臣林億等類次」25 字挤在 20 格的列里，Sheldon 11-19「职名页一定要特殊处理，每行字数不固定，高度也不固定」）：册 yaml `page_kinds: {roster_cols: {11: [2]}}` → `row_segment.roster_cols`，点名的列走职名页分支（不定字数、不定字高、格号从 1 数），同页其余列照正文切；整页职名仍用 `roster`。同一页不许既整页 roster／table／cover 又按列 roster_cols，同一列不许既 table_cols 又 roster_cols。只切一两列量不出全页「臣」行时，`roster_glyph_refine` 改把整列当官衔区按字形库重切（`segment_roster_page(chen_fallback=True)`，脉经 01 p11 c2「臣」贴着邻字）。缺省空、不进参数 dump；row_segment、roster_segment 登记 code_equiv。脉经 01 p11 c2 16→25 字、p37 c2 25 字，两页其余列与不开时相同。
 - PATCH：书级钩子 `jiazhu_step.row_split`（A22，GUJI-774 脉经第 1 册小字比大字矮）：雙行小注段每行可切多于大字格数的格；整数格号，段内照本行第几字、段占 max(a,b) 个号、段后顺延，`boundaries`／`pos` 换逻辑编号，`n_body_slots` 写逻辑格数，列旗 `jiazhu_row_split+N`，闸3 按物理格数比格数、段内逻辑格线不量。缺省 None 不调；row_segment、row_boundaries、jiazhu_step、闸3 登 code_equiv `_ROW_SPLIT_1119`（史記 02、脉经 02 逐字节同），各书指纹不变。
 - 页型表加 `no_ref`（无参校本页，Sheldon 11-19 定：参校本里本来就没有的文字，如脉经 01 林億序、06 牒文）：册 yaml `page_kinds: {no_ref: ["5-7"]}` → `seed_admit.no_ref_pages`；书级 `seed_admit.no_ref_params`（如 `{solo_5b_cov: 0.95, solo_5b_min_n: 1}`）只在这些页叠在第 7 步参数上，别的页不变。两个字段缺省空、不进参数 dump；`seed_admit` 已登记 `code_equiv`（脉经 01 3 页与 origin/dev 逐字节相同），没配的书不过期。脉经 5 页 322 格待审试跑放出 149 格，看图错 1 格。`kinds_from_params` 遇到形状错的 `params`（某步不是 dict）不再先崩，交给后面的校验报。
@@ -50,6 +51,10 @@
 - 模型库登记 5a 相似度 CNN 的跨书通用底座 `models/glyph_sim_base_v1/`（殿本、史記、全唐文三书合训 59,116 例；OCR 研究 Project 11-17，Sheldon：模型应该放到模型库里）：`core/model_pack.KINDS` 加种类 `glyph_sim_base`（global），模型表与出处表同步，权重与校准表已传 R2。校准表是通用保守包络（`scripts/fit_glyph_sim_calib.py` 的 `--work`／`--cnn` 可给多次，逐点取 cov 最小）。不动任何 Step 与 `sim_cnn.py`，各书产物指纹不变；还没有书的配置指向它。用法见 guji-manager `doc/参考/5a相似度模型.md`。
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
+
+## [0.7.75] - 2026-11-19
+
+- 发版说明（A31 11-19，**殿本 patch 线**，PATCH；ZM 报 vol20 换单 020-r13→r14 出单门拦 5 格 overturn_empty）：v0.7.70 + #1715（`scripts/zhengli/proof_cycle.py`：新导出里机器没认出的 □（`lacuna` 无 `guess_c`）与 〓／▣ 占位算「机器无字」，旧字是现行人裁就留人裁字、不复审；排除名单判残的 □、图片格、无法识别字、原刻残带推测字仍算推翻人裁，复审说明写「□（判残）」等，出单门不拦；退回成字时去掉阙文／组字标记），**不含** dev 线其他改动。只改编排脚本，不进 code_deps，**Step 指纹对 v0.7.70 全不变**；底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1715 已在 dev）。
 
 ## [0.7.74] - 2026-11-19
 
