@@ -165,27 +165,6 @@ def web_votes(ws: Path, text_id: str, rev: str | None) -> Counter:
 SITE = "https://www.openguji.com"
 
 
-def _get_json_retry(req, tries: int = 5) -> dict:
-    """读网站票的接口时不时断连（11-16 实测 ConnectionResetError 多次），退避重试，别让一次断连挡住出单。"""
-    import time
-    import urllib.error
-    import urllib.request
-    for i in range(tries):
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                return json.load(r)
-        except urllib.error.HTTPError as e:
-            if e.code < 500 or i == tries - 1:
-                raise
-        except (urllib.error.URLError, ConnectionError, TimeoutError):
-            if i == tries - 1:
-                raise
-        wait = 2 ** (i + 1)
-        print(f"  读网站票断连，{wait}s 后重试（{i + 1}/{tries - 1}）", file=sys.stderr)
-        time.sleep(wait)
-    raise AssertionError("unreachable")
-
-
 def _fetch_votes(q: dict, tok: str) -> list[dict]:
     import urllib.parse
     import urllib.request
@@ -194,7 +173,8 @@ def _fetch_votes(q: dict, tok: str) -> list[dict]:
         qq = {**q, "limit": "256", **({"cursor": cursor} if cursor else {})}
         req = urllib.request.Request(f"{SITE}/api/cellreview?{urllib.parse.urlencode(qq)}",
                                      headers={"Authorization": f"Bearer {tok}", "User-Agent": "open-guji-cv/republish"})
-        d = _get_json_retry(req)
+        with urllib.request.urlopen(req, timeout=60) as r:
+            d = json.load(r)
         if not d.get("success"):
             sys.exit(f"✗ 读网站票失败：{d.get('error')}")
         items += d.get("items") or []
@@ -988,10 +968,6 @@ def cmd_push(a) -> int:
     elif plan.get("sprites"):
         todo.append("⚠ 这次出了雪碧图目录，但单子里没有 sprites[]：网站取不到图（见 sprite_pub.py）")
     print("\n还要做：\n" + "\n".join(f"- {t}" for t in todo))
-    if not a.sync:
-        print(f"\n⚠⚠ 没加 --sync：新单 {a.rev} 只在本机数据目录，中心库和网站还是旧单。"
-              f"现在跑 guji db sync -w {ws}，再触发 proofing-sync，并用 {SITE}/api/pending?book=<text_id>&vol=<章> 核对 rev"
-              "（11-16 019-r10 就是这样漏发的）", file=sys.stderr)
     return 0
 
 
@@ -1724,39 +1700,6 @@ def site_page_table(book_id: str, volume) -> dict | None:
     return S.read_table(src, book_id, vol, revs[-1]) if revs else None
 
 
-def copy_figs(export_dir: Path, d: Path, ch: str) -> int:
-    """导出里有图（图片格、插图块，GUJI-740）就把 `NNN.fig.json` 与 `fig/NNN/` 裁图一并拷进 book-text，
-    并在 index.json 本章条目补声明 `fig_file`（校验器 F-OV-13：char 有图须声明）。返回拷了几张图。
-    以前只拷 char／cord／norm，网站图形票落成图片格后 local_check 报 F-OV-13 拒推（ZM 11-16，016／019）。"""
-    src = Path(export_dir) / f"{ch}.fig.json"
-    if not src.exists():
-        return 0
-    shutil.copyfile(src, d / f"{ch}.fig.json")
-    imgs = Path(export_dir) / "fig" / ch
-    dst = d / "fig" / ch
-    if dst.exists():
-        shutil.rmtree(dst)
-    n = 0
-    if imgs.is_dir():
-        dst.mkdir(parents=True, exist_ok=True)
-        for f in sorted(imgs.iterdir()):
-            if f.is_file():
-                shutil.copyfile(f, dst / f.name)
-                n += 1
-    idx = d / "index.json"
-    s = idx.read_text(encoding="utf-8")
-    decl = f'"fig_file": "{ch}.fig.json"'
-    if decl not in s:
-        anchor = f'"norm_file": "{ch}.norm.json"'
-        if s.count(anchor) != 1:
-            anchor = f'"cord_file": "{ch}.cord.json"'
-        if s.count(anchor) != 1:
-            sys.exit(f"✗ book-text index.json 找不到第 {ch} 章条目（要补 fig_file）")
-        idx.write_text(s.replace(anchor, f"{anchor}, {decl}"), encoding="utf-8", newline="\n")
-    print(f"图片格：拷 {ch}.fig.json 与 {n} 张裁图，index 声明 fig_file")
-    return n
-
-
 def copy_cord_for_site(src: Path, dst: Path) -> int:
     """导出的 cord 换到网站页图坐标后写进 book-text（导出目录里的原件不动，sprite 还要用）。返回换了几页。"""
     from guji_manager.formats import guji_char_cord as cc
@@ -1828,7 +1771,6 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> str:
             copy_cord_for_site(src, d / f"{ch}.{t}.json")   # 图源换过版的书要换坐标（网站和 book-text 跟新页走）
         elif src.exists():
             shutil.copyfile(src, d / f"{ch}.{t}.json")
-    copy_figs(Path(plan["export_dir"]), d, ch)
     stamp_char_pending(d / f"{ch}.char.json", plan)
     if stale_doc:
         # book-text 校验器认的是改字清单 NNN.char-edits.json（scripts/book-text/char_edits.py），不是 punct-stale：
@@ -1888,7 +1830,6 @@ def _bump_book_text_cellmap(repo: Path, plan: dict, note: str, base: str) -> str
             copy_cord_for_site(src, d / f"{ch}.{t}.json")
         elif src.exists():
             shutil.copyfile(src, d / f"{ch}.{t}.json")
-    copy_figs(Path(plan["export_dir"]), d, ch)
     pending = set()
     for k in ("pending", "team"):
         f = plan.get(k)

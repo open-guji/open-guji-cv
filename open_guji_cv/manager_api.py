@@ -186,8 +186,6 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "core_cv_version": ("core.cv_version", None),
     "NearShapeConfig": ("clustering.near_shape", "NearShapeConfig"),
     "load_matcher_from_db": ("clustering.seeding", "load_matcher_from_db"),
-    # 回库前核验（lib_backfill，2026-11-18 A22）
-    "BackfillProbe": ("clustering.backfill_probe", "BackfillProbe"),
     "_keben_subset": ("steps.glyph_match", "_keben_subset"),
     "borrowed_ids": ("steps.glyph_match", "borrowed_ids"),
     "human_confirmed_counts": ("steps.glyph_match", "human_confirmed_counts"),

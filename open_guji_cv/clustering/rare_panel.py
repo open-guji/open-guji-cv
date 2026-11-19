@@ -402,7 +402,6 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
     cnn = shared()
     require_checkpoint(cnn)
     spec: dict = {}
-    lib_keep: frozenset = frozenset()
     if cnn.available:
         cs_base, cs_esc, spec = book_charsets(book, corpus)
         a_list = b_list = [[] for _ in norms]
@@ -445,24 +444,6 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
                         if sc > seen.get(ch, -1.0):
                             seen[ch] = sc
                     emb_list[i] = sorted(seen.items(), key=lambda t: -t[1])[:max(k, 10)]
-
-        # ── 库字档（册配置 `font.charset.lib_chars`，缺省关）：本书人裁过、基集里没有的字 ──
-        # 每格都查、按分数与基集候选归并（同升级档的归并办法）。刻例原型在这一档总是开着，
-        # 且只作用在这一档的字上：基集那次检索不变，基集内字的名次只会被这一档的字插队，不会互相换位。
-        cs_lib = (lib_tier(cs_base, real_proto, corpus, spec.get("allow", "none"))
-                  if spec.get("lib_chars") else ())
-        if cs_lib:
-            sub = cnn.emb_topk_batch_subset(norms, list(range(len(norms))), cs_lib, k=max(k, 10),
-                                            real_proto=(True, real_proto[1]), gw_enabled=gw_enabled)
-            for d_all, d in zip(gw_prov, cnn.last_gw_prov):
-                d_all.update(d)
-            for i, extra in enumerate(sub):
-                seen = dict(emb_list[i])
-                for ch, sc in extra:
-                    if sc > seen.get(ch, -1.0):
-                        seen[ch] = sc
-                emb_list[i] = sorted(seen.items(), key=lambda t: -t[1])[:max(k, 10)]
-            lib_keep = frozenset(cs_lib)
     else:
         cs_small, cs_big = _rare_charsets(corpus)
         # 同 `_rare_for_single_legacy` 的 `universe=cs_big`（K19，2026-09-28）。
@@ -494,8 +475,7 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
     allow = (spec or {}).get("allow", "none")
     if allow != "none":
         from .charset_spec import filter_candidates
-        # 库字档的字是人在这本书上定过的刻形（内、温、宫 这类），与语料用字同样无条件放行
-        keep = _corpus_keep(corpus) | lib_keep
+        keep = _corpus_keep(corpus)
         f = lambda rows: [filter_candidates(r, allow, keep) for r in rows]  # noqa: E731
         cnn_list, emb_list = f(cnn_list), f(emb_list)
         a_list, b_list, db_list = f(a_list), f(b_list), f(db_list)
@@ -656,40 +636,6 @@ def book_charsets(book: str | None, corpus: str | None
         spec["base"], spec["escalate"], corpus,
         spec["corpus"], spec["variants"], tuple(spec["extra"]))
     return base, esc, spec
-
-
-_LIB_TIER_CACHE: dict[tuple, tuple[str, ...]] = {}
-
-
-def lib_tier(cs_base: tuple[str, ...], real_proto: tuple[bool, tuple[str, ...]] | None,
-             corpus: str | None = None, allow: str = "none") -> tuple[str, ...]:
-    """库字档字表：本书字形库里人裁过、而 5-b 给不出来的字（册配置 `font.charset.lib_chars`，2026-11-18）。
-    两种：基集里没有的字；在基集里、但会被白名单否决（`allow`）挡掉的字（内、无、遥 这类刻本真这么刻的字形）。
-
-    来由：人审时手输的字多数不在基集里（扩 B 以后的异体、被简体否决的刻形），升级档又几乎不触发，
-    下一次遇到同一个字 5-b 仍然给不出来。四书盘点与全唐文 010 册对照见 `doc/design/5b-库字档.md`。
-
-    库的位置取 `font.real_proto.stores`（没写就是本书自己的 `output/glyph_store`），与真刻例原型同一个来源；
-    `real_proto` 那个开关开不开不影响这里。返回的元组身份稳定（按基集、库内容记忆），`_emb_index` 的缓存才命中。"""
-    if not real_proto or not real_proto[1]:
-        return ()
-    from .charset_spec import _cjk
-    from .cnn_candidates import real_chars
-    from ..utils.cjk_compat import fold_compat
-    specs = tuple(real_proto[1])
-    chars = real_chars(specs)
-    key = (id(cs_base), len(cs_base), specs, chars, corpus, allow)
-    got = _LIB_TIER_CACHE.get(key)
-    if got is None:
-        from .charset_spec import filter_candidates
-        base = set(cs_base)
-        lib = {fold_compat(c) for c in chars if _cjk(c)}
-        inb = sorted(lib & base)
-        passed = {c for c, _ in filter_candidates([(c, 0.0) for c in inb], allow, _corpus_keep(corpus))}
-        got = tuple(sorted((lib - base) | (set(inb) - passed)))
-        _LIB_TIER_CACHE.clear()
-        _LIB_TIER_CACHE[key] = got
-    return got
 
 
 @lru_cache(maxsize=4)

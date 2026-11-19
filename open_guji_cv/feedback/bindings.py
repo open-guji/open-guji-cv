@@ -21,6 +21,11 @@
 锚里是 `ink_bbox`（当时字块图在原图上找回的墨框）的，按「墨框 ≥80% 落在某一现格、第二格 <20%」绑
 （`anchor_backfill.bind_ink`）：落在同编号 → `valid`，别的编号 → `rebound`，跨两格 → `review`，落空 → `void`。
 
+**迁移补锚闸**（2026-11-17，ZM 第一册线报）：补锚档里 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，
+取 r9c 包同编号格的框补的）可能错一格。事件 `target.anchor.migrated_from.id` 指的上一版事件在补锚档里有框的，
+两个框各自落到 IoU 最高的现格；不是同一格 → `review`（`why=migrated_prev_differs`，行里多 `prev_bound`/`prev_iou`）。
+上一版没框的照旧。见 `_migrated_prev_anchor`。
+
 **图像指纹优先**（2026-10-01，D2/#323）：事件锚里带 `evidence.fp`（`anchor.evidence_for`，口径 =
 `gold/drift.fingerprint`）的，先拿它与候选现格的字块图比：相同/近似（差 ≤ `drift.FP_TOL`）才认
 （`valid`/`rebound` 照几何定），不像一律 `review`——**包括框几乎没动（IoU ≥ `IOU_SAME`）的**：
@@ -75,6 +80,9 @@ SIM_OK = 0.90         # 图块相似度（elastic cov）；vol02 漂移检查：
 USE_STATUSES = ("valid", "rebound")
 COL_SHIFT_MIN = 3     # R3 整列同量偏移：同页同列 rebound ≥ 这么多条、偏移一致
 COL_SHIFT_EQUAL_OK = 2  # …且其中 ctx=equal 的旁证少于这么多条 → 整列回待审
+#: 补锚档里「cellvotes rebase 迁移事件无框、取迁移目标版同编号格的框」补的锚（2026-11-13 殿本写入）。
+#: 那一版的格号可能与事件迁移时的格号差一格，框就是邻格的——见 `_migrated_prev_anchor`。
+MIGRATED_SOURCE = "backfill:migrated"
 
 
 def strict_enabled() -> bool:
@@ -342,6 +350,34 @@ def _patch_renderer(book: str, store, cache):
     return render
 
 
+def _migrated_prev_anchor(ev, backfill: dict) -> dict | None:
+    """`backfill:migrated` 补锚的「上一版锚」：事件 `target.anchor.migrated_from.id` 那条事件在补锚档里的框。
+
+    2026-11-17（ZM 第一册线报，殿本 vol01/02）：cellvotes rebase 迁移过来的事件（`E~q~r~r`）本身无框，
+    补锚时取的是 r9c 包里**同编号格**的框；r9c 的格号与事件迁移时的格号差一格，取到的是邻格。旧格网对不上
+    判 unanchored 没暴露，新包格网回到 r9c 那样，IoU 1.0 判 valid，人裁静默落进邻格。上一版事件
+    （`E~q~r`）的框是格级对照表映出来的、同一张页图，可以拿来核：两个框落到的现格不同 → 不认。
+    只看一跳；上一版没有带框的补锚行（或它自己也是 `backfill:migrated`）→ None（核不了，照旧）。"""
+    mf = (getattr(ev.target, "anchor", None) or {}).get("migrated_from") or {}
+    pid = mf.get("id") if isinstance(mf, dict) else None
+    if not pid:
+        return None
+    a = backfill.get(pid)
+    if not a or not a.get("bbox") or a.get("source") == MIGRATED_SOURCE:
+        return None
+    return a
+
+
+def _best_cell(bbox, cur_idx: dict):
+    """框与现格 IoU 最高的那格及 IoU；低于 `IOU_GONE` → (None, iou)。"""
+    best, best_iou = None, 0.0
+    for c, (bb, _kind) in cur_idx.items():
+        v = _iou(bbox, bb)
+        if v > best_iou:
+            best, best_iou = c, v
+    return (best if best_iou >= IOU_GONE else None), best_iou
+
+
 #: 字块图的产物种类 id（`cell_shrink` 产出、`char_patch` 缓存）。
 PATCH_STEP_KIND = "char_patch"
 
@@ -453,6 +489,19 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
         bkey = f"{book}:{page}:{best[0]}:{best[1]}{best[2]}"
         row["bound"] = bkey
         same = "valid" if bkey == ev.target.key else "rebound"
+        if anchor.get("source") == MIGRATED_SOURCE and anchor is not ev.target.anchor:
+            # 迁移补锚闸（2026-11-17）：上一版锚落到的现格与补锚框落到的不同 → 补锚取错了格，不认
+            prev = _migrated_prev_anchor(ev, backfill)
+            if prev is not None:
+                pcell, piou = _best_cell(prev["bbox"], cur_idx)
+                if pcell != best:
+                    row["status"] = "review"
+                    row["why"] = "migrated_prev_differs"
+                    row["prev_bound"] = (None if pcell is None
+                                         else f"{book}:{page}:{pcell[0]}:{pcell[1]}{pcell[2]}")
+                    row["prev_iou"] = round(piou, 3)
+                    rows.append(row)
+                    continue
         d1 = _fp_diff(evid, _patch(*best))
         if d1 is not None:
             # 有当时的图指纹：相同/近似才认，其余回待审（几何只负责找候选格）
@@ -535,6 +584,11 @@ def _sig(events, return_events: list | None = None, backfill: dict | None = None
     if backfill:
         from .anchor_backfill import page_signature
         base = f"{base}|bf:{page_signature(backfill, [e.id for e in events])}"
+        # 迁移补锚闸要读上一版事件的补锚行：它们改了也要重算；本页没有 `backfill:migrated` 行时签名不变
+        mig = [e for e in events if (backfill.get(e.id) or {}).get("source") == MIGRATED_SOURCE]
+        if mig:
+            prev_ids = [((e.target.anchor or {}).get("migrated_from") or {}).get("id") or "" for e in mig]
+            base = f"{base}|mig1:{page_signature(backfill, [p for p in prev_ids if p])}"
     if not return_events:
         return base
     return f"{base}|{len(return_events)}:{return_events[-1].id}"
@@ -644,8 +698,7 @@ def usable(row: dict | None, event_ts: str | None = None) -> str | None:
 
 
 def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
-                          lost: dict[str, dict] | None = None,
-                          relabeled_at: dict[str, str] | None = None) -> dict[str, str]:
+                          lost: dict[str, dict] | None = None) -> dict[str, str]:
     """字形库人裁（`seed_admit._human_shapes`，按入库时的编号）→ 现在该落的编号。
 
     以该编号**最后一条**裁决事件的绑定状态为准：仍有效照旧、顺移了改绑、其余丢掉。
@@ -654,14 +707,7 @@ def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
     库里有而事件日志里没有的（很老的数据）原样保留——没有依据就不动，与 09-25 之前一致。
     传 `lost`（空 dict）时，因绑定不可用而丢掉的那些按原编号记进去（同 `lookup.human_chars` 的 `lost`）；
     「人后来改判」那种不算丢。
-
-    `relabeled_at`（2026-11-18）：`{编号: 入库时刻}`，只含库内审阅改标（`glyph_audit relabel`）重进的人裁刻例。
-    改标时旧人裁事件被作废（`stale_verdicts.tsv`），而改标本身不是 confirm 事件：以前这里见「作废之后没有再裁」
-    就把库里**新改的字**也丢了，又因「最后一条裁决的字与库里不同」再丢一次——改标永远进不了文本，机器照旧放行旧字
-    （全唐文 b3 整轮重算后仍有 10 格：侯 被放成 𠋫、𡽪 被放成 徽）。作废时刻当时或之后改标重进的，库里这份就是最新的人裁：
-    不算作废、不因旧事件的字不同而丢；落在哪一格仍照绑定表。
     """
-    relabeled_at = relabeled_at or {}
     try:
         b = book_bindings(book, log)
     except Exception:
@@ -677,9 +723,7 @@ def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
         stale = {}
     for k, ch in shapes.items():
         r = latest.get(k) if k.startswith(book + ":") else None
-        at = "".join(c for c in (relabeled_at.get(k) or "")[:16] if c not in "-:")     # 20261118T0637
-        fresh = bool(at) and k in stale and at[:len(stale[k])] >= stale[k]
-        if k in stale and not fresh:
+        if k in stale:
             # 作废标记（字形库 human_stale_* 或 stale_verdicts.tsv）：撤下时刻之后没有再裁的，库里这份不再算人裁。
             # 否则重绑只看「该格号最新事件的锚」，误锚的人裁会在重绑后落到别的格（vol01 182:9:15a 变「宅」，11-13）。
             st = stale[k]
@@ -690,7 +734,7 @@ def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
         if r is None:
             out[k] = ch
             continue
-        if r.get("shape") and r["shape"] != ch and not fresh:
+        if r.get("shape") and r["shape"] != ch:
             continue       # 库里是旧裁决，之后人改判了：让事件那条路（human_chars）给新字，库里这份作废
         nk = usable(r)
         if nk:
