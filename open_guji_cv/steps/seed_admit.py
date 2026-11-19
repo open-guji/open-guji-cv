@@ -932,6 +932,13 @@ class SeedAdmitParams(BaseModel):
     两条像年），通用「人裁≥1」闸会砍掉 56% 放行格且挑不出错，改成人看过刻例的字级名单。None＝不限（不进 dump）。"""
     solo_5b_human_min: int = 1
     """白名单之外的字，本书库里人裁刻例至少几条才照放（只在 `solo_5b_char_ok` 设了时生效，不进 dump 否则）。"""
+    no_ref_pages: list[int | str] = []
+    """无参校本页（册配置用 `page_kinds: {no_ref: [...]}` 写，不直接写这里）：参校本里本来就没有这段文字的页
+    （脉经 01 林億序、06 牒文，2026-11-19 用户定）。这些页对不上参校本是常态、不是切分坏，按 `no_ref_params`
+    换一套放行参数。写法同页号（整数或 "5-7"）。空＝没有这类页（不进 dump）。"""
+    no_ref_params: dict = {}
+    """`no_ref_pages` 上换用的 seed_admit 参数（书级），如 `{solo_5b_cov: 0.95, solo_5b_min_n: 1}`：只在这些页
+    叠在本步参数上，别的页不变。键须是本步参数名（不许再嵌 `no_ref_*`）。空＝不换（不进 dump）。"""
     num_run_cov: float | None = None
     """无参照格「数字串里的数字」放过 never_match 护栏（2026-11-08，全唐文 001–003 总目／姓氏韻編卷数小注，形近字线；
     书级，缺省关，`None`＝关、关时逐字节不变、两个键都不进 dump）。
@@ -1551,6 +1558,10 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and self.solo_5b_cov is None:
             for k in ("solo_5b_cov", "solo_5b_gap", "solo_5b_min_n"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.no_ref_pages:
+            d.pop("no_ref_pages", None)
+        if isinstance(d, dict) and not self.no_ref_params:
+            d.pop("no_ref_params", None)
         if isinstance(d, dict) and self.consensus_lib_cov is None:
             d.pop("consensus_lib_cov", None)
         if isinstance(d, dict) and self.solo_adapt_pct is None:
@@ -2046,6 +2057,7 @@ class SeedAdmitStep(Step):
         from ..utils.jiazhu_order import sort_by_reading
         from ..variant_ledger import BookLedger
         p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
+        p = no_ref_page_params(p, page)
         vmap = VariantMap.load(p.variants or None)
         if p.semantic_extra:
             vmap = _ExtraSemanticMap(vmap, _parse_semantic_extra(p.semantic_extra))
@@ -3074,6 +3086,19 @@ def _human_keben_counts(db_path: str) -> dict[str, int]:
     _HUMAN_COUNTS.clear()
     _HUMAN_COUNTS[key] = out
     return out
+
+
+def no_ref_page_params(p: "SeedAdmitParams", page: int) -> "SeedAdmitParams":
+    """无参校本页（`no_ref_pages`）上把 `no_ref_params` 叠到本步参数上；别的页、或没配，原样返回同一个对象。"""
+    if not p.no_ref_pages or not p.no_ref_params:
+        return p
+    from ..core.book import _expand_pages
+    if page not in set(_expand_pages(list(p.no_ref_pages))):
+        return p
+    bad = [k for k in p.no_ref_params if k not in type(p).model_fields or k.startswith("no_ref_")]
+    if bad:
+        raise ValueError(f"seed_admit.no_ref_params: 不认的参数 {bad}（须是 seed_admit 的参数名，且不能是 no_ref_*）")
+    return type(p).model_validate({**{k: getattr(p, k) for k in type(p).model_fields}, **p.no_ref_params})
 
 
 def solo_5b_char_allowed(ch: str, char_ok: str | None, human: dict[str, int], human_min: int) -> bool:

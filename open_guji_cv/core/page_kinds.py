@@ -7,6 +7,7 @@
       table:  ["8-163"]      # 表格页，整页跳过
     cover:  [1]            # 书衣／封面页，整页跳过（页型记 cover）
       roster: ["89-132"]     # 职名页，走职名页分支
+      no_ref: ["5-7"]        # 无参校本页：参校本里本来就没有这段（序、牒文），照常切、对位，放行换 seed_admit.no_ref_params 那套
       table_cols:            # 半文半表页：本页这些列是表、跳过，其余列按正文切、对位（GUJI-772，2026-11-16）
         112: ["1-5"]         # {页: [列号…]}，列号同产物 col（图上右起第几列，从 1 起；产物 quad 右上原点），写法同页号
 
@@ -17,6 +18,7 @@
     table  → params.border_detect_gate.table_pages
     cover  → params.border_detect_gate.cover_pages   （2026-11-04 加：书衣／封面，整页跳过，网站出占位）
     roster → params.row_segment.roster_pages
+    no_ref → params.seed_admit.no_ref_pages      （2026-11-19 加：无参校本页，配书级 `seed_admit.no_ref_params` 换放行参数）
     table_cols → params.column_gate.table_cols   （2026-11-16 加，GUJI-772：页内按列标表；新参数，没有老写法）
 
 `table_cols` 不是「一类页」而是「页里哪几列」，值是 `{页: [列号…]}` 不是页号表，所以不在 `KIND_PARAM`／`PAGE_KINDS`
@@ -36,6 +38,7 @@ KIND_PARAM: dict[str, tuple[str, str]] = {
     "table": ("border_detect_gate", "table_pages"),
     "cover": ("border_detect_gate", "cover_pages"),
     "roster": ("row_segment", "roster_pages"),
+    "no_ref": ("seed_admit", "no_ref_pages"),
 }
 PAGE_KINDS = tuple(KIND_PARAM)
 #: 页内按列标表（半文半表页）：键名与 (Step id, 参数名)
@@ -165,7 +168,8 @@ def kinds_from_params(params: dict[str, dict] | None) -> dict[str, list]:
     `BookSpec.page_kinds` 都是这张表——给 `guji pagekinds` 之类读的人用，不必再各自去三个 Step 参数里找。"""
     out: dict[str, list] = {}
     for kind, (sid, field) in KIND_PARAM.items():
-        v = ((params or {}).get(sid) or {}).get(field)
+        sp = (params or {}).get(sid)
+        v = sp.get(field) if isinstance(sp, dict) else None     # 形状错的 params 交给后面的校验报
         if v not in (None, [], ()):
             out[kind] = list(v)
     return out
