@@ -445,6 +445,10 @@ _ROW_SPLIT_1119 = ("书级钩子 jiazhu_step.row_split（缺省 None、不调；
 _ROSTER_COLS_1119 = ("row_segment 加按列职名列 roster_cols（缺省空、不进参数 dump；_roster_cols 没点名原样返回、_run_roster 加 chen_fallback 只在点名列传）、"
                      "roster_segment.segment_roster_page 加 chen_fallback（缺省 False 不走）：脉经第 1 册 11、13、37、40、66 页（11/37 卷端林億列、13 夹注密、"
                      "66 尾页）row_segment 与 origin/dev 937a770 产物逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
+_ALT_NOJZ_1119 = ("row_segment 加书级开关 alt_nojz（缺省关、不进参数 dump；_seg 多一个恒假的 nojz 标志）、align_ref 不分行参照页按列做备选对位草稿"
+                  "（只在 alt_select=admit 且有 alt_columns 时走）、seed_admit 不分行参照页按 equal 字数与放行率挑备选（只在有备选候选列时走）："
+                  "脉经第 1 册 13、17、24、40 页（夹注密、左右结构大字被劈的三列）row_segment、align_ref、seed_admit 与 origin/dev 405aad0 产物"
+                  "逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2137,6 +2141,19 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7086ef569356beda053115ed73f666f9325ef5390c9ddcfa4b10c1754ba8725f",
           old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
           evidence=_ROSTER_COLS_1119),
+    # 不认小注的备选 row_segment.alt_nojz ＋ 不分行参照页按列挑备选（脉经左右结构大字被劈成小注，2026-11-19 MJ）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="ec9b6b334f00a25a469969138b965c3e6120dfe4a2ae9ed4f2e13974d5e4bf82",
+          old="90a4a5fe8a50a4d0a3b1bd80e68328d5405d7e58a7b2a947054d67ca670fe959",
+          evidence=_ALT_NOJZ_1119),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="e1927bfc5a6435c38b1f269bcaad9aa3ab780dcdfeed76e07810d31d91ebbc22",
+          old="8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715",
+          evidence=_ALT_NOJZ_1119),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="3145d60fdccd18931cad669a39f9d6818f2df58dd3784abc3395bca868fc536e",
+          old="64d25e9fcecdaca35dda2a900cb9f526df248aeaaf5f7e2d6d8802aa25d5a47d",
+          evidence=_ALT_NOJZ_1119),
 )
 
 
