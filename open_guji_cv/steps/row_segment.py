@@ -757,6 +757,9 @@ ALT_CUT_REV = 2
 """`alt_cut` 备选出法修订号（进开了的书的参数 dump）。改备选格网或「出不出备选」的判据就加 1。"""
 
 
+ALT_NOJZ_FLAG = "alt_nojz：不认雙行小注的备选（列里认出的小注段按大字格切），下游按列挑"
+
+
 def _alt_same_ink_cells(main_cells, alt_cells) -> bool:
     """`alt_cut` 的备选格网和主切法「有字格」是否一模一样（框、种类、半边全同；格号、空格不比）。
 
@@ -974,6 +977,11 @@ class RowSegmentParams(BaseModel):
     #: align_ref 坐标对位挑和整理本吻合多的那份（写本有些列字不在格网上：题署、篇题大字、夹注行数与表不合）。
     #: 书级开关；False＝关（缺省，不进参数哈希，产物逐字节不变）。
     alt_cut: bool = False
+    #: **不认小注的备选**（2026-11-19 脉经，GUJI-774）：主切法认出雙行小注（有 jiazhu_a/b 格）的列，另按同样格网、
+    #: 不认雙行小注再切一份放进 `alt_columns`，下游照 `alt_cut` 的路按列挑。起因：脉经左右结构的大字（則何肺脉眩瞤）
+    #: 中间有白缝，被认成雙行小注劈成 a/b（第 1 册 4 段、2–6 册数十段）；几何量（墨高、缝宽、连通体）和真小注重叠分不开，
+    #: 要靠库匹配与参照文字按列挑（align_ref `alt_select: admit`）。书级开关；False＝关（缺省，不进参数哈希）。
+    alt_nojz: bool = False
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -1072,6 +1080,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_single_head", None)
             if not self.jiazhu_half_a:
                 d.pop("jiazhu_half_a", None)
+            if not self.alt_nojz:
+                d.pop("alt_nojz", None)
             if not self.alt_cut:
                 d.pop("alt_cut", None)
             else:
@@ -1384,6 +1394,8 @@ class RowSegmentStep(Step):
             # C/D 字数先验只看格的 y0/y1/kind/slot；折线与判官只写 seam_top/seam_bottom 和 cut_candidates，不动格的 y0/y1/kind。
             # 所以试切一律 seam_band=0、不叫判官，挑定之后对中选的那一遍按原参数重切一次，再补上列端记空（_blank_frame_junk
             # 原地改 kind，重切出来的是新对象）。产物逐字节不变（code_equiv 验证）。
+            nojz = [False]                  # alt_nojz 的备选那一遍：不认雙行小注
+
             def _seg(n_body: int, alt: tuple | None = None, grid: bool = False, bounds: list[float] | None = None,
                      final: bool = False):
                 n_r, t_s, l_kw, f_jz, f_main = (alt if alt is not None else
@@ -1393,7 +1405,7 @@ class RowSegmentStep(Step):
                     border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
                     top_slack=t_s, content_x=gc.content_x,
                     ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
-                    raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band if final else 0,
+                    raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu and not nojz[0], seam_band=p.seam_band if final else 0,
                     resolved_cuts=col_resolved or None, cut_judge=judge if final else None,
                     pinned_cuts={s_: y_ for (pg_, c_, s_), y_ in book_pins.items()
                                  if pg_ == page and c_ == gc.col} or None,
@@ -1752,6 +1764,17 @@ class RowSegmentStep(Step):
                                alt_fl, None, occ, gate_raised)
                     if not _alt_same_ink_cells(out[-1].cells, ca.cells):
                         alt_out.append(ca)
+            if (p.alt_nojz and not human_col and r is not None and all(a_.col != gc.col for a_ in alt_out)
+                    and any(c_.kind in ("jiazhu_a", "jiazhu_b") for c_ in out[-1].cells)):
+                nojz[0] = True
+                try:
+                    rn = _seg(n_body_col, final=True) if lay_cuts is None else _seg(n_body_col, bounds=lay_cuts, final=True)
+                finally:
+                    nojz[0] = False
+                if rn is not None:
+                    cn = _emit(rn, base, [*prior_flags, ALT_NOJZ_FLAG], lay, occ, n_raised_col)
+                    if not _alt_same_ink_cells(out[-1].cells, cn.cells):
+                        alt_out.append(cn)
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
         pc = self._header_ref_flags(ctx, p, page, pc)
