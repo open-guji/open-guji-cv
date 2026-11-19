@@ -47,6 +47,10 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.73] - 2026-11-19
+
+- 发版说明（A31 11-19，**dev 线 patch**，PATCH；全唐文·形近字线请求）：v0.7.72 + #1707（seed_admit 书级开关 `lane_lib_veto`：witness3／coord_fallback 两条补放通道遇字形库首位 cov ≥ 阈值且不同字、非异体 → 送审；缺省 0＝关、不进参数 dump；cherry-pick 304d4b6，无冲突），不含 v0.7.72 之后 dev 上的其他改动。Step 指纹对 v0.7.72 只有 `seed_admit` 变（未登 code_equiv：没跑产物比对；开开关的书按参数指纹本来要重跑 seed_admit），下游随之过期。底库不变（b30）。
+
 ## [0.7.72] - 2026-11-19
 
 - 发版说明（A20 11-19，**dev 线 patch**，PATCH；A23 请求，史記、殿本用三书合训底座跑 5a 新相似度 A/B）：v0.7.71 + #1631（模型表登记 `glyph_sim_base_v1`；cherry-pick 78c29c0b），**不含** v0.7.71 之后 dev 上的其他改动。不动任何 Step，各步 `code_hash` 不变；不配新底库。tag 在 main 合并提交（PR #1704）；dev 以 `-s ours` 合回、只加本节。
