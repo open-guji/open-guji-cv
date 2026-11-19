@@ -581,7 +581,10 @@ class BorderDetectStep(Step):
                 return ns, nt
 
             def _n_bad(r):
-                xs_ = [float(v.x_at(r.height / 2.0)) for v in r.verticals]
+                # 与下面列宽检查同一口径：x 取版框中高处
+                ty = float(r.top.y_at(0.0)) if r.top is not None else 0.0
+                by = float(r.bottom.y_at(0.0)) if r.bottom is not None else float(H - 1)
+                xs_ = [float(v.x_at((ty + by) / 2.0)) for v in r.verticals]
                 skip = {c.col for c in classify_columns(xs_, leaf_layout=ctx.book.leaf_layout) if c.kind != "body"}
                 chk_ = check_columns(xs_, col_spec, skip=skip)
                 return len(chk_.bad) if chk_.judged else 0
