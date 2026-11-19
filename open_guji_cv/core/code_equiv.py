@@ -441,7 +441,7 @@ _LIB_TIER_0774 = (_LIB_TIER_1118 + "。dev 线 patch 移植（v0.7.73 + #1701 �
 _ROW_SPLIT_1119 = ("书级钩子 jiazhu_step.row_split（缺省 None、不调；segment_column 多一支恒假的段循环与格号顺延、闸3 只认 jiazhu_row_split 列旗）："
                    "row_segment 在史記 02 30 页（5-34，jiazhu_rows＋书仓 free_split／逐步切，包 cv0.7.59-c10-g23-m2-k25-job5106）、"
                    "脉经 02 40 页（1-40，夹注多）与 origin/dev a205648 产物逐字节相同；闸3 row_segment_gate 史記 02 30 页、"
-                   "column_gate（row_boundaries）史記 02 30 页逐字节相同；scripts/code_equiv.py check，2026-11-19（A22）")
+                   "column_gate（row_boundaries）史記 02 30 页逐字节相同；变基到 dev 2ea07b2（#1712 jiazhu_span_t）后 row_segment、闸3 史記 02 20 页再核逐字节同；scripts/code_equiv.py check，2026-11-19（A22）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
