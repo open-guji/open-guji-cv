@@ -171,3 +171,26 @@ def test_lock_refuses_second_run_and_ignores_stale(tmp_path):
     with ac.Lock(lk):
         assert lk.exists()
     assert not lk.exists()
+
+
+def test_default_cells_only_when_book_table_exists(tmp_path, monkeypatch):
+    d = tmp_path / "old_new_cells"
+    d.mkdir()
+    (d / "vol37.tsv.gz").write_bytes(b"")
+    monkeypatch.setenv("GUJI_OLD_NEW_CELLS", str(d))
+    monkeypatch.setattr(ac, "CELLS_DIRS", ())
+    assert ac.default_cells("vol37") == str(d)
+    assert ac.default_cells("vol38") == ""
+    assert ac.default_cells("vol38", "/given") == "/given"
+
+
+def test_unmapped_votes_go_into_report(tmp_path):
+    ws = tmp_path / "ws"
+    f = ws / "reports" / "vol43" / "_publish" / "043-r8" / "旧单票无法对位.tsv"
+    f.parent.mkdir(parents=True)
+    f.write_text("旧格\t票\t字\t投票人\t原因\t说明\t新格\n1:4:9a\tchar\t之\tx\t删\t\t\n", encoding="utf-8")
+    um = ac.unmapped_votes(ws, "vol43", "043-r8")
+    assert um["n"] == 1
+    rep = ac.write_guard_report(ws, {"books": {"vol43": {"verdict": "done", "unmapped": um}}}, "d", tmp_path, "x")
+    t = rep.read_text(encoding="utf-8")
+    assert "无法对位" in t and "vol43" in t and "守卫拦下的册" not in t
