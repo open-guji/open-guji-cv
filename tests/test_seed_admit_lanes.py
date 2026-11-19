@@ -841,3 +841,36 @@ def test_semantic_extra_map():
     assert vm.semantic("天") == "天"
     with pytest.raises(ValueError):
         _parse_semantic_extra("圗圖")
+
+
+# ── 库否决（witness3／coord_fallback，lane_lib_veto，全唐文 11-19）─────────────
+
+def test_lane_lib_veto_witness3_and_coord():
+    """库首位 cov ≥ 阈值、与要放的字不同（非异体）→ 不放、送审；缺省 0 照旧放；cov 不够照旧放。"""
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    n, rs = _run(out, lane_witness3=True, **kw)                       # 缺省关：照旧放整理本字
+    assert n == 1 and rs[5].char == "天"
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, **kw)
+    assert n == 0 and not rs[5].admit
+    assert rs[5].evidence["lane_skip"] == {"lane": "witness3", "why": "lib_veto", "lib": "大", "cov": 0.99}
+    assert "lane_lib_veto" in rs[5].doubts
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.97)]}
+    assert _run(out, lane_witness3=True, lane_lib_veto=0.98, **kw)[0] == 1    # cov 不够：照放
+    def r4(lib_char, wit_chars):
+        chars = BODY[:30]
+        out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.99)", "上下文 margin 不足(0.10)"], char=lib_char)})
+        wits = [_wit(f"{k}.txt", "前" + chars[:4] + c + chars[5:] + "後") for k, c in zip("dwy", wit_chars)]
+        return _run(out, lib={5: [(lib_char, 0.99)]}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, lane_lib_veto=0.98)
+    n, rs = r4("夫", "天天天")
+    assert n == 0 and rs[5].evidence["lane_skip"]["why"] == "lib_veto"
+    n, rs = r4("天", "天夫夫")                                         # 放的就是库首位：不受影响
+    assert n == 1 and rs[5].evidence["lane"]["via"] == "lib_coord_primary"
+
+
+def test_lane_lib_veto_off_not_in_dump():
+    assert "lane_lib_veto" not in SeedAdmitParams(db_path="x", lane_witness3=True).model_dump()
+    assert SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98).model_dump()["lane_lib_veto"] == 0.98
