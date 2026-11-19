@@ -128,3 +128,37 @@ def test_apply_unrouted_cell_only_changes_when_final_decides_other_char(tmp_path
     assert o.verdict is None and o.stage["pair"][0]["char"] == "甲"
     s = stages(X[0], True); s.cfg = GS.StagesConfig(RouteConfig(), frozenset())
     assert s.apply("same", m, norm, norm, "c", None) == GS.StageOut()          # 没配 pair：与原来逐字相同
+
+
+def test_pair_unsure_gives_evidence_only_for_unsure_cells(tmp_path):
+    """`pair.unsure`：判决层 unsure 的格也出证据（前两名候选的对），不改判决、不改候选、不定字；缺省关。"""
+    X, y, f = _data(80, 60, 2.0)
+    path = _model(tmp_path, {"甲乙": PC.build_pair("甲", "乙", X, y, f)})
+    off = GS.StagesConfig.from_any({"pair": {"model": str(path), "final": True}})
+    on = GS.StagesConfig.from_any({"pair": {"model": str(path), "final": True, "unsure": True}})
+    assert not off.pair_unsure and on.pair_unsure
+    assert GS.stages_fingerprint({"pair": {"model": str(path)}}) != GS.stages_fingerprint({"pair": {"model": str(path), "unsure": True}})
+
+    class M:                                           # 只用到 candidates
+        candidates = [("丙", 0.9), ("乙", 0.8), ("丁", 0.7)]
+
+    class Net:
+        pass
+
+    st = GS.Stages.__new__(GS.Stages)                  # 不建匹配器：只测 _pair_unsure
+    st.cfg, st._net = on, Net()
+    e = np.zeros(X.shape[1], dtype=np.float32)
+    e[:] = X[-1]                                       # 乙 一团里的点
+    st._embed = lambda net, xs: [e]
+    out = st.apply("unsure", M(), np.zeros((2, 2)), None, "c1", None)
+    assert out.verdict is None and out.char is None and out.candidates is None     # 不改判决
+    row = out.stage["pair"][0]
+    assert row["pair"] == PC.pair_key("甲", "乙") and row["cand"] == "乙" and row["rank"] == 2 and row["lean"] == "乙"
+    assert out.stage["on"] == "unsure"
+    st.cfg = off
+    assert st.apply("unsure", M(), np.zeros((2, 2)), None, "c1", None) == GS.StageOut()   # 缺省关：什么都不出
+    st.cfg = on
+
+    class M2:
+        candidates = [("丙", 0.9), ("丁", 0.8)]
+    assert st.apply("unsure", M2(), np.zeros((2, 2)), None, "c1", None) == GS.StageOut()  # 前两名都没有对
