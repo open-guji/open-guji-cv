@@ -343,6 +343,8 @@ def cmd_apply(a) -> int:
         issue += ["--engine", engine]
     if a.ack_unlanded_votes:
         issue += ["--ack-unlanded-votes", a.ack_unlanded_votes]
+    if getattr(a, "cells", None):            # 旧单出在换图源之前：票按格级对照表把旧格号对到新格（republish 换单门）
+        issue += ["--cells", a.cells]
     if getattr(a, "no_web", False):          # 批量时每册不单独触发网站发布，由 auto_cycle 最后统一发一次
         issue += ["--no-publish-web"]
     cv_commit = plan.get("engine_commit") if engine != CV else plan["pack_cv_commit"]   # 重跑用的是哪份 cv 就记哪份
@@ -533,6 +535,7 @@ def main(argv=None) -> int:
     p.add_argument("--reuse-products", help="产物沙箱用这份现成的（引擎换版本后自己从头跑好了，不取出单版包、不再重跑 seed_admit）；"
                                            "配合 plan --engine <新版 worktree> 与 --allow-cv-drift")
     p.add_argument("--ack-unlanded-votes", help="旧单还有票没落成人裁（如图形格）也照换单；写明原因，原样交给 republish issue")
+    p.add_argument("--cells", help="旧单出在换图源之前时的格级对照表（old_new_cells/<册>.tsv[.gz] 或放各册表的目录），原样交给 republish issue")
     p.add_argument("--allow-cv-drift", action="store_true", help="本机 cv 与出单版不同也照跑重跑那一步")
     p.add_argument("--dry-run", action="store_true", help="只核计划、打出要跑的命令，不执行")
     p.add_argument("--no-web", action="store_true", help="出单、推库、升 book-text，但不触发网站发布、不冒烟（批量用，最后统一发）")
