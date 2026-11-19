@@ -544,6 +544,10 @@ class SeedAdmitParams(BaseModel):
     后面夹注逐格错一位，而 coord_fallback 放的字天然等于坐标字，`与坐标字冲突` 一项恒为 0，只剩「待审少 ≥2」撑着换列。02:106 第 7 列：
     主切法 31 格全有坐标字、待审 3，备选 31 格有 1 格没有坐标字（7:5「畤」）、待审 1，刚好差 2 被换。真换对的列（02:100:5、02:108:6／8）
     备选没坐标字的格都比主切法少（4→1、4→0、13→0）。"""
+    alt_backed_gain: int = 0
+    """`align_ref.alt_select="admit"` 换列再开一条路（书级，缺省 0 关、关时不进参数 dump；脉经 01 10:2 MJ 11-19）：备选那遍这一列
+    待审只少 1 格（够不上 `ALT_ADMIT_MIN_GAIN`），但有字形背书的放行格多出 ≥ 这么多、与坐标字冲突的不多，也换。01 10:2 序页句末「則可」
+    主切法劈成「貝丁口」，备选两字整格，待审 4→3、背书 2→3；卷一只多换这一列、卷二不变。"""
     p_ref_coord_max_cov: float | None = None
     p_ref_coord_adjacent: bool = False
     """`p_ref_coord` 的两个独立旋钮（A24 P02 深挖 11-06，1.50，缺省 `None`／关、关时不进参数 dump）：坐标对位来源的格（`evidence.p_ref.via=coord`）
@@ -1489,6 +1493,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("p_ref_coord_adjacent", None)
         if isinstance(d, dict) and not self.alt_require_matched:
             d.pop("alt_require_matched", None)
+        if isinstance(d, dict) and not self.alt_backed_gain:
+            d.pop("alt_backed_gain", None)
         if isinstance(d, dict) and not self.consensus_fallback:
             d.pop("consensus_fallback", None)
         if isinstance(d, dict) and not self.blank_ink_nonchar:
@@ -2048,7 +2054,8 @@ class SeedAdmitStep(Step):
             chars_alt = AltView(ctx).product("char_index", page)
         chosen = _pick_alt_cols(cand, sel_main, sel_alt, ctx.product("align_ref", page), ref_alt,
                                 _opt_product(ctx, "char_index", page), chars_alt,
-                                require_matched=ctx.params_for(self).alt_require_matched)
+                                require_matched=ctx.params_for(self).alt_require_matched,
+                                backed_gain=ctx.params_for(self).alt_backed_gain)
         if chosen:
             ctx.log(f"seed_admit p{page}: alt_cut 候选 {cand} → 换 {chosen}")
         return {"seed_admit": _merge_admit(main, alt, chosen)}
@@ -6524,7 +6531,7 @@ def _eq_count(ref, col: int) -> int:
 
 
 def _pick_alt_cols(cand, main: PageAdmit, alt: PageAdmit, ref_main, ref_alt, chars_main, chars_alt,
-                   require_matched: bool = False) -> list[int]:
+                   require_matched: bool = False, backed_gain: int = 0) -> list[int]:
     """逐列比两遍准入（错格闸已在 align_ref 剔过候选）：待审少 ≥ `ALT_ADMIT_MIN_GAIN`；与坐标字冲突的放行格不多；
     正文整字格墨高一致（够 `ALT_CV_MIN_CELLS` 格才比）；`ALT_REQUIRE_BACKED` 时有字形背书的放行格也不能少；
     备选首格不能过高（`ALT_FIRST_CELL_MAX`）。"""
@@ -6543,7 +6550,10 @@ def _pick_alt_cols(cand, main: PageAdmit, alt: PageAdmit, ref_main, ref_alt, cha
                 continue
             em, ea = _eq_count(ref_main, col), _eq_count(ref_alt, col)
             by_text = ea >= em + ALT_TEXT_EQ_GAIN and ra <= rm and ka <= km
-        if not by_text and not (ra <= rm - ALT_ADMIT_MIN_GAIN and (ba >= bm or not ALT_REQUIRE_BACKED) and ka <= km):
+        # 待审只少 1 格时，字形背书多出 backed_gain 也换（缺省 0 关）
+        by_backed = backed_gain > 0 and ra <= rm - 1 and ba >= bm + backed_gain and ka <= km
+        if not by_text and not by_backed and not (
+                ra <= rm - ALT_ADMIT_MIN_GAIN and (ba >= bm or not ALT_REQUIRE_BACKED) and ka <= km):
             continue
         if cv_a is not None and cv_m is not None and (cv_a > cv_m * ALT_CV_RATIO or cv_a > ALT_CV_MAX):
             continue

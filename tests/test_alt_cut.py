@@ -169,6 +169,10 @@ def test_admit_mode_pick_and_merge():
     for r in weak.chars[:9]:
         r.channel = "witnesses_coord"
     assert _pick_alt_cols([1], main, PageAdmit(page=1, columns=[weak, col(2, 5, 5)]), ref, ref, None, None) == []
+    # alt_backed_gain：待审只少 1 格、背书多 ≥1 也换（缺省 0 不换；脉经 01 10:2）
+    assert _pick_alt_cols([2], main, alt, ref, ref, None, None, backed_gain=1) == [2]
+    assert _pick_alt_cols([2], main, alt, ref, ref, None, None, backed_gain=2) == []
+    assert _pick_alt_cols([2], main, PageAdmit(page=1, columns=[col(2, 4, 5)]), ref, ref, None, None, backed_gain=1) == []
 
 
 def test_admit_mode_p_ref_is_ordinary_admit_in_stats():
