@@ -50,6 +50,10 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.75] - 2026-11-19
+
+- 发版说明（A31 11-19，**殿本 patch 线**，PATCH；ZM 报 vol20 换单 020-r13→r14 出单门拦 5 格 overturn_empty）：v0.7.70 + #1715（`scripts/zhengli/proof_cycle.py`：新导出里机器没认出的 □（`lacuna` 无 `guess_c`）与 〓／▣ 占位算「机器无字」，旧字是现行人裁就留人裁字、不复审；排除名单判残的 □、图片格、无法识别字、原刻残带推测字仍算推翻人裁，复审说明写「□（判残）」等，出单门不拦；退回成字时去掉阙文／组字标记），**不含** dev 线其他改动。只改编排脚本，不进 code_deps，**Step 指纹对 v0.7.70 全不变**；底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1715 已在 dev）。
+
 ## [0.7.74] - 2026-11-19
 
 - 发版说明（A31 11-19，**dev 线 patch**，PATCH；全唐文·总览请求，Sheldon 已批全唐文开）：v0.7.73 + #1701（5-b 库字档 `font.charset.lib_chars`：本书字形库人裁过、5-b 给不出来的字另开一档进候选；缺省关；cherry-pick eef4214），不含 v0.7.73 之后 dev 上的其他改动（#1684 stroke_evidence 等）。code_equiv：cnn_candidates 照 #1701 原登记；rare_panel 按本线哈希重登（本线未另跑产物比对，dev 上证据为全唐文 010 全册逐字节同）。**Step 指纹对 v0.7.73 全不变**；开了 `lib_chars` 的册 rare_candidates 指纹多带库内容指纹，按此过期。底库不变（b30）。
