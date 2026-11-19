@@ -396,3 +396,62 @@ def test_frame_bar_residue_at_column_end_dropped():
     g[1300:1308, 40:140] = 0                    # 列中「一」
     rc = _seg_one(g)
     assert len(rc.items) == 8 and rc.items[0].y0 == ys[0]
+
+
+# ── 按列的职名列 roster_cols（2026-11-19，《脉经》卷端「臣林億等類次」列）────────────────
+
+def test_page_kinds_roster_cols_loads_maps_and_validates():
+    import pytest
+    from open_guji_cv.core import page_kinds as PK
+    pk = PK.load_page_kinds({"roster_cols": {37: [2], "11": "2"}})
+    assert pk == {"roster_cols": {11: [2], 37: [2]}}
+    b = make_book(page_kinds={"roster_cols": {11: [2]}})
+    assert b.params["row_segment"]["roster_cols"] == {11: [2]}
+    assert PK.table_cols_from_params(b.params, PK.ROSTER_COLS) == {11: [2]}
+    assert PK.kinds_from_params(b.params) == {}
+    with pytest.raises(ValueError, match="二者选一"):
+        PK.load_page_kinds({"roster": ["10-12"], "roster_cols": {11: [2]}})
+    with pytest.raises(ValueError, match="一列只能是一种"):
+        PK.load_page_kinds({"table_cols": {11: [1, 2]}, "roster_cols": {11: [2]}})
+    PK.load_page_kinds({"table_cols": {11: [1]}, "roster_cols": {11: [2]}})        # 同页不同列可以
+    with pytest.raises(ValueError, match="roster_cols.*从 1 起"):
+        PK.load_page_kinds({"roster_cols": {11: [0]}})
+    with pytest.raises(ValueError, match="两处都写了"):
+        make_book(page_kinds={"roster_cols": {11: [2]}}, params={"row_segment": {"roster_cols": {11: [3]}}})
+
+
+def test_roster_cols_off_keeps_params_dump_unchanged():
+    from open_guji_cv.steps.row_segment import RowSegmentParams
+    assert "roster_cols" not in RowSegmentParams(cut_judge="rule").model_dump()
+
+
+def test_roster_cols_only_named_column_takes_roster_branch(tmp_path, monkeypatch):
+    book = make_book(expected_cols=4, chars_per_line=21, page_kinds={"roster_cols": {1: [2]}})
+    _, out = run_keben_chain(tmp_path, monkeypatch, book=book, through="row_segment_gate", h=2000,
+                             n_cols=4, w=500, period=100, col_n_chars={4: 3, 3: 7, 2: 12, 1: 5})
+    cols = {cc.col: cc for cc in out["cells"].columns}
+    assert "roster" in cols[2].flags and cols[2].n_body_slots == 7 and cols[2].boundaries == []
+    assert [c.pos for c in cols[2].cells] == list(range(1, 8))
+    assert all("roster" not in cols[c].flags and cols[c].n_body_slots in (20, 21) for c in (1, 3, 4))
+    gm = out["row_segment_gate_manifest"]
+    assert {c.col for c in gm.columns if c.admitted} >= {2}
+
+
+def test_chen_fallback_refines_lone_column_without_chen_row():
+    """单列职名、量不出「臣」行（没有偏右小字）：缺省不按字形库重切；chen_fallback 把整列当官衔区重切。"""
+    g = np.full((1600, W), 255, np.uint8)
+    y = 60
+    for _ in range(3):
+        g[y:y + 60, 35:145][_squash(_shape("A", 110), 60)] = 0
+        g[y + 60:y + 120, 35:145][_squash(_shape("B", 110), 60)] = 0
+        y += 130
+    for _ in range(6):
+        g[y:y + 110, 35:145][_shape("A", 110)] = 0
+        y += 160
+    cols = [(g, (10.0, W - 10.0))]
+    plain = segment_roster_page(cols, scorer=_scorer())
+    fb = segment_roster_page(cols, scorer=_scorer(), chen_fallback=True)
+    assert "roster_glyph_refined" not in plain[0].flags
+    assert "roster_glyph_refined" in fb[0].flags
+    assert len(fb[0].items) == len(plain[0].items) + 3
+    assert [it.glyph for it in fb[0].items[:6]] == list("AB" * 3)

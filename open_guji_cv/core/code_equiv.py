@@ -442,6 +442,9 @@ _ROW_SPLIT_1119 = ("书级钩子 jiazhu_step.row_split（缺省 None、不调；
                    "row_segment 在史記 02 30 页（5-34，jiazhu_rows＋书仓 free_split／逐步切，包 cv0.7.59-c10-g23-m2-k25-job5106）、"
                    "脉经 02 40 页（1-40，夹注多）与 origin/dev a205648 产物逐字节相同；闸3 row_segment_gate 史記 02 30 页、"
                    "column_gate（row_boundaries）史記 02 30 页逐字节相同；变基到 dev 2ea07b2（#1712 jiazhu_span_t）后 row_segment、闸3 史記 02 20 页再核逐字节同；scripts/code_equiv.py check，2026-11-19（A22）")
+_ROSTER_COLS_1119 = ("row_segment 加按列职名列 roster_cols（缺省空、不进参数 dump；_roster_cols 没点名原样返回、_run_roster 加 chen_fallback 只在点名列传）、"
+                     "roster_segment.segment_roster_page 加 chen_fallback（缺省 False 不走）：脉经第 1 册 11、13、37、40、66 页（11/37 卷端林億列、13 夹注密、"
+                     "66 尾页）row_segment 与 origin/dev 937a770 产物逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2125,6 +2128,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="572d8c2b55e110674112b42450e9a7c29d666dfafe8517e2ff0598f40274b083",
           old="814bd02de64f51372289b29a7f97c8460651b313c75a879048c021e9db93cd10",
           evidence=_ROW_SPLIT_1119),
+    # 按列职名列 page_kinds.roster_cols → row_segment.roster_cols（脉经卷端林億列，2026-11-19 MJ）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="6af49d437d02235d05527beb27d2a8959dc4c98bc41c726a6ce296ada4d31859",
+          old="90a4a5fe8a50a4d0a3b1bd80e68328d5405d7e58a7b2a947054d67ca670fe959",
+          evidence=_ROSTER_COLS_1119),
+    Equiv(module="open_guji_cv.impl.keben.roster_segment",
+          new="7086ef569356beda053115ed73f666f9325ef5390c9ddcfa4b10c1754ba8725f",
+          old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
+          evidence=_ROSTER_COLS_1119),
 )
 
 
