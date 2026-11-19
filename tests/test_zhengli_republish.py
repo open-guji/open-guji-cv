@@ -700,3 +700,11 @@ def test_same_pixels_relabel_only_is_not_predates(tmp_path):
     tabs[4]["pages"][1]["from_rev"]["H"] = [[1.4, 0, 0], [0, 1.4, 0], [0, 0, 1]]   # H 不是单位阵
     assert not rp.same_pixels(tmp_path, "vol37", 3, 4, read=tabs.__getitem__)
     assert not rp.same_pixels(tmp_path, "vol37", 2, 4, read=lambda r: (_ for _ in ()).throw(FileNotFoundError(r)))
+
+
+def test_figure_ruling_counts_as_landed():
+    """图形票／认不出的字票落成的 confirm v=figure 人裁，票账算已落（ZM 11-19 vol20）；vision 来源不算；普通定字仍走 deciding。"""
+    assert rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "alt": "篆字"}})
+    assert rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "unk": "无法识别"}})
+    assert not rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "source": "vision"}})
+    assert not rp.figure_ruling({"kind": "confirm", "payload": {"v": "confirm", "shape": "甲"}})
