@@ -9,7 +9,7 @@
 判定（每册一个结论，见 decide()）：
   fresh      线上单的出单版包比 main 包新或同时 → 不用重出
   waiting    main 比线上单新，但线上单已有票且还没投完 → 等投完（status 的 done）再来；不动票
-  go         main 比线上单新，且（零票，或票已投完） → plan＋apply（有票时 plan 先把票落成人裁）
+  go         main 比线上单新，且（零票，或票已投完，或加 --land-votes） → plan＋apply（有票时 plan 先把票落成人裁）
   no-main    册没有 main 包
   no-sheet   册没有线上单（首次出单走 republish issue，不归这里）
   blocked    plan／apply 任一步失败：写进汇总，不重试、不放宽任何门
@@ -68,8 +68,9 @@ def pack_rows(ws: Path, book: str) -> list[dict]:
     return rows
 
 
-def decide(ws: Path, book: str) -> dict:
-    """返回 {verdict, why, main, online_rev, status}。只读。"""
+def decide(ws: Path, book: str, land_votes: bool = False) -> dict:
+    """返回 {verdict, why, main, online_rev, status}。只读。
+    land_votes：线上单有票但没投完时不等，判 go，由 plan 把票落成人裁（落不了的由 apply 的票账门拦下，不丢票）。"""
     text_id, chapter = rp.text_id_of(ws), rp.chapter_of(book)
     online = rp.proofing_path(ws, text_id, chapter)
     if not online.exists():
@@ -100,6 +101,8 @@ def decide(ws: Path, book: str) -> dict:
     base["status"] = st
     if st["voted"] == 0 or st["done"]:
         return {**base, "verdict": "go", "why": "零票" if st["voted"] == 0 else "票已投完"}
+    if land_votes:
+        return {**base, "verdict": "go", "why": f"线上单 {st['cells']} 格已投 {st['voted']}：先落票再换单"}
     return {**base, "verdict": "waiting", "why": f"线上单 {st['cells']} 格已投 {st['voted']}，还没投完"}
 
 
@@ -173,6 +176,7 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_u
         # 切坏的（框对不上）交切分线重出包，切分没错、锚点挪不了的交 A33；修好后 `guji swap book-text --books <册> --push --sheet` 补落文本、补推单
         subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
         subprocess.run(["git", "clean", "-fdq", "--", "Book"], cwd=book_text)      # 待重标清单 NNN.punct-stale.json 是未跟踪文件，不清会混进下一册的提交
+        shutil.rmtree(sandbox, ignore_errors=True)      # 守卫拦下也清沙箱（0.3–5.6GB，不清云端盘会写满）；产物在 reports/<册>/_cycle/<rev>/export，交 A33 用
         return {"verdict": "guard-stop", "why": "book-text 守卫／本地检查不过，线上单未换；看 apply.out 与对照表，"
                 "切坏交切分线、锚点交 A33，修好后 guji swap book-text --sheet",
                 "log": str(log)}
@@ -214,6 +218,8 @@ def main(argv=None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="同 --only-decide")
     ap.add_argument("--max", type=int, default=0, help="最多重出几册（试跑用）")
     ap.add_argument("--no-publish", action="store_true", help="最后不统一发网站")
+    ap.add_argument("--land-votes", action="store_true",
+                    help="线上单有票没投完的册也换：plan 把票落成人裁；落不了（如页图与页表对不上）的由 apply 票账门拦下列出，不丢票")
     ap.add_argument("--ack-unlanded-votes", default="", metavar="原因",
                     help="旧单上的票没落完也照换（写明原因），原样交给 proof_cycle apply → republish issue；swap run 透传")
     a = ap.parse_args(argv)
@@ -227,7 +233,7 @@ def main(argv=None) -> int:
     done: list[tuple[str, str]] = []
     rows: dict[str, dict] = {}
     for book in parse_books(a.books):
-        d = decide(ws, book)
+        d = decide(ws, book, a.land_votes)
         print(f"{book}\t{d['verdict']}\t{d['why']}", flush=True)
         if d["verdict"] == "go" and not (a.only_decide or a.dry_run) and (not a.max or len(done) < a.max):
             d = {**d, **run_book(ws, book, Path(a.book_text), d, a.reviewer, a.ack_unlanded_votes)}
