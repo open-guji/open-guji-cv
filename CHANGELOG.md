@@ -52,6 +52,10 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.77] - 2026-11-19
+
+- 发版说明（A31 11-19，**殿本 patch 线**，PATCH；ZM vol20 116:6:15 有图形人裁仍留单）：v0.7.76 + #1722（`scripts/zhengli/pending_route.py` 出单扣格：图形票／认不出的字票落成的 `confirm v=figure` 人裁算已裁，类别 `figure`；`deciding` 不变；republish 票账同口径），**不含** dev 线其他改动。只改编排脚本，不进 code_deps，**Step 指纹对 v0.7.76（＝v0.7.70）全不变**；底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1722 已在 dev）。
+
 ## [0.7.76] - 2026-11-19
 
 - 发版说明（A31 11-19，**殿本 patch 线**，PATCH；ZM vol20 116:6:15 图形票台账记未落）：v0.7.75 + #1703（`scripts/zhengli/republish.py` 票账：网站图形票／认不出的字票落成的 `confirm v=figure` 人裁算已落；vision 来源不算；cherry-pick cd93723e，测试只带本条），**不含** dev 线其他改动。只改编排脚本，不进 code_deps，**Step 指纹对 v0.7.75（＝v0.7.70）全不变**；底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1703 已在 dev）。
