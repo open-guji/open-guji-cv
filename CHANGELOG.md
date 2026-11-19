@@ -2,7 +2,6 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
-- 册 yaml 新字段 `gaps:` 记缺页（Sheldon 11-18 定：只按图片页号记，不另立书上页号）：每条 `after_page`／`what`／`kind`（原书缺／未拍）／`est_chars`／`evidence`，`load_gaps` 校验，只许写在册 yaml。`guji export format` 有缺页的章另写 `NNN.gaps.json`（`guji-gaps/0.1`，lines.md、char.json 不动），`guji export md` 在缺处单起一行〔原书此处缺…〕。没有 Step 读它、不进任何 Step 的 `code_deps`，各书指纹不变。格式 `doc/formats/缺页.md`。
 - 形近字对按刻形改字两件（OCR 研究方向 2，Sheldon 11-18「同意，按这个继续做」；都缺省关、关着时输出不变）：①`glyph_match.stages.pair.unsure: true`——5a 判 unsure 的格也逐候选对问一遍分类器，证据落 `stage.pair`（`on: unsure`，不改判决；写了才进 `stages_sha`，带 `.u`）；②`seed_admit.pair_form`（归属表路径，`-`＝所有对按刻形，试验用）——放行字与证据里过门槛的 `char` 不同时改成刻形字，通道、admit、provenance 不动，人裁不动，册码位表归走的字不改；归属表 `config/groups/pair_attribution.yaml`（`groups/pair_attr.py` 只读）里 `attr` 非 shape 的对不改，没标 `variant: true` 的异字对只记 `evidence.pair_form_review` 进复审。全唐文 020 册 34 页真跑：unsure 格出证据 781 格；`pair_form` 开后第 7 步只变 26 格（清→淸 22、寇→𡨥 3、著→蓍 1，对应全唐文回库后仍照整理本的 13 格等）。**`glyph_stages.py`、`seed_admit.py` 改了，开着 `stages`／跑第 7 步的书代码哈希变、产物判过期**。
 - `guji seg check` 加页级检查 `gutter_ink`（A22 各书切分统一优化 U6，Sheldon 11-18 定）：网格模式（书级 `column_grid` 或 `column_grid_pages` 点名页）的正文页（闸收了过半的列），内竖线穿字分（`border_detect.gutter_ink_score`）> 0.5 报出，一页一行、col 记 `-`。只报不改切分；新书首跑就能看见「插值线整片穿字」（脉经 02 册旧包报 p15 0.89，书衣、空白页不报）。
 - 新书级开关 `row_segment.cut_repair`（缺省关、开关本身不进参数哈希；A22 各书切分统一优化 U2，Sheldon 11-18 定）：一行开史記 k24–k26、脉经照抄的切点修整串（`cut_gap_guard` 0.08、`cut_free_seam` 0.35、`cut_gap_keep_glyph`、`cut_white_row` 0.35、`cut_glyph_line` 0.35），单写的项照单写的；展开后与逐项写参数 dump 相同、指纹一致。劈字判据 `_split_glyphs` 与两个换线护栏抽进 `seg/seam.split_blobs`／`blobs_keep_sides`（常数原值，行为不变）。
@@ -36,6 +35,7 @@
 - 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时殿本 vol30、全唐文 020、史記 42 逐字节同，登 code_equiv `_FREE_SEAM_1117`。建议值 0.35。
 
 ## [未发版]
+- 册 yaml 新字段 `gaps:` 记缺页（Sheldon 11-18 定：只按图片页号记，不另立书上页号）：每条 `after_page`／`what`／`kind`（原书缺／未拍）／`est_chars`／`evidence`，`load_gaps` 校验，只许写在册 yaml。`guji export format` 有缺页的章另写 `NNN.gaps.json`（`guji-gaps/0.1`，lines.md、char.json 不动），`guji export md` 在缺处单起一行〔原书此处缺…〕。没有 Step 读它、不进任何 Step 的 `code_deps`，各书指纹不变。格式 `doc/formats/缺页.md`。
 - PATCH：`column_warp.det_warp` 缺省改开、`row_segment.cut_judge` 缺省改 `unet_f64`（A22 切分开关收敛 11-13 定，A20 11-18 转）。殿本、史記、全唐文早已显式写，`params_hash` 不变（code_equiv 已登）；没写的脉经 6 册、北行 column_warp 起过期。要旧行为写 `det_warp: false`／`cut_judge: unet`。`scripts/seg_harness.py` 认 `unet_f64`。
 - PATCH：字形库体检加「清边不变式」（OCR 研究 Project，Sheldon 11-17 要求防再犯）：`glyph_selfcheck.clean_invariant(库)` 逐例看库图（已清过边的 canonical）在匹配前再清一遍还删不删墨，删 ≥3% 记违例，占比 ≥0.2% 报警；`run_selfcheck` 开头先跑并打印，结果进 summary 的 `clean_invariant`。只读库，两三分钟。#1617 修复前全唐文 1.16% 违例、殿本史記 0，修复后三套书都是 0。不进任何 Step 的 `code_deps`，产物指纹不变。`doc/pipeline_handbook.md` 第 4 节记这条坑和三条规矩。
 
