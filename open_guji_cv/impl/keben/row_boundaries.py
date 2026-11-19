@@ -1865,6 +1865,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     straight_seam_ink: bool = False,
                     adopt_rel: float = 0.0,
                     jiazhu_cc_min: float = jiazhu_split.CC_MIN,
+                    jiazhu_span_t: float = jiazhu_split.SPAN_T,
                     grid_adjust=None,
                     jiazhu_heads=None,
                     half_a_left=None,
@@ -1986,6 +1987,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       `FREE_SEAM_MARGIN`，不限坡度），kind `glyph_line`，`chosen_by="glyph"`。离两边一样近时按墨多的那边（少的那边
       ≤`GLYPH_LINE_MAJ`）；仍拿不准、被劈块高过 `GLYPH_LINE_TALL` 格（两字粘成一块）、某列上下墨重叠，都不动。
     - `jiazhu_cc_min`（px，缺省 `jiazhu_split.CC_MIN`；2026-11-18 A22 U3）：雙行小注段噪点否决门槛，书级 `row_segment.jiazhu_cc_min`。
+    - `jiazhu_span_t`（缺省 `jiazhu_split.SPAN_T`；2026-11-19 MJ）：雙行小注单格判据的墨跨度/列距下限，书级 `row_segment.jiazhu_span_t`。
     - `adopt_rel`（倍数，0＝关；2026-11-18，脉经）：L3 扩池后绝对门槛没有可选候选、现选分歧 ≥ `ADOPT_REL_MIN` 时，
       取分歧 ≤ min(`ADOPT_REL_CAP`, adopt_rel×现选分歧) 的扩池候选（干净格线仍只换不穿墨的），见 `_adopt_expanded`。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
@@ -2155,7 +2157,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     if detect_jiazhu:
         ruler = float(ref_w) if ref_w else float(dst_w)
         entries = [
-            (p, jiazhu_split.gap_center(patches[p], ruler, ink_threshold)
+            (p, jiazhu_split.gap_center(patches[p], ruler, ink_threshold, span_t=jiazhu_span_t)
                 if p in nonblank else None)
             for p in sorted(patches)
         ]

@@ -398,6 +398,9 @@ _GRID_RESCUE_FORCE_1119 = ("border_detect grid_outer_fix 加「按版式列数�
 _EDGE_STRIP_1119 = ("border_detect 加书级参数 edge_strip（探竖线前抹掉页边书口条、抹与不抹两版挑出带少／穿字分低的；run_page 拆出 _run_page，"
                     "缺省关、不进参数 dump）：关着时脉经第 2 册 15、24、50、63 页 border_detect 与 origin/dev 5c276aa 产物逐字节相同；"
                     "scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
+_JZ_SPAN_T_1119 = ("row_segment 加书级参数 jiazhu_span_t（雙行小注单格判据跨度下限，jiazhu_split.gap_center 加 span_t、segment_column 加 jiazhu_span_t，"
+                   "缺省 0.75＝原常数、不进参数 dump）：缺省时脉经第 1 册 13、20、40 页 row_segment 与 origin/dev a205648 产物逐字节相同；"
+                   "scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -2084,6 +2087,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new='844fee294f0b7aff260394be89c64f08a6066addc82c63501773efdc0b7503f2',
           old='9fad332d6361d422ab9dbd0b475c94716b1e91ad644a15e81df27179fc34c0ef',
           evidence='seed_admit 在脉经 01 3 页（--pages 6,20,40）上与 origin/dev 产物逐字节相同'),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="8ed4c43c545066616337d5bce38f4b2d88d66b8fd7995420e7f8f3f17bebeb40",
+          old="90a4a5fe8a50a4d0a3b1bd80e68328d5405d7e58a7b2a947054d67ca670fe959",
+          evidence=_JZ_SPAN_T_1119),
+    Equiv(module="open_guji_cv.impl.keben.row_boundaries",
+          new="8d57d4feb00ea92307c893c3bce04cbe08ff24f040b20e0b1639cd3e057b5c09",
+          old="ff1538485290289410fc7a706eb3d8b861b7fb21b9d1d172703d63650505e8e6",
+          evidence=_JZ_SPAN_T_1119),
+    Equiv(module="open_guji_cv.impl.keben.jiazhu_split",
+          new="3e437917ab534ce2478cc5f559b8fac91b3e18c045d03c7268b394aae04cfa2f",
+          old="fe3d9465f14ded8062effe5cc54b89ce3f6548bf4678d02886f29396868d2a70",
+          evidence=_JZ_SPAN_T_1119),
     # v0.7.74（dev 线 patch，v0.7.73 + #1701）本线 rare_panel 哈希
     Equiv(module="open_guji_cv.clustering.rare_panel",
           new="0c533bac27ab77b83f4e3368f6420ab4d2802eb79f21308431d6a69ae685ad07",
