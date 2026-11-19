@@ -395,6 +395,9 @@ _GRID_OUTER_FIX_1118 = ("border_detect 加书级参数 grid_outer_fix（外列�
 _GRID_RESCUE_FORCE_1119 = ("border_detect grid_outer_fix 加「按版式列数强拟列宽均匀、不查旧线护栏，出带更少才采用」，pitch_rescue.rescue 加 n_lines、keep_guard 参数"
                            "（缺省 None／True 行为不变）：grid_outer_fix 关着时脉经第 2 册 15、24、50、63 页（书配置开着 grid_free_fallback、grid_outer_trim）"
                            "border_detect 与 origin/dev 16a2972 产物逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
+_EDGE_STRIP_1119 = ("border_detect 加书级参数 edge_strip（探竖线前抹掉页边书口条、抹与不抹两版挑出带少／穿字分低的；run_page 拆出 _run_page，"
+                    "缺省关、不进参数 dump）：关着时脉经第 2 册 15、24、50、63 页 border_detect 与 origin/dev 5c276aa 产物逐字节相同；"
+                    "scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
 _GRID_END_FIT = ("等距格网末线外推到末字墨外沿 grid_end_fit（row_segment 书级开关，殿本套书，缺省关；siku_zongmu.row_boundaries 加 "
                  "fit_grid_end）：开关关着时 row_segment 在殿本 vol28 新图 12 页（2,11,27,44,62,92,100,116,130,150,166,186；基底产物包 r8）"
                  "上与 origin/dev 5ed735d 产物逐字节相同，另 vol28/49/89 整册 cell_shrink 与 r8 包 char_index 逐字节相同；"
@@ -2070,6 +2073,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="84455fc813eefa560dead835acc262242eb312b773927b9fff11d8e469959379",
           old="f65058caf059fff6dbf2dde610a1086a027672532a920d500eb62b1c3b1ac472",
           evidence=_LIB_TIER_1118),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="b2712a678431ec3cd412257e09f365c68203783aa7283ca82590fd829d0cf566",
+          old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
+          evidence=_EDGE_STRIP_1119),
     # 无参校本页 no_ref_pages／no_ref_params（脉经 林億序、牒文，2026-11-19）：两个字段缺省空、不进 dump，没配的书逐字节不变
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='844fee294f0b7aff260394be89c64f08a6066addc82c63501773efdc0b7503f2',

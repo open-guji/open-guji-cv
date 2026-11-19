@@ -68,6 +68,42 @@ def gutter_ink_score(res, gray, ink_threshold: int = 128) -> float:
     return float(np.mean(near)) / page
 
 
+#: `edge_strip`：书口条判据。天头（页高前 `EDGE_TOP` 比例）里逐列墨比例 > `EDGE_INK` 算书口条墨；从页边往里走，
+#: 先放过页边留白 `EDGE_SKIP` px（墨层 `edge_margin` 清过的那一圈），连续 `EDGE_GAP` px 不是书口条墨就停；最多走页宽的 `EDGE_SIDE`。
+EDGE_TOP, EDGE_INK, EDGE_SKIP, EDGE_GAP, EDGE_SIDE = 0.06, 0.5, 40, 12, 0.07
+
+
+def strip_page_edge(gray, ink_threshold: int = 128):
+    """把页边的书口条（叠着的书页边缘，二值后成一束贯穿天头到地脚的竖黑条）抹白，返回 (新图, 左抹宽, 右抹宽)。
+
+    真版框线只在上下版框之间，天头没有；书口条从天头一直通到页底，二值化以后比细内框线更像「框」，网格模式会把外框
+    定在书口边上、内插线整片偏（脉经 03 p42：真内框 x≈2366，网格框到 2428；03 p46 右边 5 条线跟着偏）。只抹页边
+    连着的那一束，天头有零星墨、脏页不会一路抹进版心（脉经各册末页书衣实测）。"""
+    import numpy as np
+    H, W = gray.shape[:2]
+    f = (gray[: max(1, int(H * EDGE_TOP))] < ink_threshold).mean(0)
+    lim = int(W * EDGE_SIDE)
+    out, cut = gray, [0, 0]
+    for side in (0, 1):
+        xs = range(0, lim) if side == 0 else range(W - 1, W - 1 - lim, -1)
+        last, miss = None, -EDGE_SKIP
+        for x in xs:
+            if f[x] > EDGE_INK:
+                last, miss = x, 0
+            else:
+                miss += 1
+                if miss > EDGE_GAP:
+                    break
+        if last is not None:
+            if out is gray:
+                out = gray.copy()
+            if side == 0:
+                out[:, : last + 1] = 255; cut[0] = last + 1
+            else:
+                out[:, last:] = 255; cut[1] = W - last
+    return out, cut[0], cut[1]
+
+
 #: 页级网格页上，最外一列比内列中位窄到这个比例以下，就把外框线按中位列距往外推。
 OUTER_NARROW_FRAC = 0.8
 
@@ -361,6 +397,10 @@ class BorderDetectParams(BaseModel):
     外侧那条线、在另一侧找版框补一列（`fix_outer_sliver`）；②开了 `grid_outer_trim` 的，收外框线挪到这一步做，
     而且找不到细线时只在落点是字缝的情况下按列距平移（外列本来就宽、是版框留白的不收）。脉经 02 p15（左边版框内白边
     多一条线、右边整列落在网外）、02 p24（换线后右线落在书口上），2026-11-18 用户指出。缺省关，不进参数 dump。"""
+    edge_strip: bool = False
+    """探竖线之前先把页边书口条抹白（`strip_page_edge`）：书口条从天头通到页底，二值化（册 `ink`）后成一束竖黑条，
+    比细内框线更像框，把外框吸到书口边（脉经 03 p42、03 p46，2026-11-19 用户指出、A22 定位）。只给 `detect_borders`
+    用，穿字分、外框修整等仍看原图。缺省关，不进参数 dump。"""
     pitch_rescue: bool = True
     """列距救援（`impl/keben/pitch_rescue`，2026-10-23 sheldon 定缺省开）：自由模式探出的页上有一条列
     < 0.7 × 中位列宽（多挑了假竖线、外侧一整列落到网外）时，先用网格模式重探，选不出版框对再
@@ -441,6 +481,8 @@ class BorderDetectParams(BaseModel):
             d.pop("grid_free_fallback", None)
         if isinstance(d, dict) and not self.grid_outer_fix:
             d.pop("grid_outer_fix", None)
+        if isinstance(d, dict) and not self.edge_strip:
+            d.pop("edge_strip", None)
         if isinstance(d, dict) and not self.grid_lattice_fallback:
             d.pop("grid_lattice_fallback", None)
         if isinstance(d, dict) and self.head_raise_scale == 1.0:
@@ -493,8 +535,33 @@ class BorderDetectStep(Step):
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: BorderDetectParams = ctx.params_for(self)  # type: ignore[assignment]
+        if not p.edge_strip:
+            return self._run_page(ctx, page, None)
+        gray = ctx.raw_page(page)
+        stripped, cut_l, cut_r = strip_page_edge(gray, p.ink_threshold)
+        if not (cut_l or cut_r):
+            return self._run_page(ctx, page, None)
+        # 抹了书口条的一版与原样一版都跑，挑出带列少的；一样多时挑穿字分低的（都在原图上量）。书口紧贴版框的页
+        # 抹的时候会连版框线一起抹掉（脉经 02 p24），所以不能抹了就用。
+        a = self._run_page(ctx, page, None)
+        b = self._run_page(ctx, page, stripped)
+
+        def _key(out):
+            n_bad = sum(1 for ln in out["line_index"].lines if any(f.startswith(COL_WIDTH_FLAG) for f in ln.flags))
+            return n_bad, round(gutter_ink_score(out["borders"].to_result(), gray, p.ink_threshold), 2)
+        if _key(b) < _key(a):
+            for ln in b["line_index"].lines:
+                ln.flags.append(f"edge_strip：探竖线前抹掉页边书口条（左 {cut_l}px、右 {cut_r}px）")
+            return b
+        return a
+
+    def _run_page(self, ctx: RunContext, page: int, gray_det) -> dict[str, BaseModel]:
+        """`gray_det`：给 `detect_borders` 用的图（`edge_strip` 抹过书口条的那张）；None＝原图。"""
+        p: BorderDetectParams = ctx.params_for(self)  # type: ignore[assignment]
         cols = p.expected_cols_pages.get(page) or p.expected_cols or ctx.book.expected_cols
         gray = ctx.raw_page(page)
+        if gray_det is None:
+            gray_det = gray
         H, W = gray.shape[:2]
         grid = ctx.book.column_grid
         col_pitch = ctx.book.col_pitch
@@ -515,7 +582,7 @@ class BorderDetectStep(Step):
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
         def _detect(n_cols: int, grid: bool = grid, col_pitch=col_pitch):
-            return detect_borders(gray, expected_cols=n_cols, ink_threshold=p.ink_threshold,
+            return detect_borders(gray_det, expected_cols=n_cols, ink_threshold=p.ink_threshold,
                                   book_bottom_gap=ctx.book.bottom_gap,
                                   top_band_frac=ctx.book.top_band_frac,
                                   bottom_band_frac=ctx.book.bottom_band_frac,
