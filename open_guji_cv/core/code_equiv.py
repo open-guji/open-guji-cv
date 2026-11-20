@@ -479,6 +479,12 @@ _HOU_1120 = ("seed_admit 加书级刻形判法 group_flow_hou_shape（#1729，9d
              "填了才进参数指纹 hs…；path_params 剔掉）：没配置时 _hou_shape_pass 不调，_codepoint_exempt 多的一句查 evidence.hou_shape 恒不中。"
              "全唐文 029 册全册 170 页（main 包 cv0.7.74-c81-g-03c8f4-k11-qtw029-d2-a3 当上游，中心库 rev 1382154 尚无 hou_shape.json）seed_admit 与 origin/dev 0aaeb8f9 产物逐字节相同；"
              "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-20（A31）。放了 hou_shape.json 的书按参数指纹自然过期")
+_NOTCH_1120 = ("border_detect 加 head_raise_notch（缺口列认主上框，impl/keben/border.notch_top；缺省关、不进参数 dump，detect_borders 多一个缺省 False 的参数、"
+               "关时那一支不进；其余是新函数定义）：殿本 vol24 16 页（1,5,10,15,20,26,27,30,35,40,45,50,55,60,65,70，含缺口页 p27；main 包 cv0.7.70-c36-g24-m3-r14var 当上游）、"
+               "vol28 13 页（1,4,5,8,9,10,17,22,40,80,120,160,190，含缺口页 4/5/8/9/10/17/22；main 包 cv0.7.70-c36-g24-m3-r14cells 当上游）border_detect 与 origin/dev ced51c3 "
+               "产物逐字节相同；column_warp 只调 impl/keben/border 里没改的函数；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-20（A22）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2253,6 +2259,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="4610aef1ffe32454a5737fcd5c89bd6148a491ee760f52a76b7fe93eab26df76",
           old="d84d35465efc3d3d9cdfe797bedc93caa11e183f7f4a7a5616da55c45c35ff56",
           evidence=_HOU_DEP_1120),
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='e613abc41845b51b0853ef849dec2ec43cb8597f2f59523259c6a3ef07c7d929',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_NOTCH_1120),
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='dcc3f23d5ce58621db0a8bb9be9c6fc360cdbe86a2c5abacb42ba97fd4177352',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_NOTCH_1120),
 )
 
 
