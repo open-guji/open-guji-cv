@@ -6,6 +6,10 @@
 
 ## [未发版]
 
+## [0.7.81] - 2026-11-20
+
+- 发版说明（全唐文·形近字线 11-20，**全唐文 patch 线**，PATCH；用户 11-20 定各书自发 patch 版）：v0.7.74 + #1729（seed_admit 候𠋫 书级刻形判法 `group_flow_hou_shape`，`groups/hou_shape.py`；cherry-pick f249d335，path_params 冲突手解：本线只加 `group_flow_hou_shape`），不含 v0.7.74 之后 dev 上的其他改动。#1737 的 code_equiv 登记是 dev 线哈希，本线不适用、未带。**Step 指纹对 v0.7.74 只有 `seed_admit` 变**（91ee5d84→06b1760b，未登 code_equiv：没跑产物比对；全唐文随后推 `config/groups/hou_shape.json`，seed_admit 本来就要整体重落），下游随之过期。底库不变（b30）。
+
 ## [0.7.74] - 2026-11-19
 
 - 发版说明（A31 11-19，**dev 线 patch**，PATCH；全唐文·总览请求，Sheldon 已批全唐文开）：v0.7.73 + #1701（5-b 库字档 `font.charset.lib_chars`：本书字形库人裁过、5-b 给不出来的字另开一档进候选；缺省关；cherry-pick eef4214），不含 v0.7.73 之后 dev 上的其他改动（#1684 stroke_evidence 等）。code_equiv：cnn_candidates 照 #1701 原登记；rare_panel 按本线哈希重登（本线未另跑产物比对，dev 上证据为全唐文 010 全册逐字节同）。**Step 指纹对 v0.7.73 全不变**；开了 `lib_chars` 的册 rare_candidates 指纹多带库内容指纹，按此过期。底库不变（b30）。
