@@ -708,3 +708,16 @@ def test_figure_ruling_counts_as_landed():
     assert rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "unk": "无法识别"}})
     assert not rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "source": "vision"}})
     assert not rp.figure_ruling({"kind": "confirm", "payload": {"v": "confirm", "shape": "甲"}})
+
+
+def test_no_cell_sprite_writes_site_boxes(tmp_path, monkeypatch):
+    """--no-cell-sprite（11-20）：不出格图，单上每格补网站坐标 box（已有的不动），没相似字不出 assets。"""
+    doc = {"rev": "r9", "cells": [{"cell": "1:1:1", "c": "日"}, {"cell": "1:1:2", "c": "曰", "box": [1, 2, 3, 4]},
+                                  {"cell": "1:1:3", "c": "人"}]}
+    pub = tmp_path / "001.pending.json"
+    pub.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(rp, "site_boxes", lambda cord: {"1:1:1": [10, 20, 30, 40], "1:1:2": [9, 9, 9, 9]})
+    final = rp.no_cell_sprite(pub, tmp_path / "x.cord.json", tmp_path / "sp", "001", "python")
+    out = json.loads(final.read_text(encoding="utf-8"))
+    assert [c.get("box") for c in out["cells"]] == [[10, 20, 30, 40], [1, 2, 3, 4], None]
+    assert not (tmp_path / "sp" / "assets.json").exists()
