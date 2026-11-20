@@ -73,6 +73,9 @@ _VN_HOOK_0738 = (_VN_HOOK_1115 + "。v0.7.38（史記 patch 线，v0.7.33 + #155
 _PT_1115 = ("seed_admit 书级部件刻形判法 group_flow_part_shape（缺省空、不自动找文件、没填就不跑；模型指纹只在填了时进指纹；groups/part_shape 是新模块）："
             "全唐文 m1 包（cv0.7.10-c65-g-9f3d37-k5-qtw037-m1／qtw076-m1）037 册 4 页（seed_admit 实际跑通的页）＋076 册 12 页（3,20,48,55,65,68,69,92,93,100,120,149）"
             "seed_admit 与 origin/dev e7ce8f26 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-15（全唐文·码位线）")
+_LV_1120 = ("seed_admit lane_lib_veto_pairs（库否决名单内异体对改放库首位的形；缺省空、不进参数 dump；只在 lane_lib_veto 开且名单非空时走）："
+            "全唐文 029 册 d2 包（cv0.7.74-c81-g-03c8f4-k11-qtw029-d2-a3）9 页（5,20,40,60,80,100,120,140,160）seed_admit 与 origin/dev e39e030a 产物逐字节相同；"
+            "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-19（全唐文·码位线）")
 _RF_1113 = ("seed_admit group_flow_ruling_first（书级，缺省空不进参数 dump；Chain._ruling_first 名单外直接返回 (None, None)、ask_rf 只在名单内记）：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）40 页 seed_admit 与 origin/dev 69711fa 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-13（全唐文·形近字线）")
 _FR_HOOK_1113 = ("seed_admit follow_ref 加书级钩子 impl/keben/follow_ref_hooks.rival_skip（缺省 None，不调；follow_ref_decide 加 rival_skip "
                  "参数缺省空集，max 的过滤条件多一个恒真项）、新函数 _RivalFacts／_pair_facts／_follow_ref_rival_hook（只在钩子非 None 时用）："
@@ -2160,6 +2163,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="c35cb14a7728d4ccb99ebd5ef61b479195eed3a95041002ad9cd303e88193320",
           old="64d25e9fcecdaca35dda2a900cb9f526df248aeaaf5f7e2d6d8802aa25d5a47d",
           evidence=_ALT_BACKED_1119),
+    # seed_admit lane_lib_veto_pairs：库否决的照刻形例外（缺省空；全唐文码位线 11-19）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='3e10a0815acfbacff5f892840eb7bcfadd82f5f133f12f7b7166e0366387bdbb',
+          old='64d25e9fcecdaca35dda2a900cb9f526df248aeaaf5f7e2d6d8802aa25d5a47d',
+          evidence=_LV_1120),
 )
 
 
