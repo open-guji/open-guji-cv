@@ -169,6 +169,10 @@ def test_admit_mode_pick_and_merge():
     for r in weak.chars[:9]:
         r.channel = "witnesses_coord"
     assert _pick_alt_cols([1], main, PageAdmit(page=1, columns=[weak, col(2, 5, 5)]), ref, ref, None, None) == []
+    # alt_backed_gain：待审只少 1 格、背书多 ≥1 也换（缺省 0 不换；脉经 01 10:2）
+    assert _pick_alt_cols([2], main, alt, ref, ref, None, None, backed_gain=1) == [2]
+    assert _pick_alt_cols([2], main, alt, ref, ref, None, None, backed_gain=2) == []
+    assert _pick_alt_cols([2], main, PageAdmit(page=1, columns=[col(2, 4, 5)]), ref, ref, None, None, backed_gain=1) == []
 
 
 def test_admit_mode_p_ref_is_ordinary_admit_in_stats():
@@ -253,3 +257,52 @@ def test_alt_cut_rev_only_in_dump_when_on():
     from open_guji_cv.steps.row_segment import ALT_CUT_REV, RowSegmentParams
     assert "alt_cut_rev" not in RowSegmentParams().model_dump()
     assert RowSegmentParams(alt_cut=True).model_dump()["alt_cut_rev"] == ALT_CUT_REV
+
+
+# ── 不分行参照（text）页按列挑备选、alt_nojz（2026-11-19 脉经，GUJI-774）──────────────────────
+
+def test_text_mode_pick_by_equal_count_and_admit_rate():
+    """ref_kind="text"：没有坐标字。备选那份 equal 多 ≥2、待审不多就换（半字也放行，只比待审挑不出）；
+    放行率比主切法低 5 个点以上不换（整列真小注换成大字格，格少待审也少）。"""
+    from open_guji_cv.products.kinds.recog import AdmitRec, AlignRec, ColumnAdmit, PageAdmit, PageAlignRef
+    from open_guji_cv.steps.seed_admit import _pick_alt_cols
+
+    def col(n_ok, n_rev):
+        recs = [AdmitRec(id=f"b:1:3:{i + 1}", slot=i + 1, admit=True, channel="match_ref", char="甲") for i in range(n_ok)]
+        recs += [AdmitRec(id=f"b:1:3:{n_ok + i + 1}", slot=n_ok + i + 1) for i in range(n_rev)]
+        return ColumnAdmit(col=3, chars=recs)
+
+    def ref(n_eq):
+        return PageAlignRef(page=1, ref_kind="text", chars=[
+            AlignRec(id=f"b:1:3:{i + 1}", col=3, slot=i + 1, align_char="甲", align_op="equal") for i in range(n_eq)])
+    main = PageAdmit(page=1, columns=[col(19, 3)])     # 大字劈成半字照样放行：待审 3
+    alt = PageAdmit(page=1, columns=[col(18, 2)])      # 待审只少 1，按待审不换
+    assert _pick_alt_cols([3], main, alt, PageAlignRef(page=1), PageAlignRef(page=1), None, None) == []
+    assert _pick_alt_cols([3], main, alt, ref(11), ref(15), None, None) == [3]
+    assert _pick_alt_cols([3], main, alt, ref(14), ref(15), None, None) == []        # equal 只多 1
+    # 放行率掉了（13/40 → 0/20）：哪条路都不换
+    main2, alt2 = PageAdmit(page=1, columns=[col(13, 27)]), PageAdmit(page=1, columns=[col(0, 20)])
+    assert _pick_alt_cols([3], main2, alt2, ref(5), ref(9), None, None) == []
+
+
+def test_alt_text_ok_and_merge_alt_text_chars():
+    from types import SimpleNamespace as NS
+    from open_guji_cv.products.alt_view import with_alt_ref
+    from open_guji_cv.products.kinds.recog import AlignRec, AltDraft, PageAlignRef
+    from open_guji_cv.steps.align_ref import _alt_text_ok
+    hi, lo = NS(cov=0.99, cand_variants=[]), NS(cov=0.5, cand_variants=[])
+    assert _alt_text_ok([hi] * 20 + [lo] * 2, [hi] * 18 + [lo] * 2)       # 0.909 → 0.90：差不到 5 个点
+    assert not _alt_text_ok([hi] * 20, [hi] * 10 + [lo] * 10)
+    assert not _alt_text_ok([], [hi])
+    rec = lambda c, s, ch: AlignRec(id=f"b:1:{c}:{s}", col=c, slot=s, align_char=ch, align_op="equal")  # noqa: E731
+    ref = PageAlignRef(page=1, ref_kind="text", chars=[rec(1, 1, "甲"), rec(2, 1, "乙")], alt_cand=[2],
+                       alt_draft=AltDraft(chars=[rec(2, 1, "丙"), rec(2, 2, "丁")]))
+    v = with_alt_ref(ref, {2})
+    assert [(r.col, r.align_char) for r in v.chars] == [(1, "甲"), (2, "丙"), (2, "丁")]
+    assert "chars" not in AltDraft().model_dump()                            # 坐标页草稿不落 chars
+
+
+def test_alt_nojz_param_off_by_default_not_in_dump():
+    from open_guji_cv.steps.row_segment import RowSegmentParams
+    assert "alt_nojz" not in RowSegmentParams(cut_judge="rule").model_dump()
+    assert RowSegmentParams(cut_judge="rule", alt_nojz=True).model_dump()["alt_nojz"] is True
