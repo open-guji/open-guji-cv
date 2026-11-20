@@ -1014,10 +1014,7 @@ def cmd_binarize(args) -> None:
                               window=args.window, k=args.k)
     print(json.dumps({"book": book.id, "pages": len(pages), "written": len(written),
                       "dir": str(binarized_root() / book.id),
-                      "window": args.window, "k": args.k,
-                      # 写了 ink 的册按册的墨层出（`--window/--k` 不起作用），见 utils/ink.py
-                      "ink": (book.ink.token() if getattr(book, "ink", None) is not None else None)},
-                     ensure_ascii=False))
+                      "window": args.window, "k": args.k}, ensure_ascii=False))
 
 
 def cmd_preclean(args) -> None:

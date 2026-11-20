@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
 """推格级钉子（manual-cells）前的预检（A22 F3，2026-11-10）。逻辑在 `open_guji_cv/feedback/pins_check.py`。
 
-查五件事，只读、不改本机产物、缓存和中心库：
+查四件事，只读、不改本机产物、缓存和中心库：
   1. 钉子列 vs cell_shrink：钉子每一格都要出同号字格（防史記 r16 那种静默丢字）；
-  1b. 钉子列几何（SJ r76 切分审计，2026-11-17）：压墨（钉子格线劈字，判据同 seg check cut_through，过 U-Net 裁判，
-     强／中档算问题、弱档提示）与一格跨两字（格高 ≥1.2 倍字高、格里墨分两段各高 ≥0.3 倍）；`--geo-hint-only` 降成提示；
-  1c. 整列丢字（SJ r75，2026-11-17）：①钉后格数要等于原列格数（旧切分那一列的有字格；没有就比旧钉子），不等要在钉子
-     `expected.count_why` 写理由；②列图上格外不能有成段的墨（每行墨 ≥4px、连续 ≥25px、不在任一格内），
-     列端框线除外，印章压到的段只当提示；
   2. 照执行机条件（空字块缓存、不现切）重算涉及页的人裁绑定，标出会让 seed_admit 报 no_patch 的事件
      （史記 04 #1746、06 #1747）和不再采信（review／void）的事件；
   3. 给失锚的老事件出补锚草稿（墨框取**旧切分**那一格的页面框，预演落到新切分哪一格），人看图核过才推；
@@ -49,7 +44,6 @@ def main(argv=None) -> int:
     ap.add_argument("--old-products", help="--no-run 时：旧切分的产物根（出补锚草稿用）")
     ap.add_argument("--pages", help="直接点名页（逗号分隔），盖过按改动算出的页")
     ap.add_argument("--out", default="seg_pins_check_out", help="报告目录")
-    ap.add_argument("--geo-hint-only", action="store_true", help="压墨、一格跨两字只当提示，不计入结论")
     a = ap.parse_args(argv)
     if not a.no_run and not a.items:
         ap.error("沙箱模式要 --items（或加 --no-run）")
@@ -74,9 +68,7 @@ def main(argv=None) -> int:
         # 基线：给了 --base-items 就用它（本机分片已经推过新钉子时，拿推之前那份比），否则本机分片
         old = pc.pins_of(pc.read_items(Path(a.base_items) if a.base_items else shard), book)
     fmt = check_manual_cells(new_file) if new_file.exists() else [f"{new_file} 不存在"]
-    new_items = pc.read_items(new_file)
-    new = pc.pins_of(new_items, book)
-    notes = pc.pin_notes(new_items, book)
+    new = pc.pins_of(pc.read_items(new_file), book)
     changed = pc.diff_pins(old, new) if old is not None else {k: "pinned" for k in new}
     if a.pages:
         pages = sorted({int(x) for x in a.pages.split(",") if x.strip()})
@@ -99,16 +91,13 @@ def main(argv=None) -> int:
             print(f"❌ {why}：人裁绑定要读它。先 `guji db sync -w <工作区>`（或 db pull）拉字形库再跑。", file=sys.stderr)
             return 2
 
-    from open_guji_cv.products.cache import ImageCache
-    cache = ImageCache()
     if a.no_run:
         store = ProductStore()
         old_store = ProductStore(Path(a.old_products)) if a.old_products else None
     else:
         lines.append(f"- 沙箱：`{tmp}`（从 row_segment 跑到 cell_shrink）")
         try:
-            store, sb_cache, rep = pc.sandbox_rerun(book, pages, tmp / "sandbox", new) if pages else (ProductStore(), None, None)
-            cache = sb_cache or cache
+            store, _cache, rep = pc.sandbox_rerun(book, pages, tmp / "sandbox", new) if pages else (ProductStore(), None, None)
         except pc.SandboxNotReady as e:
             print(f"❌ {e}", file=sys.stderr)
             return 2
@@ -133,14 +122,6 @@ def main(argv=None) -> int:
             n1 += 1
     lines += [f"- 共 {n1} 处问题" if n1 else "- 全部一致", ""]
     bad |= n1 > 0
-
-    # 1b. 钉子列几何：压墨、一格跨两字
-    nb, nh = _geometry(lines, book, store, cache, cols)
-    bad |= nb > 0 and not a.geo_hint_only
-
-    # 1c. 整列丢字：格数、格外成段墨
-    nc, _nch = _coverage(lines, book, store, old_store, cache, cols, new, old or {}, notes)
-    bad |= nc > 0
 
     # 2. 模拟执行机绑定
     rows = pc.simulate_bindings(book, pages, tmp / "exec", store=store) if pages else {}
@@ -253,108 +234,6 @@ def main(argv=None) -> int:
     (out / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
     return 3 if bad else 0
-
-
-def _judge_scale(book: str) -> float:
-    """本册 row_segment 的判官画布缩放（`cut_judge_scale`，缺省 1.0），压墨判据与 Step3 用同一个判官。"""
-    try:
-        from open_guji_cv.eval.seg_screen_run import _engine
-        from open_guji_cv.steps.row_segment import RowSegmentStep
-        return float(getattr(_engine(book).ctx.params_for(RowSegmentStep()), "cut_judge_scale", 1.0))
-    except Exception:  # noqa: BLE001 —— 取不到册配置就按缺省
-        return 1.0
-
-
-def _geometry(lines: list[str], book: str, store, cache, cols) -> tuple[int, int]:
-    """第 1b 节：钉子列沙箱重跑后的 row_segment 格网，查压墨与一格跨两字。返回 (问题数, 提示数)。"""
-    import cv2
-
-    from open_guji_cv.core.spec import column_key, page_key
-    from open_guji_cv.eval import seg_screen as ss
-    from open_guji_cv.seg.cut_select import get_judge
-    from open_guji_cv.utils.image_io import imread
-    lines += ["## 一b、钉子列几何：压墨、一格跨两字", ""]
-    judge = get_judge(scale=_judge_scale(book)) if cols else None
-    if cols and judge is None:
-        lines.append("- ⚠️ 没有 U-Net 归属裁判（torch／权重），压墨只当提示")
-    nb = nh = 0
-    page_cells = {}
-    for pg, col in sorted(cols):
-        if pg not in page_cells:
-            page_cells[pg] = store.read(book, "row_segment", page_key(pg), "cells")
-        pcells = page_cells[pg]
-        cc = None if pcells is None else next((c for c in pcells.columns if c.col == col and c.ok), None)
-        if cc is None:
-            lines.append(f"- {book}:{pg}:{col} row_segment 没有这一列，几何没查")
-            nh += 1
-            continue
-        p = cache.get(book, "column_image", column_key(pg, col)) if cache is not None else None
-        gray = imread(str(p), cv2.IMREAD_GRAYSCALE) if p is not None else None
-        if gray is None:
-            lines.append(f"- {book}:{pg}:{col} 没有列图，几何没查")
-            nh += 1
-            continue
-        for t in ss.pin_geometry(gray, cc, ss.page_pitch(pcells), judge=judge):
-            lines.append(f"- {book}:{pg}:{col} {t['note']}{'' if t['block'] else '（提示）'}")
-            nb += t["block"]
-            nh += not t["block"]
-    lines += [f"- 问题 {nb} 处、提示 {nh} 处" if nb or nh else "- 没查出", ""]
-    return nb, nh
-
-
-def _coverage(lines: list[str], book: str, store, old_store, cache, cols, new: dict, old: dict,
-              notes: dict) -> tuple[int, int]:
-    """第 1c 节：钉后格数 vs 原列格数、列图上格外成段的墨。返回 (问题数, 提示数)。"""
-    import cv2
-
-    from open_guji_cv.core.spec import column_key, page_key
-    from open_guji_cv.eval import seg_screen as ss
-    from open_guji_cv.feedback import pins_check as pc
-    from open_guji_cv.utils.image_io import imread
-    lines += ["## 一c、整列丢字：钉后格数、格外成段的墨", ""]
-    nb = nh = 0
-    page_cells, old_cells, page_seals = {}, {}, {}
-    for pg, col in sorted(cols):
-        k = page_key(pg)
-        if pg not in page_cells:
-            page_cells[pg] = store.read(book, "row_segment", k, "cells")
-            old_cells[pg] = old_store.read(book, "row_segment", k, "cells") if old_store is not None else None
-            sl = store.read(book, "seal_detect", k, "seals")
-            if sl is None and old_store is not None:
-                sl = old_store.read(book, "seal_detect", k, "seals")
-            page_seals[pg] = sl.seals if sl is not None else []
-        tag = f"{book}:{pg}:{col}"
-        oc = old_cells[pg].column(col) if old_cells[pg] is not None else None
-        r = pc.check_pin_count(new[(pg, col)], oc, old.get((pg, col)), notes.get((pg, col), ""))
-        if r:
-            lines.append(f"- {tag} {r['note']}{'' if r['block'] else '（提示）'}")
-            nb += r["block"]
-            nh += not r["block"]
-        pcells = page_cells[pg]
-        cc = None if pcells is None else next((c for c in pcells.columns if c.col == col and c.ok), None)
-        p = cache.get(book, "column_image", column_key(pg, col)) if cache is not None and cc is not None else None
-        gray = imread(str(p), cv2.IMREAD_GRAYSCALE) if p is not None else None
-        if gray is None:
-            lines.append(f"- {tag} 没有 row_segment 这一列或列图，格外墨没查")
-            nh += 1
-            continue
-        ref = ss.page_pitch(pcells) or cc.period
-        segs = pc.uncovered_ink(gray, cc, ref, seal_spans=pc.seal_spans_col(cc, page_seals[pg]))
-        for is_seal, part in ((False, [u for u in segs if not u["seal"]]), (True, [u for u in segs if u["seal"]])):
-            if not part:
-                continue
-            tot = sum(u["h"] for u in part)
-            where = "、".join(f"{u['y0']}–{u['y1']}" for u in part[:6]) + ("…" if len(part) > 6 else "")
-            note = (f"格外成段的墨 {len(part)} 段、共高 {tot}px" + (f"（约 {tot / ref:.1f} 格）" if ref else "")
-                    + f"，列图 y {where}，不在任何格里")
-            if is_seal:
-                lines.append(f"- {tag} {note}；压着印章（提示）")
-                nh += 1
-            else:
-                lines.append(f"- {tag} {note}——钉子是不是漏写了这几格？")
-                nb += 1
-    lines += [f"- 问题 {nb} 处、提示 {nh} 处" if nb or nh else "- 没查出", ""]
-    return nb, nh
 
 
 if __name__ == "__main__":

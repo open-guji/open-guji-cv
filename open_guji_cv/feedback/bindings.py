@@ -698,8 +698,7 @@ def usable(row: dict | None, event_ts: str | None = None) -> str | None:
 
 
 def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
-                          lost: dict[str, dict] | None = None,
-                          relabeled_at: dict[str, str] | None = None) -> dict[str, str]:
+                          lost: dict[str, dict] | None = None) -> dict[str, str]:
     """字形库人裁（`seed_admit._human_shapes`，按入库时的编号）→ 现在该落的编号。
 
     以该编号**最后一条**裁决事件的绑定状态为准：仍有效照旧、顺移了改绑、其余丢掉。
@@ -708,14 +707,7 @@ def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
     库里有而事件日志里没有的（很老的数据）原样保留——没有依据就不动，与 09-25 之前一致。
     传 `lost`（空 dict）时，因绑定不可用而丢掉的那些按原编号记进去（同 `lookup.human_chars` 的 `lost`）；
     「人后来改判」那种不算丢。
-
-    `relabeled_at`（2026-11-18）：`{编号: 入库时刻}`，只含库内审阅改标（`glyph_audit relabel`）重进的人裁刻例。
-    改标时旧人裁事件被作废（`stale_verdicts.tsv`），而改标本身不是 confirm 事件：以前这里见「作废之后没有再裁」
-    就把库里**新改的字**也丢了，又因「最后一条裁决的字与库里不同」再丢一次——改标永远进不了文本，机器照旧放行旧字
-    （全唐文 b3 整轮重算后仍有 10 格：侯 被放成 𠋫、𡽪 被放成 徽）。作废时刻当时或之后改标重进的，库里这份就是最新的人裁：
-    不算作废、不因旧事件的字不同而丢；落在哪一格仍照绑定表。
     """
-    relabeled_at = relabeled_at or {}
     try:
         b = book_bindings(book, log)
     except Exception:
@@ -731,9 +723,7 @@ def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
         stale = {}
     for k, ch in shapes.items():
         r = latest.get(k) if k.startswith(book + ":") else None
-        at = "".join(c for c in (relabeled_at.get(k) or "")[:16] if c not in "-:")     # 20261118T0637
-        fresh = bool(at) and k in stale and at[:len(stale[k])] >= stale[k]
-        if k in stale and not fresh:
+        if k in stale:
             # 作废标记（字形库 human_stale_* 或 stale_verdicts.tsv）：撤下时刻之后没有再裁的，库里这份不再算人裁。
             # 否则重绑只看「该格号最新事件的锚」，误锚的人裁会在重绑后落到别的格（vol01 182:9:15a 变「宅」，11-13）。
             st = stale[k]
@@ -744,7 +734,7 @@ def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
         if r is None:
             out[k] = ch
             continue
-        if r.get("shape") and r["shape"] != ch and not fresh:
+        if r.get("shape") and r["shape"] != ch:
             continue       # 库里是旧裁决，之后人改判了：让事件那条路（human_chars）给新字，库里这份作废
         nk = usable(r)
         if nk:

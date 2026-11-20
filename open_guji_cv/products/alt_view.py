@@ -69,9 +69,7 @@ def merge_alt(res, draft, cols) -> None:
             return int(rid.split(":")[2])
         except (IndexError, ValueError):
             return None
-    # 不分行参照（text）的草稿带备选那份的 8-gram 对位字（`AltDraft.chars`）；坐标对位的草稿没有，照旧只删
-    res.chars = ([c for c in res.chars if c.col not in ch]
-                 + [c for c in (getattr(draft, "chars", None) or []) if c.col in ch])
+    res.chars = [c for c in res.chars if c.col not in ch]
     res.coord = sorted([r for r in res.coord if r.col not in ch] + [r for r in draft.coord if r.col in ch],
                        key=lambda r: (r.col, r.slot, r.sub or ""))
     res.coord_cols = sorted({c for c in res.coord_cols if c not in ch} | {c for c in draft.coord_cols if c in ch})
