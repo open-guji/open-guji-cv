@@ -465,6 +465,10 @@ _ROSTER_GRID_MANUAL_1120 = ("roster_grid_slots 跟进（缺省关时不走）：
                             "scripts/code_equiv.py check，2026-11-20（A22，回 ZM／A20 #1726 下游问题）")
 _ROSTER_GRID_MANUAL_0779 = (_ROSTER_GRID_MANUAL_1120 + "。殿本 patch 线移植（v0.7.78 + #1731 → v0.7.79）：原样 cherry-pick，row_segment、roster_segment"
                             "哈希按本线重算、old 取 #1726 之前的本线哈希（v0.7.77），本线未另跑产物比对（A31 2026-11-20）")
+_SHAPE_FIRST_1120 = ("seed_admit 加书级开关 lane_shape_first（#1734，795e71e6；缺省空串关、不进参数 dump，path_params 里多一项空串照样剔掉）：关时三处改动全短路——"
+                     "witness3 lib_variant 分支调 _shape_first_lib，首句 `if not (p.lane_shape_first …)` 即返回 None，走原 lane_skip；"
+                     "coord_fallback 库否决多的 `or (p.lane_shape_first and …)` 恒假；lane_variant_guard 条件多的 `and not (p.lane_shape_first and …)` 恒真；"
+                     "model_post_init 新分支不进；其余是新函数定义（只在开着时调）。代码证明等价，未另跑产物比对（审查侧 11-20 报缺口，A31 2026-11-20）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2215,6 +2219,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="fc15397166ed7ef394d621c084b6313d16306d1b67cb0c94505fc408a4c647af",
           old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
           evidence=_ROSTER_GRID_MANUAL_0779),
+    # seed_admit lane_shape_first：witness3／coord_fallback 对刻形同字异形放库形（缺省关；形近字线 11-20，#1734）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="182de6ff72acd4a853d85c04bac395a45a5ab5b49c461e1f7d007c9a587388cf",
+          old="3e10a0815acfbacff5f892840eb7bcfadd82f5f133f12f7b7166e0366387bdbb",
+          evidence=_SHAPE_FIRST_1120),
 )
 
 
