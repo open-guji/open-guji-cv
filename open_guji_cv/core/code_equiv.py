@@ -469,6 +469,9 @@ _SHAPE_FIRST_1120 = ("seed_admit 加书级开关 lane_shape_first（#1734，795e
                      "witness3 lib_variant 分支调 _shape_first_lib，首句 `if not (p.lane_shape_first …)` 即返回 None，走原 lane_skip；"
                      "coord_fallback 库否决多的 `or (p.lane_shape_first and …)` 恒假；lane_variant_guard 条件多的 `and not (p.lane_shape_first and …)` 恒真；"
                      "model_post_init 新分支不进；其余是新函数定义（只在开着时调）。代码证明等价（审查侧 11-20 报缺口，A31 2026-11-20）。实测补证：全唐文 029 册全册 170 页（main 包 cv0.7.74-c81-g-03c8f4-k11-qtw029-d2-a3 当上游，书级开着 lane_lib_veto 0.98、lane_witness3／lane_coord／lane_seal）、测试册 keben 3 页 seed_admit 与 795e71e6~1 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-20（A31）")
+_REF_ALIAS_1120 = ("seed_admit 加书级参数 group_flow_ref_alias（#1755，fea133e3；缺省空 dict、空时不进参数 dump）：groups.flow.group_flow_pass 开头 `if cfg.ref_alias:` 空时不进，"
+                   "amap／veto_refs 原样传下；seed_admit 只多把空 dict 填进 FlowConfig.ref_alias。代码证明等价＋tests/test_flow_ref_alias.py::test_no_alias_unchanged；"
+                   "全唐文 patch 线 v0.7.85（v0.7.82＋#1755），本线哈希，2026-11-20（形近字线）。书配置写了别名表的书按参数指纹自然过期")
 _HOU_1120 = ("seed_admit 加书级刻形判法 group_flow_hou_shape（#1729，9ddaa9a2；缺省空、只在 group_flow 含 hou 且数据目录有 config/groups/hou_shape.json 时自动填，"
              "填了才进参数指纹 hs…；path_params 剔掉）：没配置时 _hou_shape_pass 不调，_codepoint_exempt 多的一句查 evidence.hou_shape 恒不中。"
              "全唐文 029 册全册 170 页（main 包 cv0.7.74-c81-g-03c8f4-k11-qtw029-d2-a3 当上游，中心库 rev 1382154 尚无 hou_shape.json）seed_admit 与 origin/dev 0aaeb8f9 产物逐字节相同；"
@@ -2234,6 +2237,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="d84d35465efc3d3d9cdfe797bedc93caa11e183f7f4a7a5616da55c45c35ff56",
           old="182de6ff72acd4a853d85c04bac395a45a5ab5b49c461e1f7d007c9a587388cf",
           evidence=_HOU_1120),
+    # seed_admit 书级整理本字别名 group_flow_ref_alias（全唐文 間→閒；没配置的书不走；形近字线 11-20，#1755，全唐文 patch 线 v0.7.85 本线哈希）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="a834dd3e9221cdcaddede7af9388dae30a75e77e265c2a08afd4925fffe90ddc",
+          old="d84d35465efc3d3d9cdfe797bedc93caa11e183f7f4a7a5616da55c45c35ff56",
+          evidence=_REF_ALIAS_1120),
+    Equiv(module="open_guji_cv.groups.flow",
+          new="d17a46a73a56c37a9c30c7fe92513dcc32ce8b0d37aa096bd58509173bd079d6",
+          old="e83a839b2c9755df2a25746644fdefc141737458123e19cd28dcd3ee7ca6cbf3",
+          evidence=_REF_ALIAS_1120),
 )
 
 
