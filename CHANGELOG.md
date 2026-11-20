@@ -3,6 +3,13 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.88] - 测试中
+
+史記 patch 线：v0.7.84 + #1763（cherry-pick 0eca6af）。SJ v0.2 整书重跑用，取代 0.7.84；配底库 b31 不变（A31 11-20 指定号从 0.7.88 起）。**不含** dev 线及殿本 patch 线其他改动。
+
+- PATCH：seed_admit 5c（`_vis_ruling_pass`）给待审格当场记 `evidence.vis_ctx`（本遍裁定键窗口 left／right／ref）：产物是整遍跑完的状态，后面几遍放行／降审的邻格会让 manager 从产物重算的窗口与 5c 不同，裁定键对不上（A33 11-20，全唐文 027:59:4:7；史記取消码位归一按刻形后同样受影响）。manager（≥0.4.80）写终审裁定键、`rulings-hits --rekey` 补键直接用。测试只拣 `test_vis_ctx_recorded`（dev 同文件的 `vis_ruling_ctx_subclasses` 测试依赖未拣的功能）。
+- **Step 指纹对 v0.7.84**（实算）：只 `seed_admit` 变（c289e2ab→75a43773），其余 22 步不变。语料文件未动，底库仍 b31。不登 code_equiv（产物多写 evidence 字段，行为变）。重跑起点：已在 v0.7.84 上跑到底的册从 seed_admit 起；v0.2 整书轮从 column_warp 起不受影响。
+
 ## [0.7.84] - 测试中
 
 史記 patch 线：v0.7.80 + #1746（A24，ry 入口 `ref_top_extra`）。SJ v0.2 整书重跑用；配底库 b31 不变。**不含** dev 线及殿本 patch 线（v0.7.81–0.7.83）其他改动。

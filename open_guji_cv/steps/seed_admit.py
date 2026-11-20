@@ -5368,6 +5368,10 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
     skip_half = getattr(p, "group_flow_llm_skip_half", False) and not getattr(p, "vis_ruling_half", False)
     half_ok = getattr(p, "group_flow_llm_skip_half", False) and getattr(p, "vis_ruling_half", False)
     for r, left, right in todo:
+        # 当场记下本遍的窗口（裁定键）：产物是整遍跑完的状态，后面几遍放行／降审的邻格会让从产物重算的窗口与这里不同，
+        # manager 写终审裁定键、rulings-hits 补键直接用这个（A33 11-20，全唐文 027:59:4:7）。
+        r.evidence = {**(r.evidence or {}), "vis_ctx": {"left": left, "right": right,
+                                                        "ref": (amap.get(r.id) or (None,))[0] or ""}}
         is_half = (r.id or "")[-1:] in ("a", "b")
         if half_ok and is_half and any(isinstance(d, str) and (d in _VIS_HALF_BAD or d.startswith(("jiazhu_", "split_")))
                                         for d in (r.doubts or [])):

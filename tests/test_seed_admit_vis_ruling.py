@@ -203,3 +203,12 @@ def test_l04_subclass_admitted(tmp_path):
     n, r = _run(CELLS, AMAP, _store(tmp_path, "甲", "乙", subclass="L04"))
     assert n == 1 and r[2].char == "說" and r[2].channel == "vis_ruling" and r[2].evidence["vis_ruling"]["subclass"] == "L04"
     assert _run(CELLS, AMAP, _store(tmp_path, "甲", "乙", subclass="XXX"))[0] == 0
+
+
+def test_vis_ctx_recorded(tmp_path):
+    """待审格当场记下本遍窗口（`evidence.vis_ctx`）：后面几遍改了邻格，manager 写键／补键仍按这遍的窗口（A33 11-20）。"""
+    n, r = _run(CELLS, AMAP, _store(tmp_path, "甲", "丙"))     # 没命中，留审
+    assert n == 0 and r[2].evidence["vis_ctx"] == {"left": "甲", "right": "乙", "ref": "說"}
+    n, r = _run(CELLS, AMAP, _store(tmp_path, "甲", "乙"))     # 命中放行，也留着
+    assert n == 1 and r[2].evidence["vis_ctx"]["right"] == "乙"
+    assert "vis_ctx" not in r[1].evidence                      # 已放行格不记
