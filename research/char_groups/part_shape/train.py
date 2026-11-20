@@ -117,7 +117,7 @@ def main():
         P = np.zeros(len(cs))
         for f in (vols[i::5] for i in range(5)):
             m = np.isin(V, f)
-            P[m] = np.mean([predict(train(X[~m], Y[~m], seed=sd), X[m]) for sd in (0, 1, 2)], 0)      # 同正式模型：三个种子取平均
+            P[m] = predict(train(X[~m], Y[~m]), X[m])
         err, hi = (P > .5) != Y, (P >= a.t) | (P <= 1 - a.t)
         print(f"{a.pair} n={len(cs)} 准确率 {1 - err.mean():.3f}；p≥{a.t}/≤{1 - a.t:.2f} 覆盖 {hi.mean():.3f}、错 {int((err & hi).sum())}")
     nets = [train(X, Y, seed=s) for s in (0, 1, 2)]

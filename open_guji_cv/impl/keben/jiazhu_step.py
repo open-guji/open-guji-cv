@@ -19,7 +19,3 @@ def apply(res, col_gray, content_x, period, specs, ink_threshold: int = 128, rea
 #: 雙行小注两行字数可不等（段尾单半）：`(ink_col, n, long_sub, cxi, top, bot, anchor) -> {sub: 格线} | None`，
 #: 见 `row_boundaries.segment_column` 的 `free_split`。None＝不用（两行都切 n 格）。
 free_split = None
-
-#: 雙行小注按小字字距分行（小字比大字矮、一段每行字数多于段占的大字格数）：`(ink, top, bot, n_grid, period) -> [格线…] | None`，
-#: 见 `row_boundaries.segment_column` 的 `row_split`。None＝不用（每行切 n_grid 格）。脉经书仓覆盖（2026-11-19 GUJI-774）。
-row_split = None
