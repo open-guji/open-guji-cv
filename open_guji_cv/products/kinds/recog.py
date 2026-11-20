@@ -276,6 +276,25 @@ class PageDecision(BaseModel):
     strategy: str = ""
     corpus_fingerprint: str = ""             # 裁决是用**哪份语料**做的，见 context_decide
     columns: list[ColumnDecision] = Field(default_factory=list)
+    alt_columns: list[ColumnDecision] = Field(default_factory=list)
+    """备选切法的列的裁决（context_decide `alt_columns` 开着才有；空不落盘）。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_alt(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not d.get("alt_columns"):
+            d.pop("alt_columns", None)
+        return d
+
+    def with_alt(self, cols):
+        """`cols` 里的列换成备选那份；没有备选裁决的列丢掉（同老的 DROP 口径）。"""
+        cols = set(cols or ())
+        if not cols:
+            return self
+        alt = {c.col: c for c in self.alt_columns}
+        return self.model_copy(update={"columns": [alt[c.col] if c.col in cols and c.col in alt else c for c in self.columns
+                                                   if c.col not in cols or c.col in alt],
+                                        "alt_columns": []})
 
     def column(self, col: int) -> ColumnDecision | None:
         return next((c for c in self.columns if c.col == col), None)

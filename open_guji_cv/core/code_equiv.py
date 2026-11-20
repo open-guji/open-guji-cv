@@ -469,6 +469,9 @@ _SHAPE_FIRST_1120 = ("seed_admit 加书级开关 lane_shape_first（#1734，795e
                      "witness3 lib_variant 分支调 _shape_first_lib，首句 `if not (p.lane_shape_first …)` 即返回 None，走原 lane_skip；"
                      "coord_fallback 库否决多的 `or (p.lane_shape_first and …)` 恒假；lane_variant_guard 条件多的 `and not (p.lane_shape_first and …)` 恒真；"
                      "model_post_init 新分支不进；其余是新函数定义（只在开着时调）。代码证明等价（审查侧 11-20 报缺口，A31 2026-11-20）。实测补证：全唐文 029 册全册 170 页（main 包 cv0.7.74-c81-g-03c8f4-k11-qtw029-d2-a3 当上游，书级开着 lane_lib_veto 0.98、lane_witness3／lane_coord／lane_seal）、测试册 keben 3 页 seed_admit 与 795e71e6~1 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-20（A31）")
+_ALT_CUTS_1120 = ("row_segment 加书级 alt_cuts（备选格线表，缺省空、不进参数 dump；表空时不读不切）、context_decide 加 alt_columns"
+                  "（备选列也做上下文裁决，缺省关、不进参数 dump）：脉经第 1 册 7、13、17、25 页 row_segment、context_decide 与 origin/dev 产物"
+                  "逐字节相同；scripts/code_equiv.py check，2026-11-20（MJ，GUJI-774）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2225,6 +2228,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="182de6ff72acd4a853d85c04bac395a45a5ab5b49c461e1f7d007c9a587388cf",
           old="3e10a0815acfbacff5f892840eb7bcfadd82f5f133f12f7b7166e0366387bdbb",
           evidence=_SHAPE_FIRST_1120),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="0bfeecae08dc3f35456784edccc2707f1874f0faed89c986997db80105e127c0",
+          old="90a4a5fe8a50a4d0a3b1bd80e68328d5405d7e58a7b2a947054d67ca670fe959",
+          evidence=_ALT_CUTS_1120),
+    Equiv(module="open_guji_cv.steps.context_decide",
+          new="e61a08115d96d9d4c94a6e0adc65ef5b950533d7f8b936512bc43e46b418878f",
+          old="442732ff599c28b52a7dca9064ce776441c2f9b4dadf867d9863d380e6a43a1a",
+          evidence=_ALT_CUTS_1120),
 )
 
 

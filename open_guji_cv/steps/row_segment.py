@@ -758,6 +758,7 @@ ALT_CUT_REV = 2
 
 
 ALT_NOJZ_FLAG = "alt_nojz：不认雙行小注的备选（列里认出的小注段按大字格切），下游按列挑"
+ALT_CUTS_FLAG = "alt_cuts：按备选格线表切的备选（如 YOLO 字框定的格线），下游按列挑"
 
 
 def _alt_same_ink_cells(main_cells, alt_cells) -> bool:
@@ -988,6 +989,13 @@ class RowSegmentParams(BaseModel):
     #: 中间有白缝，被认成雙行小注劈成 a/b（第 1 册 4 段、2–6 册数十段）；几何量（墨高、缝宽、连通体）和真小注重叠分不开，
     #: 要靠库匹配与参照文字按列挑（align_ref `alt_select: admit`）。书级开关；False＝关（缺省，不进参数哈希）。
     alt_nojz: bool = False
+    #: **备选格线表**（2026-11-20 脉经，GUJI-774）：逐列格线表（jsonl，行 `{vol, page, col, cuts, col_h}`，格式同格位表的人定格线
+    #: `cuts`，见 `_layout_cuts`）的路径（相对工作区，或 `corpus/…`）。表里有的列另按表的格线切一份放进 `alt_columns`，下游照
+    #: `alt_cut` 的路按列挑（align_ref `alt_select: admit`）。起因：脉经序页、正文字有高有低，等距 20 格累积错位、把 4 个字切成 5 格
+    #: （01 7:7「景之書并」）；`scripts/yolo_alt_cuts.py` 用 yolo_tool 单字模型在列图上框字、格线放在相邻字框之间。直接替换主切法时
+    #: 上下结构高字常被劈成两框（聾→龍耳），所以只作备选。空＝关（缺省，不进参数 dump）；表内容 sha 自动填进 `alt_cuts_fingerprint`。
+    alt_cuts: str = ""
+    alt_cuts_fingerprint: str = ""
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -1027,6 +1035,19 @@ class RowSegmentParams(BaseModel):
                 import hashlib
                 _FP_CACHE[key] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
             object.__setattr__(self, "layout_fingerprint", _FP_CACHE[key])
+        return self
+
+    @model_validator(mode="after")
+    def _fill_alt_cuts_fingerprint(self):
+        if self.alt_cuts and not self.alt_cuts_fingerprint:
+            p = _layout_path(self.alt_cuts)
+            if not p.exists():
+                raise ValueError(f"alt_cuts 开着但表不存在：{p}（先跑 scripts/yolo_alt_cuts.py）")
+            key = ("alt_cuts",) + _sig(p)
+            if key not in _FP_CACHE:
+                import hashlib
+                _FP_CACHE[key] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
+            object.__setattr__(self, "alt_cuts_fingerprint", _FP_CACHE[key])
         return self
 
     @model_validator(mode="after")
@@ -1090,6 +1111,9 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_half_a", None)
             if not self.alt_nojz:
                 d.pop("alt_nojz", None)
+            if not self.alt_cuts:
+                d.pop("alt_cuts", None)
+                d.pop("alt_cuts_fingerprint", None)
             if not self.alt_cut:
                 d.pop("alt_cut", None)
             else:
@@ -1289,6 +1313,7 @@ class RowSegmentStep(Step):
             layout = layout_for(ctx, p.page_map, _pm_pins(p), _pm_ref(p))
         else:
             layout = load_layout(p.layout_prior, ctx.book.id) if p.layout_prior else {}
+        alt_cuts_tab = load_layout(p.alt_cuts, ctx.book.id) if p.alt_cuts else {}
         if p.layout_prior and not layout and not _ref_declared(ctx.book):
             # 表在、开关开着，表里却一行本册都没有：多半是新册没生成表（殿本 vol11–20 首跑就这样悄悄当关，
             # 逐格全对 94.7% vs 带表 100%）。宁可拦下，不悄悄退回无先验。
@@ -1785,6 +1810,17 @@ class RowSegmentStep(Step):
                     cn = _emit(rn, base, [*prior_flags, ALT_NOJZ_FLAG], lay, occ, n_raised_col)
                     if not _alt_same_ink_cells(out[-1].cells, cn.cells):
                         alt_out.append(cn)
+            row_ac = alt_cuts_tab.get((page, gc.col)) if alt_cuts_tab else None
+            if (row_ac is not None and not human_col and r is not None and lay_cuts is None
+                    and all(a_.col != gc.col for a_ in alt_out)):
+                ac = _layout_cuts(row_ac, img.shape[0], n_raised_col)
+                if ac is not None:
+                    n_ac = len(ac) - 1 - n_raised_col
+                    ry = _seg(n_ac, bounds=ac, final=True)
+                    if ry is not None:
+                        cy = _emit(ry, dict(base, n_body_slots=n_ac), [*prior_flags, ALT_CUTS_FLAG], lay, occ, n_raised_col)
+                        if not _alt_same_ink_cells(out[-1].cells, cy.cells):
+                            alt_out.append(cy)
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
         pc = self._header_ref_flags(ctx, p, page, pc)
