@@ -347,6 +347,12 @@ _PINS_SRC_1112 = ("row_segment 的 pins 档格位表指纹（page_map_fingerprin
                   "夹注参照指纹 f2d6945a67503581，与改前代码在只有 0243 时算出的值逐位相同，加入 0244.jsonl 后仍相同（改前会变）；"
                   "指纹值不变、其余代码路径未动，故产物不变；2026-11-12（A31，史記 0244 入库）")
 
+_ROSTER_GRID_1120 = ("row_segment 加职名列按格网位置编号 roster_grid_slots（缺省关、不进参数 dump；_run_roster 关时不调 grid_slots、n_body_slots 照旧）、"
+                     "roster_segment 加 grid_slots（新函数，关时不调）：殿本 vol01 8 页（60,87,88,99,117,131,150,190：职名页含雙行、人裁整列格，及正文页）"
+                     "row_segment 与 origin/dev e39e030a 产物逐字节相同；另 87–130 共 44 页关着重跑与 main 包 cv0.7.70-c19-g24-m2-r14fix-a2 逐字节相同；"
+                     "scripts/code_equiv.py check，2026-11-20（A22，ZM 转 Sheldon 11-19 职名格号空格占号）")
+_ROSTER_GRID_0778 = (_ROSTER_GRID_1120 + "。殿本 patch 线移植（v0.7.77 + #1726 → v0.7.78）：只带 roster_grid_slots／grid_slots，不带 dev 上的 roster_cols、"
+                     "chen_fallback；row_segment、roster_segment 哈希按本线重算，本线未另跑产物比对（A31 2026-11-20）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1754,6 +1760,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="bf9f5964d5f5eaf43e6c07fb4b9c42c4fb45e208f640f2045cf515c53c4cb857",
           old="6b156bfcc6ec09cbfc8950cf68ea05ec633eb5ec0b48798f6bd0aed0b09ce284",
           evidence="同 v0.7.28 线原条（drop_bad 冲突格现役字改坐标字 _use_coord_char，缺省关，代码核对＋tests/test_align_ref_coord.py），原样抄回 dev"),
+    # 职名列按格网位置编号 roster_grid_slots（殿本 patch 线 v0.7.78，本线哈希）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="a43b79f7b0447ac1d1ac122f012b86de6ceb93f2679aa548c685eabd34a06b0b",
+          old="cf94f26ea2cea18ab9f11622f9113cc83bb93c2ecfc3f13a37c451c5ebca6997",
+          evidence=_ROSTER_GRID_0778),
+    Equiv(module="open_guji_cv.impl.keben.roster_segment",
+          new="ce7945e413c6bfd835e6f37c08c6f32ae3193dad2c844789635945864ab10a6c",
+          old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
+          evidence=_ROSTER_GRID_0778),
 )
 
 
