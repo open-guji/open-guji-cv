@@ -268,6 +268,11 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     for g in groups_in(top, cfg.groups):      # 库首位与整理本（缺位时坐标对位）字同在本组：分差内的组外字不拦（`FlowSpec.ref_top_enter`）
         if GROUPS[g].flow.ref_top_enter and rr and (rr in GROUPS[g].members or canon(rr) in GROUPS[g].members):
             return g, "lift"
+    for g in groups_in(top, cfg.groups):      # 库首位与整理本（缺位时坐标对位）字同在本组、分差内的组外字都在 `ref_top_extra` 里（库补常用字的新邻字）
+        f = GROUPS[g].flow
+        if f.ref_top_extra and rr and (rr in GROUPS[g].members or canon(rr) in GROUPS[g].members) and all(
+                c in GROUPS[g].members or c in _tol(g, cfg) or c in f.ref_top_extra for c, v in cands[1:] if c1 - v < cfg.delta):
+            return g, "lift"
     for g in groups_in(top, cfg.groups):      # 整理本与库首位都是本组暂归一的写法、领先组外字够：分差内的组外形近字不拦（`pv_ref_gap`）
         if not _rf(g, cfg) and _pv_ref_ok(g, cands, ref, cfg, canon):
             return g, "lift"
