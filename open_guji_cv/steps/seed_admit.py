@@ -483,6 +483,14 @@ class SeedAdmitParams(BaseModel):
     空＝关（不进参数 dump，行为不变）。"""
     pair_form_fingerprint: str = ""
     """归属表文件指纹，由校验器填，进 params_hash。"""
+    lane_shape_first: str = ""
+    """witness3／coord_fallback 照刻形（2026-11-20，形近字线，缺省关）：形近字对归属表路径（同 `pair_form`，相对路径先找数据目录）。
+    表里 `attr: shape` 且 `variant: true` 的对（同字异形，如 寇𡨥、奧奥）：①库否决（`lane_lib_veto`）要否的格，要放的字与库首位恰是这样一对 →
+    改放库首位的形（同 `lane_lib_veto_pairs`，名单由表生成，两处取并集；同样要 5a.3 终判档证据倾向库形）；②witness3 的 `lib_variant` 跳过（库首位与整理本字是已知异体对，一律送审）
+    改成：这一对在表里是刻形同字异形、第 5 步 5a.3 对这一对有终判档（tier ≥3）证据且倾向库首位的形、库首位覆盖度 ≥ `lane_lib_veto`（要开着、非 0）→ 放库首位的形（`evidence.lane.lib_form`），
+    其余仍送审。只降「送审」为放行、放的是库形（刻本原字），不放整理本字。空＝关（不进参数 dump，行为不变）。"""
+    lane_shape_first_fingerprint: str = ""
+    """同上，归属表指纹，由校验器填。"""
     ruling_override_groups: tuple[str, ...] | None = None
     """越过参校本的白名单（书级；A20 对照表第 4 条，A24 第 5 轮）：`ctx-m1` 终审裁定的字≠整理本对位字时，管线再核一遍——
     这个字与整理本字须同属白名单里的某个字组（`groups.registry.FLOW_GROUPS` 成员），否则不放行、留审。
@@ -1720,6 +1728,9 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.pair_form:
             d.pop("pair_form", None)
             d.pop("pair_form_fingerprint", None)
+        if isinstance(d, dict) and not self.lane_shape_first:
+            d.pop("lane_shape_first", None)
+            d.pop("lane_shape_first_fingerprint", None)
         if isinstance(d, dict) and not self.stroke_veto:
             d.pop("stroke_veto", None)
             d.pop("stroke_veto_fingerprint", None)
@@ -1935,6 +1946,10 @@ class SeedAdmitParams(BaseModel):
             if self.pair_form != "-":
                 object.__setattr__(self, "pair_form", _resolve_data_path(self.pair_form))
             object.__setattr__(self, "pair_form_fingerprint", _pf_fp(self.pair_form) if self.pair_form != "-" else "all-shape")
+        if self.lane_shape_first and not self.lane_shape_first_fingerprint:
+            from ..groups.pair_attr import fingerprint as _pf_fp
+            object.__setattr__(self, "lane_shape_first", _resolve_data_path(self.lane_shape_first))
+            object.__setattr__(self, "lane_shape_first_fingerprint", _pf_fp(self.lane_shape_first))
         if self.stroke_veto and not self.stroke_veto_fingerprint:
             from ..groups.stroke_veto import fingerprint as _sv_fp
             object.__setattr__(self, "stroke_veto", _resolve_data_path(self.stroke_veto))
@@ -2009,7 +2024,7 @@ class SeedAdmitStep(Step):
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
                      "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_wu_shape", "group_flow_part_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn",
-                     "solo_adapt_profile", "stroke_veto", "pair_form"),
+                     "solo_adapt_profile", "stroke_veto", "pair_form", "lane_shape_first"),
     )
 
     def parallel_warm(self, ctx: RunContext) -> None:
@@ -5040,7 +5055,12 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                     wc = {name: r.get(rec.id) for name, r in rs}
                     if rs and not any(c in _JYS for c in wc.values() if c) and same(ref, co, *wc.values()):
                         if variant_pair(lib, ref):
-                            rec.evidence = {**ev, "lane_skip": {"lane": "witness3", "why": "lib_variant", "lib": lib}}
+                            _sf = _shape_first_lib(p, mmap.get(rec.id), lib, ref)
+                            if _sf is not None:      # 表里是刻形同字异形、库首位把握够高：放库形（刻本原字）
+                                hit = ("witness3", lib, {"cls": cls, "ref": ref, "coord": co, "lib": lib, "guard": guard_of(rec.id),
+                                                         "witnesses": wc, "lib_form": {"from": ref, "cov": _sf, "via": "shape_first"}})
+                            else:
+                                rec.evidence = {**ev, "lane_skip": {"lane": "witness3", "why": "lib_variant", "lib": lib}}
                         elif p.witness3_no_diff and getattr(mmap.get(rec.id), "verdict", None) == "diff":
                             rec.evidence = {**ev, "lane_skip": {"lane": "witness3", "why": "lib_diff", "lib": lib}}
                             rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["witness3_diff"]))
@@ -5091,7 +5111,8 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                 m = mmap.get(rec.id)
                 top = (m.candidates[0] if m and m.candidates else None)
                 if top and float(top[1]) >= p.lane_lib_veto and top[0] != char and not same(top[0], char):
-                    if p.lane_lib_veto_pairs and any(len(q) == 2 and {q[0], q[1]} == {top[0], char} for q in p.lane_lib_veto_pairs):
+                    if (p.lane_lib_veto_pairs and any(len(q) == 2 and {q[0], q[1]} == {top[0], char} for q in p.lane_lib_veto_pairs)) or (
+                            p.lane_shape_first and _shape_first_ok(p, m, top[0], char, top[0])):
                         lev = {**lev, "lib_form": {"from": char, "cov": round(float(top[1]), 4)}}
                         char = top[0]                       # 照刻形：放库首位的形，不否决
                     else:
@@ -5104,7 +5125,8 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                 rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "group_img", **gv}}
                 rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["lane_group_img"]))
                 continue
-            if p.lane_variant_guard and char:
+            if p.lane_variant_guard and char and not (p.lane_shape_first and lev.get("lib_form")):
+                # 放的是库形（刻本原字，`lane_shape_first`）：不是把异体改成通用字，不必拦
                 m = mmap.get(rec.id)
                 forms = [rec.char] + [c for c, _ in ((m.candidates or [])[:max(p.lane_variant_topk, 0)] if m else [])]
                 vf = next((f for f in forms if variant_pair(f, char)), None)
@@ -6041,6 +6063,32 @@ def _resolve_data_path(v: str) -> str:
     if droot is not None and (droot / q).exists():
         return str(droot / q)
     return str((workspace_root() or REPO_ROOT) / q)
+
+
+@lru_cache(maxsize=8)
+def _shape_variant_pairs(path: str, fp: str = "") -> frozenset:
+    """归属表里刻形且同字异形的对（`attr: shape`、`variant: true`）→ {frozenset({a, b})}。"""
+    from ..groups import pair_attr
+    return frozenset(frozenset(k) for k, v in pair_attr.load(path).items() if v.get("attr") == "shape" and v.get("variant"))
+
+
+def _shape_first_ok(p, m, a, b, form) -> bool:
+    """`lane_shape_first` 的闸：(a, b) 是表里刻形同字异形，且第 5 步 5a.3 对这一对有终判档（tier ≥3）的证据、倾向正是要放的刻形 `form`。
+    库首位覆盖度分不开极近的对（奥奧：020 册 cov 0.99 仍错 2/6），只有分类器证明分得开的对才放。"""
+    if not p.lane_shape_first or frozenset((a, b)) not in _shape_variant_pairs(p.lane_shape_first, p.lane_shape_first_fingerprint):
+        return False
+    rows = (getattr(m, "stage", None) or {}).get("pair") or []
+    return any(set(r.get("pair") or "") == {a, b} and (r.get("tier") or 0) >= 3 and r.get("lean") == form for r in rows)
+
+
+def _shape_first_lib(p, m, lib, ref):
+    """`lane_shape_first` 的 lib_variant 放宽：(库首位, 整理本字) 过 `_shape_first_ok`、库首位覆盖度 ≥ `lane_lib_veto` → 返回覆盖度，否则 None。"""
+    if not (p.lane_shape_first and p.lane_lib_veto and lib and ref and lib != ref):
+        return None
+    top = (m.candidates[0] if m and m.candidates else None)
+    if top and top[0] == lib and float(top[1]) >= p.lane_lib_veto and _shape_first_ok(p, m, lib, ref, lib):
+        return round(float(top[1]), 4)
+    return None
 
 
 def _pair_form_pass(p, out: list, mmap: dict, ctx=None) -> int:
