@@ -60,6 +60,13 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.84] - 2026-11-20
+
+史記 patch 线：v0.7.80 + #1746（A24，ry 入口 `ref_top_extra`）。SJ v0.2 整书重跑用；配底库 b31 不变。**不含** dev 线及殿本 patch 线（v0.7.81–0.7.83）其他改动。
+
+- PATCH：字组 ry（日曰）补放入口加 `FlowSpec.ref_top_extra`（只 ry 设 回囘）：库首位与整理本／坐标对位字同在日曰、分差 0.03 内的组外字都落在 回囘 里才进组，其余组外字照拦（目 仍留给 joint）。起因：史記 g27 补库把「回」刻例 2→20，44 格曰因「回」进分差窗口、组流程入口不进全落待审。SJ 15 册沙盒回放：救回 36/44、同页无掉回、新增放行抽 10 格全对；A22 回测殿本 0 变、全唐文 1 格（字同）。
+- **Step 指纹对 v0.7.80**（实算）：只 `seed_admit` 变（be5aa272→c289e2ab），其余 22 步不变。语料文件未动，底库仍 b31。不登 code_equiv（注册表改动，行为变）。重跑起点：已在 v0.7.80 上跑到底的册从 seed_admit 起。
+
 ## [0.7.82] - 2026-11-20
 
 - 发版说明（全唐文·形近字线 11-20，**dev 快照 patch**，PATCH；全唐文 d2/d3 实际跑的是 dev 42e5d7d6，v0.7.81 基于 v0.7.74 缺 #1727 lane_lib_veto_pairs 等，作废勿用）：直接取 dev a90cc10f，即 dev 42e5d7d6 + #1734 witness3 `lane_shape_first`（缺省关）＋ #1729 seed_admit 候𠋫 书级刻形判法 `group_flow_hou_shape`（没配 json 不跑），两项都已登 code_equiv（#1735/#1736、#1737，链式 3e10a081→182de6ff→d84d3546）。**对 dev 42e5d7d6 各 Step 产物不判过期**；全唐文推 `config/groups/hou_shape.json` 后 seed_admit 按参数指纹整体过期（有意）。底库不变。
