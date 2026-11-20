@@ -458,6 +458,11 @@ _ROSTER_GRID_1120 = ("row_segment 加职名列按格网位置编号 roster_grid_
                      "roster_segment 加 grid_slots（新函数，关时不调）：殿本 vol01 8 页（60,87,88,99,117,131,150,190：职名页含雙行、人裁整列格，及正文页）"
                      "row_segment 与 origin/dev e39e030a 产物逐字节相同；另 87–130 共 44 页关着重跑与 main 包 cv0.7.70-c19-g24-m2-r14fix-a2 逐字节相同；"
                      "scripts/code_equiv.py check，2026-11-20（A22，ZM 转 Sheldon 11-19 职名格号空格占号）")
+_ROSTER_GRID_0778 = (_ROSTER_GRID_1120 + "。殿本 patch 线移植（v0.7.77 + #1726 → v0.7.78）：只带 roster_grid_slots／grid_slots，不带 dev 上的 roster_cols、"
+                     "chen_fallback；row_segment、roster_segment 哈希按本线重算，本线未另跑产物比对（A31 2026-11-20）")
+_ROSTER_GRID_MANUAL_1120 = ("roster_grid_slots 跟进（缺省关时不走）：_apply_manual_cells 加 grid_n（缺省 0 照旧）、grid_slots 段内两行同空的号收掉／密雙行第二段起号按段字距顺延"
+                            "（新逻辑只在 grid_slots 里，开关关时不调）：殿本 vol01 10 页（60,87,88,89,99,105,117,131,150,190）row_segment 与 origin/dev 产物逐字节相同；"
+                            "scripts/code_equiv.py check，2026-11-20（A22，回 ZM／A20 #1726 下游问题）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2181,6 +2186,24 @@ ENTRIES: tuple[Equiv, ...] = (
           new="9743d7f6795f80c3df55cb2d822fbaae239dd77eafe5bbbabe6f26ed1ea36ddd",
           old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
           evidence=_ROSTER_GRID_1120),
+    # 职名列按格网位置编号 roster_grid_slots（殿本 patch 线 v0.7.78，本线哈希）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="a43b79f7b0447ac1d1ac122f012b86de6ceb93f2679aa548c685eabd34a06b0b",
+          old="cf94f26ea2cea18ab9f11622f9113cc83bb93c2ecfc3f13a37c451c5ebca6997",
+          evidence=_ROSTER_GRID_0778),
+    Equiv(module="open_guji_cv.impl.keben.roster_segment",
+          new="ce7945e413c6bfd835e6f37c08c6f32ae3193dad2c844789635945864ab10a6c",
+          old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
+          evidence=_ROSTER_GRID_0778),
+    # roster_grid_slots 跟进：人裁整列格格数、段内两行同空收号（2026-11-20 A22）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="d53f488e5079b1325da8cdd4dd7159b04af326d9ce6e22d1e222cb69a74cd56a",
+          old="90a4a5fe8a50a4d0a3b1bd80e68328d5405d7e58a7b2a947054d67ca670fe959",
+          evidence=_ROSTER_GRID_MANUAL_1120),
+    Equiv(module="open_guji_cv.impl.keben.roster_segment",
+          new="2580a706e9bc7c754ae315e2fe3593ff050aae8d0435452f98969087a7d817ea",
+          old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
+          evidence=_ROSTER_GRID_MANUAL_1120),
 )
 
 

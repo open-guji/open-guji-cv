@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 - Step3 `row_segment` 1.55：格位表说有字的格判空收口（A22 各书切分统一优化 U1，Sheldon 11-18 定「不怕动指纹」）。`segment_column` 读 `slot_mask`：表说有字的格，框线判空 `_frame_only` 只认「去掉跨格长竖后几乎没墨」，不认「剩下的是贴框角的细横」（1.51 曰、1.52 二三、1.53 细一、1.54 粗一四回少一格都栽在这条上）；墨不到 `min_ink_ratio` 的居中细横（「一」）不再要求两邻有字，按列端口径（宽 ≤0.85 列宽、纵向居格中 0.2–0.8）救回。`frame_only_edge_cells`（1.48）本就是「墨全贴版框线」口径，不变。没有格位表（`layout_prior` 没命中）的列逐字节不变；殿本、全唐文等用格位表的书 `row_segment` 指纹变、Step3 起过期。
+- PATCH：`row_segment.roster_grid_slots` 跟进（A22，回 ZM／A20）：开着时人裁整列格的 `n_body_slots` 也取格数与最大号的大者、超格数打 `roster_slot_overflow`；雙行段内两行同号都空的号收掉（读序 `order_keys` 在两行同空处断段，vol01 87:9 整理本是一段）；Step3 分成两段的密雙行，第二段起号按段字距从上一段末顺延（88:2）。vol01 87–130 与 #1726 对照表比只 87:9 一列变（13a 起各号减 1）。缺省关不变，登记 code_equiv。
 - PATCH：新册级开关 `row_segment.roster_grid_slots`（A22，Sheldon 11-19 经 ZM：殿本 vol01 职名页格号空格要占号，88:1:8a 按格数对位投错；缺省关）：职名分支切出的字按格网位置编号（`roster_segment.grid_slots`）——大字按版框内 `chars_per_line` 等分格，雙行一格一字的按格网、比格密的（vol01 p88）按本段字距逐字累加，左行比右行低一字从下一号起；号同侧严格递增、超出格数从尾往回收空号，收不回（字比格多）的列打 `roster_slot_overflow`。切法不变只改号；vol01 87–130 开后 397 列 392 列改号，人裁整列格（manual_cells）的号照人裁记录不动。只套书职名实现有 `grid_slots` 的书生效（史記写本没有）。缺省不进参数 dump；row_segment、roster_segment 登记 code_equiv（vol01 8 页逐字节同）。
 - PATCH：新书级开关 `seed_admit.alt_backed_gain`（MJ，GUJI-774，缺省 0 关）：`alt_select: admit` 换列时，备选那遍这一列待审只少 1 格、但有字形背书的放行格多出 ≥ 这么多（冲突不多）也换。脉经 01 10:2 序页「則可」主切法劈成「貝丁口」，开 1 后换对；第 1 册只多换这一列（送审 448→447），第 2 册不变。seed_admit 登记 code_equiv。
 - PATCH：新书级开关 `row_segment.alt_nojz`（MJ，GUJI-774，缺省关）：认出雙行小注的列另按同样格网、不认小注再切一份放进 `alt_columns`，下游按列挑。脉经左右结构的大字（則何肺脉眩瞤臥）中间有白缝，被认成雙行小注劈成 a/b，墨高、缝宽、连通体都和真小注重叠分不开。配套：不分行参照页（`ref_kind="text"`）也能按列挑备选——align_ref 在 `alt_select: admit` 时逐列换成备选重做 8-gram 对位（库匹配高分格占比比主切法低 5 个点以上的列不进候选），草稿对位字记 `AltDraft.chars`（空不落盘）；seed_admit 不分行参照页要求备选那份放行率不降，与参照文字 equal 的字多 ≥2、待审不多也换（半字照样放行，只比待审挑不出）。脉经第 1 册送审 463→448（17:5、24:1、40:6 换对），第 2 册 846→830（6 列换对，看图无误换）。row_segment、align_ref、seed_admit 登记 code_equiv。
@@ -53,6 +54,10 @@
 - 模型库登记 5a 相似度 CNN 的跨书通用底座 `models/glyph_sim_base_v1/`（殿本、史記、全唐文三书合训 59,116 例；OCR 研究 Project 11-17，Sheldon：模型应该放到模型库里）：`core/model_pack.KINDS` 加种类 `glyph_sim_base`（global），模型表与出处表同步，权重与校准表已传 R2。校准表是通用保守包络（`scripts/fit_glyph_sim_calib.py` 的 `--work`／`--cnn` 可给多次，逐点取 cov 最小）。不动任何 Step 与 `sim_cnn.py`，各书产物指纹不变；还没有书的配置指向它。用法见 guji-manager `doc/参考/5a相似度模型.md`。
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
+
+## [0.7.78] - 2026-11-20
+
+- 发版说明（A31 11-20，**殿本 patch 线**，PATCH；ZM 第一册线要，vol01 职名页 87–130 格号空格占号）：v0.7.77 + #1726（row_segment 书级开关 `roster_grid_slots`：职名分支切出的字按格网位置编号，列首、字间空格占号；缺省关、不进参数 dump；`impl/keben/roster_segment.grid_slots`），只带这一项，**不含** dev 上 #1726 依赖的 `roster_cols`／`chen_fallback` 及 dev 线其他改动（含 #1678，故不触发 variants.tsv 的 CorpusDrift）。code_equiv：row_segment、roster_segment 按本线哈希重登（`_ROSTER_GRID_0778`；dev 上证据为殿本 vol01 8 页对 dev、87–130 关着对 main 包逐字节同，本线未另跑产物比对），**关着时 Step 指纹对 v0.7.77 全不变**；开了的册 row_segment 参数指纹变，从 row_segment 起重跑。底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1726 已在 dev）。
 
 ## [0.7.77] - 2026-11-19
 

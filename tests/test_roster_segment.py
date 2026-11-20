@@ -513,3 +513,25 @@ def test_roster_grid_slots_param_numbers_by_grid(tmp_path, monkeypatch):
         assert all(c.slot == c.pos for c in b.cells)
     assert any([c.pos for c in a.cells] != [c.pos for c in b.cells]
                for a, b in zip(off["cells"].columns, on["cells"].columns))
+
+
+def test_grid_slots_double_line_common_gap_inside_run_is_closed():
+    # 一段雙行里两行在同一处都隔一字距（vol01 p87 c9 保／士 与 武／文）：段内不留两行同空的号，读序才不会在那里断段
+    a = [_it(120 + 70 * k, 180 + 70 * k, "jiazhu_a") for k in [0, 1, 2, 4, 5]]
+    b = [_it(190 + 70 * k, 250 + 70 * k, "jiazhu_b") for k in [0, 1, 3, 4]]
+    slots, _ = grid_slots(a + b, 0, 2100, 21)
+    sa, sb = slots[:5], slots[5:]
+    span = set(range(min(slots), max(slots) + 1))
+    assert span == set(sa) | set(sb)                             # 没有两行同空的号
+    assert sa == [2, 3, 4, 5, 6] and sb == [3, 4, 5, 6]
+
+
+def test_grid_slots_second_dense_run_keeps_gap_after_first():
+    # Step3 分成两段的密雙行（a…b…a…b，vol01 p88 c2）：两段之间空一字距，第二段从隔一个号起
+    a1 = [_it(120 + 70 * k, 180 + 70 * k, "jiazhu_a") for k in range(4)]
+    b1 = [_it(190 + 70 * k, 250 + 70 * k, "jiazhu_b") for k in range(3)]
+    a2 = [_it(470 + 70 * k, 530 + 70 * k, "jiazhu_a") for k in range(3)]
+    b2 = [_it(470 + 70 * k, 530 + 70 * k, "jiazhu_b") for k in range(3)]
+    slots, _ = grid_slots(a1 + b1 + a2 + b2, 0, 2100, 21)
+    assert slots[:7] == [2, 3, 4, 5, 3, 4, 5]
+    assert slots[7:] == [7, 8, 9, 7, 8, 9]                       # 第 6 号两行都空＝两段之间
