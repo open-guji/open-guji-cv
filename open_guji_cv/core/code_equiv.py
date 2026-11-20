@@ -490,6 +490,7 @@ _ALT_CELLS_1120 = ("row_segment 的 alt_cuts 表行带 cells 时按整列写定�
                    "row_segment、align_ref 与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-20（MJ，GUJI-774）")
 _NOTE_REGION_1120 = ("seed_admit 加书级 alt_note_region（缺省关、不进参数 dump；关时 _pick_alt_cols 不调 _note_region_ok）：脉经第 1 册 7、13、17、25、40 页 "
                      "seed_admit 与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-20（MJ，GUJI-774）")
+_BIG_REGION_1120 = ("seed_admit alt_note_region 加反方向 _big_region_ok（开关缺省关，关时不调）：脉经第 1 册 7、13、17、25、40 页 seed_admit 与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-20（MJ，GUJI-774）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2284,6 +2285,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7ee8fd2acc35a211a7429bfc7d172a7a5635106ccb06a91bd5d25d255b536128",
           old="64d25e9fcecdaca35dda2a900cb9f526df248aeaaf5f7e2d6d8802aa25d5a47d",
           evidence=_NOTE_REGION_1120),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="90c80575d6dd73739a05d1ec5e7fb4f7ffddfb1e83f2f8a8bee1ab309d20fda2",
+          old="7ee8fd2acc35a211a7429bfc7d172a7a5635106ccb06a91bd5d25d255b536128",
+          evidence=_BIG_REGION_1120),
 )
 
 

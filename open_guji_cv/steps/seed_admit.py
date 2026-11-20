@@ -561,7 +561,8 @@ class SeedAdmitParams(BaseModel):
     """`align_ref.alt_select="admit"` 换列再开一条路（书级，缺省关、关时不进参数 dump；脉经 01 MJ 11-20）：备选这一列有雙行小注格
     （如 `row_segment.alt_cuts` 的整列 cells 把「一作某」小注劈对了），而主切法落在这些小注范围里放行的字备选那份也都放行时，
     小注范围外两遍比：待审不多、与坐标字冲突不多，就换。参照本没有小注，劈对了格多、待审反而多，按原规矩永远换不过来
-    （01 29:10「得一／作」主切法并成一格、19:12、65:9 同）；主切法在小注范围里本来也放不出字，换了不丢东西。"""
+    （01 29:10「得一／作」主切法并成一格、19:12、65:9 同）；主切法在小注范围里本来也放不出字，换了不丢东西。
+    反方向也认：主切法把大字劈成 a/b 小注、备选同处是一个放行的大字格（`_big_region_ok`，01 41:1「脉」劈成「永」「月」照样放行）。"""
     p_ref_coord_max_cov: float | None = None
     p_ref_coord_adjacent: bool = False
     """`p_ref_coord` 的两个独立旋钮（A24 P02 深挖 11-06，1.50，缺省 `None`／关、关时不进参数 dump）：坐标对位来源的格（`evidence.p_ref.via=coord`）
@@ -6688,6 +6689,11 @@ def _note_region_ok(main: PageAdmit, alt: PageAdmit, col: int, ref_main, ref_alt
     if got_m - got_a:                    # 主切法在小注范围里放出的字，备选那份也得放出来
         return False
 
+    return _outside_not_worse(main, alt, col, ref_main, ref_alt, in_main, in_alt)
+
+
+def _outside_not_worse(main: PageAdmit, alt: PageAdmit, col: int, ref_main, ref_alt, in_main, in_alt) -> bool:
+    """两遍各去掉换切的那段格，其余格备选那遍待审不多、与坐标字冲突不多。"""
     def outside(adm, ref, skip):
         coord = {(r.slot, r.sub or ""): r.ref_char for r in (getattr(ref, "coord", None) or []) if r.col == col}
         rv = cf = 0
@@ -6704,6 +6710,37 @@ def _note_region_ok(main: PageAdmit, alt: PageAdmit, col: int, ref_main, ref_alt
     return ra <= rm and ka <= km
 
 
+def _big_region_ok(main: PageAdmit, alt: PageAdmit, col: int, ref_main, ref_alt, chars_main, chars_alt) -> bool:
+    """`alt_note_region` 反方向：主切法把一个大字劈成了 a/b 小注（左右结构的「脉」劈成「永」「月」，两半常常也是字、照样放行），
+    备选同一处是一个大字格。备选那些大字格全放行、其余格不更差，就换（脉经 01 41:1、39:6）。"""
+    def cols(chars):
+        return next((c for c in (getattr(chars, "columns", None) or []) if c.col == col), None)
+    cm_, ca_ = cols(chars_main), cols(chars_alt)
+    cm, ca = main.column(col), alt.column(col)
+    if cm_ is None or ca_ is None or cm is None or ca is None:
+        return False
+    pairs: dict[int, list] = {}
+    for r in cm_.chars:
+        if getattr(r, "sub", None) and getattr(r, "bbox_page", None):
+            pairs.setdefault(r.slot, []).append(r)
+    bigs = [r for r in ca_.chars if not getattr(r, "sub", None) and getattr(r, "bbox_page", None) and r.slot >= 1]
+    in_main, in_alt = set(), set()
+    for slot, rs in pairs.items():
+        if {getattr(r, "sub", None) for r in rs} != {"a", "b"}:
+            continue
+        y0, y1 = min(r.bbox_page[1] for r in rs), max(r.bbox_page[3] for r in rs)
+        for b in bigs:
+            ov = min(y1, b.bbox_page[3]) - max(y0, b.bbox_page[1])
+            if ov > 0.7 * (y1 - y0) and ov > 0.7 * (b.bbox_page[3] - b.bbox_page[1]):
+                in_main |= {(slot, r.sub) for r in rs}
+                in_alt.add((b.slot, ""))
+    if not in_alt:
+        return False
+    if not all(r.admit for r in ca.chars if (r.slot, r.sub or "") in in_alt):
+        return False
+    return _outside_not_worse(main, alt, col, ref_main, ref_alt, in_main, in_alt)
+
+
 def _pick_alt_cols(cand, main: PageAdmit, alt: PageAdmit, ref_main, ref_alt, chars_main, chars_alt,
                    require_matched: bool = False, backed_gain: int = 0, note_region: bool = False) -> list[int]:
     """逐列比两遍准入（错格闸已在 align_ref 剔过候选）：待审少 ≥ `ALT_ADMIT_MIN_GAIN`；与坐标字冲突的放行格不多；
@@ -6711,7 +6748,8 @@ def _pick_alt_cols(cand, main: PageAdmit, alt: PageAdmit, ref_main, ref_alt, cha
     备选首格不能过高（`ALT_FIRST_CELL_MAX`）。"""
     out = []
     for col in cand:
-        if note_region and _note_region_ok(main, alt, col, ref_main, ref_alt, chars_main, chars_alt):
+        if note_region and (_note_region_ok(main, alt, col, ref_main, ref_alt, chars_main, chars_alt)
+                            or _big_region_ok(main, alt, col, ref_main, ref_alt, chars_main, chars_alt)):
             out.append(col)
             continue
         rm, bm, km = _col_stats(main, col, ref_main)

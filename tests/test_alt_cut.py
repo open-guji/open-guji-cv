@@ -458,3 +458,28 @@ def test_alt_note_region_param_off_by_default_not_in_dump():
     from open_guji_cv.steps.seed_admit import SeedAdmitParams
     assert "alt_note_region" not in SeedAdmitParams().model_dump()
     assert SeedAdmitParams(alt_note_region=True).model_dump()["alt_note_region"] is True
+
+
+def test_alt_big_region_pick():
+    """alt_note_region 反方向：主切法把大字劈成 a/b、备选同处一个放行的大字格（脉经 01 41:1「脉」→「永」「月」）。"""
+    from types import SimpleNamespace as NS
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit, PageAdmit, PageAlignRef
+    from open_guji_cv.steps.seed_admit import _pick_alt_cols
+
+    def rec(s, sub, ok, ch="甲"):
+        return AdmitRec(id=f"b:1:1:{s}{sub or ''}", slot=s, sub=sub, admit=ok, char=ch if ok else None,
+                        channel="match_ref" if ok else None)
+
+    def ch(s, sub, y0, y1):
+        return NS(slot=s, sub=sub, bbox_page=(0, y0, 10, y1), patch_key="k")
+    main = PageAdmit(page=1, columns=[ColumnAdmit(col=1, chars=[rec(1, None, 1), rec(2, "a", 1, "永"), rec(2, "b", 1, "月"),
+                                                                rec(3, None, 1)])])
+    cm = NS(columns=[NS(col=1, chars=[ch(1, None, 0, 100), ch(2, "a", 100, 200), ch(2, "b", 105, 195),
+                                      ch(3, None, 200, 300)])])
+    alt = PageAdmit(page=1, columns=[ColumnAdmit(col=1, chars=[rec(1, None, 1), rec(2, None, 1, "脉"), rec(3, None, 1)])])
+    ca = NS(columns=[NS(col=1, chars=[ch(1, None, 0, 100), ch(2, None, 100, 200), ch(3, None, 200, 300)])])
+    ref = PageAlignRef(page=1)
+    assert _pick_alt_cols([1], main, alt, ref, ref, cm, ca) == []
+    assert _pick_alt_cols([1], main, alt, ref, ref, cm, ca, note_region=True) == [1]
+    alt.columns[0].chars[1] = rec(2, None, 0)                    # 备选那个大字没放行：不换
+    assert _pick_alt_cols([1], main, alt, ref, ref, cm, ca, note_region=True) == []
