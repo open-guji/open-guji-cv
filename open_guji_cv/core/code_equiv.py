@@ -358,6 +358,11 @@ _ROSTER_GRID_MANUAL_1120 = ("roster_grid_slots 跟进（缺省关时不走）：
                             "scripts/code_equiv.py check，2026-11-20（A22，回 ZM／A20 #1726 下游问题）")
 _ROSTER_GRID_MANUAL_0779 = (_ROSTER_GRID_MANUAL_1120 + "。殿本 patch 线移植（v0.7.78 + #1731 → v0.7.79）：原样 cherry-pick，row_segment、roster_segment"
                             "哈希按本线重算、old 取 #1726 之前的本线哈希（v0.7.77），本线未另跑产物比对（A31 2026-11-20）")
+_NOTCH_1120 = ("border_detect 加 head_raise_notch（缺口列认主上框，impl/keben/border.notch_top；缺省关、不进参数 dump，detect_borders 多一个缺省 False 的参数、"
+               "关时那一支不进；其余是新函数定义）：殿本 vol24 16 页（1,5,10,15,20,26,27,30,35,40,45,50,55,60,65,70，含缺口页 p27；main 包 cv0.7.70-c36-g24-m3-r14var 当上游）、"
+               "vol28 13 页（1,4,5,8,9,10,17,22,40,80,120,160,190，含缺口页 4/5/8/9/10/17/22；main 包 cv0.7.70-c36-g24-m3-r14cells 当上游）border_detect 与 origin/dev ced51c3 "
+               "产物逐字节相同；column_warp 只调 impl/keben/border 里没改的函数；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-20（A22）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1783,6 +1788,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="fc15397166ed7ef394d621c084b6313d16306d1b67cb0c94505fc408a4c647af",
           old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
           evidence=_ROSTER_GRID_MANUAL_0779),
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='e613abc41845b51b0853ef849dec2ec43cb8597f2f59523259c6a3ef07c7d929',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_NOTCH_1120),
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='dcc3f23d5ce58621db0a8bb9be9c6fc360cdbe86a2c5abacb42ba97fd4177352',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_NOTCH_1120),
 )
 
 
