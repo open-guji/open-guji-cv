@@ -932,7 +932,11 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     add_anchor_reasons(routed / f"{chapter}.team.pending.json", export, tvd, chapter)
     final = public
     rd = raw_dir(ws, book)
-    if rd and not a.no_sprite:
+    if (getattr(a, "no_cell_sprite", False) or os.environ.get("GUJI_NO_CELL_SPRITE") == "1") and not a.no_sprite:
+        # 不出格图雪碧图（用户 11-20 提议：审阅时本来就下书影，网站按 box 现场裁）：每格写网站页图坐标的 box，
+        # 相似字字形图（字体渲染，便宜）照出
+        final = no_cell_sprite(public, cord, out / "sprites", chapter, py)
+    elif rd and not a.no_sprite:
         sp = out / "sprites"
         if run([py, HERE / "sprite_build.py", "--cord", cord, "--pending", public, "--raw-dir", rd,
                 "--book", text_id, "--vol", chapter[-2:], "--out", sp]).returncode == 0:
@@ -1814,6 +1818,47 @@ def copy_figs(export_dir: Path, d: Path, ch: str) -> int:
     return n
 
 
+def site_boxes(cord_path: Path) -> dict[str, list[int]]:
+    """导出 cord → {格: 网站页图坐标的框}（换坐标同 copy_cord_for_site；原文件不动）。"""
+    cord = json.loads(Path(cord_path).read_text(encoding="utf-8"))
+    table = site_page_table(cord["book_id"], cord["volume"])
+    rebase_cord(cord, table)
+    return {c["a"]: c["box"] for pg in cord.get("pages") or [] for c in pg.get("cells") or [] if c.get("a") and c.get("box")}
+
+
+def attach_boxes(doc: dict, boxes: dict) -> tuple[dict, int]:
+    """单子每格补 ``box``（已有的不动）；返回（新单，补了几格）。网页 resolveCrop 优先用单上的 box。"""
+    n, cells = 0, []
+    for c in doc.get("cells") or []:
+        b = boxes.get(c.get("cell"))
+        if b and not c.get("box"):
+            c = dict(c, box=list(b))
+            n += 1
+        cells.append(c)
+    return dict(doc, cells=cells), n
+
+
+def no_cell_sprite(public: Path, cord: Path, sp: Path, chapter: str, py: str) -> Path:
+    """``--no-cell-sprite``：不跑 sprite_build，单上每格带 box（网站页图坐标），有相似字照跑 alt_build。返回最终单子路径。"""
+    sp.mkdir(parents=True, exist_ok=True)
+    doc = json.loads(Path(public).read_text(encoding="utf-8"))
+    try:
+        doc, n = attach_boxes(doc, site_boxes(cord))
+    except (ValueError, KeyError, OSError) as e:
+        print(f"⚠ 换不到网站页图坐标（{e}）：单上不写 box，网站按 book-text cord 裁（book-text 不是这一版切分时会裁偏）")
+        n = 0
+    print(f"不出格图雪碧图：{n}/{len(doc.get('cells') or [])} 格写了网站坐标 box，网站按书影现场裁")
+    final = sp / "pending.with-box.json"
+    final.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
+    if any(c.get("alt") for c in doc.get("cells") or []):
+        (sp / "assets.json").write_text(json.dumps({"rev": doc.get("rev"), "files": []}, ensure_ascii=False) + "\n", encoding="utf-8")
+        if run([py, HERE / "alt_build.py", "--pending", final, "--chapter", chapter, "--out", sp]).returncode == 0:
+            final = sp / "pending.with-alt.json"
+        else:
+            (sp / "assets.json").unlink()
+    return final
+
+
 def copy_cord_for_site(src: Path, dst: Path) -> int:
     """导出的 cord 换到网站页图坐标后写进 book-text（导出目录里的原件不动，sprite 还要用）。返回换了几页。"""
     from guji_manager.formats import guji_char_cord as cc
@@ -2133,6 +2178,8 @@ def main(argv=None) -> int:
             p.add_argument("--no-alt", action="store_true", help="不跑 guji audit alt（单子上没有相似字）")
             p.add_argument("--fetch-zi", action="store_true", help="audit alt 去字统网补缓存（首次慢）")
             p.add_argument("--no-sprite", action="store_true")
+            p.add_argument("--no-cell-sprite", action="store_true",
+                           help="不出格图雪碧图：单上每格写网站页图坐标的 box，网站按书影现场裁；相似字字形图照出")
             p.add_argument("--no-seg-selfcheck", action="store_true",
                            help="不跑同字对照自检（guji-manager seg_defect --gate；书没在它的 SELFCHECK_BOOKS 里开也不跑）")
             p.add_argument("--recheck", help="复审清单（格号<TAB>说明<TAB>旧人裁 id<TAB>旧人裁的字）：这些格不论放没放行、"
