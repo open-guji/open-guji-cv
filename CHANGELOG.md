@@ -60,6 +60,10 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.85] - 2026-11-20
+
+- 发版说明（全唐文·形近字线 11-20，PATCH）：v0.7.82 ＋ #1755 seed_admit 书级整理本字别名 `group_flow_ref_alias`（Sheldon 11-20 定「整理本 間 不挡本书刻的 閒，照刻形记閒」；全唐文书配置写 `{間: 閒}`）。字组流程开头把整理本字与坐标对位字按别名表换成本书刻的字，避免 ids 判閒、整理本 間 时的 ref_dissent。缺省空、不进参数 dump；seed_admit、groups.flow 已登 code_equiv（本线哈希，链 a834dd3e→d84d3546、d17a46a7→e83a839b）。**对 v0.7.82 各 Step 产物不判过期**；全唐文推书配置后 seed_admit 按参数指纹过期（有意）。底库不变。**不含** v0.7.83/v0.7.84（殿本、史記 patch 线）与 v0.7.82 之后 dev 其他改动。
+
 ## [0.7.84] - 2026-11-20
 
 史記 patch 线：v0.7.80 + #1746（A24，ry 入口 `ref_top_extra`）。SJ v0.2 整书重跑用；配底库 b31 不变。**不含** dev 线及殿本 patch 线（v0.7.81–0.7.83）其他改动。
