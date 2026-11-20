@@ -1209,6 +1209,11 @@ class SeedAdmitParams(BaseModel):
     字形库首位不同（语义也不同、不是异体对），而库首位覆盖度 ≥ 此值 → 不放，照旧送审（`lane_skip.why=lib_veto`，
     doubt `lane_lib_veto`）。维基文库 Page 版对比 001–015 发现这两条通道无视库首位放错（位/蝗、刺/殯、戸/吏…）。
     `lib_coord_primary`（放的就是库首位）不受影响。只降不升。0＝关（缺省，不进参数 dump）。"""
+    lane_lib_veto_pairs: list[str] = []
+    """库否决的照刻形例外（2026-11-19，全唐文·码位线）：每项两个字（如 "寇𡨥"），是同一个词的异体、本书照刻形记。
+    库否决要否的这一格若「要放的字」与「库首位」正好是名单里的一对 → 不否决，改放库首位（库形，刻本原字；
+    `evidence.lane.lib_form` 记原字与 cov），其余照旧。d2 轮 lane_lib_veto 退回 518 格里约 300 格是这类异体对
+    （寇/𡨥 80、奧/奥 49、遙/遥 47、皐/臯 20、冑/胄 17、冊/𠕋 17）。空＝不例外（缺省，不进参数 dump）。"""
     """库否决放宽（2026-10-31，A32）：默认字正是字形库第二名时不否决（印泥压着，近形两字分差常不到 0.01）。
     vol20–99 r3 包里库否决 340 格，看图默认字错的约 10 格，全在「默认字不在库前二」那一档；默认字是第二名的 150 格看图未见错。"""
     lane_seal_lib_veto_min_n: int = 2
@@ -1738,6 +1743,8 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.lane_lib_veto:
             d.pop("lane_lib_veto", None)
+        if isinstance(d, dict) and not (self.lane_lib_veto and self.lane_lib_veto_pairs):
+            d.pop("lane_lib_veto_pairs", None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal or self.rare_ref):
             d.pop("lane_keep_ref_review", None)
         if isinstance(d, dict) and not self.lane_header_formula:
@@ -5084,10 +5091,14 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                 m = mmap.get(rec.id)
                 top = (m.candidates[0] if m and m.candidates else None)
                 if top and float(top[1]) >= p.lane_lib_veto and top[0] != char and not same(top[0], char):
-                    rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "lib_veto", "lib": top[0],
-                                                        "cov": round(float(top[1]), 4)}}
-                    rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["lane_lib_veto"]))
-                    continue
+                    if p.lane_lib_veto_pairs and any(len(q) == 2 and {q[0], q[1]} == {top[0], char} for q in p.lane_lib_veto_pairs):
+                        lev = {**lev, "lib_form": {"from": char, "cov": round(float(top[1]), 4)}}
+                        char = top[0]                       # 照刻形：放库首位的形，不否决
+                    else:
+                        rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "lib_veto", "lib": top[0],
+                                                            "cov": round(float(top[1]), 4)}}
+                        rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["lane_lib_veto"]))
+                        continue
             if p.lane_group_img_veto is not None and char and (
                     gv := _group_img_dissent(ev.get("group"), char, p.lane_group_img_veto)):
                 rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "group_img", **gv}}

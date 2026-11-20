@@ -874,3 +874,19 @@ def test_lane_lib_veto_witness3_and_coord():
 def test_lane_lib_veto_off_not_in_dump():
     assert "lane_lib_veto" not in SeedAdmitParams(db_path="x", lane_witness3=True).model_dump()
     assert SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98).model_dump()["lane_lib_veto"] == 0.98
+
+
+def test_lane_lib_veto_pairs_follow_lib_form():
+    """名单里的异体对：库否决不否，改放库首位的形（照刻形）；名单外的对照旧否决；缺省空不进 dump。"""
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_lib_veto_pairs=["天大"], **kw)
+    assert n == 1 and rs[5].admit and rs[5].char == "大"
+    assert rs[5].evidence["lane"]["lib_form"] == {"from": "天", "cov": 0.99}
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_lib_veto_pairs=["天太", "大"], **kw)
+    assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "lib_veto"
+    d = SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98).model_dump()
+    assert "lane_lib_veto_pairs" not in d
+    assert SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98, lane_lib_veto_pairs=["天大"]).model_dump()["lane_lib_veto_pairs"] == ["天大"]

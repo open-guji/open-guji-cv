@@ -801,6 +801,12 @@ class RowSegmentParams(BaseModel):
     #: 整页都是职名用 `roster_pages`。册配置里写 `page_kinds: {roster_cols: {11: [2]}}`（`core/page_kinds.py` 翻成本参数）。
     #: 只有一两列量不出全页「臣」行，字形库细切（`roster_glyph_refine`）改把整列当官衔区。缺省空，空时不进参数 dump。
     roster_cols: dict[int, list[int | str]] = {}
+    #: **职名列按格网位置编号**（Sheldon 2026-11-19，ZM 转；殿本 vol01 职名页 87–130）：职名分支切出的字不再按字连续编号，
+    #: 改按格网位置编——列首、字间空着的格都占号（`impl/keben/roster_segment.grid_slots`）：大字按版框内 `chars_per_line`
+    #: 等分的格；雙行小字一格一字的按格网，比格密的（vol01 p88）按本段字距，左行比右行低一字就从下一号起。号严格递增、
+    #: 尽量不超过格数；字比格多收不回的列打 `roster_slot_overflow`。只套书职名实现有 `grid_slots` 的书生效（史記写本没有）。
+    #: False（缺省）＝照旧按字连续编号，产物逐字节不变、不进参数 dump。
+    roster_grid_slots: bool = False
     #: **列端虚线残段记空白**（overview#376 后续，2026-10-07）：缺省关，关时产物逐字节不变。开了以后，
     #: 首格/末格/抬头格里墨的外接框竖向 ≤ `dash_h_frac`×period 且横向 ≤ `dash_w_frac`×列宽的，kind 记 `blank`
     #: 而不是没字的 `char`。阈值未经真图标定（云端没有原图），先按 S2 实测「虚线跨度 ≤29 行 ≈ 0.25 period」取。
@@ -1072,6 +1078,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_rows", None)
             if not self.roster_cols:
                 d.pop("roster_cols", None)
+            if not self.roster_grid_slots:
+                d.pop("roster_grid_slots", None)
             if not self.jiazhu_single_head:
                 d.pop("jiazhu_single_head", None)
             if not self.jiazhu_half_a:
@@ -1850,7 +1858,7 @@ class RowSegmentStep(Step):
                      gate: GateManifest, wins: PageWindows, pc: PageCells) -> PageCells:
         """`roster_cols` 点名的列换成职名页分支切出的（不定字数）；没点名本页原样返回。
 
-        格号从 1 数（职名列不跟格网）。只切点名的列，全页 em 也只按这几列量。职名分支切失败（ok=False）的列留格网切的。"""
+        格号从 1 数（职名列不跟格网；开了 `roster_grid_slots` 按格网位置编）。只切点名的列，全页 em 也只按这几列量。职名分支切失败（ok=False）的列留格网切的。"""
         spec = p.roster_cols.get(page) if p.roster_cols else None
         cols = set(_expand_pages(list(spec))) if spec else set()
         cols &= {cc.col for cc in pc.columns}
@@ -1885,7 +1893,8 @@ class RowSegmentStep(Step):
     def _run_roster(self, ctx: RunContext, p: RowSegmentParams, page: int,
                     gate: GateManifest, wins: PageWindows, only: set[int] | None = None,
                     despeckle: set[int] | None = None, chen_fallback: bool = False) -> PageCells:
-        """职名页：每列字数不定，`n_body_slots` = 本列实际位数，`boundaries` 为空（没有格线）。
+        """职名页：每列字数不定，`n_body_slots` = 本列实际位数（开了 `roster_grid_slots` 是格数与最大格号的大者），
+        `boundaries` 为空（没有格线）。
 
         雙行小字配对成同一物理位：右行第 i 字（jiazhu_a）与左行第 i 字（jiazhu_b）共用 pos，
         `gap_center` = 两行之间的缝——Step4 按 pos 合成满宽格再从缝拆开，与正文雙行同一条路。
@@ -1897,6 +1906,7 @@ class RowSegmentStep(Step):
         _impl = lambda name: importlib.import_module(resolve(ctx.book, f"open_guji_cv.impl.keben.{name}"))  # noqa: E731
         load_scorer = _impl("roster_glyph").load_scorer
         segment_roster_page = _impl("roster_segment").segment_roster_page
+        grid_slots = getattr(_impl("roster_segment"), "grid_slots", None)
         page_w = wins.page_size[0]
         admitted = [gc for gc in gate.columns if (gc.admitted or not p.only_admitted)
                     and (only is None or gc.col in only)]
@@ -2007,6 +2017,14 @@ class RowSegmentStep(Step):
                     gap_of.append(gap)
                 pos += n_pair
                 i = k
+            # 按格网位置编号（`grid_slots`，空格占号；套书的职名实现没有这个函数就照旧按字连续编号，如史記写本）
+            overflow = False
+            if p.roster_grid_slots and grid_slots is not None and items:
+                n_grid = p.n_body_slots or ctx.book.chars_per_line or (
+                    max(1, int(round((gc.border_bottom - gc.border_top) / gate.period))) if gate.period else 0)
+                if n_grid:
+                    pos_of, overflow = grid_slots(items, gc.border_top, gc.border_bottom, n_grid)
+                    pos = max(n_grid, max(pos_of))
             cells: list[CellRec] = []
             for order, (it, ps, gp) in enumerate(zip(items, pos_of, gap_of)):
                 cells.append(CellRec(
@@ -2020,7 +2038,9 @@ class RowSegmentStep(Step):
                                 for x, y in mapper.quad_tr(it.x0, it.y0, it.x1, it.y1)]),
                 ))
             out.append(ColumnCells(ok=True, n_body_slots=pos, cells=cells, boundaries=[],
-                                   em=float(rc.em), flags=["roster", *rc.flags], **base))
+                                   em=float(rc.em),
+                                   flags=["roster", *rc.flags, *(["roster_slot_overflow"] if overflow else [])],
+                                   **base))
         return PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
 
 
