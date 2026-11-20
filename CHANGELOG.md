@@ -55,8 +55,13 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.82] - 2026-11-20
+
+- 发版说明（全唐文·形近字线 11-20，**dev 快照 patch**，PATCH；全唐文 d2/d3 实际跑的是 dev 42e5d7d6，v0.7.81 基于 v0.7.74 缺 #1727 lane_lib_veto_pairs 等，作废勿用）：直接取 dev a90cc10f，即 dev 42e5d7d6 + #1734 witness3 `lane_shape_first`（缺省关）＋ #1729 seed_admit 候𠋫 书级刻形判法 `group_flow_hou_shape`（没配 json 不跑），两项都已登 code_equiv（#1735/#1736、#1737，链式 3e10a081→182de6ff→d84d3546）。**对 dev 42e5d7d6 各 Step 产物不判过期**；全唐文推 `config/groups/hou_shape.json` 后 seed_admit 按参数指纹整体过期（有意）。底库不变。
+
 ## [0.7.81] - 2026-11-20
 
+- **作废，勿用**（底子错：全唐文实跑 dev 42e5d7d6，本版缺 #1727 等；改用 v0.7.82）。
 - 发版说明（全唐文·形近字线 11-20，**全唐文 patch 线**，PATCH；用户 11-20 定各书自发 patch 版）：v0.7.74 + #1729（seed_admit 候𠋫 书级刻形判法 `group_flow_hou_shape`，`groups/hou_shape.py`；cherry-pick f249d335，path_params 冲突手解：本线只加 `group_flow_hou_shape`），不含 v0.7.74 之后 dev 上的其他改动。#1737 的 code_equiv 登记是 dev 线哈希，本线不适用、未带。**Step 指纹对 v0.7.74 只有 `seed_admit` 变**（91ee5d84→06b1760b，未登 code_equiv：没跑产物比对；全唐文随后推 `config/groups/hou_shape.json`，seed_admit 本来就要整体重落），下游随之过期。底库不变（b30）。
 
 ## [0.7.80] - 2026-11-20
