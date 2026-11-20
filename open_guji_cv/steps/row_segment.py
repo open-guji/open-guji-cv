@@ -759,6 +759,7 @@ ALT_CUT_REV = 2
 
 ALT_NOJZ_FLAG = "alt_nojz：不认雙行小注的备选（列里认出的小注段按大字格切），下游按列挑"
 ALT_CUTS_FLAG = "alt_cuts：按备选格线表切的备选（如 YOLO 字框定的格线），下游按列挑"
+ALT_CELLS_FLAG = "alt_cells：备选格线表里整列写定的格（YOLO 框字＋小注分类器），下游按列挑"
 
 
 def _alt_same_ink_cells(main_cells, alt_cells) -> bool:
@@ -994,8 +995,13 @@ class RowSegmentParams(BaseModel):
     #: `alt_cut` 的路按列挑（align_ref `alt_select: admit`）。起因：脉经序页、正文字有高有低，等距 20 格累积错位、把 4 个字切成 5 格
     #: （01 7:7「景之書并」）；`scripts/yolo_alt_cuts.py` 用 yolo_tool 单字模型在列图上框字、格线放在相邻字框之间。直接替换主切法时
     #: 上下结构高字常被劈成两框（聾→龍耳），所以只作备选。空＝关（缺省，不进参数 dump）；表内容 sha 自动填进 `alt_cuts_fingerprint`。
+    #: 行里带 `cells`（整列写定，`scripts/yolo_alt_cells.py`：YOLO 框字＋小注分类器，夹注分 a/b）时按格出备选（旗 `alt_cells`，
+    #: 裁图走职名列逐格裁法，配 `cell_shrink.manual_ink_fit`），列图高与表的 `col_h` 差过 `LAYOUT_CUTS_H_TOL` 不套。
     alt_cuts: str = ""
     alt_cuts_fingerprint: str = ""
+    #: 表里带 `cells`（整列写定，格式同 manual-cells 的 `expected.cells`）的行出的备选，**顶掉** `alt_nojz` 那份（一列只有一份备选）。
+    #: False（缺省，不进参数 dump）＝本列已有 alt_nojz 备选就不出。
+    alt_cells_first: bool = False
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -1114,6 +1120,8 @@ class RowSegmentParams(BaseModel):
             if not self.alt_cuts:
                 d.pop("alt_cuts", None)
                 d.pop("alt_cuts_fingerprint", None)
+            if not self.alt_cells_first:
+                d.pop("alt_cells_first", None)
             if not self.alt_cut:
                 d.pop("alt_cut", None)
             else:
@@ -1811,7 +1819,16 @@ class RowSegmentStep(Step):
                     if not _alt_same_ink_cells(out[-1].cells, cn.cells):
                         alt_out.append(cn)
             row_ac = alt_cuts_tab.get((page, gc.col)) if alt_cuts_tab else None
-            if (row_ac is not None and not human_col and r is not None and lay_cuts is None
+            if (row_ac is not None and row_ac.get("cells") and not human_col and r is not None and lay_cuts is None
+                    and abs(int(row_ac.get("col_h") or -99) - img.shape[0]) <= LAYOUT_CUTS_H_TOL
+                    and (p.alt_cells_first or all(a_.col != gc.col for a_ in alt_out))):
+                # 整列写定的备选格（`scripts/yolo_alt_cells.py`：YOLO 框字＋小注分类器，夹注分 a/b 逐字切）
+                one = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=[out[-1]])
+                cc_ = _apply_manual_cells(one, {gc.col: row_ac["cells"]}, gate, wins).columns[0]
+                if cc_ is not out[-1] and not _alt_same_ink_cells(out[-1].cells, cc_.cells):
+                    cc_ = cc_.model_copy(update={"flags": [*cc_.flags, ALT_CELLS_FLAG]})
+                    alt_out = [a_ for a_ in alt_out if a_.col != gc.col] + [cc_]
+            elif (row_ac is not None and not row_ac.get("cells") and not human_col and r is not None and lay_cuts is None
                     and all(a_.col != gc.col for a_ in alt_out)):
                 ac = _layout_cuts(row_ac, img.shape[0], n_raised_col)
                 if ac is not None:
