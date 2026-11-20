@@ -472,6 +472,10 @@ _SHAPE_FIRST_1120 = ("seed_admit 加书级开关 lane_shape_first（#1734，795e
 _ALT_CUTS_1120 = ("row_segment 加书级 alt_cuts（备选格线表，缺省空、不进参数 dump；表空时不读不切）、context_decide 加 alt_columns"
                   "（备选列也做上下文裁决，缺省关、不进参数 dump）：脉经第 1 册 7、13、17、25 页 row_segment、context_decide 与 origin/dev 产物"
                   "逐字节相同；scripts/code_equiv.py check，2026-11-20（MJ，GUJI-774）")
+_HOU_1120 = ("seed_admit 加书级刻形判法 group_flow_hou_shape（#1729，9ddaa9a2；缺省空、只在 group_flow 含 hou 且数据目录有 config/groups/hou_shape.json 时自动填，"
+             "填了才进参数指纹 hs…；path_params 剔掉）：没配置时 _hou_shape_pass 不调，_codepoint_exempt 多的一句查 evidence.hou_shape 恒不中。"
+             "全唐文 029 册全册 170 页（main 包 cv0.7.74-c81-g-03c8f4-k11-qtw029-d2-a3 当上游，中心库 rev 1382154 尚无 hou_shape.json）seed_admit 与 origin/dev 0aaeb8f9 产物逐字节相同；"
+             "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-20（A31）。放了 hou_shape.json 的书按参数指纹自然过期")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2236,6 +2240,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="e61a08115d96d9d4c94a6e0adc65ef5b950533d7f8b936512bc43e46b418878f",
           old="442732ff599c28b52a7dca9064ce776441c2f9b4dadf867d9863d380e6a43a1a",
           evidence=_ALT_CUTS_1120),
+    # seed_admit 候𠋫 书级刻形判法 hou_shape（没配置的书不走；全唐文形近字线 11-20，#1729）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="d84d35465efc3d3d9cdfe797bedc93caa11e183f7f4a7a5616da55c45c35ff56",
+          old="182de6ff72acd4a853d85c04bac395a45a5ab5b49c461e1f7d007c9a587388cf",
+          evidence=_HOU_1120),
 )
 
 

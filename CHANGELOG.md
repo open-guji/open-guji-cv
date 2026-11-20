@@ -56,6 +56,27 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.82] - 2026-11-20
+
+- 发版说明（全唐文·形近字线 11-20，**dev 快照 patch**，PATCH；全唐文 d2/d3 实际跑的是 dev 42e5d7d6，v0.7.81 基于 v0.7.74 缺 #1727 lane_lib_veto_pairs 等，作废勿用）：直接取 dev a90cc10f，即 dev 42e5d7d6 + #1734 witness3 `lane_shape_first`（缺省关）＋ #1729 seed_admit 候𠋫 书级刻形判法 `group_flow_hou_shape`（没配 json 不跑），两项都已登 code_equiv（#1735/#1736、#1737，链式 3e10a081→182de6ff→d84d3546）。**对 dev 42e5d7d6 各 Step 产物不判过期**；全唐文推 `config/groups/hou_shape.json` 后 seed_admit 按参数指纹整体过期（有意）。底库不变。
+
+## [0.7.81] - 2026-11-20
+
+- **作废，勿用**（底子错：全唐文实跑 dev 42e5d7d6，本版缺 #1727 等；改用 v0.7.82）。
+- 发版说明（全唐文·形近字线 11-20，**全唐文 patch 线**，PATCH；用户 11-20 定各书自发 patch 版）：v0.7.74 + #1729（seed_admit 候𠋫 书级刻形判法 `group_flow_hou_shape`，`groups/hou_shape.py`；cherry-pick f249d335，path_params 冲突手解：本线只加 `group_flow_hou_shape`），不含 v0.7.74 之后 dev 上的其他改动。#1737 的 code_equiv 登记是 dev 线哈希，本线不适用、未带。**Step 指纹对 v0.7.74 只有 `seed_admit` 变**（91ee5d84→06b1760b，未登 code_equiv：没跑产物比对；全唐文随后推 `config/groups/hou_shape.json`，seed_admit 本来就要整体重落），下游随之过期。底库不变（b30）。
+
+## [0.7.80] - 2026-11-20
+
+史記 patch 线：v0.7.62 + #1586 + #1627 + #1673 + #1676 + #1677（前置 #1502、#1505），配**底库 b31**（＝b28＋两份异体文件）。SJ v0.2 整书重跑用（A31 11-20）。**不含** dev 线及殿本 patch 线其他改动（#1506／#1508 读不到人工指定改报错、#1678 variants.tsv、#1679 等都不带）。
+
+- PATCH：异体边补 16 对兄弟异体（#1586，`config/variants/local_edges.json`、`variants.json`，与 dev 逐字节同）。底库文件变：钉 b28 的册须改钉 **b31**，否则起跑被语料校验拒绝。
+- PATCH：人裁作废与重绑（与 dev 上 `feedback/bindings.py` 逐字节同；`lookup.py` 只差 #1506／#1508 的读失败报错）：
+  - #1502 `stale_human_marks` 字形库读不到时仍读 `stale_verdicts.tsv`；#1505 `rebind_library_shapes` 尊重作废标记（误锚人裁重绑后不再落到别的格）。
+  - #1627 迁移补锚闸：`backfill:migrated` 补锚与上一版锚落格不同 → `review`（旧格号人裁不再静默挂到邻格；史記没有这类补锚行）。
+  - #1673 库内审阅改标重进的人裁刻例照常采信；#1676 撤库／改标的撤下标记只作废被撤刻例原字的人裁（史記没有库内审阅标记）。
+  - #1677 `seed_admit` 的 `code_deps` 加 `feedback.lookup`、`feedback.bindings`。
+- **Step 指纹对 v0.7.62**（实算）：只 `seed_admit` 变（ec92cec7→be5aa272），其余 22 步不变；另因底库换号，读语料的步随钉子过期。不登 code_equiv。
+
 ## [0.7.79] - 2026-11-20
 
 - 发版说明（A31 11-20，**殿本 patch 线**，PATCH；ZM 第一册线要，vol01 87–130 重跑前）：v0.7.78 + #1731（`roster_grid_slots` 跟进：人裁整列格 `n_body_slots` 取 max(格数, 最大号)、超格数打 `roster_slot_overflow`；`grid_slots` 段内两行同空的号收掉、密雙行第二段起号顺延；新逻辑只在开关开着时走），**不含** dev 线其他改动。code_equiv：row_segment、roster_segment 按本线哈希重登（`_ROSTER_GRID_MANUAL_0779`，old 取 v0.7.77 本线哈希），**关着时 Step 指纹对 v0.7.78（＝v0.7.77）全不变**；开了 `roster_grid_slots` 的册 row_segment 按此过期。底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1731 已在 dev）。
