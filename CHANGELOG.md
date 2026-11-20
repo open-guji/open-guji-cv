@@ -54,6 +54,10 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.79] - 2026-11-20
+
+- 发版说明（A31 11-20，**殿本 patch 线**，PATCH；ZM 第一册线要，vol01 87–130 重跑前）：v0.7.78 + #1731（`roster_grid_slots` 跟进：人裁整列格 `n_body_slots` 取 max(格数, 最大号)、超格数打 `roster_slot_overflow`；`grid_slots` 段内两行同空的号收掉、密雙行第二段起号顺延；新逻辑只在开关开着时走），**不含** dev 线其他改动。code_equiv：row_segment、roster_segment 按本线哈希重登（`_ROSTER_GRID_MANUAL_0779`，old 取 v0.7.77 本线哈希），**关着时 Step 指纹对 v0.7.78（＝v0.7.77）全不变**；开了 `roster_grid_slots` 的册 row_segment 按此过期。底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1731 已在 dev）。
+
 ## [0.7.78] - 2026-11-20
 
 - 发版说明（A31 11-20，**殿本 patch 线**，PATCH；ZM 第一册线要，vol01 职名页 87–130 格号空格占号）：v0.7.77 + #1726（row_segment 书级开关 `roster_grid_slots`：职名分支切出的字按格网位置编号，列首、字间空格占号；缺省关、不进参数 dump；`impl/keben/roster_segment.grid_slots`），只带这一项，**不含** dev 上 #1726 依赖的 `roster_cols`／`chen_fallback` 及 dev 线其他改动（含 #1678，故不触发 variants.tsv 的 CorpusDrift）。code_equiv：row_segment、roster_segment 按本线哈希重登（`_ROSTER_GRID_0778`；dev 上证据为殿本 vol01 8 页对 dev、87–130 关着对 main 包逐字节同，本线未另跑产物比对），**关着时 Step 指纹对 v0.7.77 全不变**；开了的册 row_segment 参数指纹变，从 row_segment 起重跑。底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1726 已在 dev）。
