@@ -251,6 +251,7 @@ class SeedAdmitParams(BaseModel):
     group_flow_book_knn: dict[str, str] = Field(default_factory=dict)   # 组 id → 书级刻形近邻库（`groups.book_knn`，缺省找 config/groups/book_knn/<组>.json；没有＝不跑，行为不变）
     group_flow_rr_shape: str = ""            # 入人八 书级刻形判法模型（`groups.rr_shape`，缺省找 config/groups/rr_shape.json；没有＝不跑，行为不变）。
     group_flow_wu_shape: str = ""            # 嗚鳴 书级刻形判法模型（`groups.wu_shape`，缺省找 config/groups/wu_shape.json；没有＝不跑，行为不变；全唐文 11-14）。
+    group_flow_hou_shape: str = ""           # 候𠋫 书级刻形判法（`groups.hou_shape`，几何量判 亻 右边第二竖长短；缺省找 config/groups/hou_shape.json；没有＝不跑，行为不变；全唐文 11-20）。
     group_flow_part_shape: str = ""          # 书级部件刻形判法模型（`groups.part_shape`，剌刺／疎踈 等差在一块部件的字对，一份文件挂多对；缺省空＝不跑，不自动找文件；全唐文 11-15）。
     group_flow_near_knn: str = ""            # 形近护栏格书级刻形近邻库（`groups.near_knn`，缺省找 config/groups/near_knn.json；没有＝不跑，行为不变）。
                                               # 只补放待审格，候选限 本格字／整理本／库首位，全书刻例近邻也须同意（全唐文形近字线 2026-11-04）
@@ -1867,6 +1868,9 @@ class SeedAdmitParams(BaseModel):
                 if self.group_flow_wu_shape:         # 嗚鳴 书级刻形判法（没有模型的书不加，旧指纹不变）
                     from ..groups.wu_shape import fingerprint as _ws_fp
                     parts.append("ws" + _ws_fp(self.group_flow_wu_shape))
+                if self.group_flow_hou_shape:        # 候𠋫 书级刻形判法（没有配置的书不加，旧指纹不变）
+                    from ..groups.hou_shape import fingerprint as _hs_fp
+                    parts.append("hs" + _hs_fp(self.group_flow_hou_shape))
                 if self.group_flow_part_shape:       # 书级部件刻形判法（没有模型的书不加，旧指纹不变）
                     from ..groups.part_shape import fingerprint as _pt_fp
                     parts.append("pt" + _pt_fp(self.group_flow_part_shape))
@@ -1961,7 +1965,7 @@ class SeedAdmitStep(Step):
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
-                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_wu_shape", "group_flow_part_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn",
+                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_wu_shape", "group_flow_hou_shape", "group_flow_part_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn",
                      "solo_adapt_profile", "stroke_veto"),
     )
 
@@ -2655,6 +2659,8 @@ class SeedAdmitStep(Step):
                 d_ws = _wu_shape_pass(p, out, amap, ctx, page, patch_missing)
                 n_auto += d_ws
                 n_review -= d_ws
+            if p.group_flow_hou_shape:
+                _hou_shape_pass(p, out, ctx, page, patch_missing)
             if p.group_flow_part_shape:
                 d_pt = _part_shape_pass(p, out, amap, ctx, page, patch_missing)
                 n_auto += d_pt
@@ -2894,6 +2900,8 @@ def _codepoint_exempt(rec, book) -> bool:
     tgt = book.canonical_char(rec.char)
     if tgt == rec.char:
         return False
+    if ((rec.evidence or {}).get("hou_shape") or {}).get("char") == rec.char:
+        return True                       # 候𠋫 书级刻形判法判出的 候 照录，不归 𠋫
     gids = _shape_split(rec.char, tgt)
     if not gids:
         return False
@@ -5181,6 +5189,10 @@ def _resolve_group_flow_paths(p) -> None:
     if not ws and "wu" in p.group_flow and (cfg / "wu_shape.json").exists():
         ws = str(cfg / "wu_shape.json")
     object.__setattr__(p, "group_flow_wu_shape", ws)
+    hs = _abs(p.group_flow_hou_shape) if p.group_flow_hou_shape else ""
+    if not hs and "hou" in p.group_flow and (cfg / "hou_shape.json").exists():
+        hs = str(cfg / "hou_shape.json")
+    object.__setattr__(p, "group_flow_hou_shape", hs)
     if p.group_flow_part_shape:                  # 相对路径先找数据目录（config/groups/part_shape.json，随中心库走），再找工作区
         _q = Path(p.group_flow_part_shape).expanduser()
         _dr = data_root()
@@ -5828,6 +5840,42 @@ def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "wu_shape", "match", []
             delta += 1
     return delta
+
+
+_HOU = frozenset("候𠋫")
+
+
+def _hou_shape_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
+    """候𠋫 书级刻形判法（`groups.hou_shape`，`SeedAdmitParams.group_flow_hou_shape`）。紧接 wu_shape。→ 0（只改字、不改放行）。
+
+    全唐文书级码位 候→𠋫（照刻形），可书里也刻真 候（033 册起居多；sheldon 11-19 点选 182 格定标签）。
+    只碰**已放行**、字是 候／𠋫 的非人裁格：刻形给了字就照录（`evidence.hou_shape`），给 候 的格到最后码位归一那步不归 𠋫
+    （`_codepoint_exempt`），改了字记 `evidence.fixed_from`。待审格不补放：库首位是 候𠋫 的待审格可能其实是 侯（亻右边也只一短笔），
+    几何量分不开 侯／候，补放留给原通道与人审。弃权（量在中间）不动。"""
+    from ..groups import hou_shape
+    model = hou_shape.load(p.group_flow_hou_shape)
+    miss = patch_missing if patch_missing is not None else {}
+    for c in out:
+        for r in c.chars or []:
+            if not r.admit or r.char not in _HOU or r.provenance == "human" or r.channel == "human":
+                continue
+            try:
+                img = _page_patch(ctx, page, c.col, r.slot, r.sub)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                miss.setdefault(r.id, []).append("hou_shape")
+                continue
+            v = hou_shape.judge(img, model)
+            ev = r.evidence or {}
+            if v["char"] is None:
+                r.evidence = {**ev, "hou_shape": v}
+                continue
+            if v["char"] != r.char:
+                ev = {**ev, "fixed_from": {"channel": r.channel, "char": r.char}}
+                r.char = v["char"]
+            r.evidence = {**ev, "hou_shape": v}
+    return 0
 
 
 def _part_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
