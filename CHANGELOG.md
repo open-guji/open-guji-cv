@@ -3,6 +3,18 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.80] - 2026-11-20
+
+史記 patch 线：v0.7.62 + #1586 + #1627 + #1673 + #1676 + #1677（前置 #1502、#1505），配**底库 b31**（＝b28＋两份异体文件）。SJ v0.2 整书重跑用（A31 11-20）。**不含** dev 线及殿本 patch 线其他改动（#1506／#1508 读不到人工指定改报错、#1678 variants.tsv、#1679 等都不带）。
+
+- PATCH：异体边补 16 对兄弟异体（#1586，`config/variants/local_edges.json`、`variants.json`，与 dev 逐字节同）。底库文件变：钉 b28 的册须改钉 **b31**，否则起跑被语料校验拒绝。
+- PATCH：人裁作废与重绑（与 dev 上 `feedback/bindings.py` 逐字节同；`lookup.py` 只差 #1506／#1508 的读失败报错）：
+  - #1502 `stale_human_marks` 字形库读不到时仍读 `stale_verdicts.tsv`；#1505 `rebind_library_shapes` 尊重作废标记（误锚人裁重绑后不再落到别的格）。
+  - #1627 迁移补锚闸：`backfill:migrated` 补锚与上一版锚落格不同 → `review`（旧格号人裁不再静默挂到邻格；史記没有这类补锚行）。
+  - #1673 库内审阅改标重进的人裁刻例照常采信；#1676 撤库／改标的撤下标记只作废被撤刻例原字的人裁（史記没有库内审阅标记）。
+  - #1677 `seed_admit` 的 `code_deps` 加 `feedback.lookup`、`feedback.bindings`。
+- **Step 指纹对 v0.7.62**（实算）：只 `seed_admit` 变（ec92cec7→be5aa272），其余 22 步不变；另因底库换号，读语料的步随钉子过期。不登 code_equiv。
+
 ## [0.7.62] - 2026-11-18
 
 史記 patch 线：v0.7.61 + #1617 + #1635（字形图清边两次修复；SJ 字形库线请求，A22 评估 11-18）。
@@ -20,8 +32,6 @@
 史記 patch 线：v0.7.57 + #1632（A22 11-17，史記 r78）。
 
 - 史記 r78 三个书级切点开关（缺省都关、不进参数哈希，关时逐字节不变）：`row_segment.cut_gap_keep_glyph`（cut_gap_guard 换线不许劈新字、不许把上字一段跨 ≥0.35 格的墨划给下格；修 r77 代/黃、實、彬、為等 gap 换错的线）、`cut_white_row`（仍劈字时挪到 ±这么多格内最近的整行白，护字内白缝）、`straight_seam_ink`（直线候选 seam_ink 记真墨，只是记录）。code_equiv 按本线哈希登 `_R78_0759`（dev 线为 `_R78_1117`）。
-
-- 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
 ## [0.7.57] - 2026-11-17
 
