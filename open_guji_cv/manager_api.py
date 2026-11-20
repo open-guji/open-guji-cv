@@ -400,6 +400,16 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "_corpus_text": ("steps.align_ref", "_corpus_text"),
     "BookSpec": ("core.book", "BookSpec"),
     "FORBIDDEN_IN_OVERRIDE": ("core.book_config", "FORBIDDEN_IN_OVERRIDE"),
+    # guji-manager rulings-hits／collect 落 AI 裁定（2026-11-20）
+    "RulingLog": ("feedback.rulings", "RulingLog"),
+    "RulingStore": ("feedback.rulings", "RulingStore"),
+    "RULING_KIND": ("feedback.rulings", "KIND"),
+    "ruling_ctx_hash": ("feedback.rulings", "ctx_hash"),
+    "llm_questions_of_page": ("feedback.llm_queue", "questions_of_page"),
+    "FLOW_GROUPS": ("groups.registry", "FLOW_GROUPS"),
+    "CTX_WIDTH": ("groups.context", "WIDTH"),
+    "seed_admit_clf_ctx": ("steps.seed_admit", "_clf_ctx"),
+    "seed_admit_override_ok": ("steps.seed_admit", "_override_ok"),
 }
 
 __all__ = sorted(_EXPORTS)
