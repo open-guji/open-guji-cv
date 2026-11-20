@@ -353,6 +353,11 @@ _ROSTER_GRID_1120 = ("row_segment 加职名列按格网位置编号 roster_grid_
                      "scripts/code_equiv.py check，2026-11-20（A22，ZM 转 Sheldon 11-19 职名格号空格占号）")
 _ROSTER_GRID_0778 = (_ROSTER_GRID_1120 + "。殿本 patch 线移植（v0.7.77 + #1726 → v0.7.78）：只带 roster_grid_slots／grid_slots，不带 dev 上的 roster_cols、"
                      "chen_fallback；row_segment、roster_segment 哈希按本线重算，本线未另跑产物比对（A31 2026-11-20）")
+_ROSTER_GRID_MANUAL_1120 = ("roster_grid_slots 跟进（缺省关时不走）：_apply_manual_cells 加 grid_n（缺省 0 照旧）、grid_slots 段内两行同空的号收掉／密雙行第二段起号按段字距顺延"
+                            "（新逻辑只在 grid_slots 里，开关关时不调）：殿本 vol01 10 页（60,87,88,89,99,105,117,131,150,190）row_segment 与 origin/dev 产物逐字节相同；"
+                            "scripts/code_equiv.py check，2026-11-20（A22，回 ZM／A20 #1726 下游问题）")
+_ROSTER_GRID_MANUAL_0779 = (_ROSTER_GRID_MANUAL_1120 + "。殿本 patch 线移植（v0.7.78 + #1731 → v0.7.79）：原样 cherry-pick，row_segment、roster_segment"
+                            "哈希按本线重算、old 取 #1726 之前的本线哈希（v0.7.77），本线未另跑产物比对（A31 2026-11-20）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1769,6 +1774,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="ce7945e413c6bfd835e6f37c08c6f32ae3193dad2c844789635945864ab10a6c",
           old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
           evidence=_ROSTER_GRID_0778),
+    # roster_grid_slots 跟进：人裁整列格格数、段内两行同空收号（殿本 patch 线 v0.7.79，本线哈希）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="78b75d2c2d6573a284e137e7f87e6f9848449aa563fd20f78cd1b4f1c88b5980",
+          old="cf94f26ea2cea18ab9f11622f9113cc83bb93c2ecfc3f13a37c451c5ebca6997",
+          evidence=_ROSTER_GRID_MANUAL_0779),
+    Equiv(module="open_guji_cv.impl.keben.roster_segment",
+          new="fc15397166ed7ef394d621c084b6313d16306d1b67cb0c94505fc408a4c647af",
+          old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
+          evidence=_ROSTER_GRID_MANUAL_0779),
 )
 
 
