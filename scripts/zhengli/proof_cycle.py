@@ -135,6 +135,10 @@ def cmd_plan(a) -> int:
     man = pack_info(ws, book, label)
     cmd = [*GUJI, "cellvotes", "draft", book, "--site-book", text_id, "--rev", rev, "--out", draft, "-w", ws]
     cmd += ["--from-kv"] if os.environ.get("CELLREVIEW_TOKEN") else []
+    if a.allow_empty:          # 零票册（殿本 21–99 册旧单，ZM 11-18）：draft 当场读网站确认两种记法都是 0 条才出空草稿
+        if not os.environ.get("CELLREVIEW_TOKEN"):
+            sys.exit("✗ --allow-empty 要当场从网站读票确认零票：设 CELLREVIEW_TOKEN")
+        cmd += ["--allow-empty"]
     if man:
         cmd += ["--pack", label]
     elif a.cord:
@@ -159,6 +163,7 @@ def cmd_plan(a) -> int:
         "pack_cv_version": (man or {}).get("cv_version"), "cord": None if man else str(a.cord),
         "pages": pages, "full_book": not a.voted_pages_only, "engine": engine,
         "engine_commit": engine_head(Path(engine)) if engine else None,
+        **({"empty_confirmed": meta["empty_confirmed"]} if meta.get("empty_confirmed") else {}),
         "recheck": sum(1 for ln in (draft / "recheck.tsv").read_text(encoding="utf-8").splitlines()[1:] if ln.strip())
         if (draft / "recheck.tsv").exists() else 0,
         "created": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -304,6 +309,7 @@ def cmd_apply(a) -> int:
         old_char = rp.book_text_dir(Path(a.book_text), plan["text_id"]) / f"{plan['chapter']}.char.json"
         new_char = export / f"{plan['chapter']}.char.json"
         sp = split_changes(old_char, new_char, human_chars_of(ws, book, sandbox), codepoint_map(ws, book))
+        vd = _verdicts(new_char)    # 退回之前取：机器判残／图片格等的 □ 写明是判定（「□（判残）」），出单门只拦「机器无字」的 □
         if sp["norm"] and list(_cells(old_char)) == list(_cells(new_char)):
             revert_cells(new_char, {a_: o for a_, o, _ in sp["norm"]})   # 只差码位归一的格，文本留旧字
             log.note(f"只差码位归一（不算改字、不算推翻人裁）{len(sp['norm'])} 格，文本留旧字")
@@ -321,7 +327,8 @@ def cmd_apply(a) -> int:
                  + (f"（{'、'.join(f'{x}:{o}→{n}' for x, o, n in sp['overrule'][:10])}）" if sp["overrule"] else ""))
         dr = Path(plan["draft_dir"]) / "recheck.tsv"
         rows = [ln for ln in dr.read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if dr.exists() else []
-        rows += [f"{x}\t机器改判「{o or '□'}」→「{n or '□'}」，推翻人裁，请核\t\t{o}\t" for x, o, n in sp["overrule"]]   # 第 4 列旧人裁的字：出单门据此归一比对
+        rows += [f"{x}\t机器改判「{o or '□'}」→「{(n or '□') + (f'（{vd[x]}）' if x in vd else '')}」，推翻人裁，请核\t\t{o}\t"
+                 for x, o, n in sp["overrule"]]   # 第 4 列旧人裁的字：出单门据此归一比对
         recheck.write_text("格位\t说明\t旧人裁\t旧人裁的字\t旧人裁时间\n" + "".join(r + "\n" for r in rows), encoding="utf-8")
 
     # 5. 一条命令出单：过出单门、换单门，传图、存包、升 book-text、推库、只发这一章、等发布、冒烟
@@ -329,13 +336,17 @@ def cmd_apply(a) -> int:
     note = (f"{book} 精校一轮：{plan['rev']} 的 {plan['ready']} 条人裁（{plan['batch']}），待审单 {new_rev}")
     issue = [sys.executable, HERE / "republish.py", "issue", "--book", book, "-w", ws, "--export-dir", export,
              "--rev", new_rev, "--book-text", a.book_text, "--note", note,
-             "--held-file", Path(plan["draft_dir"]) / "held.tsv"]
+             "--held-file", Path(plan["draft_dir"]) / "held.tsv",
+             # 落完票、新单 0 格＝这一章审完了：照样换成空单、升 book-text，别让旧单挂在线上（ZM 11-17 殿本 vol08 008-r10）
+             "--allow-empty"]
     if rows:
         issue += ["--recheck", recheck]
     if engine != CV:
         issue += ["--engine", engine]
     if a.ack_unlanded_votes:
         issue += ["--ack-unlanded-votes", a.ack_unlanded_votes]
+    if getattr(a, "cells", None):            # 旧单出在换图源之前：票按格级对照表把旧格号对到新格（republish 换单门）
+        issue += ["--cells", a.cells]
     if getattr(a, "no_web", False):          # 批量时每册不单独触发网站发布，由 auto_cycle 最后统一发一次
         issue += ["--no-publish-web"]
     cv_commit = plan.get("engine_commit") if engine != CV else plan["pack_cv_commit"]   # 重跑用的是哪份 cv 就记哪份
@@ -373,6 +384,48 @@ def engine_head(engine: Path) -> str:
 def _cells(char_json: Path) -> dict[str, str]:
     d = json.loads(Path(char_json).read_text(encoding="utf-8"))
     return {c["a"]: c.get("c") or "" for p in d.get("pages") or [] for col in p.get("columns") or [] for c in col.get("cells") or []}
+
+
+PLACEHOLDERS = "□〓▣"     # 导出里「这格没有可用的字」的占位：□ 阙文／待审，〓 组字无近似字、私用码映不上，▣ 以图代字
+
+
+def _blank_verdict(cell: dict) -> str | None:
+    """占位格是不是一个**判定**（不是「没认出」）：是就返回说明（进复审行，出单门据此与「机器无字」分开），否则 None。"""
+    if "fig" in cell:
+        return "图片格"
+    if "unk" in cell:
+        return "无法识别字"
+    if cell.get("guess_c"):
+        return "原刻残"
+    if (cell.get("c") or "") == "□" and not cell.get("lacuna"):
+        return "判残"
+    return None
+
+
+def _machine_blank(char_json: Path) -> set[str]:
+    """新导出里「机器没认出字」的格：`c` 空，或是占位（□〓▣）而不是机器／排除名单的判定。
+
+    char-cord（guji-manager `formats/guji_char_cord.py`）里 □ 有几种来路，只看 `c` 分不开，要看标记：
+    - 没认出（Step7 `admit=False`、不在排除名单、没有字，slots `unreadable`）→ `{"c":"□","lacuna":true}`，不带 `guess_c`；
+    - 排除名单判残／切坏（damaged／seg_defect，Step7 给 □ 占位）→ `{"c":"□"}`，**不带** lacuna——这是阙字判定；
+    - 人裁原刻残带推测字 → `{"c":"□","lacuna":true,"guess_c":X}`；图片格 → 带 `fig`；无法识别字 → 带 `unk`。
+    只有第一种（以及 〓／▣ 占位、`c` 空）算「机器无字」；其余是判定，推翻人裁仍要复审。"""
+    d = json.loads(Path(char_json).read_text(encoding="utf-8"))
+    out = set()
+    for p in d.get("pages") or []:
+        for col in p.get("columns") or []:
+            for c in col.get("cells") or []:
+                ch = c.get("c") or ""
+                if not ch or (ch in PLACEHOLDERS and _blank_verdict(c) is None):
+                    out.add(c["a"])
+    return out
+
+
+def _verdicts(char_json: Path) -> dict[str, str]:
+    """{格位: 判定说明}：新导出里是占位、但属判定（判残／图片格／无法识别字／原刻残）的格。"""
+    d = json.loads(Path(char_json).read_text(encoding="utf-8"))
+    return {c["a"]: v for p in d.get("pages") or [] for col in p.get("columns") or [] for c in col.get("cells") or []
+            if (c.get("c") or "") in PLACEHOLDERS and c.get("c") and (v := _blank_verdict(c))}
 
 
 def human_chars_of(ws: Path, book: str, products: Path | None = None) -> dict[str, str]:
@@ -424,8 +477,9 @@ def codepoint_map(ws: Path, book: str) -> dict[str, str]:
 def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: dict[str, str] | None = None) -> dict:
     """新导出对 book-text 现文逐格比，变了的格分四种：最新人裁就是新字＝human（人裁改字）；
     旧字正是最新人裁、机器改成别的＝overrule（机器推翻人裁，留人裁的字、复审）；两边只差一个码位归一（`norm`，
-    如 别→別）＝norm（不算改字、不算推翻，文本留旧字、不上单）；旧字是最新人裁、新字为空（机器无字，如印章遮挡 admit=false）
-    ＝keep（不是机器改判，文本留人裁字、不进复审）；其余＝machine（机器改字，按新结果）。
+    如 别→別）＝norm（不算改字、不算推翻，文本留旧字、不上单）；旧字是最新人裁、新字是「机器无字」（空，或没认出的 □、
+    〓／▣ 占位，如印章遮挡 admit=false，见 `_machine_blank`）＝keep（不是机器改判，文本留人裁字、不进复审；
+    排除名单判残的 □、图片格、无法识别字是判定，照算 overrule）；其余＝machine（机器改字，按新结果）。
     格号两边对不上的（重切）不在这里管，交 republish 的差异单。"""
     nm = norm or {}
 
@@ -433,6 +487,7 @@ def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: d
         return nm.get(c, c)
 
     o, n = _cells(old_char), _cells(new_char)
+    blank = _machine_blank(new_char)
     out = {"human": [], "machine": [], "overrule": [], "norm": [], "keep": []}
     for a_ in sorted(set(o) & set(n), key=rp._key):
         if o[a_] == n[a_]:
@@ -441,7 +496,7 @@ def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: d
             out["norm"].append((a_, o[a_], n[a_]))
             continue
         h = human.get(a_)
-        if h and not n[a_] and u(h) == u(o[a_]):
+        if h and a_ in blank and u(h) == u(o[a_]):
             out["keep"].append((a_, o[a_], n[a_]))
             continue
         k = "human" if h and u(h) == u(n[a_]) else ("overrule" if h and u(h) == u(o[a_]) else "machine")
@@ -458,6 +513,9 @@ def revert_cells(char_json: Path, old: dict[str, str]) -> None:
                 if c["a"] in old:
                     if old[c["a"]]:
                         c["c"] = old[c["a"]]
+                        if c["c"] not in PLACEHOLDERS:     # 退回成字：去掉新导出这格的阙文／组字等标记，免得字与标记打架
+                            for k in ("lacuna", "guess_c", "zi"):
+                                c.pop(k, None)
                     else:
                         c.pop("c", None)
     Path(char_json).write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
@@ -514,6 +572,8 @@ def main(argv=None) -> int:
     p.add_argument("--engine", help="出单版 cv 的 worktree（重跑用它；缺省本仓，须就是包的 cv_commit）")
     p.add_argument("--recheck-extra", help="另加复审的格（同 recheck.tsv 格式）：别处发现的疑点，拿不准的回网站再看")
     p.add_argument("--voted-pages-only", action="store_true", help="只重跑有票的页（旧做法；缺省全册 seed_admit）")
+    p.add_argument("--allow-empty", action="store_true",
+                   help="这张单确实没人投也照出计划（交 guji cellvotes draft --allow-empty：要 CELLREVIEW_TOKEN，当场读网站两种记法都 0 条才放）")
     p.add_argument("--no-pull", action="store_true")
     p = sp.add_parser("apply")
     p.add_argument("--book", required=True)
@@ -524,6 +584,7 @@ def main(argv=None) -> int:
     p.add_argument("--reuse-products", help="产物沙箱用这份现成的（引擎换版本后自己从头跑好了，不取出单版包、不再重跑 seed_admit）；"
                                            "配合 plan --engine <新版 worktree> 与 --allow-cv-drift")
     p.add_argument("--ack-unlanded-votes", help="旧单还有票没落成人裁（如图形格）也照换单；写明原因，原样交给 republish issue")
+    p.add_argument("--cells", help="旧单出在换图源之前时的格级对照表（old_new_cells/<册>.tsv[.gz] 或放各册表的目录），原样交给 republish issue")
     p.add_argument("--allow-cv-drift", action="store_true", help="本机 cv 与出单版不同也照跑重跑那一步")
     p.add_argument("--dry-run", action="store_true", help="只核计划、打出要跑的命令，不执行")
     p.add_argument("--no-web", action="store_true", help="出单、推库、升 book-text，但不触发网站发布、不冒烟（批量用，最后统一发）")

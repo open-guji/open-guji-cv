@@ -125,7 +125,8 @@ def _db_topk_batch(norms: list, editions: list[str], k: int, norm_stroke: int | 
     return [sorted(d.items(), key=lambda t: -t[1])[:k] for d in acc]
 
 
-def _fuse(a, b, cnn_topk, emb_topk, k: int, db_topk=None) -> list[dict]:
+def _fuse(a, b, cnn_topk, emb_topk, k: int, db_topk=None,
+          stroke_order: list[str] | None = None, stroke_w: float = 0.0) -> list[dict]:
     """HOG（两档字表，`cnn.available` 为 False 时才有）+ CNN 分类 + CNN
     embedding → 融合后的候选字典列表。
 
@@ -160,9 +161,11 @@ def _fuse(a, b, cnn_topk, emb_topk, k: int, db_topk=None) -> list[dict]:
         # 它是这册书实际印刷字形的证人，字表由 `font.editions` 定，不受 classes 限制。
         from .cnn_candidates import cls_gate_weight, shared_classes
         w_cls = cls_gate_weight(emb_order, shared_classes())
-        orders = [o for o in (db_order, cnn_order, emb_order) if o]
+        # `stroke_order`（笔画证据 `mode: rrf`，缺省空）：只给已有候选排名次，不带新候选进来
+        st_order = stroke_order or []
+        orders = [o for o in (db_order, cnn_order, emb_order, st_order) if o]
         weights = tuple(w for o, w in ((db_order, CNN_WEIGHT), (cnn_order, w_cls),
-                                       (emb_order, EMB_WEIGHT)) if o)
+                                       (emb_order, EMB_WEIGHT), (st_order, stroke_w)) if o)
         order = rrf(*orders, k=k, weights=weights)
         hits = [(ch, *by_char.get(ch, ("cnn", 0.0))) for ch in order]
     elif db_order and not (cnn_order or emb_order):
@@ -180,7 +183,10 @@ def _fuse(a, b, cnn_topk, emb_topk, k: int, db_topk=None) -> list[dict]:
             # emb 单源 top-1 67.8%，两路恒权 RRF 只剩 26.4%。
             from .cnn_candidates import cls_gate_weight, shared_classes
             w_cls = cls_gate_weight(emb_order, shared_classes())
-            order = rrf(cnn_order, emb_order, k=k, weights=(w_cls, EMB_WEIGHT))
+            if stroke_order and stroke_w > 0:
+                order = rrf(cnn_order, emb_order, stroke_order, k=k, weights=(w_cls, EMB_WEIGHT, stroke_w))
+            else:
+                order = rrf(cnn_order, emb_order, k=k, weights=(w_cls, EMB_WEIGHT))
         else:
             order = (cnn_order or emb_order)[:k]
         hits = [(ch, *by_char.get(ch, ("cnn", 0.0))) for ch in order]
@@ -358,8 +364,15 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
                    book: str | None = None, struct_rerank: bool = False,
                    struct_probe: str | None = None,
                    real_proto: tuple[bool, tuple[str, ...]] | None = None,
-                   gw_enabled: bool | None = None) -> list[list[dict]]:
+                   gw_enabled: bool | None = None,
+                   stroke: tuple[bool, float, str] | None = None) -> list[list[dict]]:
     """`rare_for` 的批量版：一页多个字块图一次性做检索，逐图融合。
+
+    `stroke`（笔画证据，2026-11-18，缺省关）：`(enabled, weight, mode)`，`RareCandidatesStep` 传
+    `stroke_evidence.book_stroke_evidence(ctx.book.font)`。`mode="emb"` 在融合**之前**把 embedding 那一路
+    的前 k 名按「余弦 + weight × 笔画分」重排；`mode="rrf"` 让笔画分给各路候选的并集排名次、当名次融合
+    多出来的一路。两种都不带新候选进来（见 `stroke_evidence` 模块头）；别的调用方不传，行为与加这个
+    形参之前逐位相同。
 
     `struct_rerank`（2026-09-21，缺省关）：融合后再按部件袋头的一致性重排前 30 名
     （`ids_struct.struct_rerank`）。**效果未量**，量法见 `scripts/eval_struct_rerank.py`；
@@ -500,6 +513,18 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         cnn_list, emb_list = f(cnn_list), f(emb_list)
         a_list, b_list, db_list = f(a_list), f(b_list), f(db_list)
 
+    stroke_orders: list = [None] * len(norms)
+    stroke_w = 0.0
+    if stroke and stroke[0] and cnn.available:
+        # 笔画证据（缺省关），放在白名单否决之后、融合之前。两种接法见 `stroke_evidence.book_stroke_evidence`
+        from .stroke_evidence import shared as _stroke_shared
+        if stroke[2] == "rrf":
+            cands = [list(dict.fromkeys([c for c, _ in e] + [c for c, _ in cl] + [c for c, _ in (d or [])]))
+                     for e, cl, d in zip(emb_list, cnn_list, db_list)]
+            stroke_orders, stroke_w = _stroke_shared().orders(imgs, cands), stroke[1]
+        else:
+            emb_list = _stroke_shared().rerank_rows(imgs, emb_list, stroke[1])
+
     if struct_probe:
         # Step A′ 外挂结构头（2026-09-22）：主干不动，只给重排换一副更细的眼睛
         cnn.attach_probe(struct_probe)
@@ -512,17 +537,17 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         return hits
 
     if not (struct_rerank and cnn.available):
-        return [_sym_first(_gw(_fuse(a, b, cnn_topk, emb_topk, k, dbk), pv), ok)
-                for a, b, cnn_topk, emb_topk, dbk, pv, ok
-                in zip(a_list, b_list, cnn_list, emb_list, db_list, gw_prov, sym_ok)]
+        return [_sym_first(_gw(_fuse(a, b, cnn_topk, emb_topk, k, dbk, so, stroke_w), pv), ok)
+                for a, b, cnn_topk, emb_topk, dbk, pv, ok, so
+                in zip(a_list, b_list, cnn_list, emb_list, db_list, gw_prov, sym_ok, stroke_orders)]
 
     # 重排要看前 30 名，先按 30 融合再截 k；部件概率整页一次前向
     from .ids_guard import components as first_level_components
     from .ids_struct import STRUCT_RERANK_TOP_M, struct_rerank as _rerank
     m = max(k, STRUCT_RERANK_TOP_M)
-    fused = [_fuse(a, b, cnn_topk, emb_topk, m, dbk)
-             for a, b, cnn_topk, emb_topk, dbk
-             in zip(a_list, b_list, cnn_list, emb_list, db_list)]
+    fused = [_fuse(a, b, cnn_topk, emb_topk, m, dbk, so, stroke_w)
+             for a, b, cnn_topk, emb_topk, dbk, so
+             in zip(a_list, b_list, cnn_list, emb_list, db_list, stroke_orders)]
     # Step A 的槽位头（部件@槽）比部件袋头（只管有没有、不管在哪）更细，有就用它
     if cnn.has_struct_heads:
         from .ids_struct import slot_keys_of

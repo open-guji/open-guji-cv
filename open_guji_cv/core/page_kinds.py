@@ -7,8 +7,11 @@
       table:  ["8-163"]      # 表格页，整页跳过
     cover:  [1]            # 书衣／封面页，整页跳过（页型记 cover）
       roster: ["89-132"]     # 职名页，走职名页分支
+      no_ref: ["5-7"]        # 无参校本页：参校本里本来就没有这段（序、牒文），照常切、对位，放行换 seed_admit.no_ref_params 那套
       table_cols:            # 半文半表页：本页这些列是表、跳过，其余列按正文切、对位（GUJI-772，2026-11-16）
         112: ["1-5"]         # {页: [列号…]}，列号同产物 col（图上右起第几列，从 1 起；产物 quad 右上原点），写法同页号
+      roster_cols:           # 正文页里夹的职名列：本页这些列走职名页分支（不定字数），其余列照正文切（2026-11-19，《脉经》）
+        11: [2]              # 写法同 table_cols
 
 读配置时（`BookSpec.__post_init__`）把它翻成原来就有的三个 Step 参数，**值一字不改**，所以 Step 参数指纹、
 各步产物都不变（L0）：
@@ -17,11 +20,14 @@
     table  → params.border_detect_gate.table_pages
     cover  → params.border_detect_gate.cover_pages   （2026-11-04 加：书衣／封面，整页跳过，网站出占位）
     roster → params.row_segment.roster_pages
+    no_ref → params.seed_admit.no_ref_pages      （2026-11-19 加：无参校本页，配书级 `seed_admit.no_ref_params` 换放行参数）
     table_cols → params.column_gate.table_cols   （2026-11-16 加，GUJI-772：页内按列标表；新参数，没有老写法）
+    roster_cols → params.row_segment.roster_cols （2026-11-19 加：页内按列标职名列；新参数，没有老写法）
 
 `table_cols` 不是「一类页」而是「页里哪几列」，值是 `{页: [列号…]}` 不是页号表，所以不在 `KIND_PARAM`／`PAGE_KINDS`
 里（读页型表的人照旧拿到 `{页型: [页号…]}`），另有 `TABLE_COLS`／`table_cols_from_params`。同一页不许既整页 table
-（或 cover）又按列 table_cols。
+（或 cover）又按列 table_cols。`roster_cols` 同形（`COL_KINDS` 登记两者）：同一页不许既整页 roster／table／cover
+又按列 roster_cols，同一列不许既 table_cols 又 roster_cols。
 老写法照旧能用。同一类页不许新老两处同时写不同的值（报错，不猜谁生效）；两处写的值一样不算冲突，所以
 `dataclasses.replace` 出的副本（`__post_init__` 再跑一遍）不会误报。
 页号写法同 `_expand_pages`：整数，或 `"10-380"`、`"3,9,12-15"` 这类字符串。
@@ -36,18 +42,24 @@ KIND_PARAM: dict[str, tuple[str, str]] = {
     "table": ("border_detect_gate", "table_pages"),
     "cover": ("border_detect_gate", "cover_pages"),
     "roster": ("row_segment", "roster_pages"),
+    "no_ref": ("seed_admit", "no_ref_pages"),
 }
 PAGE_KINDS = tuple(KIND_PARAM)
 #: 页内按列标表（半文半表页）：键名与 (Step id, 参数名)
 TABLE_COLS = "table_cols"
 TABLE_COLS_PARAM: tuple[str, str] = ("column_gate", "table_cols")
+#: 页内按列标职名列（正文页里夹的一两列职名，《脉经》各卷卷端「朝散大夫……臣林億等類次」，2026-11-19）
+ROSTER_COLS = "roster_cols"
+ROSTER_COLS_PARAM: tuple[str, str] = ("row_segment", "roster_cols")
+#: 按列的页型：键名 → (Step id, 参数名)。值都是 `{页: [列号…]}`
+COL_KINDS: dict[str, tuple[str, str]] = {TABLE_COLS: TABLE_COLS_PARAM, ROSTER_COLS: ROSTER_COLS_PARAM}
 
 
-def _load_table_cols(raw) -> dict[int, list]:
-    """`table_cols: {页: [列号…]}` → `{int 页: [升序列号…]}`（按页排序）。列号写法同页号（整数或 "1-5"），页键只收单页整数。"""
+def _load_table_cols(raw, kind: str = TABLE_COLS) -> dict[int, list]:
+    """`table_cols／roster_cols: {页: [列号…]}` → `{int 页: [升序列号…]}`（按页排序）。列号写法同页号（整数或 "1-5"），页键只收单页整数。"""
     from .book import _expand_pages
     if not isinstance(raw, dict):
-        raise ValueError("page_kinds.table_cols: 要写成 {页: [列号…]}，如 {112: [\"1-5\"]}")
+        raise ValueError(f"page_kinds.{kind}: 要写成 {{页: [列号…]}}，如 {{112: [\"1-5\"]}}")
     out: dict[int, list] = {}
     for pg, cols in raw.items():
         try:
@@ -55,19 +67,19 @@ def _load_table_cols(raw) -> dict[int, list]:
                 raise ValueError
             page = int(str(pg).strip())
         except ValueError:
-            raise ValueError(f"page_kinds.table_cols: 页号 {pg!r} 要是整数（一页一条）") from None
+            raise ValueError(f"page_kinds.{kind}: 页号 {pg!r} 要是整数（一页一条）") from None
         if cols is None:
             continue
         if isinstance(cols, (int, str)):
             cols = [cols]
         if not isinstance(cols, (list, tuple)) or any(isinstance(c, bool) or not isinstance(c, (int, str)) for c in cols):
-            raise ValueError(f"page_kinds.table_cols.{page}: 要写成列号列表（整数或 \"1-5\" 这样的字符串）")
+            raise ValueError(f"page_kinds.{kind}.{page}: 要写成列号列表（整数或 \"1-5\" 这样的字符串）")
         try:
             got = _expand_pages(list(cols))
         except ValueError as e:
-            raise ValueError(f"page_kinds.table_cols.{page}: 列号写错了：{e}") from None
+            raise ValueError(f"page_kinds.{kind}.{page}: 列号写错了：{e}") from None
         if any(c < 1 for c in got):
-            raise ValueError(f"page_kinds.table_cols.{page}: 列号从 1 起（图上右起第几列）")
+            raise ValueError(f"page_kinds.{kind}.{page}: 列号从 1 起（图上右起第几列）")
         if got:
             out[page] = sorted(set(got))       # 展开成升序整数：["1-3"] 与 [1, 2, 3] 同一个指纹
     return dict(sorted(out.items()))
@@ -89,13 +101,13 @@ def load_page_kinds(raw) -> dict[str, list]:
     out: dict[str, list] = {}
     for kind, pages in raw.items():
         kind = str(kind)
-        if kind == TABLE_COLS:
-            tc = _load_table_cols(pages) if pages is not None else {}
+        if kind in COL_KINDS:
+            tc = _load_table_cols(pages, kind) if pages is not None else {}
             if tc:
                 out[kind] = tc
             continue
         if kind not in KIND_PARAM:
-            raise ValueError(f"page_kinds: 未知页型 {kind!r}，只认 {'、'.join(PAGE_KINDS + (TABLE_COLS,))}")
+            raise ValueError(f"page_kinds: 未知页型 {kind!r}，只认 {'、'.join(PAGE_KINDS + tuple(COL_KINDS))}")
         if pages is None:
             continue
         if isinstance(pages, (int, str)):
@@ -120,6 +132,15 @@ def load_page_kinds(raw) -> dict[str, list]:
             both = sorted(set(out[TABLE_COLS]) & set(_expand_pages(out.get(kind) or [])))
             if both:
                 raise ValueError(f"page_kinds: 第 {both[0]} 页既整页写在 {kind} 里、又在 table_cols 里按列标表，二者选一")
+    if ROSTER_COLS in out:
+        for kind in ("roster", "table", "cover"):
+            both = sorted(set(out[ROSTER_COLS]) & set(_expand_pages(out.get(kind) or [])))
+            if both:
+                raise ValueError(f"page_kinds: 第 {both[0]} 页既整页写在 {kind} 里、又在 roster_cols 里按列标职名列，二者选一")
+        for pg in sorted(set(out[ROSTER_COLS]) & set(out.get(TABLE_COLS) or {})):
+            both = sorted(set(out[ROSTER_COLS][pg]) & set(out[TABLE_COLS][pg]))
+            if both:
+                raise ValueError(f"page_kinds: 第 {pg} 页第 {both[0]} 列同时写在 table_cols 和 roster_cols 里，一列只能是一种")
     return out
 
 
@@ -127,8 +148,8 @@ def to_params(page_kinds: dict[str, list] | None) -> dict[str, dict]:
     """`{页型: [页号…]}` → `{step_id: {参数名: [页号…]}}`（只含写了的页型）。"""
     out: dict[str, dict] = {}
     for kind, pages in (page_kinds or {}).items():
-        if kind == TABLE_COLS:
-            sid, field = TABLE_COLS_PARAM
+        if kind in COL_KINDS:
+            sid, field = COL_KINDS[kind]
             out.setdefault(sid, {})[field] = {int(pg): sorted(set(_expand_cols(c))) for pg, c in pages.items()}
             continue
         sid, field = KIND_PARAM[kind]
@@ -152,7 +173,7 @@ def merge_into_params(params: dict[str, dict], page_kinds: dict[str, list] | Non
             else:
                 same = old in (None, [], ()) or list(old) == pages
             if not same:
-                kind = next((k for k, v in KIND_PARAM.items() if v == (sid, field)), TABLE_COLS)
+                kind = next((k for k, v in {**KIND_PARAM, **COL_KINDS}.items() if v == (sid, field)), TABLE_COLS)
                 raise ValueError(
                     f"page_kinds.{kind} 和 params.{sid}.{field} 两处都写了、值不一样（{pages} / {old if isinstance(old, dict) else list(old)}）："
                     f"同一类页只写一处，新写法用 page_kinds")
@@ -165,15 +186,16 @@ def kinds_from_params(params: dict[str, dict] | None) -> dict[str, list]:
     `BookSpec.page_kinds` 都是这张表——给 `guji pagekinds` 之类读的人用，不必再各自去三个 Step 参数里找。"""
     out: dict[str, list] = {}
     for kind, (sid, field) in KIND_PARAM.items():
-        v = ((params or {}).get(sid) or {}).get(field)
+        sp = (params or {}).get(sid)
+        v = sp.get(field) if isinstance(sp, dict) else None     # 形状错的 params 交给后面的校验报
         if v not in (None, [], ()):
             out[kind] = list(v)
     return out
 
 
-def table_cols_from_params(params: dict[str, dict] | None) -> dict[int, list]:
-    """从（已合并的）`params` 读生效的 `table_cols`：`{页: [升序列号…]}`，没写返回空。"""
-    sid, field = TABLE_COLS_PARAM
+def table_cols_from_params(params: dict[str, dict] | None, kind: str = TABLE_COLS) -> dict[int, list]:
+    """从（已合并的）`params` 读生效的 `table_cols`（或 `kind` 指的别的按列页型）：`{页: [升序列号…]}`，没写返回空。"""
+    sid, field = COL_KINDS[kind]
     v = ((params or {}).get(sid) or {}).get(field)
     return {int(k): sorted(set(_expand_cols(c))) for k, c in dict(v).items() if c} if v else {}
 
@@ -197,6 +219,7 @@ def fold_layer(name: str, layer: dict) -> dict:
 #: 老写法登记：(Step id, 参数名) → 页型。`reject_old_syntax` 用。
 _OLD = {v: k for k, v in KIND_PARAM.items()}
 _OLD[TABLE_COLS_PARAM] = TABLE_COLS       # 新参数也只许经 page_kinds 写（册 yaml／基础配置直接写 params 报错，运行覆盖放行）
+_OLD[ROSTER_COLS_PARAM] = ROSTER_COLS
 #: 老写法 2026-11-04 起警告，2026-11-13 起报错（扫过中心库 391 册，没有册还在用）
 OLD_SYNTAX_ERROR_FROM = "2026-11-13"
 

@@ -60,6 +60,11 @@ def edge_ink(gray: np.ndarray, col_cells, ink_threshold: int = 128) -> dict | No
     return {"top": top, "bottom": bottom, "period": round(period, 1)}
 
 
+#: 网格模式页内竖线穿字分（`steps/border_detect.gutter_ink_score`）报警线（A22 U6，2026-11-18）：脉经实测线在字缝≈0、
+#: 斜穿字 >0.5（02 p15 0.89）；夹注密的正文页贴线墨会到 0.3–0.4（02 p24 线都在缝里）。`grid_free_fallback` 0.15 是「试换」线，这里只报明显的。
+GUTTER_INK_WARN = 0.5
+
+
 # ── ②a 整页列网错 ───────────────────────────────────────────────────────────
 
 def colnet_page(gate) -> list[dict]:

@@ -243,3 +243,12 @@ def test_stained_page_floor():
     assert how == "fit"
     got = [round(x) for x in line_xs(out)]
     assert len(got) == len(GOOD) and all(abs(a - b) <= 2 * pr.TOL for a, b in zip(got, GOOD)), got
+
+
+def test_rescue_n_lines_and_keep_guard_default_unchanged():
+    """n_lines／keep_guard 缺省（None／True）时走原路径：签名可选、不传就与加参数前一样。"""
+    import inspect
+    from open_guji_cv.impl.keben.pitch_rescue import rescue
+    sig = inspect.signature(rescue)
+    assert sig.parameters["n_lines"].default is None
+    assert sig.parameters["keep_guard"].default is True
