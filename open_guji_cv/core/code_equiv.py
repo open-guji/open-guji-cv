@@ -73,6 +73,9 @@ _VN_HOOK_0738 = (_VN_HOOK_1115 + "。v0.7.38（史記 patch 线，v0.7.33 + #155
 _PT_1115 = ("seed_admit 书级部件刻形判法 group_flow_part_shape（缺省空、不自动找文件、没填就不跑；模型指纹只在填了时进指纹；groups/part_shape 是新模块）："
             "全唐文 m1 包（cv0.7.10-c65-g-9f3d37-k5-qtw037-m1／qtw076-m1）037 册 4 页（seed_admit 实际跑通的页）＋076 册 12 页（3,20,48,55,65,68,69,92,93,100,120,149）"
             "seed_admit 与 origin/dev e7ce8f26 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-15（全唐文·码位线）")
+_LV_1120 = ("seed_admit lane_lib_veto_pairs（库否决名单内异体对改放库首位的形；缺省空、不进参数 dump；只在 lane_lib_veto 开且名单非空时走）："
+            "全唐文 029 册 d2 包（cv0.7.74-c81-g-03c8f4-k11-qtw029-d2-a3）9 页（5,20,40,60,80,100,120,140,160）seed_admit 与 origin/dev e39e030a 产物逐字节相同；"
+            "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-19（全唐文·码位线）")
 _RF_1113 = ("seed_admit group_flow_ruling_first（书级，缺省空不进参数 dump；Chain._ruling_first 名单外直接返回 (None, None)、ask_rf 只在名单内记）：全唐文 020 f5 包（cv0.7.8-c52-g-9f3d37-k4-qtw020-f5）40 页 seed_admit 与 origin/dev 69711fa 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-13（全唐文·形近字线）")
 _FR_HOOK_1113 = ("seed_admit follow_ref 加书级钩子 impl/keben/follow_ref_hooks.rival_skip（缺省 None，不调；follow_ref_decide 加 rival_skip "
                  "参数缺省空集，max 的过滤条件多一个恒真项）、新函数 _RivalFacts／_pair_facts／_follow_ref_rival_hook（只在钩子非 None 时用）："
@@ -451,6 +454,17 @@ _ALT_NOJZ_1119 = ("row_segment 加书级开关 alt_nojz（缺省关、不进参�
                   "逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
 _ALT_BACKED_1119 = ("seed_admit 加书级开关 alt_backed_gain（缺省 0 关、不进参数 dump；_pick_alt_cols 多一条恒假的 by_backed）：脉经第 1 册"
                     "10、13、17、24 页 seed_admit 与 origin/dev ea18b31 产物逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
+_ROSTER_GRID_1120 = ("row_segment 加职名列按格网位置编号 roster_grid_slots（缺省关、不进参数 dump；_run_roster 关时不调 grid_slots、n_body_slots 照旧）、"
+                     "roster_segment 加 grid_slots（新函数，关时不调）：殿本 vol01 8 页（60,87,88,99,117,131,150,190：职名页含雙行、人裁整列格，及正文页）"
+                     "row_segment 与 origin/dev e39e030a 产物逐字节相同；另 87–130 共 44 页关着重跑与 main 包 cv0.7.70-c19-g24-m2-r14fix-a2 逐字节相同；"
+                     "scripts/code_equiv.py check，2026-11-20（A22，ZM 转 Sheldon 11-19 职名格号空格占号）")
+_ROSTER_GRID_0778 = (_ROSTER_GRID_1120 + "。殿本 patch 线移植（v0.7.77 + #1726 → v0.7.78）：只带 roster_grid_slots／grid_slots，不带 dev 上的 roster_cols、"
+                     "chen_fallback；row_segment、roster_segment 哈希按本线重算，本线未另跑产物比对（A31 2026-11-20）")
+_ROSTER_GRID_MANUAL_1120 = ("roster_grid_slots 跟进（缺省关时不走）：_apply_manual_cells 加 grid_n（缺省 0 照旧）、grid_slots 段内两行同空的号收掉／密雙行第二段起号按段字距顺延"
+                            "（新逻辑只在 grid_slots 里，开关关时不调）：殿本 vol01 10 页（60,87,88,89,99,105,117,131,150,190）row_segment 与 origin/dev 产物逐字节相同；"
+                            "scripts/code_equiv.py check，2026-11-20（A22，回 ZM／A20 #1726 下游问题）")
+_ROSTER_GRID_MANUAL_0779 = (_ROSTER_GRID_MANUAL_1120 + "。殿本 patch 线移植（v0.7.78 + #1731 → v0.7.79）：原样 cherry-pick，row_segment、roster_segment"
+                            "哈希按本线重算、old 取 #1726 之前的本线哈希（v0.7.77），本线未另跑产物比对（A31 2026-11-20）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2160,6 +2174,47 @@ ENTRIES: tuple[Equiv, ...] = (
           new="c35cb14a7728d4ccb99ebd5ef61b479195eed3a95041002ad9cd303e88193320",
           old="64d25e9fcecdaca35dda2a900cb9f526df248aeaaf5f7e2d6d8802aa25d5a47d",
           evidence=_ALT_BACKED_1119),
+    # seed_admit lane_lib_veto_pairs：库否决的照刻形例外（缺省空；全唐文码位线 11-19）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='3e10a0815acfbacff5f892840eb7bcfadd82f5f133f12f7b7166e0366387bdbb',
+          old='64d25e9fcecdaca35dda2a900cb9f526df248aeaaf5f7e2d6d8802aa25d5a47d',
+          evidence=_LV_1120),
+    # 职名列按格网位置编号 roster_grid_slots（殿本 vol01 职名页格号空格占号，2026-11-20 A22）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="0fc4a8fd141a30e6ebc63a775d233f1c573976e871cadbc257418ac39402a75c",
+          old="90a4a5fe8a50a4d0a3b1bd80e68328d5405d7e58a7b2a947054d67ca670fe959",
+          evidence=_ROSTER_GRID_1120),
+    Equiv(module="open_guji_cv.impl.keben.roster_segment",
+          new="9743d7f6795f80c3df55cb2d822fbaae239dd77eafe5bbbabe6f26ed1ea36ddd",
+          old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
+          evidence=_ROSTER_GRID_1120),
+    # 职名列按格网位置编号 roster_grid_slots（殿本 patch 线 v0.7.78，本线哈希）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="a43b79f7b0447ac1d1ac122f012b86de6ceb93f2679aa548c685eabd34a06b0b",
+          old="cf94f26ea2cea18ab9f11622f9113cc83bb93c2ecfc3f13a37c451c5ebca6997",
+          evidence=_ROSTER_GRID_0778),
+    Equiv(module="open_guji_cv.impl.keben.roster_segment",
+          new="ce7945e413c6bfd835e6f37c08c6f32ae3193dad2c844789635945864ab10a6c",
+          old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
+          evidence=_ROSTER_GRID_0778),
+    # roster_grid_slots 跟进：人裁整列格格数、段内两行同空收号（2026-11-20 A22）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="d53f488e5079b1325da8cdd4dd7159b04af326d9ce6e22d1e222cb69a74cd56a",
+          old="90a4a5fe8a50a4d0a3b1bd80e68328d5405d7e58a7b2a947054d67ca670fe959",
+          evidence=_ROSTER_GRID_MANUAL_1120),
+    Equiv(module="open_guji_cv.impl.keben.roster_segment",
+          new="2580a706e9bc7c754ae315e2fe3593ff050aae8d0435452f98969087a7d817ea",
+          old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
+          evidence=_ROSTER_GRID_MANUAL_1120),
+    # roster_grid_slots 跟进：人裁整列格格数、段内两行同空收号（殿本 patch 线 v0.7.79，本线哈希）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="78b75d2c2d6573a284e137e7f87e6f9848449aa563fd20f78cd1b4f1c88b5980",
+          old="cf94f26ea2cea18ab9f11622f9113cc83bb93c2ecfc3f13a37c451c5ebca6997",
+          evidence=_ROSTER_GRID_MANUAL_0779),
+    Equiv(module="open_guji_cv.impl.keben.roster_segment",
+          new="fc15397166ed7ef394d621c084b6313d16306d1b67cb0c94505fc408a4c647af",
+          old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
+          evidence=_ROSTER_GRID_MANUAL_0779),
 )
 
 

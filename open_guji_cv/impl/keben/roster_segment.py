@@ -740,6 +740,131 @@ def _glyph_refine(rc: RosterColumn, ink: np.ndarray, chen_row: float, scorer) ->
     rc.flags = _column_flags(items)
 
 
+GRID_SNAP = 0.85           # 雙行段字距 ≥ 此 × 格高就按格网编号，否则按本段字距（grid_slots）
+GRID_PITCH_MAX = 1.6       # 量雙行段字距时只取同侧相邻字心距 < 此 × 格高的（跨过空格的不算）
+
+
+def grid_slots(items: list[RosterItem], top: float, bottom: float, n: int) -> tuple[list[int], bool]:
+    """按格网位置给每个字编格号（1 起）：空格占号——列首、字间空着的格都算号（Sheldon 2026-11-19，ZM 转）。
+
+    `items` 读序同 `segment_roster_column`（雙行段右行 jiazhu_a 读完再读左行 jiazhu_b），`top`／`bottom` 是版框
+    上下界（列图坐标），`n` 是每列格数（殿本 21）。格高 P =（bottom − top）/ n。
+    - 大字：字心落在第几格就是几号。
+    - 雙行段：两侧各自编号，同号的右／左两字共占一个号（a/b）。段内字距 ≥ GRID_SNAP × P（vol01 p87 c7/c9，小字
+      一格一字）就同大字按格网编；字距更密（p88，小字两字约占一格多）按本段字距编：段首字（两侧最上一字）取它所在
+      格的号，往下每隔一个字距加一号，左行比右行低一字距就从第 2 号起（ZM 例 88:1 b 半列开头空一格）。
+    - 号严格递增（同侧），大字与雙行段不共号；挤在一格的字往后顺延。雙行段内两行同号都空的号收掉（读序按两行同空断段）。顺延后超过 n 就从列尾往回收（只收空号，不改
+      相对次序）；收不回（字比格多：压扁密排、密排雙行）就按顺延的号，返回 overflow=True。
+    返回 (逐字格号, overflow)。"""
+    if not items:
+        return [], False
+    P = (bottom - top) / n if n > 0 and bottom > top else 1.0
+
+    def cell(y: float) -> int:
+        return int(np.floor((y - top) / P)) + 1
+
+    # 分段：('c', [i]) 大字；('j', [a 下标…], [b 下标…]) 雙行段＝连着的 jiazhu_a／jiazhu_b（人裁整列格 a/b 交错排也认；左行后又来一个整个落在段下面的右行算下一段）
+    segs: list[tuple] = []
+    i = 0
+    while i < len(items):
+        if items[i].kind not in ("jiazhu_a", "jiazhu_b"):
+            segs.append(("c", [i]))
+            i += 1
+            continue
+        j, bottom, seen_b = i, items[i].y1, False
+        while j < len(items) and items[j].kind in ("jiazhu_a", "jiazhu_b"):
+            # 左行之后又来右行、且整个落在本段已有字下面：是下一段（Step3 分段 a…b…a…b，vol01 p88 c2）
+            if items[j].kind == "jiazhu_a" and seen_b and (items[j].y0 + items[j].y1) / 2 > bottom:
+                break
+            seen_b = seen_b or items[j].kind == "jiazhu_b"
+            bottom = max(bottom, items[j].y1)
+            j += 1
+        segs.append(("j", [q for q in range(i, j) if items[q].kind == "jiazhu_a"],
+                     [q for q in range(i, j) if items[q].kind == "jiazhu_b"]))
+        i = j
+    cy = [(it.y0 + it.y1) / 2.0 for it in items]
+    target = [0] * len(items)
+    dense: dict[int, tuple[float, float]] = {}            # 比格密的雙行段：(段首字心, 段字距)，target 存段内相对号
+    for sg in segs:
+        if sg[0] == "c":
+            target[sg[1][0]] = cell(cy[sg[1][0]])
+            continue
+        sides = [s for s in sg[1:] if s]
+        d = [cy[s[q + 1]] - cy[s[q]] for s in sides for q in range(len(s) - 1)]
+        d = [x for x in d if 0 < x < GRID_PITCH_MAX * P]
+        pitch = float(np.median(d)) if d else P
+        if pitch >= GRID_SNAP * P:
+            for s in sides:
+                for q in s:
+                    target[q] = cell(cy[q])
+        else:
+            c0 = min(cy[s[0]] for s in sides)
+            dense[id(sg)] = (c0, pitch)
+            for s in sides:                               # 逐字累加（一个量出的字距一路乘下去会累积漂移）；段首号顺延时再加
+                t = int(round((cy[s[0]] - c0) / pitch))
+                target[s[0]] = t
+                for q0, q in zip(s, s[1:]):
+                    t += max(1, int(round((cy[q] - cy[q0]) / pitch)))
+                    target[q] = t
+    # 顺延：同侧严格递增，大字与雙行段不共号
+    slot = [0] * len(items)
+    low = 1
+    for sg in segs:
+        if sg[0] == "c":
+            q = sg[1][0]
+            slot[q] = max(target[q], low)
+            low = slot[q] + 1
+            continue
+        hi = low - 1
+        if id(sg) in dense:
+            # 段首号：段首字所在格；前面有字时不小于「前一字的号＋按本段字距折出的距离」（上一段也是密雙行时号早已
+            # 跑在格网前面，只按格会把两段之间的空字距吃掉，vol01 p88 c2 第二段）
+            c0, pitch = dense[id(sg)]
+            s0 = cell(c0)
+            done = [q for q in range(len(items)) if slot[q]]
+            if done:
+                last = max(slot[q] for q in done)
+                lc = max(cy[q] for q in done if slot[q] == last)
+                s0 = max(s0, last + max(1, int(round((c0 - lc) / pitch))))
+            for q in sg[1] + sg[2]:
+                target[q] += s0
+        for s in sg[1:]:
+            prev = low - 1
+            for q in s:
+                slot[q] = max(target[q], prev + 1)
+                prev = slot[q]
+            hi = max(hi, prev)
+        # 段内两行同号都空的收掉：读序（utils/jiazhu_order.order_keys）在两行同空的号上断段，段内不该有这种号
+        # （vol01 p87 c9「保／士」与「武／文」之间两行都隔一字距，整理本是一段：…太子太保武英殿大學士管｜吏部刑部事…）
+        idx = sg[1] + sg[2]
+        used = sorted({slot[q] for q in idx})
+        if used and used[-1] - used[0] + 1 > len(used):
+            remap = {u: used[0] + k for k, u in enumerate(used)}
+            for q in idx:
+                slot[q] = remap[slot[q]]
+            hi = used[0] + len(used) - 1
+        low = hi + 1
+    if low - 1 <= n:
+        return slot, False
+    # 超出 n：从列尾往回收（大字逐个、雙行段整段平移），只收空号
+    back = list(slot)
+    up = n
+    for sg in reversed(segs):
+        idx = [sg[1][0]] if sg[0] == "c" else sg[1] + sg[2]
+        shift = max(0, max(back[q] for q in idx) - up)
+        for q in idx:
+            back[q] -= shift
+        up = min(back[q] for q in idx) - 1
+    lo_ok, prev_hi = True, 0
+    for sg in segs:
+        idx = [sg[1][0]] if sg[0] == "c" else sg[1] + sg[2]
+        if min(back[q] for q in idx) <= prev_hi:
+            lo_ok = False
+            break
+        prev_hi = max(back[q] for q in idx)
+    return (back, False) if lo_ok else (slot, True)
+
+
 def segment_roster_page(cols: list[tuple[np.ndarray, tuple[float, float] | None]],
                         ink_threshold: int = 128, scorer=None, chen_fallback: bool = False) -> list[RosterColumn]:
     """整页：先量全页 em，再逐列切。cols = [(列图灰度, content_x)]。
