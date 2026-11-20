@@ -557,6 +557,11 @@ class SeedAdmitParams(BaseModel):
     """`align_ref.alt_select="admit"` 换列再开一条路（书级，缺省 0 关、关时不进参数 dump；脉经 01 10:2 MJ 11-19）：备选那遍这一列
     待审只少 1 格（够不上 `ALT_ADMIT_MIN_GAIN`），但有字形背书的放行格多出 ≥ 这么多、与坐标字冲突的不多，也换。01 10:2 序页句末「則可」
     主切法劈成「貝丁口」，备选两字整格，待审 4→3、背书 2→3；卷一只多换这一列、卷二不变。"""
+    alt_note_region: bool = False
+    """`align_ref.alt_select="admit"` 换列再开一条路（书级，缺省关、关时不进参数 dump；脉经 01 MJ 11-20）：备选这一列有雙行小注格
+    （如 `row_segment.alt_cuts` 的整列 cells 把「一作某」小注劈对了），而主切法落在这些小注范围里放行的字备选那份也都放行时，
+    小注范围外两遍比：待审不多、与坐标字冲突不多，就换。参照本没有小注，劈对了格多、待审反而多，按原规矩永远换不过来
+    （01 29:10「得一／作」主切法并成一格、19:12、65:9 同）；主切法在小注范围里本来也放不出字，换了不丢东西。"""
     p_ref_coord_max_cov: float | None = None
     p_ref_coord_adjacent: bool = False
     """`p_ref_coord` 的两个独立旋钮（A24 P02 深挖 11-06，1.50，缺省 `None`／关、关时不进参数 dump）：坐标对位来源的格（`evidence.p_ref.via=coord`）
@@ -1507,6 +1512,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("p_ref_coord_adjacent", None)
         if isinstance(d, dict) and not self.alt_require_matched:
             d.pop("alt_require_matched", None)
+        if isinstance(d, dict) and not self.alt_note_region:
+            d.pop("alt_note_region", None)
         if isinstance(d, dict) and not self.alt_backed_gain:
             d.pop("alt_backed_gain", None)
         if isinstance(d, dict) and not self.consensus_fallback:
@@ -2083,7 +2090,8 @@ class SeedAdmitStep(Step):
         chosen = _pick_alt_cols(cand, sel_main, sel_alt, ctx.product("align_ref", page), ref_alt,
                                 _opt_product(ctx, "char_index", page), chars_alt,
                                 require_matched=ctx.params_for(self).alt_require_matched,
-                                backed_gain=ctx.params_for(self).alt_backed_gain)
+                                backed_gain=ctx.params_for(self).alt_backed_gain,
+                                note_region=ctx.params_for(self).alt_note_region)
         if chosen:
             ctx.log(f"seed_admit p{page}: alt_cut 候选 {cand} → 换 {chosen}")
         return {"seed_admit": _merge_admit(main, alt, chosen)}
@@ -6639,13 +6647,73 @@ def _eq_count(ref, col: int) -> int:
     return sum(1 for r in (getattr(ref, "chars", None) or []) if r.col == col and r.align_op == "equal")
 
 
+def _note_spans(chars, col: int) -> list[tuple[float, float]]:
+    """一列雙行小注格（有 sub 的格）的页内 y 范围，按格号并成一段段。"""
+    cc = next((c for c in (getattr(chars, "columns", None) or []) if c.col == col), None)
+    ys = sorted((r.bbox_page[1], r.bbox_page[3]) for r in (cc.chars if cc else [])
+                if getattr(r, "sub", None) and getattr(r, "bbox_page", None))
+    out: list[list[float]] = []
+    for y0, y1 in ys:
+        if out and y0 <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], y1)
+        else:
+            out.append([y0, y1])
+    return [(a, b) for a, b in out]
+
+
+def _note_region_ok(main: PageAdmit, alt: PageAdmit, col: int, ref_main, ref_alt, chars_main, chars_alt) -> bool:
+    """`alt_note_region`：备选有小注格、主切法在小注范围里放行的字备选也放行，小注范围外待审不多、冲突不多。"""
+    spans = _note_spans(chars_alt, col)
+    if not spans:
+        return False
+
+    def inside(chars, rec_ok):
+        cc = next((c for c in (getattr(chars, "columns", None) or []) if c.col == col), None)
+        keys = set()
+        for r in (cc.chars if cc else []):
+            bb = getattr(r, "bbox_page", None)
+            if bb and rec_ok(r) and any(a <= (bb[1] + bb[3]) / 2 <= b for a, b in spans):
+                keys.add((r.slot, getattr(r, "sub", None) or ""))
+        return keys
+    in_main = inside(chars_main, lambda r: True)
+    if any(sub for _s, sub in in_main):  # 主切法在这里已认出小注：不是「并成大字」那种错，照常比
+        return False
+    in_alt = inside(chars_alt, lambda r: getattr(r, "sub", None))
+    cm, ca = main.column(col), alt.column(col)
+    if not in_main or cm is None or ca is None:
+        return False
+    from collections import Counter
+    got_m = Counter(r.char for r in cm.chars if r.admit and (r.slot, r.sub or "") in in_main)
+    got_a = Counter(r.char for r in ca.chars if r.admit and (r.slot, r.sub or "") in in_alt)
+    if got_m - got_a:                    # 主切法在小注范围里放出的字，备选那份也得放出来
+        return False
+
+    def outside(adm, ref, skip):
+        coord = {(r.slot, r.sub or ""): r.ref_char for r in (getattr(ref, "coord", None) or []) if r.col == col}
+        rv = cf = 0
+        for r in adm.column(col).chars:
+            if (r.slot, r.sub or "") in skip or "excluded" in r.evidence:
+                continue
+            if not r.admit:
+                rv += 1
+            elif coord.get((r.slot, r.sub or "")) and r.char != coord[(r.slot, r.sub or "")]:
+                cf += 1
+        return rv, cf
+    rm, km = outside(main, ref_main, in_main)
+    ra, ka = outside(alt, ref_alt, in_alt)
+    return ra <= rm and ka <= km
+
+
 def _pick_alt_cols(cand, main: PageAdmit, alt: PageAdmit, ref_main, ref_alt, chars_main, chars_alt,
-                   require_matched: bool = False, backed_gain: int = 0) -> list[int]:
+                   require_matched: bool = False, backed_gain: int = 0, note_region: bool = False) -> list[int]:
     """逐列比两遍准入（错格闸已在 align_ref 剔过候选）：待审少 ≥ `ALT_ADMIT_MIN_GAIN`；与坐标字冲突的放行格不多；
     正文整字格墨高一致（够 `ALT_CV_MIN_CELLS` 格才比）；`ALT_REQUIRE_BACKED` 时有字形背书的放行格也不能少；
     备选首格不能过高（`ALT_FIRST_CELL_MAX`）。"""
     out = []
     for col in cand:
+        if note_region and _note_region_ok(main, alt, col, ref_main, ref_alt, chars_main, chars_alt):
+            out.append(col)
+            continue
         rm, bm, km = _col_stats(main, col, ref_main)
         ra, ba, ka = _col_stats(alt, col, ref_alt)
         cv_a, _ = _ink_cv(chars_alt, col)

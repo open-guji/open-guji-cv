@@ -19,6 +19,7 @@
 - 小注：YOLO 常把并排两小字框成一框，所以每框过一个小 CNN（内容宽 × 框高缩 32×32，判「小注行 vs 大字」）。
   连续小注框成一段；段内找两行之间的白缝（中间 40% 宽里墨最少的竖线），左右两半各自再喂 YOLO 框字，格放在相邻框之间。
   挨着小注框、墨宽不到内容宽 72% 的框也算小注（一行只剩一字的末格）。
+  分类器判是、但框比正文一格（列高／每列字数）高出 40% 以上的不算小注起点：YOLO 把两个扁大字并成一个高框时分类器会摇摆（01 16:6「定息」）。
 - 相邻两单元之间取中点作格界；格子满内容宽（裁图时由 `cell_shrink.manual_ink_fit` 收到格内墨迹再裁，不带进邻字）。
 
 分类器：3 层卷积，1 通道 32×32，二分类；样本是放行格（大字格 → 0；同 slot 的 a、b 都放行、纵向叠 ≥60% 的小注行 → 1）。
@@ -117,7 +118,7 @@ def sub_boxes(yt, img, y0, y1, x0, x1, pad=0):
     return out
 
 
-def column_cells(yt, cls: NoteCls, img, cx0: float, cx1: float, p_note: float = P_NOTE):
+def column_cells(yt, cls: NoteCls, img, cx0: float, cx1: float, p_note: float = P_NOTE, per_col: int = 20):
     """一列 → manual-cells 格式的格表；框不到字返回 None。"""
     H, W = img.shape[0], cx1 - cx0
     raw = sorted(_detect(yt, img), key=lambda b: (b.y0 + b.y1) / 2)
@@ -136,13 +137,15 @@ def column_cells(yt, cls: NoteCls, img, cx0: float, cx1: float, p_note: float = 
         rows = ink[int(b.y0):int(b.y1), int(cx0):int(cx1)].mean(1)
         return bool(rows.size) and rows.max() > .7 and (rows > .1).sum() < .35 * rows.size
 
-    isn = [q > p_note for q in pr]
+    hs = sorted(b.y1 - b.y0 for b in raw)
+    mh = hs[len(hs) // 2]
+    # 小注起点：分类器判是、且不比大字高出许多（YOLO 把两个扁大字并成一个高框时分类器会摇摆，01 16:6「定息」）
+    big_h = H / per_col        # 正文一格高；小注多的列 mh 是小注高，不能拿来比
+    isn = [q > p_note and (b.y1 - b.y0) < 1.4 * big_h for q, b in zip(pr, raw)]
     for i, b in enumerate(raw):          # 小注段的续行：挨着小注框、半宽、概率不太低
         if not isn[i] and pr[i] > .2 and ink_w(b) < .72 * W and (
                 (i > 0 and isn[i - 1]) or (i + 1 < len(raw) and isn[i + 1])):
             isn[i] = True
-    hs = sorted(b.y1 - b.y0 for b in raw)
-    mh = hs[len(hs) // 2]
     ends = (0, len(raw) - 1)
     keep = [not (i in ends and (is_bar(b) or (b.y1 - b.y0) < .45 * mh)) for i, b in enumerate(raw)]
     raw = [b for b, k in zip(raw, keep) if k]
@@ -228,7 +231,7 @@ def cmd_gen(a) -> None:
                 continue
             img = ctx.image("column_image", column_key(page, col["col"]))
             img = img if img.ndim == 2 else img[..., 0]
-            cells = column_cells(yt, cls, img, *col["content_x"])
+            cells = column_cells(yt, cls, img, *col["content_x"], per_col=ctx.book.chars_per_line or 20)
             if not cells:
                 continue
             n_note += any(c["sub"] for c in cells)
