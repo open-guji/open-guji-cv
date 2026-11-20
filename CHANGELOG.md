@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.83] - 2026-11-20
+
+- 发版说明（ZM 11-20，**殿本 patch 线**，PATCH）：v0.7.79 + #1747（border_detect 加书级开关 `head_raise_notch`：缺口列认主上框，`impl/keben/border.notch_top`；缺省关、不进参数 dump；vol24 p27、vol28 多页抬头小框／缺口假格）。code_equiv：border_detect、impl.keben.border 按本线哈希重登（`_NOTCH_1120`，old 取 v0.7.79 本线哈希），关着时 Step 指纹对 v0.7.79 不变。底库不变。tag 在 main 合并提交；dev 以 `-s ours` 合回。
+
 ## [0.7.79] - 2026-11-20
 
 - 发版说明（A31 11-20，**殿本 patch 线**，PATCH；ZM 第一册线要，vol01 87–130 重跑前）：v0.7.78 + #1731（`roster_grid_slots` 跟进：人裁整列格 `n_body_slots` 取 max(格数, 最大号)、超格数打 `roster_slot_overflow`；`grid_slots` 段内两行同空的号收掉、密雙行第二段起号顺延；新逻辑只在开关开着时走），**不含** dev 线其他改动。code_equiv：row_segment、roster_segment 按本线哈希重登（`_ROSTER_GRID_MANUAL_0779`，old 取 v0.7.77 本线哈希），**关着时 Step 指纹对 v0.7.78（＝v0.7.77）全不变**；开了 `roster_grid_slots` 的册 row_segment 按此过期。底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回、树不变（#1731 已在 dev）。
