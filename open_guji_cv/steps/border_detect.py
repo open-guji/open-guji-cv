@@ -26,10 +26,83 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.borders import Borders
 from ..products.kinds.line_index import LineIndex, LineRec
 from ..impl.keben.border import detect_borders, refit_bends
-from ..impl.keben.column_pair_merge import PAIR_MERGED_FLAG, merge_narrow_pair
 from ..impl.keben.column_types import classify_columns
 from ..impl.keben.pitch_rescue import rescue as pitch_rescue
 from ..seg.columns import COL_WIDTH_FLAG, ColumnSpec, check_columns
+
+#: `grid_free_fallback`：贴线字缝带，离线 [GUTTER_IN, GUTTER_OUT] 倍列距。
+GUTTER_IN, GUTTER_OUT = 0.036, 0.075
+#: 自由模式的穿字分要低于网格模式的这个比例才换。
+GRID_FREE_RATIO = 0.5
+
+
+def gutter_ink_score(res, gray, ink_threshold: int = 128) -> float:
+    """内竖线「穿字」分：内线两侧贴线字缝带的墨比例 ÷ 版心（首末线之间）的平均墨比例。
+
+    线落在字缝（或界行两侧的白缝）里≈0；线整片错位、斜穿字身时≈1 或更高。只量版框中段（页高 25%–85%），
+    版心几乎没墨（空页）记 0。坐标与 `trim_outer_columns` 同：`res.verticals` 右上原点，图上 x = W-1-x。"""
+    import numpy as np
+    v = res.verticals
+    if len(v) < 3:
+        return 0.0
+    H, W = gray.shape[:2]
+    y0, y1 = int(H * 0.25), int(H * 0.85)
+    ys = np.arange(y0, y1, 4)
+    ink = gray[ys] < ink_threshold                                       # 行抽样
+    xm = [float(line.x_at(res.height / 2.0)) for line in v]
+    pitch = float(np.median(np.diff(sorted(xm))))
+    lo, hi = int((W - 1) - max(xm)), int((W - 1) - min(xm))
+    if pitch <= 0 or hi - lo < 2:
+        return 0.0
+    page = float(ink[:, max(lo, 0):min(hi, W)].mean())
+    if page < 0.02:
+        return 0.0
+    ds = list(range(int(GUTTER_IN * pitch), int(GUTTER_OUT * pitch) + 1))
+    ds = [-d for d in ds] + ds
+    rows = np.arange(len(ys))[:, None]
+    near = []
+    for line in v[1:-1]:
+        xs = np.round((W - 1) - line.x_at(ys)).astype(int)
+        cols = np.clip(xs[:, None] + np.array(ds)[None, :], 0, W - 1)
+        near.append(float(ink[rows, cols].mean()))
+    return float(np.mean(near)) / page
+
+
+#: `edge_strip`：书口条判据。天头（页高前 `EDGE_TOP` 比例）里逐列墨比例 > `EDGE_INK` 算书口条墨；从页边往里走，
+#: 先放过页边留白 `EDGE_SKIP` px（墨层 `edge_margin` 清过的那一圈），连续 `EDGE_GAP` px 不是书口条墨就停；最多走页宽的 `EDGE_SIDE`。
+EDGE_TOP, EDGE_INK, EDGE_SKIP, EDGE_GAP, EDGE_SIDE = 0.06, 0.5, 40, 12, 0.07
+
+
+def strip_page_edge(gray, ink_threshold: int = 128):
+    """把页边的书口条（叠着的书页边缘，二值后成一束贯穿天头到地脚的竖黑条）抹白，返回 (新图, 左抹宽, 右抹宽)。
+
+    真版框线只在上下版框之间，天头没有；书口条从天头一直通到页底，二值化以后比细内框线更像「框」，网格模式会把外框
+    定在书口边上、内插线整片偏（脉经 03 p42：真内框 x≈2366，网格框到 2428；03 p46 右边 5 条线跟着偏）。只抹页边
+    连着的那一束，天头有零星墨、脏页不会一路抹进版心（脉经各册末页书衣实测）。"""
+    import numpy as np
+    H, W = gray.shape[:2]
+    f = (gray[: max(1, int(H * EDGE_TOP))] < ink_threshold).mean(0)
+    lim = int(W * EDGE_SIDE)
+    out, cut = gray, [0, 0]
+    for side in (0, 1):
+        xs = range(0, lim) if side == 0 else range(W - 1, W - 1 - lim, -1)
+        last, miss = None, -EDGE_SKIP
+        for x in xs:
+            if f[x] > EDGE_INK:
+                last, miss = x, 0
+            else:
+                miss += 1
+                if miss > EDGE_GAP:
+                    break
+        if last is not None:
+            if out is gray:
+                out = gray.copy()
+            if side == 0:
+                out[:, : last + 1] = 255; cut[0] = last + 1
+            else:
+                out[:, last:] = 255; cut[1] = W - last
+    return out, cut[0], cut[1]
+
 
 #: 页级网格页上，最外一列比内列中位窄到这个比例以下，就把外框线按中位列距往外推。
 OUTER_NARROW_FRAC = 0.8
@@ -62,6 +135,175 @@ def pad_outer_columns(res) -> int:
     if n:
         res.vline_filled = filled
     return n
+
+
+#: `grid_outer_trim` 找内侧细线时，搜索窗是「内邻线 + 中位列距」两侧各这么多倍 `grid_thresholds` 的 slot_tol；
+#: 找到的线离原外框线不到这么多倍 slot_tol 就不认（窗口够得着原外框线时，联合搜索会挑回它：脉经 02:50 首列
+#: 外线 119、目标 147，slot_tol 29 的窗里最强的就是原线）。
+OUTER_TRIM_TOL = 0.5
+OUTER_TRIM_AWAY = 0.5
+
+
+#: 外列宽过内列中位这么多倍就不是「多圈进一条书口」了（列网整体不对、非正文页），不动。
+OUTER_TRIM_MAX = 1.6
+
+
+def trim_outer_columns(res, gray, ratio: float, *, n_cols: int | None = None, ink_threshold: int = 128,
+                       col_pitch: float | None = None, frame_height: float | None = None,
+                       gap_only: bool = False) -> int:
+    """网格模式书级开关 `grid_outer_trim`：`pad_outer_columns` 的镜像——最外一列明显**宽于**内列
+    （> `ratio` × 内列中位），说明外框线落到了版心条（书口鱼尾、书名卷次小字）外沿上，书口整条圈进了
+    首／末列（脉经 02:50 c1 列宽 238，正文 0–180、内界线≈190、书口 195–255；网格模式选版框对时无界行的
+    页各对支持数打平，按投影和挑中墨更重的鱼尾那条）。
+
+    外框线改到「内邻线往外一个中位列距」：先在那附近（± 半个 slot_tol）用联合搜索找细线（`is_thin_rule`，
+    同网格模式验线那把尺子），找到就按它定位；找不到就按中位列距平移、记插值（`vline_filled`）。
+    线形一律取内邻线平移（折线页也一样，整页同为直线或三段），只改位置。只动外框两条，内部线不动。
+    列数不等于 `n_cols`（本页版式列数）的页、外列宽过 `OUTER_TRIM_MAX` 倍的不动（序页、书衣等列网本来不对的页，
+    脉经 02 p4／p77 外推 350–415px）。返回改了几条。"""
+    import numpy as np
+    from ..impl.keben.border import _vline_to_new
+    from ..seg.grid import grid_thresholds, is_thin_rule
+    from ..seg.lines import joint_search_coarse_to_fine
+    v = res.verticals
+    if ratio <= 0 or len(v) < 5 or (n_cols is not None and len(v) != n_cols + 1):
+        return 0
+    H, W = gray.shape[:2]
+    y = res.height / 2.0
+    xs = [float(line.x_at(y)) for line in v]
+    gaps = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
+    inner = sorted(gaps[1:-1])
+    med = inner[len(inner) // 2]
+    thr = grid_thresholds(col_pitch or med, frame_height)
+    tol = OUTER_TRIM_TOL * thr["slot_tol"]
+    mask = None
+    filled = list(res.vline_filled) or [False] * len(v)
+    n = 0
+    for idx, nb, gap, sign in ((0, 1, gaps[0], -1.0), (len(v) - 1, len(v) - 2, gaps[-1], 1.0)):
+        if not ratio * med < gap <= OUTER_TRIM_MAX * med:
+            continue
+        target = xs[nb] + sign * med                     # 新坐标（右上原点）里，外框线该在的 x
+        if mask is None:
+            mask = (gray < ink_threshold).astype(np.float64)
+        c_old = (W - 1) - target                         # 换回左上原点找线
+        lo, hi = int(round(c_old - tol)), int(round(c_old + tol))
+        hit = False
+        if 0 <= lo and hi <= W - 1:
+            m = joint_search_coarse_to_fine(mask, "v", lo, hi)
+            if is_thin_rule(m, thr["min_score"], thr["max_width"]):
+                # 找到的线只取位置（框中高处），线形跟内邻线
+                found = float(_vline_to_new(m, W, H).x_at(y))
+                if abs(found - xs[idx]) >= OUTER_TRIM_AWAY * thr["slot_tol"]:
+                    target, hit = found, True
+        if not (xs[nb] < target < xs[idx] if sign > 0 else xs[idx] < target < xs[nb]):
+            continue
+        if gap_only and not hit:
+            # `grid_outer_fix`：没找到细线、按列距平移的落点得在字缝里，不然是外列本来就宽（版框留白），不收
+            between = _band_ink(gray, ink_threshold)
+            # 参照：本页满列字身的墨（各内列中段墨的 3/4 分位；短列、空列不拉低）。落点靠版心那半边（外半边可能
+            # 就是书口条的墨）逐列墨中位到了它的 `OUTER_TRIM_GAP_INK` 倍，就是压着字（细界行、纸面杂点只占几列，不抬中位）
+            col_ink = sorted(between(xs[i] + 0.2 * gaps[i], xs[i + 1] - 0.2 * gaps[i]) for i in range(1, len(xs) - 2))
+            ref = col_ink[(3 * len(col_ink)) // 4]
+            w = GUTTER_OUT * med
+            if between(target, target - sign * w, stat="median") >= OUTER_TRIM_GAP_INK * ref:
+                continue
+        v[idx] = replace(v[nb], x_at_top=v[nb].x_at_top + (target - xs[nb]))
+        filled[idx] = not hit
+        n += 1
+    if n:
+        res.vline_filled = filled
+    return n
+
+
+#: `grid_outer_fix`：外列宽不到内列中位这么多倍、里面的墨又不到版心平均的 `OUTER_SLIVER_INK`，就是版框内侧白边
+#: 上多出的一条线（脉经 02 p15：粗版框与首列字之间 70px 空白被当成一列，另一侧版框没认、整列字落在网外）。
+OUTER_SLIVER_FRAC = 0.5
+OUTER_SLIVER_INK = 0.5
+#: 另一侧补外框线：在「外框线往外 [lo, hi] 倍列距」里找最实的竖线（版框）；外框线往外 `OUTER_ADD_TEXT` 倍列距里
+#: 的墨得有版心平均的 `OUTER_ADD_INK` 倍以上（那边确有一列字落在网外）才补。
+OUTER_ADD_RANGE = (0.6, 1.45)
+OUTER_ADD_TEXT = 0.6
+OUTER_ADD_INK = 0.3
+#: `grid_outer_fix` 下收外框线找不到细线、按列距平移时，落点靠版心一侧贴线带的墨（逐列中位）得不到内邻列字身墨的这个比例（在字缝里）
+OUTER_TRIM_GAP_INK = 0.5
+
+
+def _band_ink(gray, ink_threshold: int):
+    """页高 25%–85% 的行抽样墨图，和一个「新坐标 [a, b] 之间的墨比例」量具（新坐标右上原点，图上 x = W-1-x）。"""
+    import numpy as np
+    H, W = gray.shape[:2]
+    ink = gray[np.arange(int(H * 0.25), int(H * 0.85), 4)] < ink_threshold
+
+    def between(a: float, b: float, stat: str = "mean") -> float:
+        lo, hi = sorted((int(round((W - 1) - a)), int(round((W - 1) - b))))
+        lo, hi = max(lo, 0), min(hi, W - 1)
+        if hi <= lo:
+            return 0.0
+        blk = ink[:, lo:hi + 1]
+        return float(np.median(blk.mean(axis=0))) if stat == "median" else float(blk.mean())
+    return between
+
+
+def fix_outer_sliver(res, gray, *, n_cols: int | None = None, ink_threshold: int = 128) -> int:
+    """`grid_outer_fix`：一侧外列是空白窄条（< `OUTER_SLIVER_FRAC` × 内列中位、墨 < `OUTER_SLIVER_INK` × 版心平均）
+    时，去掉窄条外侧那条线（粗框条／双边框外线；里侧那条是双边框内线或字区起点，留着当外框线），在另一侧外框线往外 `OUTER_ADD_RANGE` 倍列距里找最实的竖线当版框补上。
+    另一侧外框线外面得确有字（墨 ≥ `OUTER_ADD_INK` × 版心平均），否则不动。线形取那一侧外框线平移。
+    列数不等于 `n_cols` 的页不动。返回改了几处（0／1）。"""
+    from ..impl.keben.border import _vline_to_new
+    from ..seg.lines import joint_search_coarse_to_fine
+    import numpy as np
+    v = res.verticals
+    if len(v) < 5 or (n_cols is not None and len(v) != n_cols + 1):
+        return 0
+    H, W = gray.shape[:2]
+    y = res.height / 2.0
+    xs = [float(line.x_at(y)) for line in v]
+    gaps = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
+    med = sorted(gaps[1:-1])[len(gaps[1:-1]) // 2]
+    between = _band_ink(gray, ink_threshold)
+    page = between(xs[0], xs[-1])
+    if med <= 0 or page <= 0.02:
+        return 0
+    n = len(v)
+    for out, inn, gap in ((0, 1, gaps[0]), (n - 1, n - 2, gaps[-1])):
+        # 窄条里量逐列墨的中位（双边框的内细线、粗框条的毛边都只占几列，不抬中位）；外半边常压着粗框条，只量靠里的
+        if gap >= OUTER_SLIVER_FRAC * med or between(xs[inn] + 0.15 * gap * (1 if out else -1),
+                                                      xs[inn] + 0.6 * gap * (1 if out else -1),
+                                                      stat="median") >= OUTER_SLIVER_INK * page:
+            continue
+        opp = n - 1 if out == 0 else 0
+        sign = 1.0 if opp == n - 1 else -1.0                    # 另一侧往外的方向（新坐标）
+        if between(xs[opp], xs[opp] + sign * OUTER_ADD_TEXT * med) < OUTER_ADD_INK * page:
+            continue
+        a, b = (xs[opp] + sign * OUTER_ADD_RANGE[0] * med, xs[opp] + sign * OUTER_ADD_RANGE[1] * med)
+        lo, hi = sorted((int(round((W - 1) - a)), int(round((W - 1) - b))))
+        lo, hi = max(lo, 0), min(hi, W - 1)
+        if hi - lo < 0.3 * med:
+            continue
+        m = joint_search_coarse_to_fine((gray < ink_threshold).astype(np.float64), "v", lo, hi)
+        if m.score <= 0:
+            continue
+        found = float(_vline_to_new(m, W, H).x_at(y))
+        filled = list(res.vline_filled) or [False] * n
+        straight = list(res.verticals_straight)
+        new_v = replace(v[opp], x_at_top=v[opp].x_at_top + (found - xs[opp]))
+        keep = [i for i in range(n) if i != out]
+        lines, fl = [v[i] for i in keep], [filled[i] for i in keep]
+        st = [straight[i] for i in keep] if len(straight) == n else straight
+        if opp == n - 1:
+            lines.append(new_v); fl.append(False)
+            if len(straight) == n:
+                st.append(replace(straight[opp], x_at_top=straight[opp].x_at_top + (found - xs[opp])))
+        else:
+            lines.insert(0, new_v); fl.insert(0, False)
+            if len(straight) == n:
+                st.insert(0, replace(straight[opp], x_at_top=straight[opp].x_at_top + (found - xs[opp])))
+        res.verticals = lines
+        res.vline_filled = fl
+        if len(straight) == n:
+            res.verticals_straight = st
+        return 1
+    return 0
 
 
 def apply_head_raise_verdicts(res, verdicts: dict[int, int], n_rows: int, scale: float = 1.0) -> dict[int, int]:
@@ -124,10 +366,6 @@ def _apply_vline_override(res, xs: list[float]) -> None:
 class BorderDetectParams(BaseModel):
     expected_cols: int | None = Field(default=None, description="列数先验；None = 用 Book 的 expected_cols")
     ink_threshold: int = 128
-    merge_narrow_pair: bool = False
-    """窄对合并（`impl/keben/column_pair_merge`，overview GUJI-155）：相邻两条**内部**窄列、宽度和≈一列时，
-    用 `expected_cols−1` 重探，接受条件见该模块。**缺省关**（要不要让各册 Step1 重算由 Morgan 定）；
-    关着、或页上没有窄对时，产物逐字节不变。触发页的 `expected_cols` 记成少一列，闸读它。"""
 
     column_grid_pages: list[int | str] = []
     """页级网格模式：点名的页竖线走 `column_grid`（版框定死、列距均匀），其余页照书级配置。
@@ -144,6 +382,25 @@ class BorderDetectParams(BaseModel):
     网格模式与自由模式结果相同、只出 8 列。写法
     `params: {border_detect: {column_grid_pages: [139], grid_col_pitch: 133, grid_lattice_fallback: true}}`。
     只管点名页；缺省关不进参数 dump，产物与加字段前逐字节相同。"""
+    grid_outer_trim: float = 0.0
+    """网格模式（书级 `column_grid` 或点名页）下，首／末列宽于内列中位这么多倍就把外框线收到「内邻线往外一个
+    中位列距」，先就近找细线、找不到按列距平移（`trim_outer_columns`）。给半叶图书口紧贴版框、网格模式把书口
+    外沿当版框的书用（脉经，2026-11-18，GUJI-774）：`params: {border_detect: {grid_outer_trim: 1.12}}`。
+    0＝关（缺省），不进参数 dump，产物与加字段前逐字节相同。"""
+    grid_free_fallback: float = 0.0
+    """书级网格模式下，内竖线穿字分（`gutter_ink_score`）高过这个值，就再用自由模式（＋列距救援）探一遍，
+    线数相同且穿字分不到网格模式的 `GRID_FREE_RATIO` 就改用自由模式的线。给界行大多没印出来、网格靠插值补线，
+    但个别页列距不匀、补出的线整片错位斜穿字的书用（脉经 02 p15、03 p40，2026-11-18，GUJI-774）：
+    `params: {border_detect: {grid_free_fallback: 0.15}}`。0＝关（缺省），不进参数 dump，产物与加字段前逐字节相同。"""
+    grid_outer_fix: bool = False
+    """书级网格模式下外框线的后处理（在 `grid_free_fallback` 换线之后做，换没换线都做）：①外列是空白窄条就去掉窄条
+    外侧那条线、在另一侧找版框补一列（`fix_outer_sliver`）；②开了 `grid_outer_trim` 的，收外框线挪到这一步做，
+    而且找不到细线时只在落点是字缝的情况下按列距平移（外列本来就宽、是版框留白的不收）。脉经 02 p15（左边版框内白边
+    多一条线、右边整列落在网外）、02 p24（换线后右线落在书口上），2026-11-18 用户指出。缺省关，不进参数 dump。"""
+    edge_strip: bool = False
+    """探竖线之前先把页边书口条抹白（`strip_page_edge`）：书口条从天头通到页底，二值化（册 `ink`）后成一束竖黑条，
+    比细内框线更像框，把外框吸到书口边（脉经 03 p42、03 p46，2026-11-19 用户指出、A22 定位）。只给 `detect_borders`
+    用，穿字分、外框修整等仍看原图。缺省关，不进参数 dump。"""
     pitch_rescue: bool = True
     """列距救援（`impl/keben/pitch_rescue`，2026-10-23 sheldon 定缺省开）：自由模式探出的页上有一条列
     < 0.7 × 中位列宽（多挑了假竖线、外侧一整列落到网外）时，先用网格模式重探，选不出版框对再
@@ -184,6 +441,10 @@ class BorderDetectParams(BaseModel):
     倾角 0.035，真框在 128–146 行），整页上框、抬头全错。开了贴图顶时在 ±0.05 各档倾角里找离开图顶的最好峰。
     缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
 
+    expected_cols_pages: dict[int, int] = {}
+    """按页列数（2026-11-12，殿本 vol01 p100：图上 10 列、版框只探出 9 列，参校本质检）：`{页: 本页列数}`，覆盖册级 `expected_cols`。
+    职名页、个别页列数与册级不同时用；一般同 `vline_overrides` 配用（给出本页全部竖线）。border_detect、border_detect_gate、
+    column_gate 三处都要写同一张表。缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
     vline_overrides: dict[int, list[float]] = {}
     """页级人核竖线（2026-11-02，史記文淵閣本 06 p63、04 p122 类）：自由／网格模式在右（左）外框被扫描裁掉、
     小注双行带内多出一条假界行的页上都挑不对界行（整列漏掉、小注缝被当成列界）。点名的页用人核给的界行
@@ -211,11 +472,17 @@ class BorderDetectParams(BaseModel):
     def _drop_off_merge(self, handler):
         """缺省关时不进 dump：没开的书 `params_hash` 与加这个字段之前逐位相同。"""
         d = handler(self)
-        if isinstance(d, dict) and not self.merge_narrow_pair:
-            d.pop("merge_narrow_pair", None)
         if isinstance(d, dict) and not self.column_grid_pages:
             d.pop("column_grid_pages", None)
             d.pop("grid_col_pitch", None)
+        if isinstance(d, dict) and not self.grid_outer_trim:
+            d.pop("grid_outer_trim", None)
+        if isinstance(d, dict) and not self.grid_free_fallback:
+            d.pop("grid_free_fallback", None)
+        if isinstance(d, dict) and not self.grid_outer_fix:
+            d.pop("grid_outer_fix", None)
+        if isinstance(d, dict) and not self.edge_strip:
+            d.pop("edge_strip", None)
         if isinstance(d, dict) and not self.grid_lattice_fallback:
             d.pop("grid_lattice_fallback", None)
         if isinstance(d, dict) and self.head_raise_scale == 1.0:
@@ -230,6 +497,8 @@ class BorderDetectParams(BaseModel):
             d.pop("bottom_lock_reslope", None)
         if isinstance(d, dict) and not self.top_edge_reslope:
             d.pop("top_edge_reslope", None)
+        if isinstance(d, dict) and not self.expected_cols_pages:
+            d.pop("expected_cols_pages", None)
         if isinstance(d, dict) and not self.vline_overrides:
             d.pop("vline_overrides", None)
         if isinstance(d, dict) and not self.hline_hints:
@@ -266,8 +535,33 @@ class BorderDetectStep(Step):
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: BorderDetectParams = ctx.params_for(self)  # type: ignore[assignment]
-        cols = p.expected_cols or ctx.book.expected_cols
+        if not p.edge_strip:
+            return self._run_page(ctx, page, None)
         gray = ctx.raw_page(page)
+        stripped, cut_l, cut_r = strip_page_edge(gray, p.ink_threshold)
+        if not (cut_l or cut_r):
+            return self._run_page(ctx, page, None)
+        # 抹了书口条的一版与原样一版都跑，挑出带列少的；一样多时挑穿字分低的（都在原图上量）。书口紧贴版框的页
+        # 抹的时候会连版框线一起抹掉（脉经 02 p24），所以不能抹了就用。
+        a = self._run_page(ctx, page, None)
+        b = self._run_page(ctx, page, stripped)
+
+        def _key(out):
+            n_bad = sum(1 for ln in out["line_index"].lines if any(f.startswith(COL_WIDTH_FLAG) for f in ln.flags))
+            return n_bad, round(gutter_ink_score(out["borders"].to_result(), gray, p.ink_threshold), 2)
+        if _key(b) < _key(a):
+            for ln in b["line_index"].lines:
+                ln.flags.append(f"edge_strip：探竖线前抹掉页边书口条（左 {cut_l}px、右 {cut_r}px）")
+            return b
+        return a
+
+    def _run_page(self, ctx: RunContext, page: int, gray_det) -> dict[str, BaseModel]:
+        """`gray_det`：给 `detect_borders` 用的图（`edge_strip` 抹过书口条的那张）；None＝原图。"""
+        p: BorderDetectParams = ctx.params_for(self)  # type: ignore[assignment]
+        cols = p.expected_cols_pages.get(page) or p.expected_cols or ctx.book.expected_cols
+        gray = ctx.raw_page(page)
+        if gray_det is None:
+            gray_det = gray
         H, W = gray.shape[:2]
         grid = ctx.book.column_grid
         col_pitch = ctx.book.col_pitch
@@ -288,7 +582,7 @@ class BorderDetectStep(Step):
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
         def _detect(n_cols: int, grid: bool = grid, col_pitch=col_pitch):
-            return detect_borders(gray, expected_cols=n_cols, ink_threshold=p.ink_threshold,
+            return detect_borders(gray_det, expected_cols=n_cols, ink_threshold=p.ink_threshold,
                                   book_bottom_gap=ctx.book.bottom_gap,
                                   top_band_frac=ctx.book.top_band_frac,
                                   bottom_band_frac=ctx.book.bottom_band_frac,
@@ -309,23 +603,74 @@ class BorderDetectStep(Step):
         res = _detect(cols)
         if grid_page:
             pad_outer_columns(res)
+        if grid and p.grid_outer_trim and not p.grid_outer_fix:
+            trim_outer_columns(res, gray, p.grid_outer_trim, n_cols=cols, ink_threshold=p.ink_threshold,
+                               col_pitch=col_pitch, frame_height=ctx.book.frame_height)
         rescued = None
         col_spec = ColumnSpec.from_dict(ctx.book.columns)
-        if p.pitch_rescue and not grid:
+
+        def _rescue(r, force: bool = False):
             # 网格模式必须带列距先验（见 border_geometry.detect_borders）；书上没写就取本页自由模式的中位列距
-            res, rescued = pitch_rescue(res, gray, lambda pitch: _detect(cols, True, col_pitch or pitch),
-                                        leaf_layout=ctx.book.leaf_layout, ink_threshold=p.ink_threshold,
-                                        spec=col_spec)
-            if rescued:
+            # force（grid_outer_fix）：按版式列数拟、不查旧线护栏（见 pitch_rescue.rescue）
+            kw = {"n_lines": cols + 1, "keep_guard": False} if force and cols else {}
+            r, how = pitch_rescue(r, gray, lambda pitch: _detect(cols, True, col_pitch or pitch),
+                                  leaf_layout=ctx.book.leaf_layout, ink_threshold=p.ink_threshold,
+                                  spec=col_spec, **kw)
+            if how:
                 # 换了线就在新的一串直线上重拟合折线（旧形状是在错的线网上拟的，vol46 p78）
-                res = refit_bends(res, gray, ink_threshold=p.ink_threshold,
-                                  vline_polyline=ctx.book.vline_polyline, **bend_kw)
-        # 窄对合并（缺省关）：内部相邻两条窄列、宽度和≈一列 → 多了一条竖线，用 cols−1 重探。
-        # 没触发／重探不被接受时原样返回，下面的产物逐字节不变。
-        merged_col = None
-        if p.merge_narrow_pair:
-            res, cols, merged_col = merge_narrow_pair(res, cols, _detect,
-                                                      leaf_layout=ctx.book.leaf_layout)
+                r = refit_bends(r, gray, ink_threshold=p.ink_threshold,
+                                vline_polyline=ctx.book.vline_polyline, **bend_kw)
+            return r, how
+
+        if p.pitch_rescue and not grid:
+            res, rescued = _rescue(res)
+        free_switched = None
+        if grid and not grid_page and p.grid_free_fallback:
+            s_grid = gutter_ink_score(res, gray, p.ink_threshold)
+            if s_grid > p.grid_free_fallback:
+                alt = _detect(cols, False)
+                how = None
+                if p.pitch_rescue:
+                    alt, how = _rescue(alt)
+                s_free = gutter_ink_score(alt, gray, p.ink_threshold)
+                if len(alt.verticals) == len(res.verticals) and s_free < GRID_FREE_RATIO * s_grid:
+                    res, rescued = alt, how
+                    free_switched = f"穿字分 {s_grid:.2f}→{s_free:.2f}"
+        outer_fixed = None
+        if grid and not grid_page and p.grid_outer_fix:
+            import copy
+
+            def _outer(r):
+                ns = fix_outer_sliver(r, gray, n_cols=cols, ink_threshold=p.ink_threshold)
+                nt = (trim_outer_columns(r, gray, p.grid_outer_trim, n_cols=cols, ink_threshold=p.ink_threshold,
+                                         col_pitch=col_pitch, frame_height=ctx.book.frame_height, gap_only=True)
+                      if p.grid_outer_trim else 0)
+                return ns, nt
+
+            def _n_bad(r):
+                # 与下面列宽检查同一口径：x 取版框中高处
+                ty = float(r.top.y_at(0.0)) if r.top is not None else 0.0
+                by = float(r.bottom.y_at(0.0)) if r.bottom is not None else float(H - 1)
+                xs_ = [float(v.x_at((ty + by) / 2.0)) for v in r.verticals]
+                skip = {c.col for c in classify_columns(xs_, leaf_layout=ctx.book.leaf_layout) if c.kind != "body"}
+                chk_ = check_columns(xs_, col_spec, skip=skip)
+                return len(chk_.bad) if chk_.judged else 0
+
+            # A：只重定外框线。B：先按版式列数强拟列宽均匀（列宽均匀是强约束；网格模式原先不跑），再重定外框线。
+            # 拟合的外列带宽到 1.3 倍，书口条会被圈回来、内线跟着挪（02 p24），所以 A 已经全在带里就用 A；
+            # 否则 B 出带的列更少才用 B。
+            a = copy.deepcopy(res)
+            n_sliver, n_trim = _outer(a)
+            pick, how_b = a, None
+            if p.pitch_rescue and _n_bad(a):
+                b, how_b = _rescue(copy.deepcopy(res), force=True)
+                if how_b:
+                    ns_b, nt_b = _outer(b)
+                    if _n_bad(b) < _n_bad(a):
+                        pick, n_sliver, n_trim, rescued = b, ns_b, nt_b, how_b
+            res = pick
+            if n_sliver or n_trim:
+                outer_fixed = f"去窄条补对侧版框 {n_sliver} 处、收外框线 {n_trim} 条"
         if page in p.vline_overrides:
             _apply_vline_override(res, p.vline_overrides[page])
         # 人裁逐列抬头（`lookup.resolved_head_raise`）：补 Step1 漏认的抬头框／去掉认错的。本页没有裁决时不动
@@ -353,15 +698,16 @@ class BorderDetectStep(Step):
         lines = []
         for c in classify_columns(xs, leaf_layout=ctx.book.leaf_layout):
             flags = [c.reason] if c.reason else []
-            if merged_col is not None and c.col == merged_col:
-                flags.append(f"{PAIR_MERGED_FLAG}：原相邻两条窄列（宽度和≈一列）被多余竖线劈开，"
-                             f"已用 {cols} 列重探去掉那条线")
             # 列位 col（1 起）夹在 xs[col-1] 与 xs[col] 之间；任一侧是插值线就标出来
             if filled[c.col - 1] or filled[c.col]:
                 flags.append("rule_interpolated")
             if c.col in hr_done:
                 flags.append(f"head_raise_verdict：人裁抬头 {hr_done[c.col]} 格，Step1 的抬头框已按裁决"
                              + ("补上" if hr_done[c.col] else "去掉"))
+            if outer_fixed:
+                flags.append(f"grid_outer_fix：外框线已重定（{outer_fixed}）")
+            if free_switched:
+                flags.append(f"grid_free_fallback：网格模式补出的竖线穿字，改用自由模式的线（{free_switched}）")
             if rescued:
                 flags.append(f"pitch_rescued：页上有列宽出带（假竖线、外列落在网外或被劈半），已按列宽均匀重拟合（{rescued}）")
             if col_chk is not None and col_chk.judged and c.col in col_chk.bad:

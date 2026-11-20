@@ -18,8 +18,8 @@ from pathlib import Path
 
 OVERRIDE_ENV = "GUJI_BOOK_OVERRIDE"
 
-#: 身份与图源：只能写在册 yaml 里，基础配置、运行覆盖都不许写
-IDENTITY_KEYS = frozenset({"id", "title", "raw_dir", "raw_pattern", "pages", "sets", "freeze"})
+#: 身份与图源（含缺页 `gaps`：这一册图源的事实）：只能写在册 yaml 里，基础配置、运行覆盖都不许写
+IDENTITY_KEYS = frozenset({"id", "title", "raw_dir", "raw_pattern", "pages", "sets", "freeze", "gaps"})
 #: 书 id、册序（`core/volume_id.py`）：书 id 写在基础配置、册序写在册 yaml，但都是身份，运行覆盖不许改
 VOLUME_ID_KEYS = frozenset({"book_id", "volume", "volume_width", "chapter_width"})
 #: 实测的版式先验：换书必须重标，不许写进基础配置（运行覆盖可以，做实验用）
@@ -119,12 +119,12 @@ def layers(book_yaml: Path, *, apply_override: bool = True) -> list[tuple[str, d
 
 def effective_book_dict(book_yaml: Path, *, apply_override: bool = True) -> dict:
     """册 yaml 合上基础配置与运行覆盖后的生效字典（`load_book` 的入口）。"""
-    from .page_kinds import fold_layer, warn_old_syntax
+    from .page_kinds import fold_layer, reject_old_syntax
     from .ref_profile import fold_layer as fold_ref_profile
     raw_ls = layers(book_yaml, apply_override=apply_override)
     for n, ly in raw_ls:
         if n != "运行覆盖":
-            warn_old_syntax(Path(book_yaml).stem, n, ly)
+            reject_old_syntax(Path(book_yaml).stem, n, ly)
     from .lib_pins import expand_layer
     try:      # 参校本属性：各层先把标量归一成 {default: x} 再合并（否则标量盖映射丢另一半）；基础配置不许写 segments
         # 四库版本简写 `pin: c31-g19-m2-k3` 逐层展开成分开的键（core/lib_pins.py），上层照常压下层

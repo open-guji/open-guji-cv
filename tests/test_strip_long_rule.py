@@ -80,3 +80,24 @@ def test_head_corner_line_starting_below_frame_needs_grow():
     out = strip_long_rule(patch, ink, 0, 0, CELL, head=True, ink_edges=edges, grow=True)
     assert (out[:, 5:10] == 255).all()
     assert (out[10:70, 35:95] == 0).all()
+
+
+def test_single_char_column_dao_kept_with_outer_only():
+    """单字成列的「制」（全唐文 009:33:7:5，R038）：字缘就是这个字，刂 落在字缘外、列首又是列尾、长钩连到格底。
+    缺省当拐角框线抹掉；outer_only（cell_shrink.long_rule_outer_only）只认贴列窗外沿的一段，刂 在列中间偏右，留着。"""
+    ink = np.zeros((CELL, W), dtype=bool)
+    ink[10:70, 20:60] = True                       # 左半「⿰」字身
+    ink[8:CELL - 2, 72:78] = True                  # 刂 的长竖钩，连到格底
+    edges = column_ink_edges(ink, _rows(1))
+    patch = _patch(ink, 0)
+    out = strip_long_rule(patch, ink, 0, 0, CELL, tail=True, head=True, ink_edges=edges)
+    assert (out[:, 72:78] == 255).all()            # 缺省：旧行为，刂 被抹
+    assert strip_long_rule(patch, ink, 0, 0, CELL, tail=True, head=True, ink_edges=edges, outer_only=True) is patch
+
+
+def test_outer_only_still_strips_rule_at_window_edge():
+    ink = _strip()
+    ink[4 * CELL + 20:5 * CELL, 5:10] = True
+    edges = column_ink_edges(ink, _rows(5))
+    out = strip_long_rule(_patch(ink, 4), ink, 4 * CELL, 4 * CELL, 5 * CELL, tail=True, ink_edges=edges, outer_only=True)
+    assert (out[:, 5:10] == 255).all()

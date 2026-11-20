@@ -65,9 +65,6 @@ class FlowSpec:
       码位归一组用（2026-10-26，A24 全册任务 04）：两码位归同一字，整理本×库首位一致就是要放的字（同 `match_ref` 的文本×形状互证，
       只是库 cov 不到 0.98、整理本只有坐标对位）；繁复字库形常把一串组外字排在分差内（夔 后紧咬 囊蘗𮑮聽臺…，類 后 頗頻顚…），
       逐个登记陪衬登记不完。没有整理本字的格不走这条。
-    - `ref_top_extra`：同 `ref_top_enter`（库 top1 与整理本／坐标对位字同在本组），但分差内的组外字只有都落在这个集合里才进，
-      其余组外字照拦（目 之类要留给 joint 的不放）。起因：史記 v0.2 g27 补库把「回」刻例 2→20，44 格曰（ry 补放）因「回」新进 0.03 窗口、入口不进；
-      加陪衬字 tolerate_extra 因 tolerate_ref_agree 要整理本互证、现役对位缺位的格反掉 16 格，故走坐标对位这一支（A24 2026-11-20）。
     - `ctx_over`：文意够硬（L1 规则或 L2 表 strong）时，这几个字形方法给了别的字只算弱票，补放、复核都照文意
       （其余方法须不反对）。入人八（A24 10-26）：殿本 入 多刻成两笔分开，整字 HOG 常把 入 判成 八；「不看上下文无法判」。
     - `lift_img_ref_veto`：补放时文意没给这个字（只有字形方法给字）、整理本又是组里另一个字 → 留人审（`group_flow_ref_dissent`）。
@@ -117,7 +114,6 @@ class FlowSpec:
     ref_enter_member: bool = False
     tolerate_ref_agree: bool = False
     ref_top_enter: bool = False
-    ref_top_extra: frozenset = frozenset()   # 同 `ref_top_enter`，但只放宽这几个组外字（库补常用字后新进分差窗口的形近邻字；ry 回囘）
     ctx_over: tuple = ()
     ctx_over_panel: tuple = ()          # 同 `ctx_over`，但文意字须经 L3 二审小组确认才算硬（`flow._panel_firm`）
     lift_img_ref_veto: bool = False
@@ -285,7 +281,7 @@ GROUPS: dict[str, GroupSpec] = {
         backends=("table",),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/ry",
         flow=FlowSpec((CTX, RY_SHAPE), review=True, review_fix_strong=True, strong_over_ref=True, lift_needs=("ctx",),
-                     tolerate=frozenset("師臼白自口"), tolerate_ref_agree=True, ref_enter=True, ref_top_extra=frozenset("回囘"), ctx_over_panel=("ry_shape",)), overlaps=("rm",),
+                     tolerate=frozenset("師臼白自口"), tolerate_ref_agree=True, ref_enter=True, ctx_over_panel=("ry_shape",)), overlaps=("rm",),
         note="按文意定（L1 规则，弃权查 L2 表）＋字形宽高比（日窄曰宽，只当第二路：强烈指向另一个字就降审，不单独补放）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
     "rr": GroupSpec(
         id="rr", name="入人八", members=frozenset("人入八"),
@@ -735,6 +731,14 @@ OPT_IN_GROUPS: dict[str, GroupSpec] = {
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/zw",
         flow=FlowSpec((CTX,), review=True, lift_ref_agree=True, review_ref_agree=True),
         note="形近不同义，按文意定（L1 规则，弃权查 L2 表）；放行字须与整理本（参校本）同字：补放要同字，复核时与整理本不同又没有文意给出整理本字的降审（不改字）。"),
+    # 嗚鳴（2026-11-13，全唐文 QTW 经 Ops 转）：本书嗚的刻形与库里鳴的刻例看图分不出（m2 层4 有 130 格参校本作嗚、库首位鳴，
+    #   123 格是 嗚呼／嗚乎／嗚咽／喑嗚），只能靠文意：L1 规则（嗚＝叹词哭声，鳴＝鸟兽乐器之声）→ L2/L3 裁定库（管线不在线问，
+    #   留痕 ask 进 llm_queue）。补放、复核都跑；文意 strong 才改已放行的字、才越过整理本（同 日曰／刺剌）。需点名才开（全唐文册配置 group_flow 加 wu）。
+    "wu": GroupSpec(
+        id="wu", name="嗚鳴", members=frozenset("嗚鳴"), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/wu",
+        flow=FlowSpec((CTX,), review=True, review_fix_strong=True, strong_over_ref=True),
+        note="形近不同义，看图分不开，按文意定（L1 规则，弃权查 L2 表；L3 走裁定库）：嗚＝嗚呼、嗚咽，鳴＝雞鳴、鳴鑾；补放，也复核，文意 strong 才改字（同 日曰）。"),
 }
 
 #: 字组流程可点名的全部组。

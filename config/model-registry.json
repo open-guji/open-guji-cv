@@ -626,6 +626,38 @@
    "owner": "96mid1ogzk"
   },
   {
+   "kind": "glyph_sim_base",
+   "path": "models/glyph_sim_base_v1/calib.json",
+   "size": 3025,
+   "sha256": "48e918d717937e046eb66996d6363ba3d5ec33020eed2dade04ce2c4dff62c94",
+   "level": "global",
+   "owner": "global"
+  },
+  {
+   "kind": "glyph_sim_base",
+   "path": "models/glyph_sim_base_v1/model.pt",
+   "size": 3777797,
+   "sha256": "0383b09d3b71d7ed7140e5bbdf69cc9f5d6710223625e282a3f0d0a76615608d",
+   "level": "global",
+   "owner": "global"
+  },
+  {
+   "kind": "glyph_sim",
+   "path": "models/glyph_sim_qtw/calib.json",
+   "size": 607,
+   "sha256": "21e548c5ad6cc5ddd3e20301889bf5a7aa35d8e0d54e767e61d466bf07a4eb5f",
+   "level": "book",
+   "owner": "995ejelvk0"
+  },
+  {
+   "kind": "glyph_sim",
+   "path": "models/glyph_sim_qtw/model.pt",
+   "size": 3774933,
+   "sha256": "289fdf56aa646ae8ec4e19806706e5520f2a00a28db005d0ed63b4bc9b5f9319",
+   "level": "book",
+   "owner": "995ejelvk0"
+  },
+  {
    "kind": "pagetype",
    "path": "models/pagetype/pagetype_v1.joblib",
    "size": 57633,
@@ -696,6 +728,30 @@
    "sha256": "aca920f9d644240d03b4cae4f359bd73fadba43ab0fed8caad36d15fa4b15077",
    "level": "book",
    "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "stroke_evidence",
+   "path": "models/stroke_evidence_v1/net.pt",
+   "size": 16542371,
+   "sha256": "d9208ca9647221e7b108301ed5626824635aee6959894791f63fe937e8973371",
+   "level": "global",
+   "owner": "global"
+  },
+  {
+   "kind": "stroke_evidence",
+   "path": "models/stroke_evidence_v1/skel.npz",
+   "size": 36583842,
+   "sha256": "9bd57e32fb153d133486caf2b97a9b4d978acadde0b49cb12c0c123fec8ea06c",
+   "level": "global",
+   "owner": "global"
+  },
+  {
+   "kind": "stroke_evidence",
+   "path": "models/stroke_evidence_v1/skel_forms.json",
+   "size": 2695492,
+   "sha256": "483cc434cb5c3b478bdc4da619b6e1ec395c998edeb8ca169cbd0a929b71d386",
+   "level": "global",
+   "owner": "global"
   }
  ]
 }

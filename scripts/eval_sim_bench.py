@@ -27,6 +27,8 @@
     python scripts/eval_sim_bench.py score --work /tmp/simb prod el_tau3 fast
     python scripts/eval_sim_bench.py fit --work /tmp/simb            # fast 特征 → fast7 融合（二折出分）
     python scripts/eval_sim_bench.py report --work /tmp/simb prod el_tau3 fast7_oof
+    python scripts/eval_sim_bench.py cnn --work /tmp/simb --model models/glyph_sim_qtw/model.pt --name cnn_prod
+    python scripts/eval_sim_bench.py report --work /tmp/simb prod cnn_prod    # 度量学习 CNN 权重的逐对分（余弦，未校准）
 """
 from __future__ import annotations
 
@@ -126,6 +128,32 @@ def score(work: Path, names: list[str], procs: int) -> None:
             res = dict(p.map(_work, [(name, i) for i in range(nq)], chunksize=20))
         pickle.dump({"scores": res, "us_pair": us}, open(work / f"s_{name}.pkl", "wb"))
         print(f"{name}: {us:.0f} us/对", flush=True)
+
+
+def score_cnn(work: Path, model: str, name: str) -> None:
+    """5a 相似度 CNN（`clustering.sim_cnn`）一份权重的逐对分＝嵌入余弦（不过校准表），存 s_<name>.pkl。"""
+    import torch
+    from open_guji_cv.clustering.sim_cnn import load_net
+    D = pickle.load(open(work / "pool.pkl", "rb"))
+    net = load_net(str(Path(model).resolve()))
+
+    def emb(ps):
+        out = []
+        with torch.no_grad():
+            for i in range(0, len(ps), 1024):
+                x = torch.from_numpy(np.stack(ps[i:i + 1024]).astype(np.float32))[:, None]
+                out.append(net.embed(x).numpy())
+        return np.concatenate(out)
+
+    used = sorted({j for q in D["qs"] for j in _rows(q)})
+    pos = {j: k for k, j in enumerate(used)}
+    t = time.perf_counter()
+    E = emb([D["lib"]["patches"][j] for j in used])
+    Q = emb([q["norm"] for q in D["qs"]])
+    us = (time.perf_counter() - t) / (len(used) + len(Q)) * 1e6
+    res = {i: [float(Q[i] @ E[pos[j]]) for j in _rows(q)] for i, q in enumerate(D["qs"])}
+    pickle.dump({"scores": res, "us_pair": us}, open(work / f"s_{name}.pkl", "wb"))
+    print(f"{name}: 每图 {us:.0f} us（逐对只是点积）", flush=True)
 
 
 def fit(work: Path) -> None:
@@ -253,7 +281,7 @@ def report(work: Path, names: list[str], include_sc: bool, fold_variants: bool =
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=("run", "pool", "score", "fit", "report"))
+    ap.add_argument("cmd", choices=("run", "pool", "score", "cnn", "fit", "report"))
     ap.add_argument("algos", nargs="*")
     ap.add_argument("--work", default="/tmp/sim_bench")
     ap.add_argument("--db", default=os.environ.get("GUJI_GLYPH_DB"))
@@ -262,6 +290,8 @@ def main() -> int:
     ap.add_argument("--all", action="store_true", help="report 含体检标记格")
     ap.add_argument("--fold-variants", action="store_true", help="report 把语义异体与 SAME_SHAPE_QTW 当同字")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--model", help="cnn：5a 相似度 CNN 权重（如 models/glyph_sim_qtw/model.pt）")
+    ap.add_argument("--name", default="cnn", help="cnn：分数名（存 s_<name>.pkl，report 时用）")
     a = ap.parse_intermixed_args()
     work = Path(a.work)
     work.mkdir(parents=True, exist_ok=True)
@@ -281,6 +311,10 @@ def main() -> int:
         build_pool(a.db, Path(a.shard), work / "pool.pkl")
     elif a.cmd == "score":
         score(work, a.algos, a.procs)
+    elif a.cmd == "cnn":
+        if not a.model:
+            raise SystemExit("要 --model <权重>")
+        score_cnn(work, a.model, a.name)
     elif a.cmd == "fit":
         fit(work)
     else:
