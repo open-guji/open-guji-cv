@@ -1298,3 +1298,15 @@ def test_group_flow_exclude_subtracts_from_default():
     assert SeedAdmitParams(**d).group_flow == p.group_flow          # 从 dump 重建：减法幂等
     with pytest.raises(ValueError):
         SeedAdmitParams(db_path="x", group_flow=allg, group_flow_exclude=["no_such_group"])
+
+
+def test_entry_ry_ref_top_extra_hui():
+    """日曰 ry：库补常用字后「回」新进 0.03 窗口（史記 v0.2 g27，44 格），库首位 日 与坐标对位 曰 同在组里仍进；其余组外字照挡。"""
+    r = Rec("a")
+    cfg = FlowConfig(groups=("ry", "rm"))
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9731)], None, cfg, coord_ref="曰") == ("ry", "lift")   # 回 0.9731 在 0.03 窗口内（g27 后新进），库首位 日×坐标对位 曰 同组
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9800)], None, cfg, coord_ref="曰") == ("ry", "lift")
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9800)], None, cfg) is None                  # 没有整理本／坐标对位字：不走
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9800)], None, cfg, coord_ref="指") is None   # 整理本是组外字：照挡
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("目", 0.9900)], None, cfg, coord_ref="曰") is None   # 目 留给 joint
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("百", 0.9900)], None, cfg, coord_ref="曰") is None
