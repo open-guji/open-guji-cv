@@ -1269,7 +1269,9 @@ class RowSegmentStep(Step):
         manual = ov.page_manual(page)
         if p.roster_pages and page in set(_expand_pages(p.roster_pages)):
             pc = self._run_roster(ctx, p, page, gate, wins)
-            return {"cells": _apply_manual_cells(pc, manual, gate, wins)}
+            # 开了 `roster_grid_slots`：人裁整列格的号也是格网号（可跳号），格数按格网算
+            grid_n = (p.n_body_slots or ctx.book.chars_per_line or 0) if p.roster_grid_slots else 0
+            return {"cells": _apply_manual_cells(pc, manual, gate, wins, grid_n=grid_n)}
         book_resolved = ov.cuts          # 人裁回流的切点：slot_above → kind，给 segment_column 收敛候选
         book_slots = ov.slots            # 逐列字数＋字距匀不匀（`review/slot_count_cards.py`；p33c19 22 字 vs 常量 21）
         book_solo = ov.solo              # 人指认的單行小注格
@@ -2049,11 +2051,14 @@ class RowSegmentStep(Step):
 
 
 def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: GateManifest,
-                        wins: PageWindows) -> PageCells:
+                        wins: PageWindows, grid_n: int = 0) -> PageCells:
     """人工指定的整列格（`lookup.resolved_manual_cells`）替换算法切出的那一列。
 
     与职名页同一套下游约定：列级 flags 带 `roster`（闸3 不按版式格数拦、Step4 不按格线裁）加 `manual_cells`，
-    `boundaries` 为空；雙行 a/b 同 slot 共 pos，`gap_center` = 两行之间的缝。未过交接闸的列不动。"""
+    `boundaries` 为空；雙行 a/b 同 slot 共 pos，`gap_center` = 两行之间的缝。未过交接闸的列不动。
+
+    `grid_n`（职名页开了 `roster_grid_slots` 时 = 每列格数）：人裁的号是格网号、可以跳号，`n_body_slots` 取格数与
+    最大号的大者（同职名分支），最大号超过格数的列打 `roster_slot_overflow`。0（缺省）＝照旧按不同号的个数。"""
     if not manual:
         return pc
     page_w = wins.page_size[0]
@@ -2083,9 +2088,14 @@ def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: Gate
                            [(round(x, 2), round(y, 2))
                             for x, y in mapper.quad_tr(c["x0"], c["y0"], c["x1"], c["y1"])])))
         n_pos = len({c.pos for c in cells})
+        over = []
+        if grid_n:
+            top = max((c.pos for c in cells), default=0)
+            n_pos = max(grid_n, top)
+            over = ["roster_slot_overflow"] if top > grid_n else []
         cols.append(ColumnCells(
             ok=True, n_body_slots=n_pos, cells=cells, boundaries=[], em=None,
-            flags=["roster", "manual_cells"], col=cc.col, n_raised=0, period=gate.period,
+            flags=["roster", "manual_cells", *over], col=cc.col, n_raised=0, period=gate.period,
             ref_w=gate.ref_w, content_x=gc.content_x, border_top=gc.border_top,
             border_bottom=gc.border_bottom, top_slack=0.0))
     return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=cols)
