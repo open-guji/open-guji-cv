@@ -440,6 +440,40 @@ def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]
             "counts": {k: len(x) for k, x in rows.items()}}
 
 
+def new_cells(out: Path | None) -> set[str] | None:
+    """新单那份导出（plan.json 的 export_dir）里的全部格号；读不到返回 None（不判）。"""
+    if out is None:
+        return None
+    try:
+        plan = json.loads((Path(out) / "plan.json").read_text(encoding="utf-8"))
+        char = json.loads((Path(plan["export_dir"]) / f"{plan['chapter']}.char.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, KeyError):
+        return None
+    return {x["a"] for pg in char.get("pages") or [] for col in pg.get("columns") or [] for x in col.get("cells") or [] if x.get("a")}
+
+
+def gone_cells(led: dict, cells: set[str] | None) -> int:
+    """未落的票里，格在新切分里已经没有了（如 #1747 把抬头极小框切没）→ 改记「无法对位」：不拦，照样列清单交复审
+    （用户 11-17：拦截一律放行；孤儿票不该永远挡出单）。返回挪了几条。"""
+    if not cells:
+        return 0
+    rows = led["rows"]
+    keep, moved = [], []
+    for v in rows.get("未落") or []:
+        c = v.get("new") or v["a"]
+        if c in cells:
+            keep.append(v)
+        else:
+            moved.append({**v, "why": v.get("why") or "新切分里没有这一格", "detail": v.get("detail") or "重切后格已不存在"})
+    if moved:
+        rows["未落"] = keep
+        rows.setdefault("无法对位", []).extend(moved)
+        if isinstance(led.get("counts"), dict):
+            led["counts"]["未落"] = len(keep)
+            led["counts"]["无法对位"] = len(rows["无法对位"])
+    return len(moved)
+
+
 def _vote_cell(v: dict) -> str:
     return f"{v['a']}→{v['new']}" if v.get("new") else v["a"]
 
@@ -519,6 +553,7 @@ def votes_gate(ws: Path, book: str, text_id: str, old_rev: str | None, new_rev: 
     held = [ln.split("\t")[0] for ln in Path(hf).read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if hf else []
     pre = sheet_predates_source(ws, book, old_doc, getattr(a, "old_source_rev", None))
     led = ticket_ledger(ws, book, text_id, old_rev, votes, held, predates=pre, cells=getattr(a, "cells", None))
+    gone_cells(led, new_cells(out))
     left = led["rows"]["未落"]
     print(f"旧单 {old_rev} 的票（{src}）：{ledger_md(led)}")
     lost = led["rows"].get("无法对位") or []
