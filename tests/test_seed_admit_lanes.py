@@ -42,14 +42,14 @@ def _page(chars, pending: dict):
     return [ColumnAdmit(col=1, chars=recs)]
 
 
-def _mm(lib: dict, guard: dict | None = None):
+def _mm(lib: dict, guard: dict | None = None, stage: dict | None = None):
     return {f"{B}:1:{s}": NS(char=None, candidates=list(c) if isinstance(c, list) else [(c, 0.95)],
-                             guard=(guard or {}).get(s)) for s, c in lib.items()}
+                             guard=(guard or {}).get(s), stage=(stage or {}).get(s)) for s, c in lib.items()}
 
 
-def _run(out, *, lib=None, amap=None, coord=None, wits=(), guard=None, canon=None, lib_n=None, **params):
+def _run(out, *, lib=None, amap=None, coord=None, wits=(), guard=None, canon=None, lib_n=None, stage=None, **params):
     p = SeedAdmitParams(db_path="x", **params)
-    n = _review_lanes_pass(p, out, _mm(lib or {}, guard), amap or {}, coord or {}, _vm(),
+    n = _review_lanes_pass(p, out, _mm(lib or {}, guard, stage), amap or {}, coord or {}, _vm(),
                            (lambda: list(wits)) if wits else None, canon=canon, lib_n=lib_n)
     return n, {r.slot: r for r in out[0].chars}
 
@@ -890,3 +890,50 @@ def test_lane_lib_veto_pairs_follow_lib_form():
     d = SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98).model_dump()
     assert "lane_lib_veto_pairs" not in d
     assert SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98, lane_lib_veto_pairs=["天大"]).model_dump()["lane_lib_veto_pairs"] == ["天大"]
+
+
+def _shape_table(tmp_path, *pairs, variant=True):
+    f = tmp_path / "pa.yaml"
+    f.write_text("schema: pair_attribution/1\npairs:\n" + "".join(
+        f"  {p}: {{attr: shape{', variant: true' if variant else ''}}}\n" for p in pairs), encoding="utf-8")
+    return str(f)
+
+
+def test_lane_shape_first_lib_variant_releases_lib_form(tmp_path):
+    """lane_shape_first：库首位与整理本字是表里的刻形同字异形、库首位 cov ≥ lane_lib_veto → witness3 放库形；其余照旧送审。"""
+    vm = _vm()
+    a, b = next((x, y) for x, y in (("獘", "弊"), ("峯", "峰"), ("羣", "群")) if vm.semantic(x) == vm.semantic(y))
+    chars = BODY[:4] + b + BODY[5:30]
+    wits = [_wit(f"{k}.txt", "前" + chars + "後") for k in "dwy"]
+
+    def go(cov=0.99, tier=3, lean=a, **kw):
+        out = _page(chars, {5: dict(doubts=["replace_align"], char=b)})
+        st = {5: {"pair": [{"pair": a + b, "tier": tier, "p": 0.9, "lean": lean}]}}
+        return _run(out, lane_witness3=True, lane_lib_veto=0.98, lib={5: [(a, cov)]}, amap=_ids({5: (b, "replace")}),
+                    coord=_ids({5: b}), wits=wits, stage=st, **kw)
+    assert go()[0] == 0                                                         # 缺省关：送审
+    n, rs = go(lane_shape_first=_shape_table(tmp_path, a + b))
+    assert n == 1 and rs[5].admit and rs[5].char == a and rs[5].channel == "witness3"
+    assert rs[5].evidence["lane"]["lib_form"] == {"from": b, "cov": 0.99, "via": "shape_first"}
+    assert go(cov=0.9, lane_shape_first=_shape_table(tmp_path, a + b))[0] == 0   # 库首位把握不够
+    assert go(lane_shape_first=_shape_table(tmp_path, a + b, variant=False))[0] == 0   # 表里没标同字异形
+    assert go(lane_shape_first=_shape_table(tmp_path, "天地"))[0] == 0           # 表里没这一对
+    assert go(tier=2, lane_shape_first=_shape_table(tmp_path, a + b))[0] == 0   # 分类器没到终判档（奥奧）
+    assert go(lean=b, lane_shape_first=_shape_table(tmp_path, a + b))[0] == 0   # 分类器倾向整理本字
+
+
+def test_lane_shape_first_feeds_lib_veto_pairs(tmp_path):
+    """库否决要否的格，要放的字与库首位是表里的同字异形对 → 放库形（名单由表生成）；不是同字异形仍否决。"""
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    st = {5: {"pair": [{"pair": "天大", "tier": 3, "p": 0.9, "lean": "大"}]}}
+    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_shape_first=_shape_table(tmp_path, "天大"), stage=st, **kw)
+    assert n == 1 and rs[5].char == "大"
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_shape_first=_shape_table(tmp_path, "天大", variant=False), stage=st, **kw)
+    assert n == 0 and rs[5].evidence["lane_skip"]["why"] == "lib_veto"
+
+
+def test_lane_shape_first_off_not_in_dump():
+    assert "lane_shape_first" not in SeedAdmitParams(db_path="x").model_dump()
