@@ -360,3 +360,55 @@ def test_yolo_alt_cuts_clean_and_cuts():
     lead = m.column_cuts([[10, 300, 90, 390], [10, 400, 90, 490]], 6, 900)   # 低三格起头
     top = 300 - 0.1 * 90 * 1.05                            # 首字上缘让 0.1 个字高
     assert lead[:4] == [0.0, round(top / 3, 1), round(2 * top / 3, 1), round(top, 1)]
+
+
+# ── 整列写定的备选格 alt_cells（2026-11-20 脉经 01，GUJI-774）──────────────────────────────
+def test_alt_cells_first_off_by_default_not_in_dump():
+    from open_guji_cv.steps.row_segment import RowSegmentParams
+    assert "alt_cells_first" not in RowSegmentParams(cut_judge="rule").model_dump()
+    assert RowSegmentParams(cut_judge="rule", alt_cells_first=True).model_dump()["alt_cells_first"] is True
+
+
+def test_alt_text_ok_count_slack():
+    from types import SimpleNamespace as NS
+    from open_guji_cv.steps.align_ref import AlignRefParams, _alt_text_ok
+    hi, lo = NS(cov=0.99, cand_variants=[]), NS(cov=0.5, cand_variants=[])
+    main, alt = [hi] * 12 + [lo] * 11, [hi] * 12 + [lo] * 17      # 01 30:7：主 12/23、备选 12/29
+    assert not _alt_text_ok(main, alt)                             # 按占比：0.41 < 0.52 - 0.05
+    assert _alt_text_ok(main, alt, 1) and _alt_text_ok(main, [hi] * 11 + [lo] * 18, 1)
+    assert not _alt_text_ok(main, [hi] * 10 + [lo] * 19, 1)
+    assert "alt_text_count_slack" not in AlignRefParams().model_dump()
+    assert AlignRefParams(alt_text_count_slack=1).model_dump()["alt_text_count_slack"] == 1
+
+
+def test_row_segment_alt_cells_table(tmp_path, monkeypatch):
+    """表里带 cells 的行 → 这列多出一份整列写定的备选（带 alt_cells 标记，夹注 a/b 照写）；col_h 对不上不出。"""
+    from open_guji_cv.core.spec import column_key
+    from open_guji_cv.core.step import STEPS, RunContext
+    from open_guji_cv.steps.row_segment import ALT_CELLS_FLAG, RowSegmentParams
+    book = make_book(expected_cols=4, chars_per_line=21)
+    ctx, out = run_keben_chain(tmp_path, monkeypatch, book=book, through="row_segment", h=2000,
+                               n_cols=4, w=500, period=100, col_n_chars={4: 3, 3: 7, 2: 12, 1: 5})
+    col = next(c for c in out["cells"].columns if c.ok and len(c.cells) > 3)
+    h = ctx.image("column_image", column_key(1, col.col)).shape[0]
+    x0, x1 = col.content_x
+    xm = (x0 + x1) / 2
+    cells = [{"slot": 1, "sub": None, "kind": "char", "x0": x0, "x1": x1, "y0": 0, "y1": 150},
+             {"slot": 2, "sub": "a", "kind": "jiazhu_a", "x0": xm, "x1": x1, "y0": 150, "y1": 220},
+             {"slot": 2, "sub": "b", "kind": "jiazhu_b", "x0": x0, "x1": xm, "y0": 150, "y1": 220},
+             {"slot": 3, "sub": None, "kind": "char", "x0": x0, "x1": x1, "y0": 220, "y1": 400}]
+
+    def run(col_h):
+        t = tmp_path / f"cells_{col_h}.jsonl"
+        t.write_text(json.dumps({"vol": book.id, "page": 1, "col": col.col, "col_h": col_h, "cells": cells}) + "\n",
+                     encoding="utf-8")
+        p = RowSegmentParams(cut_judge="rule", alt_cuts=str(t))
+        c2 = RunContext(ctx.book, ctx.store, ctx.cache, params={"row_segment": p}, log=lambda s: None)
+        return STEPS["row_segment"].run_page(c2, 1)["cells"]
+
+    got = run(h)
+    alt = [c for c in got.alt_columns if c.col == col.col]
+    assert len(alt) == 1 and ALT_CELLS_FLAG in alt[0].flags
+    assert [(x.slot, x.sub) for x in alt[0].cells] == [(1, None), (2, "a"), (2, "b"), (3, None)]
+    assert [c.cells for c in got.columns] == [c.cells for c in out["cells"].columns]     # 主切法不动
+    assert not [c for c in run(h + 50).alt_columns if c.col == col.col]                 # 列图高变了不套

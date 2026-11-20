@@ -485,6 +485,9 @@ _NOTCH_1120 = ("border_detect 加 head_raise_notch（缺口列认主上框，imp
                "产物逐字节相同；column_warp 只调 impl/keben/border 里没改的函数；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-20（A22）")
 
 
+_ALT_CELLS_1120 = ("row_segment 的 alt_cuts 表行带 cells 时按整列写定的格出备选（表里没有 cells 的行照旧），加 alt_cells_first（缺省关、不进参数 dump）；"
+                   "align_ref 加 alt_text_count_slack（缺省 -1 关、不进参数 dump，关时 _alt_text_ok 走原占比判据）：脉经第 1 册 7、13、17、25 页 "
+                   "row_segment、align_ref 与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-20（MJ，GUJI-774）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2267,6 +2270,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='dcc3f23d5ce58621db0a8bb9be9c6fc360cdbe86a2c5abacb42ba97fd4177352',
           old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
           evidence=_NOTCH_1120),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="882aa19781547c2dfc7fa922247ac268f9186734af6e5377e634c47043ee2c90",
+          old="90a4a5fe8a50a4d0a3b1bd80e68328d5405d7e58a7b2a947054d67ca670fe959",
+          evidence=_ALT_CELLS_1120),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="66b4b39a9704d4d6fd516910d7b7ed9493393287cfb4b2a394e9f4121ba6ab2e",
+          old="8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715",
+          evidence=_ALT_CELLS_1120),
 )
 
 
