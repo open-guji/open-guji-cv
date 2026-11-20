@@ -454,6 +454,10 @@ _ALT_NOJZ_1119 = ("row_segment 加书级开关 alt_nojz（缺省关、不进参�
                   "逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
 _ALT_BACKED_1119 = ("seed_admit 加书级开关 alt_backed_gain（缺省 0 关、不进参数 dump；_pick_alt_cols 多一条恒假的 by_backed）：脉经第 1 册"
                     "10、13、17、24 页 seed_admit 与 origin/dev ea18b31 产物逐字节相同；scripts/code_equiv.py check，2026-11-19（MJ，GUJI-774）")
+_ROSTER_GRID_1120 = ("row_segment 加职名列按格网位置编号 roster_grid_slots（缺省关、不进参数 dump；_run_roster 关时不调 grid_slots、n_body_slots 照旧）、"
+                     "roster_segment 加 grid_slots（新函数，关时不调）：殿本 vol01 8 页（60,87,88,99,117,131,150,190：职名页含雙行、人裁整列格，及正文页）"
+                     "row_segment 与 origin/dev e39e030a 产物逐字节相同；另 87–130 共 44 页关着重跑与 main 包 cv0.7.70-c19-g24-m2-r14fix-a2 逐字节相同；"
+                     "scripts/code_equiv.py check，2026-11-20（A22，ZM 转 Sheldon 11-19 职名格号空格占号）")
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2168,6 +2172,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='3e10a0815acfbacff5f892840eb7bcfadd82f5f133f12f7b7166e0366387bdbb',
           old='64d25e9fcecdaca35dda2a900cb9f526df248aeaaf5f7e2d6d8802aa25d5a47d',
           evidence=_LV_1120),
+    # 职名列按格网位置编号 roster_grid_slots（殿本 vol01 职名页格号空格占号，2026-11-20 A22）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="0fc4a8fd141a30e6ebc63a775d233f1c573976e871cadbc257418ac39402a75c",
+          old="90a4a5fe8a50a4d0a3b1bd80e68328d5405d7e58a7b2a947054d67ca670fe959",
+          evidence=_ROSTER_GRID_1120),
+    Equiv(module="open_guji_cv.impl.keben.roster_segment",
+          new="9743d7f6795f80c3df55cb2d822fbaae239dd77eafe5bbbabe6f26ed1ea36ddd",
+          old="30963e0ad1fea0ae9ce4714a7d1aa397979da6d665b3e5fe383e0bd55fee95dc",
+          evidence=_ROSTER_GRID_1120),
 )
 
 
