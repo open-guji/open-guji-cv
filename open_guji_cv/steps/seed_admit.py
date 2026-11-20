@@ -309,6 +309,10 @@ class SeedAdmitParams(BaseModel):
     """书级：这几组补放（lift）时，整理本对位字（现役对位缺格时用坐标对位字）是组里另一个字、与组给的字不同 → 不放，留人审
     （`group_flow_ref_dissent`；只降不放）。起因（2026-11-03 史記文淵閣本）：山由出 sy 整字 HOG 的模板来自殿本，史記写本山常被判成出
     （标签山的格里判出 143、判山 27），第 6 轮 06:93:4:1a、alt_cut 02:20:6:2b 山被放成出。空＝不启用（不进参数 dump）。"""
+    group_flow_ref_alias: dict[str, str] = Field(default_factory=dict)
+    """书级（全唐文 11-20，sheldon「整理本作 間 的格不再挡本书刻的 閒」）：字组流程里整理本字（及坐标对位字）先按这张表换掉再判，
+    `{"間": "閒"}`＝本书只刻 閒、整理本的 間 来自殿本模板，不当 ref_dissent。只影响字组流程（`groups.flow`），不改对位产物与其他通道。
+    空＝不换（缺省，不进参数 dump）。"""
     group_flow_lift_shape_ref: list[str] = Field(default_factory=list)
     """书级：这几组补放时，`lift_needs`（如日曰要文意给字）没满足、但字形路给的字＝整理本字（现役对位缺格时用坐标对位字），
     且没有任何解法给出别的字（文意只是弃权）→ 照样补放（2026-11-01 史記文淵閣本：写本 曰 在小注里文意 L2 常 low_p 弃权，
@@ -1680,6 +1684,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_lift_ref_veto", None)
         if isinstance(d, dict) and not self.group_flow_lift_shape_ref:
             d.pop("group_flow_lift_shape_ref", None)
+        if isinstance(d, dict) and not self.group_flow_ref_alias:
+            d.pop("group_flow_ref_alias", None)
         if isinstance(d, dict) and not self.group_flow_lift_shape_ratio:
             d.pop("group_flow_lift_shape_ratio", None)
         if isinstance(d, dict) and self.group_flow_lift_shape_ratio_jiazhu is None:
@@ -6363,6 +6369,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      l2_tables=dict(p.group_flow_tables), l2_models=dict(p.group_flow_models), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
                      tolerate_extra={g: str(v) for g, v in p.group_flow_tolerate_extra.items()},
                      lift_shape_ref=p._rt_lift_shape_ref(),
+                     ref_alias=dict(p.group_flow_ref_alias),
                      lift_shape_ratio={g: dict(v) for g, v in p.group_flow_lift_shape_ratio.items()},
                      lift_shape_ratio_half=(None if p.group_flow_lift_shape_ratio_jiazhu is None
                                             else {g: dict(v) for g, v in p.group_flow_lift_shape_ratio_jiazhu.items()}),
