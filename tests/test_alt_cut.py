@@ -306,3 +306,57 @@ def test_alt_nojz_param_off_by_default_not_in_dump():
     from open_guji_cv.steps.row_segment import RowSegmentParams
     assert "alt_nojz" not in RowSegmentParams(cut_judge="rule").model_dump()
     assert RowSegmentParams(cut_judge="rule", alt_nojz=True).model_dump()["alt_nojz"] is True
+
+
+# ── 备选格线表 alt_cuts、备选列的上下文裁决（2026-11-20 脉经，GUJI-774）──────────────────────
+def test_alt_cuts_param_off_by_default_and_fingerprint(tmp_path):
+    from open_guji_cv.steps.row_segment import RowSegmentParams
+    d = RowSegmentParams(cut_judge="rule").model_dump()
+    assert "alt_cuts" not in d and "alt_cuts_fingerprint" not in d
+    t = tmp_path / "cuts.jsonl"
+    t.write_text('{"vol": "01", "page": 7, "col": 7, "cuts": [0, 10, 20], "col_h": 20}\n', encoding="utf-8")
+    on = RowSegmentParams(cut_judge="rule", alt_cuts=str(t)).model_dump()
+    assert on["alt_cuts"] == str(t) and len(on["alt_cuts_fingerprint"]) == 16
+    import pytest
+    with pytest.raises(ValueError):
+        RowSegmentParams(cut_judge="rule", alt_cuts=str(tmp_path / "missing.jsonl"))
+
+
+def test_context_decision_alt_columns_view():
+    from open_guji_cv.products.alt_view import view
+    from open_guji_cv.products.kinds.recog import ColumnDecision, DecisionRec, PageDecision
+    from open_guji_cv.steps.context_decide import ContextDecideParams
+
+    def col(c, ch):
+        return ColumnDecision(col=c, ok=True, chars=[DecisionRec(id=f"b:1:{c}:1", slot=1, char=ch, source="context")])
+    old = PageDecision(page=1, columns=[col(1, "甲"), col(2, "乙")])
+    assert "alt_columns" not in old.model_dump()
+    assert [c.col for c in view(old, "context_decision", {2}).columns] == [1]          # 没有备选裁决：照旧丢
+    new = PageDecision(page=1, columns=[col(1, "甲"), col(2, "乙")], alt_columns=[col(2, "丙"), col(1, "丁")])
+    v = view(new, "context_decision", {2})
+    assert [(c.col, c.chars[0].char) for c in v.columns] == [(1, "甲"), (2, "丙")]      # 只换点名的列
+    assert view(new, "context_decision", set()) is new
+    assert "alt_columns" not in ContextDecideParams().model_dump()
+    assert ContextDecideParams(alt_columns=True).model_dump()["alt_columns"] is True
+
+
+def test_yolo_alt_cuts_clean_and_cuts():
+    import importlib.util
+    from pathlib import Path
+    from open_guji_cv.impl.keben.yolo_tool_infer import Box
+    spec = importlib.util.spec_from_file_location("yac", Path(__file__).parents[1] / "scripts" / "yolo_alt_cuts.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    bx = lambda y0, y1, conf=0.9: Box(10, y0, 90, y1, conf, "ch")
+    raw = [bx(100 * i + 5, 100 * i + 95) for i in range(5)]
+    raw += [bx(205, 240), bx(500, 545), bx(548, 590)]     # 「書」下半另框、一个高字劈成上下两框
+    raw += [bx(990, 1000)]                                 # 版框线碎点
+    got = m.clean(raw)
+    assert len(got) == 6 and got[-1][1] == 500 and got[-1][3] == 590
+    cuts = m.column_cuts(got, 8, 900)
+    assert len(cuts) == 9 and cuts[0] == 0.0 and cuts[-1] == 900.0
+    assert cuts[1] == 100.0                                # 两框之间
+    assert m.column_cuts(got, 5, 900) is None              # 框多于格数
+    lead = m.column_cuts([[10, 300, 90, 390], [10, 400, 90, 490]], 6, 900)   # 低三格起头
+    top = 300 - 0.1 * 90 * 1.05                            # 首字上缘让 0.1 个字高
+    assert lead[:4] == [0.0, round(top / 3, 1), round(2 * top / 3, 1), round(top, 1)]

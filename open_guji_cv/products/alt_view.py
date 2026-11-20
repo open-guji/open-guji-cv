@@ -109,6 +109,8 @@ def view(obj: Any, kind: str, cols) -> Any:
         return obj
     if kind in VIEW_KINDS and hasattr(obj, "with_alt"):
         return obj.with_alt(cols)
+    if kind == "context_decision" and getattr(obj, "alt_columns", None):
+        return obj.with_alt(cols)            # context_decide 开了 alt_columns：备选列有自己的裁决
     if kind in DROP_KINDS and hasattr(obj, "columns"):
         return obj.model_copy(update={"columns": [c for c in obj.columns if c.col not in cols]})
     return obj
