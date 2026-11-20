@@ -721,3 +721,20 @@ def test_no_cell_sprite_writes_site_boxes(tmp_path, monkeypatch):
     out = json.loads(final.read_text(encoding="utf-8"))
     assert [c.get("box") for c in out["cells"]] == [[10, 20, 30, 40], [1, 2, 3, 4], None]
     assert not (tmp_path / "sp" / "assets.json").exists()
+
+
+def test_gone_cells_not_blocking(tmp_path):
+    """重切后票投的格没了（vol24 27:7:-1 抬头极小框被 #1747 切没）：改记无法对位，不拦；还在的格照旧未落。"""
+    exp = tmp_path / "export"
+    exp.mkdir()
+    (exp / "024.char.json").write_text(json.dumps({"pages": [{"page": 11, "columns": [{"col": 6, "cells": [
+        {"a": "11:6:4", "c": "之"}]}]}]}), encoding="utf-8")
+    out = tmp_path / "pub"
+    out.mkdir()
+    (out / "plan.json").write_text(json.dumps({"export_dir": str(exp), "chapter": "024"}), encoding="utf-8")
+    led = {"rows": {"未落": [{"a": "11:6:4", "choice": "char"}, {"a": "27:7:-1", "choice": "none"}]},
+           "counts": {"未落": 2}}
+    assert rp.gone_cells(led, rp.new_cells(out)) == 1
+    assert [v["a"] for v in led["rows"]["未落"]] == ["11:6:4"]
+    assert led["rows"]["无法对位"][0]["a"] == "27:7:-1" and led["counts"] == {"未落": 1, "无法对位": 1}
+    assert rp.new_cells(tmp_path / "nope") is None
