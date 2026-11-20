@@ -475,6 +475,9 @@ _SHAPE_FIRST_1120 = ("seed_admit 加书级开关 lane_shape_first（#1734，795e
 _ALT_CUTS_1120 = ("row_segment 加书级 alt_cuts（备选格线表，缺省空、不进参数 dump；表空时不读不切）、context_decide 加 alt_columns"
                   "（备选列也做上下文裁决，缺省关、不进参数 dump）：脉经第 1 册 7、13、17、25 页 row_segment、context_decide 与 origin/dev 产物"
                   "逐字节相同；scripts/code_equiv.py check，2026-11-20（MJ，GUJI-774）")
+_REF_ALIAS_1120 = ("seed_admit 加书级参数 group_flow_ref_alias（#1755，fea133e3；缺省空 dict、空时不进参数 dump）：groups.flow.group_flow_pass 开头 `if cfg.ref_alias:` 空时不进，"
+                   "amap／veto_refs 原样传下；seed_admit 只多把空 dict 填进 FlowConfig.ref_alias。代码证明等价＋tests/test_flow_ref_alias.py::test_no_alias_unchanged；"
+                   "全唐文 patch 线 v0.7.85（v0.7.82＋#1755）与 dev（fea133e3）各登本线哈希，2026-11-20（形近字线）。书配置写了别名表的书按参数指纹自然过期")
 _HOU_1120 = ("seed_admit 加书级刻形判法 group_flow_hou_shape（#1729，9ddaa9a2；缺省空、只在 group_flow 含 hou 且数据目录有 config/groups/hou_shape.json 时自动填，"
              "填了才进参数指纹 hs…；path_params 剔掉）：没配置时 _hou_shape_pass 不调，_codepoint_exempt 多的一句查 evidence.hou_shape 恒不中。"
              "全唐文 029 册全册 170 页（main 包 cv0.7.74-c81-g-03c8f4-k11-qtw029-d2-a3 当上游，中心库 rev 1382154 尚无 hou_shape.json）seed_admit 与 origin/dev 0aaeb8f9 产物逐字节相同；"
@@ -2289,6 +2292,24 @@ ENTRIES: tuple[Equiv, ...] = (
           new="90c80575d6dd73739a05d1ec5e7fb4f7ffddfb1e83f2f8a8bee1ab309d20fda2",
           old="7ee8fd2acc35a211a7429bfc7d172a7a5635106ccb06a91bd5d25d255b536128",
           evidence=_BIG_REGION_1120),
+    # seed_admit 书级整理本字别名 group_flow_ref_alias（全唐文 間→閒；没配置的书不走；形近字线 11-20，#1755）——全唐文 patch 线 v0.7.85 本线哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="a834dd3e9221cdcaddede7af9388dae30a75e77e265c2a08afd4925fffe90ddc",
+          old="d84d35465efc3d3d9cdfe797bedc93caa11e183f7f4a7a5616da55c45c35ff56",
+          evidence=_REF_ALIAS_1120),
+    Equiv(module="open_guji_cv.groups.flow",
+          new="d17a46a73a56c37a9c30c7fe92513dcc32ce8b0d37aa096bd58509173bd079d6",
+          old="e83a839b2c9755df2a25746644fdefc141737458123e19cd28dcd3ee7ca6cbf3",
+          evidence=_REF_ALIAS_1120),
+    # 同一改动在 dev 上（fea133e3 对 fea133e3~1）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="5104b27cbb3c4eb9fc5c0b8f057f4bd0ddfbabbebf38ac8fb0a7f148262e77c9",
+          old="90c80575d6dd73739a05d1ec5e7fb4f7ffddfb1e83f2f8a8bee1ab309d20fda2",
+          evidence=_REF_ALIAS_1120),
+    Equiv(module="open_guji_cv.groups.flow",
+          new="8fcc28ea5c3650b6d7982f9deecbb33a7711757895565f32edf5ec9ddf13c24a",
+          old="3bfef8bf750fde01b496fd5dfe1bf77c2825035ed2f69a2a65c92b70bc206095",
+          evidence=_REF_ALIAS_1120),
 )
 
 
