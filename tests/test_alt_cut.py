@@ -412,3 +412,49 @@ def test_row_segment_alt_cells_table(tmp_path, monkeypatch):
     assert [(x.slot, x.sub) for x in alt[0].cells] == [(1, None), (2, "a"), (2, "b"), (3, None)]
     assert [c.cells for c in got.columns] == [c.cells for c in out["cells"].columns]     # 主切法不动
     assert not [c for c in run(h + 50).alt_columns if c.col == col.col]                 # 列图高变了不套
+
+
+def test_alt_note_region_pick():
+    """seed_admit.alt_note_region：备选把主切法并成大字的小注劈开了，小注范围外不更差就换（脉经 01 40:3「即穴也太淵」）。"""
+    from types import SimpleNamespace as NS
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit, PageAdmit, PageAlignRef
+    from open_guji_cv.steps.seed_admit import ALT_ADMIT_MIN_GAIN, _pick_alt_cols, _note_spans
+
+    def rec(s, sub, ok, ch="甲"):
+        return AdmitRec(id=f"b:1:1:{s}{sub or ''}", slot=s, sub=sub, admit=ok, char=ch if ok else None,
+                        channel="match_ref" if ok else None)
+
+    def ch(s, sub, y0, y1):
+        return NS(slot=s, sub=sub, bbox_page=(0, y0, 10, y1), patch_key="k")
+    # 主切法：1–3 大字放行，4、5 是并成大字的小注（待审）
+    main = PageAdmit(page=1, columns=[ColumnAdmit(col=1, chars=[rec(1, None, 1), rec(2, None, 1), rec(3, None, 1),
+                                                                rec(4, None, 0), rec(5, None, 0)])])
+    cm = NS(columns=[NS(col=1, chars=[ch(s, None, 100 * s - 100, 100 * s) for s in range(1, 6)])])
+    # 备选：1–3 同，4a/4b/5a/5b 小注，待审 3 格（比主切法多 1）
+    alt = PageAdmit(page=1, columns=[ColumnAdmit(col=1, chars=[rec(1, None, 1), rec(2, None, 1), rec(3, None, 1),
+                                                               rec(4, "a", 1, "乙"), rec(4, "b", 0), rec(5, "a", 0),
+                                                               rec(5, "b", 0)])])
+    ca = NS(columns=[NS(col=1, chars=[ch(s, None, 100 * s - 100, 100 * s) for s in range(1, 4)]
+                        + [ch(4, "a", 300, 400), ch(4, "b", 300, 400), ch(5, "a", 400, 500), ch(5, "b", 400, 500)])])
+    ref = PageAlignRef(page=1)
+    assert ALT_ADMIT_MIN_GAIN >= 1
+    assert _note_spans(ca, 1) == [(300, 500)]
+    assert _pick_alt_cols([1], main, alt, ref, ref, cm, ca) == []                     # 缺省关：待审多了不换
+    assert _pick_alt_cols([1], main, alt, ref, ref, cm, ca, note_region=True) == [1]
+    # 主切法在小注范围里放出了备选没放的字：不换
+    main.columns[0].chars[3] = rec(4, None, 1, "丙")
+    assert _pick_alt_cols([1], main, alt, ref, ref, cm, ca, note_region=True) == []
+    main.columns[0].chars[3] = rec(4, None, 0)
+    # 小注范围外备选待审多了：不换
+    alt.columns[0].chars[2] = rec(3, None, 0)
+    assert _pick_alt_cols([1], main, alt, ref, ref, cm, ca, note_region=True) == []
+    alt.columns[0].chars[2] = rec(3, None, 1)
+    # 主切法这里本来就认出了小注：照常比，不走这条
+    cm.columns[0].chars[3] = ch(4, "a", 300, 400)
+    assert _pick_alt_cols([1], main, alt, ref, ref, cm, ca, note_region=True) == []
+
+
+def test_alt_note_region_param_off_by_default_not_in_dump():
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams
+    assert "alt_note_region" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(alt_note_region=True).model_dump()["alt_note_region"] is True
