@@ -194,3 +194,13 @@ def test_unmapped_votes_go_into_report(tmp_path):
     rep = ac.write_guard_report(ws, {"books": {"vol43": {"verdict": "done", "unmapped": um}}}, "d", tmp_path, "x")
     t = rep.read_text(encoding="utf-8")
     assert "无法对位" in t and "vol43" in t and "守卫拦下的册" not in t
+
+
+def test_done_is_keyed_by_main(monkeypatch):
+    """状态文件的「已做」只对当时的主包有效：标了新 main 就重做（全唐文 11-20 d2）；没记 main 的旧状态照旧跳过。"""
+    monkeypatch.setattr(ac, "pack_rows", lambda ws, b: [{"label": "c1", "main": False}, {"label": "d2", "main": True}])
+    assert ac.main_changed(Path("."), "vol01", {"verdict": "done", "main": "c1"}) is True
+    assert ac.main_changed(Path("."), "vol01", {"verdict": "done", "main": "d2"}) is False
+    assert ac.main_changed(Path("."), "vol01", {"verdict": "done"}) is False
+    monkeypatch.setattr(ac, "pack_rows", lambda ws, b: [])
+    assert ac.main_changed(Path("."), "vol01", {"verdict": "done", "main": "c1"}) is False
