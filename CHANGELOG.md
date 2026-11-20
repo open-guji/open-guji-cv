@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.86] - 2026-11-20
+
+- 发版说明（A31 11-20，**殿本 patch 线**，PATCH；修 v0.7.83）：v0.7.83 的 code_equiv 除追加 `_NOTCH_1120` 两条外，还把本线已有的 border_detect／impl.keben.border 登记（含 `MOVED` 里 impl.keben.border）的 old 从 `301df64d`／`fe76aa1f` 批量改成 dev 值 `bf37ceda`／`632040e4`（L0 那条成了 new＝old 自环），本线链断，border_detect、border_detect_gate、column_warp 指纹相对 v0.7.79 变了，殿本旧产物会从 border_detect 起判过期。本版把 code_equiv 恢复成 v0.7.79 的原样、只追加 `_NOTCH_1120` 两条（d1e2b0bb→bf37ceda、dcc3f23d→632040e4，再沿本线链到 301df64d／fe76aa1f）；实算 23 步 Step 代码指纹与 v0.7.79 全同。代码与 v0.7.83 相同。**v0.7.83 勿用**。底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回（dev 不受影响）。
+
 ## [0.7.83] - 2026-11-20
 
 - 发版说明（ZM 11-20，**殿本 patch 线**，PATCH）：v0.7.79 + #1747（border_detect 加书级开关 `head_raise_notch`：缺口列认主上框，`impl/keben/border.notch_top`；缺省关、不进参数 dump；vol24 p27、vol28 多页抬头小框／缺口假格）。code_equiv：border_detect、impl.keben.border 按本线哈希重登（`_NOTCH_1120`，old 取 v0.7.79 本线哈希），关着时 Step 指纹对 v0.7.79 不变。底库不变。tag 在 main 合并提交；dev 以 `-s ours` 合回。
