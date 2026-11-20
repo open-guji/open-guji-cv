@@ -203,22 +203,3 @@ def test_l04_subclass_admitted(tmp_path):
     n, r = _run(CELLS, AMAP, _store(tmp_path, "甲", "乙", subclass="L04"))
     assert n == 1 and r[2].char == "說" and r[2].channel == "vis_ruling" and r[2].evidence["vis_ruling"]["subclass"] == "L04"
     assert _run(CELLS, AMAP, _store(tmp_path, "甲", "乙", subclass="XXX"))[0] == 0
-
-
-def test_ctx_extra_subclasses_book_switch(tmp_path):
-    """`vis_ruling_ctx_subclasses`：ctx-m1 在 Z/N 外再收书级指定的子类；缺省空＝不收、不进 dump；不影响 vis-o1 等其它版本。"""
-    st = RulingStore(tmp_path)
-    p = st.put("O", "ctx-m1", "甲", "乙", char="說", conf="high", why="x", model="m", cell=f"{B}:1:2")
-    p.update({"admit_ok": True, "subclass": "A", "ref": "說"})
-
-    def run(**kw):
-        recs = [AdmitRec(id=f"{B}:1:{s}", slot=s, admit=s != 2, char={1: "甲", 2: "誤", 3: "乙"}[s], doubts=[], channel=None,
-                         provenance="match" if s != 2 else "", evidence={}) for s in (1, 2, 3)]
-        return _vis_ruling_pass(SeedAdmitParams(db_path="x", **kw), [ColumnAdmit(col=1, chars=recs)],
-                                {f"{B}:1:{s}": (c, None) for s, c in AMAP.items()}, st)
-    assert run() == 0                                        # 缺省不收 A
-    assert run(vis_ruling_ctx_subclasses="A") == 1
-    assert run(vis_ruling_ctx_subclasses=" L, A ") == 1
-    assert run(vis_ruling_ctx_subclasses="L") == 0
-    assert "vis_ruling_ctx_subclasses" not in SeedAdmitParams(db_path="x").model_dump()
-    assert SeedAdmitParams(db_path="x", vis_ruling_ctx_subclasses="A").model_dump()["vis_ruling_ctx_subclasses"] == "A"

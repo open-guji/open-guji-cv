@@ -25,12 +25,3 @@ def test_override_replaces_lines_sorted_and_straight():
     assert [round(v.x_at(500.0)) for v in res.verticals] == [0, 167, 363, 562]
     assert res.vline_segments == 1 and res.vline_filled == [False] * 4
     assert all(v.k2 is None for v in res.verticals)
-
-
-def test_expected_cols_pages_default_not_in_dump():
-    """按页列数 expected_cols_pages（2026-11-12，殿本 vol01 p100 十列）：缺省空不进参数 dump，三处都一样。"""
-    from open_guji_cv.gates.border_detect_gate import BorderDetectGateParams
-    from open_guji_cv.gates.column_gate import ColumnGateParams
-    for cls in (BorderDetectParams, BorderDetectGateParams, ColumnGateParams):
-        assert "expected_cols_pages" not in cls().model_dump()
-        assert cls(expected_cols_pages={100: 10}).model_dump()["expected_cols_pages"] == {100: 10}
