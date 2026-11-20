@@ -1991,7 +1991,9 @@ class SeedAdmitStep(Step):
                    # L2 答案表、量横、入人八字形分类器、字频
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.freq", "open_guji_cv.groups.registry", "open_guji_cv.groups.edge_pairs",
                    "open_guji_cv.groups.methods",
-                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.book_knn", "open_guji_cv.groups.near_knn", "open_guji_cv.groups.pair_attr", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
+                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.rr_shape",
+                   # 候𠋫 书级刻形判法（group_flow_hou_shape，#1729）：补进指纹；经 code_equiv.SPLITS 合回 rr_shape 一项，现有产物不过期（A31 11-20）
+                   "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.book_knn", "open_guji_cv.groups.near_knn", "open_guji_cv.groups.pair_attr", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
                    "open_guji_cv.groups.prompt_template", "open_guji_cv.feedback.rulings",
                    # 人裁取字与撤下标记、绑定重挂（human_chars／stale_human_rules／rebind_library_shapes）：
                    # 这两处改了，有作废记录或重绑的格输出就变，要让第 7 步判过期（#1673、#1676 之后补，A31 11-18）。

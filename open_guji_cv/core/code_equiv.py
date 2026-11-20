@@ -73,6 +73,9 @@ _VN_HOOK_0738 = (_VN_HOOK_1115 + "。v0.7.38（史記 patch 线，v0.7.33 + #155
 _PT_1115 = ("seed_admit 书级部件刻形判法 group_flow_part_shape（缺省空、不自动找文件、没填就不跑；模型指纹只在填了时进指纹；groups/part_shape 是新模块）："
             "全唐文 m1 包（cv0.7.10-c65-g-9f3d37-k5-qtw037-m1／qtw076-m1）037 册 4 页（seed_admit 实际跑通的页）＋076 册 12 页（3,20,48,55,65,68,69,92,93,100,120,149）"
             "seed_admit 与 origin/dev e7ce8f26 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-15（全唐文·码位线）")
+_HOU_DEP_1120 = ("seed_admit 的 StepSpec.code_deps 元组补一项 open_guji_cv.groups.hou_shape（#1729 起 seed_admit 已 import 它，当时漏列，manager 守卫 test_code_deps_coverage 报红）："
+                 "只改 Step 声明、不改任何运行路径（code_deps 运行时只用来算指纹），产物逐字节不变按构造成立；"
+                 "seed_admit 组合 code_hash 改前改后同（2731e712841ca574，hou_shape 经 SPLITS 合回 rr_shape），2026-11-20（A31）")
 _LV_1120 = ("seed_admit lane_lib_veto_pairs（库否决名单内异体对改放库首位的形；缺省空、不进参数 dump；只在 lane_lib_veto 开且名单非空时走）："
             "全唐文 029 册 d2 包（cv0.7.74-c81-g-03c8f4-k11-qtw029-d2-a3）9 页（5,20,40,60,80,100,120,140,160）seed_admit 与 origin/dev e39e030a 产物逐字节相同；"
             "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-19（全唐文·码位线）")
@@ -2245,6 +2248,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="d84d35465efc3d3d9cdfe797bedc93caa11e183f7f4a7a5616da55c45c35ff56",
           old="182de6ff72acd4a853d85c04bac395a45a5ab5b49c461e1f7d007c9a587388cf",
           evidence=_HOU_1120),
+    # seed_admit code_deps 补列 groups.hou_shape（只改 Step 声明的元组，运行逻辑一字不动；组合指纹经 SPLITS 合回 rr_shape，A31 11-20）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="4610aef1ffe32454a5737fcd5c89bd6148a491ee760f52a76b7fe93eab26df76",
+          old="d84d35465efc3d3d9cdfe797bedc93caa11e183f7f4a7a5616da55c45c35ff56",
+          evidence=_HOU_DEP_1120),
 )
 
 
@@ -2314,6 +2322,12 @@ FORKED: dict[str, tuple[str, str]] = {
 SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     # 不是拆分、是 seed_admit 新加了一个 code_dep（书级钩子 follow_ref_hooks，缺省 rival_skip=None；2026-11-13 A22）：
     # pua_v2_codes 与 follow_ref_hooks 都还是这一版时合回 pua_v2_codes 一项，指纹不变。书仓覆盖了钩子的书（史記）照常过期
+    # 不是拆分、是 seed_admit 补列 code_dep groups.hou_shape（#1729 起 seed_admit 就 import 它，当时没列进 code_deps，
+    # manager 守卫 test_code_deps_coverage 报红；A31 2026-11-20）：rr_shape 与 hou_shape 都还是这一版时合回 rr_shape 一项，
+    # seed_admit 指纹不变（现有产物不过期）；之后哪块真改了照常过期。
+    "open_guji_cv.groups.rr_shape": ("b2aa48311b2c4854f09f4af3c7eb4b3efc4e4d11b2d6bc5ab21b4e5bfacea273", (
+        ("open_guji_cv.groups.rr_shape", "b2aa48311b2c4854f09f4af3c7eb4b3efc4e4d11b2d6bc5ab21b4e5bfacea273"),
+        ("open_guji_cv.groups.hou_shape", "b8c36f23d4a5861bdce91d9dafdd19cb3264b0be2f026f56dfafa61d03e2deb1"))),
     "open_guji_cv.utils.pua_v2_codes": ("909be2f3c3054883a2666af3e775e9baaa5a6e0f9ba73f3f04f99137dffde528", (
         ("open_guji_cv.utils.pua_v2_codes", "909be2f3c3054883a2666af3e775e9baaa5a6e0f9ba73f3f04f99137dffde528"),
         ("open_guji_cv.impl.keben.follow_ref_hooks", "67ffed25de9e2f114bfd57a4f490d1fa5a7e162d02b1a0174d92bc45543b4895"))),
