@@ -308,6 +308,32 @@ class RunReport:
         }
 
 
+_LIB_STORE_FP_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def _lib_store_token(font: dict) -> str:
+    """库字档（`font.charset.lib_chars`）用的库内容指纹：`font.real_proto.stores`（缺省本书 `output/glyph_store`）
+    下 `instances/*.jsonl` 的内容 sha256。路径解析与 `clustering.cnn_candidates.book_real_proto` 同一口径
+    （相对路径按工作区根）；写在 core 里是因为 core 不许反过来 import clustering。库不存在时是 `none`。"""
+    from .workspace import workspace_root
+    stores = ((font.get("real_proto") or {}).get("stores")) or ["output/glyph_store"]
+    base = workspace_root() or Path(__file__).resolve().parents[2]
+    parts = []
+    for st in stores:
+        d = Path(st)
+        d = (d if d.is_absolute() else base / d) / "instances"
+        if not d.exists():
+            continue
+        for jf in sorted(d.glob("*.jsonl")):
+            stt = jf.stat()
+            key = (str(jf), stt.st_size, stt.st_mtime_ns)
+            fp = _LIB_STORE_FP_CACHE.get(key)
+            if fp is None:
+                fp = _LIB_STORE_FP_CACHE[key] = hashlib.sha256(jf.read_bytes()).hexdigest()[:16]
+            parts.append(f"{jf.name}:{fp}")
+    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:12] if parts else "none"
+
+
 def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False) -> dict:
     """指纹里**不含上游**的那部分：步 id、版本、参数、代码、册配置。
     `fingerprint` = 它 + 上游 sha；`self_hash` = 只有它（格级复用的判据，见 core/reuse.py）。
@@ -329,6 +355,12 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     # （不进 `book_deps`，那会让所有册指纹变，见 core/ref_profile.py 模块头）。
     if step.spec.id == "rare_candidates" and getattr(book, "rare_charset", None):
         payload["rare_charset"] = book.rare_charset
+    # 库字档（`font.charset.lib_chars`，缺省关）：字表跟着本书字形库里人裁的字走，库长了产物要过期。
+    # 只在开着的册加键（库的内容指纹），没开的册指纹逐位不变。
+    if step.spec.id == "rare_candidates":
+        font = getattr(book, "font", None) or {}
+        if (font.get("charset") or {}).get("lib_chars"):
+            payload["lib_chars"] = _lib_store_token(font)
     # 册钉了语料库版本，且这一步读语料：整步带上版本号（`core/corpus_pin.CORPUS_STEPS`）。
     # 没钉的册不写这个键，指纹逐位不变。
     from .corpus_pin import step_pin_token

@@ -313,12 +313,17 @@ def resolve_pin(ws: Path, vol: str, n: int) -> dict:
 
 
 def append_pin(ws: Path, vol: str, *, from_n: int | None = None, global_ver=_KEEP, book_ver=_KEEP,
-               vol_ver=_KEEP, note: str = "", dev: bool = False) -> dict:
+               vol_ver=_KEEP, note: str = "", dev: bool = False, same_output_as: int | None = None) -> dict:
     """给这册追加一行钉子账。没写的层沿用最新一行；组合与最新一行相同就拒绝（不空升）。
 
     没有钉子账时 ``from_n`` 必给（册 yaml 现在的 ``corpus:``），先把它按旧做法登成首行再追加。
     ``dev=True``：开发中的总号，各层版本号可以指向还没出的清单（先升号，再改语料，发版时 ``release_pin``）。
-    只写账，不改册 yaml、不推中心库——新总号由调用方写进册 yaml（开发中再加 ``corpus_dev: true``）。"""
+    只写账，不改册 yaml、不推中心库——新总号由调用方写进册 yaml（开发中再加 ``corpus_dev: true``）。
+
+    ``same_output_as=M``：语料等价登记（同 ``core/code_equiv.py`` 的纪律，只登记产物逐字节不变的改动）。新总号的
+    指纹沿用总号 M 的（``corpus_token``），这册读语料的步不判过期。``note`` 必须写证据（哪些步、哪些页、怎么比的）。
+    登记时把两版清单的差异条目记进 ``same_output_paths``；之后取指纹时再核一遍，对不上就报错，不悄悄沿用。
+    只对这一册生效（钉子账按册），别的册、别的书照常过期——规则改动对某本书是真变化时，不受影响。"""
     import datetime
     import json
     rows = load_pins(ws, vol)
@@ -340,11 +345,39 @@ def append_pin(ws: Path, vol: str, *, from_n: int | None = None, global_ver=_KEE
            "date": datetime.date.today().isoformat(), "note": note}
     if dev:
         row["dev"] = True
+    if same_output_as is not None:
+        if dev:
+            raise ValueError("开发中的总号不能登记语料等价（清单还没出齐，没法核差异）")
+        if not note.strip():
+            raise ValueError("登记语料等价要在 note 里写证据（哪些步、哪些页逐字节相同）")
+        tgt = next((r for r in rows if r["n"] == same_output_as), None)
+        if tgt is None or tgt.get("dev"):
+            raise ValueError(f"册 {vol} 的钉子账里没有已发的总号 {same_output_as}，不能沿用它的指纹")
+        row["same_output_as"] = same_output_as
+        row["same_output_paths"] = _manifest_diff(_layers_manifest(ws, vol, tgt), _layers_manifest(ws, vol, row))
+        if not row["same_output_paths"]:
+            raise ValueError(f"新总号与总号 {same_output_as} 的清单内容相同，不用登记等价")
     rows.append(row)
     p = pins_path(ws, vol)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps({"rows": rows}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     return row
+
+
+def _layers_manifest(ws: Path, vol: str, row: dict) -> dict:
+    """钉子账一行（三层版本）对应的完整清单，同 ``load_manifest`` 的并法。"""
+    man = _load_book_manifest(ws, row["book"], base=row.get("global"))
+    if row.get("vol") is None:
+        return man
+    vm = _load_vol_manifest(ws, vol, row["vol"])
+    return {**man, "items": man["items"] + vm["items"]}
+
+
+def _manifest_diff(a: dict, b: dict) -> list[str]:
+    """两份清单内容不同的条目（``root:path``，新增、删除、改了都算），排好序。只看 ``items_digest`` 用的三项。"""
+    ka = {(i["root"], i["path"]): i["sha256"] for i in a["items"]}
+    kb = {(i["root"], i["path"]): i["sha256"] for i in b["items"]}
+    return sorted(f"{r}:{p}" for r, p in set(ka) | set(kb) if ka.get((r, p)) != kb.get((r, p)))
 
 
 def versions(ws: Path) -> list[int]:
@@ -512,6 +545,20 @@ def corpus_token(ws: Path | None, version: int, vol: str | None = None, dev: boo
     if not rows or any(r["n"] == version and r.get("legacy_token") for r in rows):
         return f"corpus-v{version}"                    # 没有钉子账，或迁移行（legacy_token）：旧写法，指纹逐位不变
     key = (str(ws), version, vol)
+    if key in _TOKEN_CACHE:
+        return _TOKEN_CACHE[key]
+    row = next((r for r in rows if r["n"] == version), None)
+    if row is not None and row.get("same_output_as") is not None:   # 语料等价登记：沿用老总号的指纹（append_pin 头注）
+        m = row["same_output_as"]
+        tgt = next((r for r in rows if r["n"] == m), None)
+        if tgt is None or m >= version:
+            raise ValueError(f"册 {vol} 总号 {version} 登记沿用总号 {m} 的指纹，但账里没有更早的总号 {m}")
+        diff = _manifest_diff(_layers_manifest(ws, vol, tgt), _layers_manifest(ws, vol, row))
+        if diff != row.get("same_output_paths"):
+            raise ValueError(f"册 {vol} 总号 {version} 的语料等价登记与清单对不上（登记 {row.get('same_output_paths')}，"
+                             f"实际差 {diff}）：清单被改过，撤掉这条登记或重新核")
+        tok = _TOKEN_CACHE[key] = corpus_token(ws, m, vol)
+        return tok
     tok = _TOKEN_CACHE.get(key)
     if tok is None:
         try:
