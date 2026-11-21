@@ -313,6 +313,10 @@ class SeedAdmitParams(BaseModel):
     """书级（全唐文 11-20，sheldon「整理本作 間 的格不再挡本书刻的 閒」）：字组流程里整理本字（及坐标对位字）先按这张表换掉再判，
     `{"間": "閒"}`＝本书只刻 閒、整理本的 間 来自殿本模板，不当 ref_dissent。只影响字组流程（`groups.flow`），不改对位产物与其他通道。
     空＝不换（缺省，不进参数 dump）。"""
+    group_flow_hou_shape_late: bool = False
+    """书级（全唐文 11-21）：5c vis_ruling 放行之后对 候／𠋫 格再跑一遍 `_hou_shape_pass`，只判还没有 `evidence.hou_shape` 的格。
+    hou_shape 那一遍排在字组流程里、5c 之前，5c 补放的 候 格没被刻形判过，到最后码位归一（候→𠋫）一律落成 𠋫
+    （ve1 053:23:9:6、053:34:2:9、044:66:8:7）。要 `group_flow_hou_shape` 有模型才生效。缺省关（不进参数 dump）。"""
     group_flow_lift_shape_ref: list[str] = Field(default_factory=list)
     """书级：这几组补放时，`lift_needs`（如日曰要文意给字）没满足、但字形路给的字＝整理本字（现役对位缺格时用坐标对位字），
     且没有任何解法给出别的字（文意只是弃权）→ 照样补放（2026-11-01 史記文淵閣本：写本 曰 在小注里文意 L2 常 low_p 弃权，
@@ -1707,6 +1711,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_lift_shape_ref", None)
         if isinstance(d, dict) and not self.group_flow_ref_alias:
             d.pop("group_flow_ref_alias", None)
+        if isinstance(d, dict) and not self.group_flow_hou_shape_late:
+            d.pop("group_flow_hou_shape_late", None)
         if isinstance(d, dict) and not self.group_flow_lift_shape_ratio:
             d.pop("group_flow_lift_shape_ratio", None)
         if isinstance(d, dict) and self.group_flow_lift_shape_ratio_jiazhu is None:
@@ -2933,6 +2939,9 @@ class SeedAdmitStep(Step):
             d_vr = _vis_ruling_pass(p, out, amap)
             n_auto += d_vr
             n_review -= d_vr
+            if d_vr and p.group_flow_hou_shape_late and p.group_flow and p.group_flow_hou_shape:
+                # 5c 补放的 候／𠋫 格补跑刻形判（只判还没判过的格；只改字、不改放行）
+                _hou_shape_pass(p, out, ctx, page, patch_missing, only_unjudged=True)
         if p.symbol_review:
             d_sym = _symbol_review_pass(ctx, page, p, out, mmap, human_shapes)
             n_auto -= d_sym
@@ -5983,7 +5992,8 @@ def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
 _HOU = frozenset("候𠋫")
 
 
-def _hou_shape_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
+def _hou_shape_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict | None = None,
+                    only_unjudged: bool = False) -> int:
     """候𠋫 书级刻形判法（`groups.hou_shape`，`SeedAdmitParams.group_flow_hou_shape`）。紧接 wu_shape。→ 0（只改字、不改放行）。
 
     全唐文书级码位 候→𠋫（照刻形），可书里也刻真 候（033 册起居多；sheldon 11-19 点选 182 格定标签）。
@@ -5996,6 +6006,8 @@ def _hou_shape_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict |
     for c in out:
         for r in c.chars or []:
             if not r.admit or r.char not in _HOU or r.provenance == "human" or r.channel == "human":
+                continue
+            if only_unjudged and "hou_shape" in (r.evidence or {}):
                 continue
             try:
                 img = _page_patch(ctx, page, c.col, r.slot, r.sub)

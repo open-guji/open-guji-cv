@@ -132,3 +132,33 @@ def test_net_schema_judges_by_prob(tmp_path):
         r = H.judge(img, H.load(str(p)))
         assert r["char"] == want, (bias, r)
     assert H.judge(np.full((80, 80), 255, np.uint8), H.load(str(p)))["why"] == "abstain:no_ink"
+
+
+def test_late_pass_only_unjudged(monkeypatch):
+    """group_flow_hou_shape_late：5c 补放的格补判刻形，已判过的格不再动（全唐文 ve1 053:23:9:6）。"""
+    class R:
+        def __init__(self, **k):
+            self.__dict__.update(dict(slot=1, sub=None, doubts=[], provenance="match"), **k)
+
+    class C:
+        col = 1
+
+        def __init__(self, chars):
+            self.chars = chars
+    judged = R(id="b:1:1:1", admit=True, char="𠋫", channel="match_ref", evidence={"hou_shape": {"char": None, "why": "abstain:mid"}})
+    late = R(id="b:1:1:2", admit=True, char="候", channel="vis_ruling", evidence={"vis_ruling": {"char": "候"}})
+    p = SeedAdmitParams()
+    object.__setattr__(p, "group_flow_hou_shape", "x")
+    monkeypatch.setattr(H, "load", lambda path: {})
+    monkeypatch.setattr(H, "judge", lambda img, m: {"char": "候", "why": "agree", "p": 0.999})
+    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
+    sa._hou_shape_pass(p, [C([judged, late])], only_unjudged=True)
+    assert judged.char == "𠋫" and judged.evidence["hou_shape"]["char"] is None
+    assert late.char == "候" and late.evidence["hou_shape"]["char"] == "候"
+
+
+def test_late_flag_default_off_not_in_dump():
+    p = SeedAdmitParams()
+    assert p.group_flow_hou_shape_late is False
+    assert "group_flow_hou_shape_late" not in p.model_dump()
+    assert SeedAdmitParams(group_flow_hou_shape_late=True).model_dump()["group_flow_hou_shape_late"] is True
