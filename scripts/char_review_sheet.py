@@ -20,6 +20,9 @@ from pathlib import Path
 
 from PIL import Image
 
+#: 己已巳、日曰：同形字，只能按文意判（runbook S10），人看字形图判不了，快审页不收。
+AMBIGUOUS = "己已巳日曰"
+
 TEMPLATE = Path(__file__).with_name("char_review_sheet.tpl.html")
 GRID_TEMPLATE = Path(__file__).with_name("char_review_grid.tpl.html")
 
@@ -93,6 +96,8 @@ def main() -> None:
     ap.add_argument("--per-char", type=int, default=14)
     ap.add_argument("--grid", type=int, default=0,
                     help="每页 N 格、一图一字、默认全对（只点不对的）；每字挑 --per-char 个像素匹配度最高的格")
+    ap.add_argument("--keep-ambiguous", action="store_true",
+                    help="不跳过靠字形无法判的字（%s）；缺省跳过，这些字要按文意判，不放进快审页" % AMBIGUOUS)
     ap.add_argument("--unadmitted", action="store_true",
                     help="只出还没放行、但整理本有对应字的格（按整理本的字分组），用于第二轮")
     a = ap.parse_args()
@@ -101,6 +106,8 @@ def main() -> None:
     groups: dict[str, list[str]] = collections.defaultdict(list)
     for i, r in gm.items():
         top = (r.get("candidates") or [[None]])[0][0]
+        if not a.keep_ambiguous and any(c and c in AMBIGUOUS for c in (top, ar.get(i))):
+            continue
         if a.unadmitted:
             if ar.get(i) and not sa.get(i, {}).get("admit"):
                 groups[ar[i]].append(i)
