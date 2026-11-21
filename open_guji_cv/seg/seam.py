@@ -239,3 +239,64 @@ def cut_cost_sides(ink: np.ndarray, max_h: float | None = None, min_area: int = 
         up[top + 1:top + hh] += np.where(above < below, above, np.where(above == below, above / 2, 0.0))
         down[top + 1:top + hh] += np.where(below < above, below, np.where(above == below, below / 2, 0.0))
     return up, down
+
+
+# ── 劈字连通块（2026-11-18 A22 统一优化 U2：从 impl/keben/row_boundaries 的 _split_glyphs、_free_seam_keeps_sides、
+#    _white_row_ok 抽来，Step3 切点修整串 cut_free_seam／cut_white_row／cut_glyph_line／cut_gap_keep_glyph 共用；常数原值不变）──
+
+SPLIT_FRAC = 0.2         # 被劈连通块两边各至少占这么多面积
+SPLIT_EXT = 0.25         # 两边各伸出至少这么多格高
+SPLIT_HMAX = 1.3         # 高过这么多格高的连通块不算单字（版框残段、两字以上粘连）
+SPLIT_MIN_AREA = 0.015   # 小于这么多格高² 的墨点不管
+SIDE_TOL = 0.05          # 换线后被劈块另一边至多留这么多（面积比）
+
+
+def split_blobs(lab: np.ndarray, stats: np.ndarray, yv: np.ndarray, period: float) -> set[int]:
+    """切线 `yv`（逐列 y，行 < y 属上格）劈开的单字大小连通块的标号：两边各 ≥`SPLIT_FRAC` 面积、各伸出 ≥`SPLIT_EXT` 格高，
+    块高 ≤`SPLIT_HMAX` 格高、面积 ≥`SPLIT_MIN_AREA` 格高²。`lab`／`stats` 是 `cv2.connectedComponentsWithStats` 的输出。"""
+    h, w = lab.shape
+    xs = np.arange(w)
+    ids = set(np.unique(lab[np.clip(yv, 0, h - 1), xs]).tolist()) | set(np.unique(lab[np.clip(yv - 1, 0, h - 1), xs]).tolist())
+    ids.discard(0)
+    out: set[int] = set()
+    min_a = SPLIT_MIN_AREA * period * period
+    for i in ids:
+        x, y, cw, ch, a = (int(v) for v in stats[i])
+        if a < min_a or ch > SPLIT_HMAX * period:
+            continue
+        comp = lab[y:y + ch, x:x + cw] == i
+        up = comp & (np.arange(y, y + ch)[:, None] < yv[x:x + cw][None, :])
+        dn = comp & ~up
+        nu, nd = int(up.sum()), int(dn.sum())
+        if min(nu, nd) < SPLIT_FRAC * a:
+            continue
+        ru, rd = np.nonzero(up.any(1))[0], np.nonzero(dn.any(1))[0]
+        if ru[-1] - ru[0] + 1 >= SPLIT_EXT * period and rd[-1] - rd[0] + 1 >= SPLIT_EXT * period:
+            out.add(int(i))
+    return out
+
+
+def blobs_keep_sides(lab: np.ndarray, stats: np.ndarray, cur: np.ndarray, new: np.ndarray, split: set[int],
+                     period: float, *, split_to: str) -> bool:
+    """换线护栏（线从 `cur` 换到 `new`）：被原线劈开的块（`split`）要整块（≥ 1−`SIDE_TOL`）归到 `split_to` 指的那边——
+    `"up"`：只修上字笔画伸进下格，块原来墨大半在上格、换线后整块归上格（`cut_free_seam`）；`"major"`：整块归它原来
+    墨多的那边（`cut_white_row`）。别的单字大小的块不许换边（墨大半从一边挪到另一边）。"""
+    h, w = lab.shape
+    lo, hi = int(max(0, min(cur.min(), new.min()) - 1)), int(min(h, max(cur.max(), new.max()) + 1))
+    min_a = SPLIT_MIN_AREA * period * period
+    ids = set(np.unique(lab[lo:hi]).tolist()) - {0}
+    for i in ids:
+        x, y, cw, ch, a = (int(v) for v in stats[i])
+        comp = lab[y:y + ch, x:x + cw] == i
+        rows = np.arange(y, y + ch)[:, None]
+        up0 = int((comp & (rows < cur[x:x + cw][None, :])).sum()) / a
+        up1 = int((comp & (rows < new[x:x + cw][None, :])).sum()) / a
+        if i in split:
+            if split_to == "up":
+                if up0 < 0.5 or up1 < 1 - SIDE_TOL:
+                    return False
+            elif (up1 if up0 >= 0.5 else 1 - up1) < 1 - SIDE_TOL:
+                return False
+        elif a >= min_a and (up0 >= 0.5) != (up1 >= 0.5):
+            return False
+    return True

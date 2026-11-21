@@ -105,7 +105,7 @@ def _binary(patch: np.ndarray, ink_threshold: int = INK_THRESHOLD) -> np.ndarray
 
 
 def gap_center(patch: np.ndarray, ref_w: float | None = None,
-               ink_threshold: int = INK_THRESHOLD) -> tuple[float, float] | None:
+               ink_threshold: int = INK_THRESHOLD, span_t: float = SPAN_T) -> tuple[float, float] | None:
     """单格判据：图块若呈「双列小字」形态，返回 `(缝中心 x, strength)`。
 
     `patch` 是**内容窗口内的格框图块**（界行已剥掉、未裁紧），返回的 x 是
@@ -133,7 +133,7 @@ def gap_center(patch: np.ndarray, ref_w: float | None = None,
         return None
     x0, x1 = int(ink[0]), int(ink[-1])
     span = x1 - x0 + 1
-    if span / float(ref_w or w) < SPAN_T:
+    if span / float(ref_w or w) < span_t:
         return None
     runs: list[tuple[int, int]] = []
     start = None
@@ -318,8 +318,8 @@ def right_half_left_edge(patch: np.ndarray, ink_threshold: int = INK_THRESHOLD) 
     return float(w // 2 + (int(solid[0]) if solid.size else 0))
 
 
-def link_runs(entries: list[tuple[int, tuple[float, float] | None]]
-              ) -> dict[int, float]:
+def link_runs(entries: list[tuple[int, tuple[float, float] | None]],
+              cc_min: float = CC_MIN) -> dict[int, float]:
     """列上下文：连续、缝对齐的夹注格 → `{格号: 缝中心}`。
 
     `entries` 是本列每一格的 `(格号, gap_center()结果|None)`，格号必须同序
@@ -332,6 +332,9 @@ def link_runs(entries: list[tuple[int, tuple[float, float] | None]]
     - **噪点段否决**：纸面碎点列（vol01/3 col2）span/缝/均衡全能骗过、还能
       连成 7 格长段。唯一分得开的是连通体结构，按**段中位** strength <
       `CC_MIN` 整段否决（单格不卡，薄字由段里其他字撑住中位数）。
+
+    `cc_min`：噪点段否决门槛，缺省 `CC_MIN`（殿本小字标定）；书级 `row_segment.jiazhu_cc_min` 改（2026-11-18 A22 U3：
+    脉经刻本小字笔画细，单字最大连通体 200–600px，取 200；原先书仓整段抄 `link_runs` 只为换这个数）。
     """
     ents = sorted(entries)
     measured = {i: c for i, c in ents if c is not None}
@@ -349,7 +352,7 @@ def link_runs(entries: list[tuple[int, tuple[float, float] | None]]
         if len(run) < MIN_RUN:
             return
         strengths = sorted(smap[j] for j in run if j in smap)
-        if not strengths or strengths[len(strengths) // 2] < CC_MIN:
+        if not strengths or strengths[len(strengths) // 2] < cc_min:
             return
         out.update({j: cmap[j] for j in run})
 
