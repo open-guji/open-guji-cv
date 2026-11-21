@@ -52,6 +52,11 @@
 - 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时殿本 vol30、全唐文 020、史記 42 逐字节同，登 code_equiv `_FREE_SEAM_1117`。建议值 0.35。
 
 ## [未发版]
+
+## [0.7.92] - 2026-11-21
+
+- 发版说明（dev 线，A31 11-21，PATCH；全唐文切分线用）：dev eb000256（含 #1771／#1774 never_group 新登记 15 对、#1775 印框格记空）。Step 指纹对 v0.7.89（全唐文 patch 线）只 seed_admit 变（实算 23 步）。**配底库 b32**（＝b31 的 never_group.json、variants.tsv 换 dev 版，新增 config/groups/wu/rules.yaml），钉老底库的册要 `guji corpus pin` 改钉。
+- PATCH：seed_admit 加书级 `occluded_manual_seal_blank`／`occluded_seal_align_yield`／`occluded_seal_keep_cov`（缺省关、关时不进参数 dump；#1775，QTW 切分线 11-21）：人定印框（`seal_detect.overrides`）压着、没有坐标对位字的遮挡格记 coord_blank 由 R5 判非字；past_leaf／行为空判整列时不算印纹上硬配的现役对位字；库判 same 或 unsure 首位 ≥ 0.93 的格不判空（印压真字）。全唐文 046–060 清单 47 格全判空（含 8 格印纹被放成 一／二／和），057 p90 待审 5→1。登记 code_equiv（057 12 页逐字节同）。
 - PATCH：`seed_admit` 5c `_vis_ruling_pass` 给本遍窗口里的待审格记 `evidence.vis_ctx`（`left`／`right`／`ref`，即终审裁定键的窗口与整理本对位字）。产物是整遍跑完的状态，后面 consensus_lib 等遍放行、stroke_veto 等遍降审的邻格让从产物重算的窗口与 5c 不同，裁定键对不上（A33 11-20，全唐文 001–030 26 格 6 格失效，例 027:59:4:7）；manager 写键、`rulings-hits` 补键直接用这个（guji-manager #761，旧产物 manager 按 5c 时状态推断）。放行判定不变，只多一个 evidence 键。**`seed_admit.py` 改了，第 7 步代码哈希变、各书 seed_admit 起产物判过期**（产物多了键，不能登 code_equiv）。
 - 册 yaml 新字段 `gaps:` 记缺页（Sheldon 11-18 定：只按图片页号记，不另立书上页号）：每条 `after_page`／`what`／`kind`（原书缺／未拍）／`est_chars`／`evidence`，`load_gaps` 校验，只许写在册 yaml。`guji export format` 有缺页的章另写 `NNN.gaps.json`（`guji-gaps/0.1`，lines.md、char.json 不动），`guji export md` 在缺处单起一行〔原书此处缺…〕。没有 Step 读它、不进任何 Step 的 `code_deps`，各书指纹不变。格式 `doc/formats/缺页.md`。
 - PATCH：`column_warp.det_warp` 缺省改开、`row_segment.cut_judge` 缺省改 `unet_f64`（A22 切分开关收敛 11-13 定，A20 11-18 转）。殿本、史記、全唐文早已显式写，`params_hash` 不变（code_equiv 已登）；没写的脉经 6 册、北行 column_warp 起过期。要旧行为写 `det_warp: false`／`cut_judge: unet`。`scripts/seg_harness.py` 认 `unet_f64`。
