@@ -98,19 +98,3 @@ def test_white_row_guards_inner_gap():
     assert len(rb._split_glyphs(lab, st, np.full(100, 100), P)) == 1   # 直线劈开竖尾
     r = rb._white_row(cands, 0, "rule", ink, (lab, st), 100.0, P, 0.5, up, dn)
     assert r[2] == "rule"
-
-
-def test_cut_repair_expands_to_same_params():
-    """`cut_repair: true` 一行＝史記 k24–k26 五个切点开关原值（A22 U2，2026-11-18）；单写的项照单写的，开关本身不进 dump。"""
-    from open_guji_cv.steps.row_segment import CUT_REPAIR, RowSegmentParams
-    a = RowSegmentParams(cut_repair=True)
-    assert a.model_dump() == RowSegmentParams(**CUT_REPAIR).model_dump()
-    assert RowSegmentParams(cut_repair=True, cut_free_seam=0.2).cut_free_seam == 0.2
-    assert "cut_repair" not in RowSegmentParams().model_dump()
-
-
-def test_split_blobs_lives_in_seg():
-    """劈字判据抽进 `seg.seam`（A22 U2）：row_boundaries 的旧名照用、结果相同。"""
-    import open_guji_cv.seg.seam as sm
-    assert rb._split_glyphs.__doc__ and sm.split_blobs is not None
-    assert rb.FREE_SEAM_FRAC == sm.SPLIT_FRAC and rb.FREE_SEAM_SIDE == sm.SIDE_TOL

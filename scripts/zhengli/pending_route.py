@@ -6,7 +6,7 @@
 本脚本接在它后面，只读，不碰 products、不写事件：
 
   已裁   截止 --as-of（缺省现在），该格有一条「定了字」的人裁事件：confirm 带 shape、not_a_char、damaged、
-         seg_defect 且 quality 不是 clean；图形票／认不出的字票落成的 confirm v=figure 也算（11-19）。cutline、needs_review、cell_review、看图结论（source=vision）都不算。
+         seg_defect 且 quality 不是 clean。cutline、needs_review、cell_review、看图结论（source=vision）都不算。
          待审单里带 stale（旧裁已失效）的格，只认 stale.ts 之后的事件。
   团队单 页在 --team-pages 里，或 --page-types 里不是 body 的页（非正文只给团队，用户 10-20 定）。
   公众单 其余。
@@ -57,18 +57,6 @@ def deciding(e: dict) -> str | None:
     return None
 
 
-def figure_ruling(e: dict) -> bool:
-    """网站图形票／「认不出的字」票落成的人裁（confirm v=figure，带 alt 或 unk；看图结论 source=vision 不算）。
-    不算「定了字」（`deciding` 不认，绑定核对等不碰它），但这格人已审过：出单扣格、票账都算已裁（ZM 11-19 vol20 116:6:15）。"""
-    pl = e.get("payload") or {}
-    return e.get("kind") == "confirm" and pl.get("v") == "figure" and pl.get("source") != "vision"
-
-
-def decided_kind(e: dict) -> str | None:
-    """出单扣格用：定了字的类别（`deciding`），或图形／认不出的字人裁记 `figure`。"""
-    return deciding(e) or ("figure" if figure_ruling(e) else None)
-
-
 def cell_of(e: dict, book: str) -> str | None:
     t = e.get("target") or {}
     if t.get("unit") != "cell" or t.get("book") not in (None, book):
@@ -98,21 +86,13 @@ def iter_events(paths: list[Path]):
                         yield e
 
 
-def overridden_ids(payloads) -> set[str]:
-    """新人裁 `payload.overrides` 指向的旧人裁 id（网站落票时记，用户 2026-11-10 定：新裁直接覆盖旧裁）。"""
-    return {o for pl in payloads for o in ([pl["overrides"]] if isinstance(pl.get("overrides"), str)
-                                           else pl.get("overrides") or []) if o}
-
-
 def decided_cells(events, book: str, as_of: str) -> dict[str, list[tuple[str, str]]]:
-    """{格号: [(ts, 类别)…]}，只收截止时刻之前、定了字的事件（含图形／认不出的字人裁，类别 figure）。"""
+    """{格号: [(ts, 类别)…]}，只收截止时刻之前、定了字的事件。"""
     out: dict[str, list[tuple[str, str]]] = defaultdict(list)
-    events = [e for e in events if str(e.get("ts", "")) <= as_of and decided_kind(e)]
-    gone = overridden_ids((e.get("payload") or {} for e in events))     # 已被后来的人裁推翻的旧人裁不再算这格「定了」
     for e in events:
-        if e.get("id") in gone:
+        if str(e.get("ts", "")) > as_of:
             continue
-        kind = decided_kind(e)
+        kind = deciding(e)
         cell = cell_of(e, book) if kind else None
         if cell:
             out[cell].append((str(e.get("ts", "")), kind))

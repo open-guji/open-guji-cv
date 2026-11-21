@@ -42,14 +42,14 @@ def _page(chars, pending: dict):
     return [ColumnAdmit(col=1, chars=recs)]
 
 
-def _mm(lib: dict, guard: dict | None = None, stage: dict | None = None):
+def _mm(lib: dict, guard: dict | None = None):
     return {f"{B}:1:{s}": NS(char=None, candidates=list(c) if isinstance(c, list) else [(c, 0.95)],
-                             guard=(guard or {}).get(s), stage=(stage or {}).get(s)) for s, c in lib.items()}
+                             guard=(guard or {}).get(s)) for s, c in lib.items()}
 
 
-def _run(out, *, lib=None, amap=None, coord=None, wits=(), guard=None, canon=None, lib_n=None, stage=None, **params):
+def _run(out, *, lib=None, amap=None, coord=None, wits=(), guard=None, canon=None, lib_n=None, **params):
     p = SeedAdmitParams(db_path="x", **params)
-    n = _review_lanes_pass(p, out, _mm(lib or {}, guard, stage), amap or {}, coord or {}, _vm(),
+    n = _review_lanes_pass(p, out, _mm(lib or {}, guard), amap or {}, coord or {}, _vm(),
                            (lambda: list(wits)) if wits else None, canon=canon, lib_n=lib_n)
     return n, {r.slot: r for r in out[0].chars}
 
@@ -841,99 +841,3 @@ def test_semantic_extra_map():
     assert vm.semantic("天") == "天"
     with pytest.raises(ValueError):
         _parse_semantic_extra("圗圖")
-
-
-# ── 库否决（witness3／coord_fallback，lane_lib_veto，全唐文 11-19）─────────────
-
-def test_lane_lib_veto_witness3_and_coord():
-    """库首位 cov ≥ 阈值、与要放的字不同（非异体）→ 不放、送审；缺省 0 照旧放；cov 不够照旧放。"""
-    out, kw = _r1_setup()
-    kw["lib"] = {5: [("大", 0.99)]}
-    n, rs = _run(out, lane_witness3=True, **kw)                       # 缺省关：照旧放整理本字
-    assert n == 1 and rs[5].char == "天"
-    out, kw = _r1_setup()
-    kw["lib"] = {5: [("大", 0.99)]}
-    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, **kw)
-    assert n == 0 and not rs[5].admit
-    assert rs[5].evidence["lane_skip"] == {"lane": "witness3", "why": "lib_veto", "lib": "大", "cov": 0.99}
-    assert "lane_lib_veto" in rs[5].doubts
-    out, kw = _r1_setup()
-    kw["lib"] = {5: [("大", 0.97)]}
-    assert _run(out, lane_witness3=True, lane_lib_veto=0.98, **kw)[0] == 1    # cov 不够：照放
-    def r4(lib_char, wit_chars):
-        chars = BODY[:30]
-        out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.99)", "上下文 margin 不足(0.10)"], char=lib_char)})
-        wits = [_wit(f"{k}.txt", "前" + chars[:4] + c + chars[5:] + "後") for k, c in zip("dwy", wit_chars)]
-        return _run(out, lib={5: [(lib_char, 0.99)]}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, lane_lib_veto=0.98)
-    n, rs = r4("夫", "天天天")
-    assert n == 0 and rs[5].evidence["lane_skip"]["why"] == "lib_veto"
-    n, rs = r4("天", "天夫夫")                                         # 放的就是库首位：不受影响
-    assert n == 1 and rs[5].evidence["lane"]["via"] == "lib_coord_primary"
-
-
-def test_lane_lib_veto_off_not_in_dump():
-    assert "lane_lib_veto" not in SeedAdmitParams(db_path="x", lane_witness3=True).model_dump()
-    assert SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98).model_dump()["lane_lib_veto"] == 0.98
-
-
-def test_lane_lib_veto_pairs_follow_lib_form():
-    """名单里的异体对：库否决不否，改放库首位的形（照刻形）；名单外的对照旧否决；缺省空不进 dump。"""
-    out, kw = _r1_setup()
-    kw["lib"] = {5: [("大", 0.99)]}
-    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_lib_veto_pairs=["天大"], **kw)
-    assert n == 1 and rs[5].admit and rs[5].char == "大"
-    assert rs[5].evidence["lane"]["lib_form"] == {"from": "天", "cov": 0.99}
-    out, kw = _r1_setup()
-    kw["lib"] = {5: [("大", 0.99)]}
-    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_lib_veto_pairs=["天太", "大"], **kw)
-    assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "lib_veto"
-    d = SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98).model_dump()
-    assert "lane_lib_veto_pairs" not in d
-    assert SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98, lane_lib_veto_pairs=["天大"]).model_dump()["lane_lib_veto_pairs"] == ["天大"]
-
-
-def _shape_table(tmp_path, *pairs, variant=True):
-    f = tmp_path / "pa.yaml"
-    f.write_text("schema: pair_attribution/1\npairs:\n" + "".join(
-        f"  {p}: {{attr: shape{', variant: true' if variant else ''}}}\n" for p in pairs), encoding="utf-8")
-    return str(f)
-
-
-def test_lane_shape_first_lib_variant_releases_lib_form(tmp_path):
-    """lane_shape_first：库首位与整理本字是表里的刻形同字异形、库首位 cov ≥ lane_lib_veto → witness3 放库形；其余照旧送审。"""
-    vm = _vm()
-    a, b = next((x, y) for x, y in (("獘", "弊"), ("峯", "峰"), ("羣", "群")) if vm.semantic(x) == vm.semantic(y))
-    chars = BODY[:4] + b + BODY[5:30]
-    wits = [_wit(f"{k}.txt", "前" + chars + "後") for k in "dwy"]
-
-    def go(cov=0.99, tier=3, lean=a, **kw):
-        out = _page(chars, {5: dict(doubts=["replace_align"], char=b)})
-        st = {5: {"pair": [{"pair": a + b, "tier": tier, "p": 0.9, "lean": lean}]}}
-        return _run(out, lane_witness3=True, lane_lib_veto=0.98, lib={5: [(a, cov)]}, amap=_ids({5: (b, "replace")}),
-                    coord=_ids({5: b}), wits=wits, stage=st, **kw)
-    assert go()[0] == 0                                                         # 缺省关：送审
-    n, rs = go(lane_shape_first=_shape_table(tmp_path, a + b))
-    assert n == 1 and rs[5].admit and rs[5].char == a and rs[5].channel == "witness3"
-    assert rs[5].evidence["lane"]["lib_form"] == {"from": b, "cov": 0.99, "via": "shape_first"}
-    assert go(cov=0.9, lane_shape_first=_shape_table(tmp_path, a + b))[0] == 0   # 库首位把握不够
-    assert go(lane_shape_first=_shape_table(tmp_path, a + b, variant=False))[0] == 0   # 表里没标同字异形
-    assert go(lane_shape_first=_shape_table(tmp_path, "天地"))[0] == 0           # 表里没这一对
-    assert go(tier=2, lane_shape_first=_shape_table(tmp_path, a + b))[0] == 0   # 分类器没到终判档（奥奧）
-    assert go(lean=b, lane_shape_first=_shape_table(tmp_path, a + b))[0] == 0   # 分类器倾向整理本字
-
-
-def test_lane_shape_first_feeds_lib_veto_pairs(tmp_path):
-    """库否决要否的格，要放的字与库首位是表里的同字异形对 → 放库形（名单由表生成）；不是同字异形仍否决。"""
-    out, kw = _r1_setup()
-    kw["lib"] = {5: [("大", 0.99)]}
-    st = {5: {"pair": [{"pair": "天大", "tier": 3, "p": 0.9, "lean": "大"}]}}
-    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_shape_first=_shape_table(tmp_path, "天大"), stage=st, **kw)
-    assert n == 1 and rs[5].char == "大"
-    out, kw = _r1_setup()
-    kw["lib"] = {5: [("大", 0.99)]}
-    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_shape_first=_shape_table(tmp_path, "天大", variant=False), stage=st, **kw)
-    assert n == 0 and rs[5].evidence["lane_skip"]["why"] == "lib_veto"
-
-
-def test_lane_shape_first_off_not_in_dump():
-    assert "lane_shape_first" not in SeedAdmitParams(db_path="x").model_dump()

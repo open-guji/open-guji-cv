@@ -204,12 +204,6 @@ def _with_book_real_proto(p: BaseModel, ctx: "RunContext") -> BaseModel:
     return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
 
 
-def _with_pua_table_pin(p: BaseModel, ctx: "RunContext") -> BaseModel:
-    """册 yaml `pua_table_pin: N` → 码表内容指纹进参数（见 `core/pua_table_pin.py`）。"""
-    from .pua_table_pin import with_pua_table_pin
-    return with_pua_table_pin(p, ctx.book)
-
-
 def _with_corpus_pin(p: BaseModel, ctx: "RunContext") -> BaseModel:
     """册 yaml `corpus: N` → 语料类内容指纹换成 `corpus-vN`（见 `core/corpus_pin.py`）。"""
     from .corpus_pin import with_corpus_pin
@@ -427,7 +421,6 @@ class RunContext:
         p = _with_book_step6_ai(p, self)
         p = _with_book_ledger(p, self)  # 用字账按书选（缺省键是殿本的账）
         p = _with_glyph_pin(p, self)    # 册钉了字形库：人裁、近似字指纹换成钉号
-        p = _with_pua_table_pin(p, self)  # 册钉了 PUA 码表共享层版本：码表内容指纹进参数
         p = _with_corpus_pin(p, self)   # 必须最后：册钉了语料库版本，内容指纹整体换成版本号
         if memo is not None:
             memo[step.spec.id] = p
@@ -468,18 +461,6 @@ class RunContext:
         纯防御、行为不变；实测同样跑一遍 `border_detect` 全书，RSS 从
         72MB→1410MB（改前）变成 72MB→146MB 就不再涨（改后）。
         """
-        ink = getattr(self.book, "ink", None)
-        if ink is not None:
-            # 墨层与原样亮度两种图共用这个 LRU，键带上是哪种（同一 ctx 跨步复用，见 `LUMA_STEPS`）
-            key = (page, self.step_id in self.LUMA_STEPS)
-            if key in self._raw:
-                self._raw.move_to_end(key)
-                return self._raw[key]
-            img = self._ink_page(page, ink)
-            self._raw[key] = img
-            while len(self._raw) > self._RAW_MAX:
-                self._raw.popitem(last=False)
-            return img
         if page in self._raw:
             self._raw.move_to_end(page)
             return self._raw[page]
@@ -502,30 +483,6 @@ class RunContext:
         while len(self._raw) > self._RAW_MAX:
             self._raw.popitem(last=False)
         return self._raw[page]
-
-    #: 写了 `ink` 的册上，这几步读**原样亮度图**（不做墨层转换、不二值）：
-    #: 印章是朱色的，墨层 `max`／`red` 正好把它压没，认印就得看原样；反色带检测是 Step0 体检，也看原样。
-    #: 由引擎跑步时设的 `step_id` 判（`Engine._run_one_step`、并行 worker）；没设（控制台等）一律给墨层。
-    LUMA_STEPS = frozenset({"seal_detect", "invert_detect"})
-    #: 当前在跑哪一步（引擎设，见上）
-    step_id: str | None = None
-
-    def _ink_page(self, page: int, ink) -> np.ndarray:
-        """`book.ink` 写了时的 `raw_page`：彩色读入 → 墨层（＋二值）；`LUMA_STEPS` 给原样亮度。
-        与 `utils.binarized.build_binarized` 共用 `utils.ink.ink_page`，几何看的、二值副本、人审看的是同一张。"""
-        import cv2
-        from ..utils.ink import ink_page
-        path = self._page_path(page)
-        img = imread(str(path), cv2.IMREAD_COLOR) if path.exists() else None
-        if img is None:
-            raise FileNotFoundError(f"原图缺失或读不出来: {path}")
-        if self.step_id in self.LUMA_STEPS:
-            out = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        else:
-            out = ink_page(img, ink)
-        if getattr(self.book, "writing_mode", "vertical-rl") == "horizontal-tb":
-            out = np.rot90(out, -1).copy()
-        return out
 
     def _page_path(self, page: int) -> "Path":
         """这一页从哪读：登记过预清理且产物已生成的，读修好的那张；否则读原图。
