@@ -3,6 +3,13 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.91] - 测试中
+
+史記 patch 线：v0.7.88 + #1771（cherry-pick -x -m 1 b6aaa118）。SJ v0.2 整书重跑用，取代 0.7.88；配**底库 b32**（＝b31＋新 never_group.json）。本线 patch 清单：#1746＋#1763＋#1771（另含 0.7.80 已带各项）。**不含** dev 线及殿本／全唐文 patch 线其他改动。
+
+- PATCH：`config/variants/never_group.json` 登记 8 对形近字不成组（兩雨 味未 玉王 傅傳 箸著 住往 奕弈 寥𡚶，#1771）；`config/corpus-registry.json` 只这一项 sha 变（518c2b2b→6b3add2d）。底库文件变：钉 b31 的册须改钉 **b32**，否则起跑被语料校验拒绝。
+- **Step 指纹对 v0.7.88**（实算）：23 步全不变（只改语料文件）。底库换号只让读语料的步（glyph_match、rare_candidates、context_decide、align_ref、seed_admit）过期；v0.2 整书轮从 column_warp 起不受影响。
+
 ## [0.7.88] - 测试中
 
 史記 patch 线：v0.7.84 + #1763（cherry-pick 0eca6af）。SJ v0.2 整书重跑用，取代 0.7.84；配底库 b31 不变（A31 11-20 指定号从 0.7.88 起）。**不含** dev 线及殿本 patch 线其他改动。
