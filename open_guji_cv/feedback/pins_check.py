@@ -29,6 +29,8 @@ from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path
 
+import numpy as np
+
 # 绑定状态里「下游会采信」的两种（同 bindings.USE_STATUSES）
 USE = ("valid", "rebound")
 
@@ -106,6 +108,159 @@ def check_pin_vs_chars(pin: list[dict], col_chars) -> list[str]:
     for s, sb in sorted(got_char - want):
         probs.append(f"cell_shrink 多出字格 {s}{sb}（钉子里没有）")
     return probs
+
+
+# ── 1c. 整列丢字（SJ r75，2026-11-17）────────────────────────────────────────
+# 钉子是整列替换：只写要改的几格，列里其余字整段没了也不报错（史記 r75 28:93:3 只剩 19–21 格）。
+# 第一节只比「钉子的格 vs cell_shrink」，钉子本身少写了格它看不出；第 1b 节只看钉子格线压不压墨。这里补两项：
+#   ① 钉后格数要等于原列格数（旧切分那一列的有字格；没有旧切分就比旧钉子），不等要在钉子里写理由；
+#   ② 列图上格外不能有成段的墨（判据照 SJ 本地扫描：每行墨 ≥4px、连续 ≥25px、不在任一格内），
+#      列端框线（版框线附近、剥掉的长直线）、印章（seal_detect 印框压到的段，只当提示）除外。
+
+COUNT_WHY_KEY = "count_why"   # 钉子 expected 里写「格数为什么和原列不同」（不进指纹，row_segment 只读 cells）
+UNCOV_ROW_PX = 4              # 一行（文字带内、剥掉长直线后）墨 ≥ 这么多像素算有墨行
+UNCOV_SEG_PX = 25             # 连续有墨行 ≥ 这么多 px，
+UNCOV_SEG_FRAC = 0.4          # 且 ≥ 参照字高 × 这么多（殿本 vol07 全册 1179 列自动切：0.25 时有 3 列是列端字脚＋框线残点 29–39px，0.4 时 0；史記丢字段最矮 0.53）
+UNCOV_BORDER_NEAR = 0.2       # 离上／下版框线这么多格高以内的不算（列端框线、框线毛边）
+
+
+def pin_notes(items: Iterable, book: str) -> dict[tuple[int, int], str]:
+    """manual-cells 条目 → `{(页, 列): expected.count_why}`（只取本册 active 且写了理由的）。"""
+    out = {}
+    for it in items:
+        d = it if isinstance(it, dict) else it.model_dump()
+        anc = d.get("anchor") or {}
+        if d.get("status", "active") != "active" or str(anc.get("book")) != str(book):
+            continue
+        why = str((d.get("expected") or {}).get(COUNT_WHY_KEY) or "").strip()
+        if why and anc.get("page") is not None and anc.get("col") is not None:
+            out[(int(anc["page"]), int(anc["col"]))] = why
+    return out
+
+
+def text_slots(col_cells) -> set[tuple[int, str]]:
+    """一列（`ColumnCells`）有字格的格号 `{(slot, sub)}`（blank 不算）。"""
+    return {(int(c.slot), str(c.sub or "")) for c in col_cells.cells if c.kind != "blank"}
+
+
+def check_pin_count(pin: list[dict], old_col=None, old_pin: list[dict] | None = None, why: str = "") -> dict | None:
+    """① 钉后格数 vs 原列格数 → `{"block", "note", "new", "old"}`；一样 → None。
+
+    原列：旧切分（row_segment）那一列的有字格；旧切分没有这一列（或无解）就比旧钉子；都没有只出提示。
+    格数不同但钉子写了 `expected.count_why` → 提示（理由照抄进报告）；没写 → 问题。"""
+    n_new = len(pin_slots(pin))
+    if old_col is not None and old_col.ok and old_col.cells:
+        n_old, src = len(text_slots(old_col)), "旧切分"
+    elif old_pin:
+        n_old, src = len(pin_slots(old_pin)), "旧钉子"
+    else:
+        return {"block": False, "new": n_new, "old": None, "note": f"钉后 {n_new} 格；没有旧切分或旧钉子可比，格数没查"}
+    if n_new == n_old:
+        return None
+    note = f"钉后 {n_new} 格，{src}这一列 {n_old} 格（{n_new - n_old:+d}）"
+    if why:
+        return {"block": False, "new": n_new, "old": n_old, "note": f"{note}，理由：{why}"}
+    return {"block": True, "new": n_new, "old": n_old,
+            "note": f"{note}，钉子没写理由（expected.{COUNT_WHY_KEY}）。钉子是整列替换，只写要改的几格，"
+                    f"其余字会整段丢掉；从现役 row_segment 抽整列再改（`guji seg pin` 起稿就是整列），"
+                    f"真要改格数就在钉子里写理由"}
+
+
+def uncovered_ink(gray: np.ndarray, col_cells, ref_h: float | None = None, *, seal_spans=(),
+                  ink_threshold: int = 128) -> list[dict]:
+    """② 列图上不在任何有字格里的成段墨 → `[{"y0", "y1", "h", "ink", "seal"}]`（列图坐标）。
+
+    文字带取 `content_x`（没有就取各格 x 范围），先剥长直线（界行、版框横线，同 `seg_screen.strip_long_lines`）；每行墨 ≥ UNCOV_ROW_PX、
+    不在任何有字格的 y 范围内算格外墨行；连续段高 ≥ max(UNCOV_SEG_PX, UNCOV_SEG_FRAC × 参照字高) 才报。
+    细高的连通块（界行残段，`_drop_rule_bits`）也去掉。版框线（`border_top`／`border_bottom`）以外和离它 UNCOV_BORDER_NEAR 格高以内的不算（列端框线）。
+    `seal_spans`：印框压到的列图 y 段，段与之相交的 `seal=True`（调用方当提示）。"""
+    body = [c for c in col_cells.cells if c.kind != "blank"]
+    if not body:
+        return []
+    h, w = gray.shape[:2]
+    if col_cells.content_x:
+        x0, x1 = int(col_cells.content_x[0]), int(col_cells.content_x[1])
+    else:
+        x0, x1 = int(min(c.x0 for c in body)), int(max(c.x1 for c in body))
+    x0, x1 = max(0, x0), min(w, max(x1, x0 + 1))
+    from ..seg.rules import strip_long_rules
+
+    # 剥线参数同 seg_screen.strip_long_lines（SJ 快筛 ORPH）
+    ink = strip_long_rules((gray[:, x0:x1] < ink_threshold).astype(np.uint8), vline=200, hline_frac=0.85, hline_min=40)
+    ink = _drop_rule_bits(ink)
+    row = ink.sum(axis=1)
+    covered = np.zeros(h, dtype=bool)
+    for c in body:
+        covered[max(0, int(np.floor(c.y0))):min(h, int(np.ceil(c.y1)))] = True
+    ref = float(ref_h or col_cells.period or 0.0)
+    near = UNCOV_BORDER_NEAR * ref
+    lo = 0 if col_cells.border_top is None else max(0, int(np.ceil(col_cells.border_top + near)))
+    hi = h if col_cells.border_bottom is None else min(h, int(np.floor(col_cells.border_bottom - near)))
+    inky = (row >= UNCOV_ROW_PX) & ~covered
+    inky[:lo] = False
+    inky[max(hi, 0):] = False
+    min_h = max(UNCOV_SEG_PX, UNCOV_SEG_FRAC * ref)
+    out = []
+    y = 0
+    while y < h:
+        if not inky[y]:
+            y += 1
+            continue
+        e = y
+        while e < h and inky[e]:
+            e += 1
+        if e - y >= min_h:
+            seal = any(a < e and b > y for a, b in seal_spans)
+            out.append({"y0": y, "y1": e, "h": e - y, "ink": int(row[y:e].sum()), "seal": seal})
+        y = e
+    return out
+
+
+UNCOV_RULE_W = 25             # 连通块宽 ≤ 这么多 px 且 ≤ 高 × UNCOV_RULE_RATIO：界行／竖框线残段（不到 200px 没被剥掉），
+UNCOV_RULE_RATIO = 0.3        # 同 seg_screen.orphan_ink「界行残段」（史記 01:108:1 列尾一截竖线）
+
+
+def _drop_rule_bits(ink: np.ndarray) -> np.ndarray:
+    """去掉细高的连通块（界行、竖框线没剥干净的残段）。字的竖笔连着别的笔画，整块不会这么细。"""
+    import cv2
+    n, lab, st, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
+    drop = [i for i in range(1, n)
+            if st[i, cv2.CC_STAT_WIDTH] <= UNCOV_RULE_W and st[i, cv2.CC_STAT_WIDTH] <= UNCOV_RULE_RATIO * st[i, cv2.CC_STAT_HEIGHT]]
+    if not drop:
+        return ink
+    out = ink.copy()
+    out[np.isin(lab, drop)] = 0
+    return out
+
+
+def seal_spans_col(col_cells, seals) -> list[tuple[float, float]]:
+    """印框（`Seal.bbox`，规范空间）换成这一列列图上的 y 段。
+
+    用本列各格的 `quad_page` 拟一条列图 y → 页 y 的直线（列图是竖直拉直的一列，近似线性）；印框 x 范围与本列不相交的不算。
+    格没有 `quad_page` 时不能换算：有印就整列算压印（返回 [(-inf, inf)]）。"""
+    if not seals:
+        return []
+    pts, xs = [], []
+    for c in col_cells.cells:
+        if c.quad_page:
+            q = np.asarray(c.quad_page, dtype=float)
+            pts += [(c.y0, q[:, 1].min()), (c.y1, q[:, 1].max())]
+            xs += [q[:, 0].min(), q[:, 0].max()]
+    if len(pts) < 2:
+        return [(float("-inf"), float("inf"))]
+    a = np.asarray(pts, dtype=float)
+    if np.ptp(a[:, 0]) < 1:
+        return [(float("-inf"), float("inf"))]
+    k, b = np.polyfit(a[:, 0], a[:, 1], 1)
+    cx0, cx1 = min(xs), max(xs)
+    out = []
+    for s in seals:
+        sx0, sy0, sx1, sy1 = s.bbox
+        if sx1 < cx0 or sx0 > cx1 or abs(k) < 1e-6:
+            continue
+        ya, yb = sorted(((sy0 - b) / k, (sy1 - b) / k))
+        out.append((ya, yb))
+    return out
 
 
 # ── 2. 模拟执行机绑定 ────────────────────────────────────────────────────────
