@@ -64,6 +64,22 @@ def _drop_never(mapping: dict[str, str], never: frozenset[frozenset[str]]) -> No
             del mapping[b]
 
 
+def _apply_pair_kinds(mapping: dict[str, str]) -> None:
+    """字对关系表套到语义表上：C 对拆开（同 `_drop_never`）；V 对语义不同的并到一起（码位大的字归到码位小的字的语义正字上）。"""
+    from ..pair_kind import C, V, load_pair_kinds
+    kinds = load_pair_kinds()
+    if not kinds:
+        return
+    _drop_never(mapping, frozenset(k for k, v in kinds.items() if v == C))
+    for key, v in sorted(kinds.items(), key=lambda kv: sorted(kv[0])):
+        if v != V:
+            continue
+        a, b = sorted(key)
+        sa, sb = mapping.get(a, a), mapping.get(b, b)
+        if sa != sb:
+            mapping[b] = sa
+
+
 class VariantMap:
     def __init__(self, mapping: dict[str, str] | None = None):
         self._map = dict(mapping or {})
@@ -78,6 +94,7 @@ class VariantMap:
             _read_tsv(DEFAULT_AUTO_PATH, mapping)
             _drop_never(mapping, never_group_pairs())     # 名单只剔自动表
             _read_tsv(DEFAULT_VARIANTS_PATH, mapping)     # 手工条目覆盖自动条目
+            _apply_pair_kinds(mapping)                    # 字对关系表（pair_kind.py）：C 拆开、V 并到一起
         return cls(mapping)
 
     def semantic(self, char: str) -> str:

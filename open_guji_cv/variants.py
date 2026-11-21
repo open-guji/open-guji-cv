@@ -42,7 +42,7 @@ HIGH_CONFIDENCE_SOURCES = frozenset({
     "unihan:kSemanticVariant", "unihan:kSpecializedSemanticVariant",
     "unihan:kZVariant", "unihan:kSimplifiedVariant",
     "unihan:kTraditionalVariant",
-    "twedu", "yitizi",
+    "twedu", "yitizi", "local:pairkind",
 })
 
 # ── 来源分级（variant_strategy.md §3.1）─────────────────────
@@ -53,6 +53,8 @@ BRIDGE_SOURCES = frozenset({
     # 但**本书刻本实证过**的同字异形（首例 㫖—旨，各家资料里 㫖 是孤立点）。
     # 刻例是我们能拿到的最硬的证据，所以进桥；准入照样还要过本书用字账。
     "local:keben",
+    # local:pairkind —— 字对关系表（pair_kind.py）里判 V 的对，人定或强源判定
+    "local:pairkind",
 })
 #: 单独出现不够格：yitizi 把 ytenx + OpenCC 混在一起且不可溯源，
 #: 只有它一家的边（來~勅、某~私、藝~芸）最可疑。
@@ -97,6 +99,28 @@ class VariantEdge:
         return self.tier == "T1" and self.n_bridge >= 2
 
 
+def _apply_pair_kinds(pairs: dict, directed: dict | None):
+    """字对关系表套到关系图上：C（纯形近）的边两个方向都删（含有向的正字←异体）；V（同义异体）补一条 `local:pairkind` 边。"""
+    from .pair_kind import TAG, V, load_pair_kinds
+    kinds = load_pair_kinds()
+    if not kinds:
+        return pairs, directed
+    pairs = {a: {b: list(t) for b, t in bs.items()} for a, bs in pairs.items()}
+    directed = {a: {b: list(t) for b, t in bs.items()} for a, bs in (directed or {}).items()}
+    for key, k in kinds.items():
+        a, b = sorted(key)
+        if k == V:
+            for x, y in ((a, b), (b, a)):
+                tags = pairs.setdefault(x, {}).setdefault(y, [])
+                if TAG not in tags:
+                    tags.append(TAG)
+        else:
+            for x, y in ((a, b), (b, a)):
+                pairs.get(x, {}).pop(y, None)
+                directed.get(x, {}).pop(y, None)
+    return pairs, directed
+
+
 class VariantGraph:
     """异体关系图：无向邻接（``pairs``）+ 有向 正字←异体（``directed``）。"""
 
@@ -129,7 +153,10 @@ class VariantGraph:
                 f"找不到 {p}——先跑 python scripts/build_variants.py 构建")
         with open(p, "r", encoding="utf-8") as f:
             doc = json.load(f)
-        return cls(doc["pairs"], doc.get("directed"))
+        pairs, directed = doc["pairs"], doc.get("directed")
+        if not path:                                   # 默认关系图套字对关系表（pair_kind.py）：C 删边、V 补边
+            pairs, directed = _apply_pair_kinds(pairs, directed)
+        return cls(pairs, directed)
 
     # ── 无向：有没有关系 ──────────────────────────────────
 
