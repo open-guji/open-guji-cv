@@ -3,6 +3,13 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.90] - 2026-11-20
+
+殿本 patch 线：v0.7.86 + #1763（cherry-pick 0eca6af）。用户 11-20 同意殿本升级、第 1 册整册重跑（ZM 发）；配底库 b29 不变。**不含** dev 线、史記（0.7.88）、全唐文（0.7.87／0.7.89）patch 线其他改动。
+
+- PATCH：seed_admit 5c（`_vis_ruling_pass`）给待审格当场记 `evidence.vis_ctx`（本遍裁定键窗口 left／right／ref），manager（≥0.4.80）写终审裁定键、`rulings-hits --rekey` 补键直接用（A33／A31 11-20）。
+- **Step 指纹对 v0.7.86**（实算）：只 `seed_admit` 变（d14c7e84→61687d88），其余 22 步不变。语料文件未动，底库仍 b29。不登 code_equiv（产物多写 evidence 字段）。重跑起点：已在 v0.7.86 上跑到底的册从 seed_admit 起；从 v0.7.79 升上来的册（vol01）另含 v0.7.83 head_raise_notch，从切分起整册重跑。
+
 ## [0.7.86] - 2026-11-20
 
 - 发版说明（A31 11-20，**殿本 patch 线**，PATCH；修 v0.7.83）：v0.7.83 的 code_equiv 除追加 `_NOTCH_1120` 两条外，还把本线已有的 border_detect／impl.keben.border 登记（含 `MOVED` 里 impl.keben.border）的 old 从 `301df64d`／`fe76aa1f` 批量改成 dev 值 `bf37ceda`／`632040e4`（L0 那条成了 new＝old 自环），本线链断，border_detect、border_detect_gate、column_warp 指纹相对 v0.7.79 变了，殿本旧产物会从 border_detect 起判过期。本版把 code_equiv 恢复成 v0.7.79 的原样、只追加 `_NOTCH_1120` 两条（d1e2b0bb→bf37ceda、dcc3f23d→632040e4，再沿本线链到 301df64d／fe76aa1f）；实算 23 步 Step 代码指纹与 v0.7.79 全同。代码与 v0.7.83 相同。**v0.7.83 勿用**。底库不变（b29）。tag 在 main 合并提交；dev 以 `-s ours` 合回（dev 不受影响）。
