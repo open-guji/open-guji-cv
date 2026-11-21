@@ -53,6 +53,10 @@
 
 ## [未发版]
 
+## [0.7.93] - 2026-11-21
+
+- 发版说明（全唐文 patch 线，形近字线 11-21，PATCH）：v0.7.92 ＋ #1778（seed_admit 书级 `group_flow_hou_shape_late`，5c vis_ruling 后补跑 hou_shape，缺省关）；dev 已含 #1778。
+
 ## [0.7.92] - 2026-11-21
 
 - 发版说明（dev 线，A31 11-21，PATCH；全唐文切分线用）：dev eb000256（含 #1771／#1774 never_group 新登记 15 对、#1775 印框格记空）。Step 指纹对 v0.7.89（全唐文 patch 线）只 seed_admit 变（实算 23 步）。**配底库 b32**（＝b31 的 never_group.json、variants.tsv 换 dev 版，新增 config/groups/wu/rules.yaml），钉老底库的册要 `guji corpus pin` 改钉。
