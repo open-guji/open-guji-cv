@@ -263,7 +263,6 @@ def spec_for_book(book: str | None, edition: str = "keben") -> dict:
             allow: no-simplified    # 简体否决（繁体刻本推荐）；none = 不过滤
             extra: [甫, 鳥]          # 手工补字
             symbols: false          # 特殊符号表（○□△…，`config/charset/symbols.tsv`）并进基集，缺省关
-            lib_chars: false        # 本书字形库里人裁过、基集里没有的字另开一档进候选，缺省关（见 `rare_panel.lib_tier`）
 
     **`corpus` 从「唯一来源」降级成「叠加项」**——这是本次改造的要点。
     整理本仍有独立价值（给 `freq` 排序与 `std` 正字提示），
@@ -291,8 +290,6 @@ def spec_for_book(book: str | None, edition: str = "keben") -> dict:
         # 特殊符号（设计 `doc/design/特殊符号进字符候选集-设计.md` S3）：开了就把符号表追加进 extra，
         # `build_charsets` 让 extra 里登记过的符号绕过 `_cjk` 过滤。没开的书 extra 原样，字表逐字相同。
         "extra": list(cfg.get("extra") or []) + (list(symbols()) if cfg.get("symbols") else []),
-        # 库字档（2026-11-18）：只在开着时才有这个键的真值；关着的书别处一律不读它，字表与候选逐字不变。
-        "lib_chars": bool(cfg.get("lib_chars", False)),
     }
 
 

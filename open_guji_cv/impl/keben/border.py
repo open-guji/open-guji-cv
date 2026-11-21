@@ -363,6 +363,84 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
     return out
 
 
+#: 缺口列（`notch_top`，2026-11-20，A22）：一页上抬头列占多数时，`find_horizontal_border` 把抬头框的内框线当成主上版框，
+#: 没抬头的列反成了版框上的「缺口」——主上框以下先是一段白纸、再是本列真版框（粗框条＋内细线），整页抬头认不出、
+#: 缺口列首格切进白纸（殿本 vol24 p27、vol28 p9：抬头格只有 20 多 px 高、缺口里切出假字格、抬头列末字没格）。
+#: 判据只看列中间一半：主上框不横穿本列（主上框上 HR_PAIR_MAX＋NOTCH_TOP_PAD 行到下 NOTCH_TOP_PAD 行里没有 ≥ NOTCH_INNER_INK 的墨行：
+#: 普通页的空列有框条，哪怕内细线印成虚线）；
+#: 去掉整段有墨的竖条（抬头框的墙）后，主上框下 [HR_BAND_MARGIN, 第一道粗墨) 几乎全白（墨 >0.1 的行 ≤ NOTCH_BLANK_ROWS），
+#: 第一道墨（≥ NOTCH_LINE_INK）离主上框落在 [HR_DIST_MIN − HR_PAIR_MAX, HR_DIST_MAX]；本列真上框取这道框条往下
+#: HR_PAIR_MAX＋NOTCH_INNER_PAD 内最后一段 ≥ NOTCH_INNER_INK 的墨（框条内沿的细线，同「框条内沿约定」）。
+NOTCH_LINE_INK = 0.5
+NOTCH_INNER_INK = 0.3
+NOTCH_INNER_PAD = 15
+NOTCH_BLANK_ROWS = 0.05
+NOTCH_TOP_PAD = 8
+
+
+def _notch_inner_y(binm: np.ndarray, btop: float, xl: int, xr: int, g: _HRGeom) -> float | None:
+    """缺口列（见 NOTCH_*）：返回本列真上版框（框条内沿细线）的 y，不是缺口列返回 None。"""
+    h = binm.shape[0]
+    m = (xr - xl) // 4
+    lo = int(btop + g.BAND_MARGIN)
+    hi = min(h, int(btop + g.DIST_MAX + g.PAIR_MAX + NOTCH_INNER_PAD))
+    if xr - xl < 20 or hi - lo < 20:
+        return None
+    y0 = max(0, int(btop - g.PAIR_MAX - NOTCH_TOP_PAD))
+    if float(binm[y0:int(btop + NOTCH_TOP_PAD) + 1, xl + m:xr - m].mean(axis=1).max(initial=0.0)) >= NOTCH_INNER_INK:
+        return None                                   # 主上框（框条＋内细线）横穿本列：本列在版框里，不是缺口
+    curve = binm[lo:hi, xl + m:xr - m].mean(axis=1)
+    strong = np.flatnonzero(curve >= NOTCH_LINE_INK)
+    if not len(strong):
+        return None
+    ys = int(strong[0])
+    if not (g.DIST_MIN - g.PAIR_MAX <= lo + ys - btop <= g.DIST_MAX) or ys < 20:
+        return None
+    band = binm[lo:lo + ys - 3, xl + m:xr - m]
+    keep = band.mean(axis=0) < HR_TEXT_ROW_HI       # 去掉抬头框的墙（整段有墨的竖条），同 `_raised_text_top`
+    if not keep.any() or float((band[:, keep].mean(axis=1) > 0.1).mean()) > NOTCH_BLANK_ROWS:
+        return None
+    seg = curve[ys:ys + g.PAIR_MAX + NOTCH_INNER_PAD] >= NOTCH_INNER_INK
+    rows = np.flatnonzero(seg)
+    last = int(rows[-1])
+    first = last
+    while first > 0 and seg[first - 1]:
+        first -= 1
+    return float(lo + ys + (first + last) / 2.0)
+
+
+def notch_top(mask: np.ndarray, top: HLine, verticals: list[VLine], width: int,
+              extend: bool = True, scale: float = 1.0) -> tuple[HLine, list[HeadRaiseBorder]] | None:
+    """主上版框认在抬头框上的页（见 NOTCH_*）：把主上框挪到缺口列的真上框，重探抬头框；挪了以后**缺口以外的列全都认成抬头**
+    才接受，返回 (新主上框, 抬头框)，否则 None。只在本页一个抬头框都没认出时由 `detect_borders(head_raise_notch=True)` 调。"""
+    g = _HRGeom(scale)
+    binm = (mask > 0).astype(np.uint8)
+    n = len(verticals) - 1
+    if n < 2:
+        return None
+    x_old = lambda v, y: (width - 1) - v.x_at(y)  # noqa: E731
+    found: dict[int, tuple[float, float]] = {}
+    for i in range(n):
+        right_v, left_v = verticals[i], verticals[i + 1]
+        btop = float(np.mean([top.y_at(v.x_at(0.0)) for v in (right_v, left_v)]))
+        ym = btop + g.DIST_MAX / 2.0
+        xl = int(max(0, min(x_old(right_v, ym), x_old(left_v, ym))))
+        xr = int(min(binm.shape[1], max(x_old(right_v, ym), x_old(left_v, ym))))
+        y = _notch_inner_y(binm, btop, xl, xr, g)
+        if y is not None:
+            found[i + 1] = (y, btop)
+    if not found or len(found) == n:
+        return None
+    dys = [y - b for y, b in found.values()]
+    if max(dys) - min(dys) > 2 * g.CLUSTER_DY:
+        return None
+    new_top = HLine(y_at_right=top.y_at_right + float(np.median(dys)), slope=top.slope, kind=top.kind)
+    hr = detect_head_raise(mask, new_top, verticals, width, extend=extend, scale=scale)
+    if {b.col for b in hr} != set(range(1, n + 1)) - set(found):
+        return None
+    return new_top, hr
+
+
 # --- 外边框探测（形态常数来自 14 页金标实测） ---
 OUTER_GAP_MIN, OUTER_GAP_MAX = 12, 78   # 外框离内框多远，金标实测 24~47
 OUTER_INK_MIN = 0.25      # 认一段"外框墨"的绝对门槛。
@@ -1160,8 +1238,11 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     bottom_lock_reslope: bool = False,
                     top_edge_reslope: bool = False,
                     top_hint: float | None = None,
-                    bottom_hint: float | None = None) -> BorderDetectionResult:
+                    bottom_hint: float | None = None,
+                    head_raise_notch: bool = False) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
+
+    `head_raise_notch`：一个抬头框都没认出的页，查主上框是不是认在了抬头框上（`notch_top`）。缺省关。
 
     `top_hint` / `bottom_hint`：人给的上／下版框大致 y（页面横向中点处的行号），只在附近重找那条线，
     见 `seg/lines.find_horizontal_border` 的 `hint`。下游（折线、抬头框、外框）都在改后的线上算。缺省 None 不传。
@@ -1267,6 +1348,11 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
         mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline, bend_w80_med)
     head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend,
                                    scale=head_raise_scale)
+    if head_raise_notch and not head_raise and top_hint is None:
+        # 主上框认在抬头框上、没抬头的列反成缺口（见 NOTCH_*）：挪到缺口列的真上框重探抬头。缺省关不走
+        nt = notch_top(mask, top, verticals, w, extend=head_raise_extend, scale=head_raise_scale)
+        if nt is not None:
+            top, head_raise = nt
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
                                  outer_shift=outer_shift, book_gap=book_outer_gap,
                                  frame_layers=frame_layers)
