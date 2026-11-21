@@ -8,6 +8,13 @@
 阈值随书配置走（`config/groups/hou_shape.json`）::
 
     {"schema": "hou_shape/1", "chars": ["候", "𠋫"], "lo": 0.52, "hi": 0.70}
+
+`hou_shape/2`（形近字线 11-21）：046–053 的刻工第二竖偏长，几何阈值分不开（e1 中间档 30 格里 sheldon 点 候 25 格）。
+改用小卷积网（结构、numpy 前向同 `groups.wu_shape`）：字块灰度 < thr 裁到墨边、取左 `left` 宽、反相归一、缩成 size×size，
+各网取平均得「候」的概率 p，p ≥ t 给 候、p ≤ 1−t 给 𠋫，其余弃权。训练用 sheldon 点选 222 格＋算法目看一致 134 格，
+按册 5 折留出 t=0.98 覆盖 sheldon 标签 193/222、错 1（057:43:5:1，图上是通长第二竖，疑点选错）::
+
+    {"schema": "hou_shape/2", "chars": ["候", "𠋫"], "size": 64, "left": 0.6, "thr": 140, "t": 0.98, "nets": [...]}
 """
 from __future__ import annotations
 
@@ -19,6 +26,7 @@ from pathlib import Path
 import numpy as np
 
 SCHEMA = "hou_shape/1"
+SCHEMA_NET = "hou_shape/2"
 
 
 def _gaprun(col: np.ndarray, gap: int) -> int:
@@ -62,8 +70,12 @@ def second_vertical(gray: np.ndarray, thr: int = 140) -> float | None:
 @lru_cache(maxsize=4)
 def _load(path: str, mtime: float) -> dict:
     d = json.loads(Path(path).read_text(encoding="utf-8"))
+    if d.get("schema") == SCHEMA_NET:
+        from .wu_shape import _arr
+        d["_nets"] = [{k: _arr(v) for k, v in n.items()} for n in d["nets"]]
+        return d
     if d.get("schema") != SCHEMA:
-        raise ValueError(f"hou_shape：{path} 不是 {SCHEMA}")
+        raise ValueError(f"hou_shape：{path} 不是 {SCHEMA}／{SCHEMA_NET}")
     if not float(d["lo"]) <= float(d["hi"]):
         raise ValueError(f"hou_shape：{path} 要 lo ≤ hi")
     return d
@@ -79,14 +91,38 @@ def fingerprint(path: str | None) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()[:16] if p and p.exists() else ""
 
 
+def net_input(gray: np.ndarray, size: int = 64, left: float = 0.6, thr: int = 140) -> np.ndarray | None:
+    """字块 → 网的输入（左 left 宽、反相 0–1、size×size）；墨太少 → None。"""
+    import cv2
+    g = np.asarray(gray)
+    if g.ndim == 3:
+        g = g[..., :3].mean(axis=2)
+    g = g.astype(np.float32)
+    ys, xs = np.nonzero(g < thr)
+    if len(xs) < 50:
+        return None
+    g = g[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    g = g[:, :max(1, int(g.shape[1] * left))]
+    return cv2.resize((255 - g) / 255, (size, size), interpolation=cv2.INTER_AREA)
+
+
 def judge(gray: np.ndarray, model: dict) -> dict:
-    """→ {"char": 候|𠋫|None, "why": "agree"|"abstain:mid"|"abstain:no_ink", "v": 第二竖长}。"""
+    """→ {"char": 候|𠋫|None, "why": "agree"|"abstain:mid"|"abstain:no_ink", "v": 第二竖长 | "p": 候的概率}。"""
+    hou, alt = model.get("chars", ["候", "𠋫"])
+    if model.get("schema") == SCHEMA_NET:
+        from .wu_shape import _forward
+        x = net_input(gray, int(model.get("size", 64)), float(model.get("left", 0.6)), int(model.get("thr", 140)))
+        if x is None:
+            return {"char": None, "why": "abstain:no_ink"}
+        pr = float(np.mean([_forward(n, x) for n in model["_nets"]]))
+        t = float(model.get("t", 0.98))
+        ch = hou if pr >= t else alt if pr <= 1 - t else None
+        return {"char": ch, "why": "agree" if ch else "abstain:mid", "p": round(pr, 4)}
     v = second_vertical(gray, int(model.get("thr", 140)))
     if v is None:
         return {"char": None, "why": "abstain:no_ink"}
-    hou, alt = model.get("chars", ["候", "𠋫"])
     ch = hou if v < float(model["lo"]) else alt if v >= float(model["hi"]) else None
     return {"char": ch, "why": "agree" if ch else "abstain:mid", "v": round(v, 4)}
 
 
-__all__ = ["SCHEMA", "second_vertical", "load", "fingerprint", "judge"]
+__all__ = ["SCHEMA", "SCHEMA_NET", "second_vertical", "net_input", "load", "fingerprint", "judge"]

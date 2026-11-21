@@ -102,3 +102,33 @@ def test_codepoint_exempt_keeps_shape_hou():
     assert sa._codepoint_exempt(R("候", {"hou_shape": {"char": "候"}}), B())
     assert not sa._codepoint_exempt(R("候", {"hou_shape": {"char": None}}), B())
     assert not sa._codepoint_exempt(R("候", {}), B())
+
+
+def test_net_schema_judges_by_prob(tmp_path):
+    """hou_shape/2：小网的「候」概率过 t 给 候、低于 1−t 给 𠋫，其间弃权（权重造成恒值输出）。"""
+    import base64
+    import json
+
+    import numpy as np
+
+    from open_guji_cv.groups import hou_shape as H
+
+    def arr(a):
+        a = np.asarray(a, np.float32)
+        return {"shape": list(a.shape), "dtype": "<f4", "b64": base64.b64encode(a.tobytes()).decode()}
+
+    def net(bias):
+        return {"f.0.weight": arr(np.zeros((16, 1, 3, 3))), "f.0.bias": arr(np.zeros(16)),
+                "f.3.weight": arr(np.zeros((32, 16, 3, 3))), "f.3.bias": arr(np.zeros(32)),
+                "f.6.weight": arr(np.zeros((64, 32, 3, 3))), "f.6.bias": arr(np.zeros(64)),
+                "f.11.weight": arr(np.zeros((64, 64 * 8 * 8))), "f.11.bias": arr(np.zeros(64)),
+                "f.13.weight": arr(np.zeros((1, 64))), "f.13.bias": arr([bias])}
+    img = np.full((80, 80), 255, np.uint8)
+    img[10:70, 15:20] = 0
+    img[10:70, 40:45] = 0
+    for bias, want in ((8.0, "候"), (-8.0, "𠋫"), (0.0, None)):
+        p = tmp_path / f"h{bias}.json"
+        p.write_text(json.dumps({"schema": "hou_shape/2", "chars": ["候", "𠋫"], "t": 0.98, "nets": [net(bias)]}), encoding="utf-8")
+        r = H.judge(img, H.load(str(p)))
+        assert r["char"] == want, (bias, r)
+    assert H.judge(np.full((80, 80), 255, np.uint8), H.load(str(p)))["why"] == "abstain:no_ink"
