@@ -1061,6 +1061,21 @@ class SeedAdmitParams(BaseModel):
     且这一列没有现役对位字 → 默认字来源记 `coord_blank`，由 R5 判非字（同 `occluded_past_leaf_blank`）。
     起因：卷首页小印盖在整理本空列上（史記 05:85、08:119 等，卷首只有题名、印下几列没有字），印下的格机器认成印纹，
     默认字 None、`via=none`，只能人审。需配合 `seal_detect.overrides` 点名印位（模板按原扫描尺度，这几页的印小一圈没测出）。"""
+    occluded_manual_seal_blank: bool = False
+    """书级（缺省关，不进 dump）：**人定印框**（`seal_detect.overrides` 写的印，`source="manual"`）压着的遮挡格，
+    坐标对位没给字（没有坐标对位记录；原先 `via=none`，或印纹上被现役对位硬配了字、`via=align`）→ 默认字来源记
+    `coord_blank`，由 R5 判非字。人点名这儿是印、参校本又没字，就不再送人审（全唐文 046–060 层 1 一批 37 格，QTW 11-21）。
+    坐标对位给了字的格照旧（印压真字）；库认得出的格（判 same，或判 unsure 且首位相似度 ≥ `occluded_seal_keep_cov`）
+    也照旧——印压真字时现役对位常给对字（056:77:1:10 三 0.969、054:89:1:9 五 0.965、051:3:1:10 十 0.944），
+    印纹硬配的字库都判 diff 或首位偏低（052:91:2:19 一 0.913）。算法认的印（`frame`／`density`／`template`）不受影响。"""
+    occluded_seal_keep_cov: float = 0.93
+    """`occluded_manual_seal_blank`／`occluded_seal_align_yield` 的「印压真字」保险：库判 unsure 时首位相似度 ≥ 此值不判空。
+    两个开关都关时不进 dump。全唐文 046–060 人定印框下无坐标字的 120 格里，判空的 117 格首位最高 0.913，保下的 3 格真字 ≥ 0.944。"""
+    occluded_seal_align_yield: bool = False
+    """书级（缺省关，不进 dump）：`occluded_past_leaf_blank`／`occluded_ref_empty_blank` 判「整理本说这一列没字」时，
+    **落在遮挡格里的现役对位字不算**，这些遮挡格的 `align` 默认字也让位给 `coord_blank`。起因：全唐文 057 p90 列 8、9
+    过了半叶末行，印纹上被现役对位硬配了「一」（8:19、9:21），整列就不算空列，其余印下格 `via=none` 进待审，
+    那两格还被 R5 按 `via=align` 放成了「一」（A22 11-21 查）。遮挡格外有现役对位字的列照旧不算空列。"""
     occluded_past_leaf_blank: bool = True
     """遮挡格所在列过了整理本这半叶的最后一行（align_ref 退回原因 `COORD_PAST_LEAF`，只在按半叶头定位的页上有），
     且这一列没有现役对位字 → 默认字来源记 `coord_blank`（整理本说这儿没字），由 R5 判非字（1.29，A32 11-01）。
@@ -1470,6 +1485,12 @@ class SeedAdmitParams(BaseModel):
             d.pop("occluded_rescue_ink", None)
         if isinstance(d, dict) and not self.occluded_ref_empty_blank:
             d.pop("occluded_ref_empty_blank", None)
+        if isinstance(d, dict) and not self.occluded_manual_seal_blank:
+            d.pop("occluded_manual_seal_blank", None)
+        if isinstance(d, dict) and not self.occluded_seal_align_yield:
+            d.pop("occluded_seal_align_yield", None)
+        if isinstance(d, dict) and not (self.occluded_manual_seal_blank or self.occluded_seal_align_yield):
+            d.pop("occluded_seal_keep_cov", None)
         if isinstance(d, dict) and self.vis_rulings:
             d.pop("vis_rulings", None)
         if isinstance(d, dict) and not self.pua_code_table:
@@ -7159,15 +7180,26 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
         past = {int(k) for k, v in ref.coord_fallback.items() if v == COORD_PAST_LEAF}
     if p.occluded_ref_empty_blank and ref is not None:
         past |= {int(k) for k, v in ref.coord_fallback.items() if v == "整理本行为空"}
+    manual = _manual_seal_cells(ctx, page) if p.occluded_manual_seal_blank else set()
     out: dict[str, tuple[float, str | None, str]] = {}
     for cc in match.columns:
         # 整理本这半叶没有这一列、现役对位也没给这一列任何字 → 整理本说这儿没字
-        blank_col = cc.col in past and not any(r.id in amap for r in cc.chars)
+        # （`occluded_seal_align_yield`：印纹上被现役对位硬配的字不算）
+        blank_col = cc.col in past and not any(
+            r.id in amap and not (p.occluded_seal_align_yield and (cc.col, r.slot, r.sub or "") in hit)
+            for r in cc.chars)
         for r in cc.chars:
             dens = hit.get((cc.col, r.slot, r.sub or ""))
             if dens is None:
                 continue
-            if r.id in coord and is_gap(coord[r.id]):
+            seal_blank = (r.id not in coord
+                          and ((blank_col and p.occluded_seal_align_yield)
+                               or (cc.col, r.slot, r.sub or "") in manual)
+                          and not _lib_reads_char(r, p.occluded_seal_keep_cov))
+            if seal_blank:
+                # 整理本说这儿没字／人定印框：印纹上的现役对位字不作默认字
+                out[r.id] = (dens, None, "coord_blank")
+            elif r.id in coord and is_gap(coord[r.id]):
                 # 逐列本里没有码表的 PUA 生僻字占位：知道这儿有字、不知道是哪个
                 out[r.id] = (dens, None, "coord_pua")
             elif r.id in coord:
@@ -7180,6 +7212,29 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
             else:
                 out[r.id] = (dens, None, "none")
     return out
+
+
+def _lib_reads_char(r, keep_cov: float) -> bool:
+    """库认得出这一格（判 same，或判 unsure 且首位相似度 ≥ `keep_cov`）：印压真字，不按印纹判空。"""
+    if r.verdict == "same":
+        return True
+    top = max((float(c[1]) for c in (r.candidates or [])), default=float(r.cov or 0.0))
+    return r.verdict == "unsure" and top >= keep_cov
+
+
+def _manual_seal_cells(ctx: RunContext, page: int) -> set[tuple[int, int, str]]:
+    """人定印框（`seals` 产物里 `source="manual"` 的印）压着的格 {(col, slot, sub)}；重叠门槛同遮挡判据
+    （大印 `OCC_SEAL_OVERLAP`、小印 `OCC_CRISP_OVERLAP`）。没有 `seals` 产物或 Step3 字格就是空集。"""
+    from .occlusion import OCC_CRISP_OVERLAP, OCC_SEAL_OVERLAP, seal_overlap_cells
+    has = getattr(ctx, "has_product", None)
+    if has is None or not has("seals", page):
+        return set()
+    seals = [s for s in ctx.product("seals", page).seals if s.source == "manual"]
+    cells = _opt(ctx, "cells", page) if seals else None
+    if cells is None:
+        return set()
+    return (set(seal_overlap_cells(cells, seals, "stain", OCC_SEAL_OVERLAP))
+            | set(seal_overlap_cells(cells, seals, "crisp", OCC_CRISP_OVERLAP)))
 
 
 _FOLLOW_REF_HOOKS = "open_guji_cv.impl.keben.follow_ref_hooks"
