@@ -478,6 +478,9 @@ _ALT_CUTS_1120 = ("row_segment 加书级 alt_cuts（备选格线表，缺省空�
 _REF_ALIAS_1120 = ("seed_admit 加书级参数 group_flow_ref_alias（#1755，fea133e3；缺省空 dict、空时不进参数 dump）：groups.flow.group_flow_pass 开头 `if cfg.ref_alias:` 空时不进，"
                    "amap／veto_refs 原样传下；seed_admit 只多把空 dict 填进 FlowConfig.ref_alias。代码证明等价＋tests/test_flow_ref_alias.py::test_no_alias_unchanged；"
                    "全唐文 patch 线 v0.7.85（v0.7.82＋#1755）与 dev（fea133e3）各登本线哈希，2026-11-20（形近字线）。书配置写了别名表的书按参数指纹自然过期")
+_HOU_NET_1121 = ("groups.hou_shape 加 hou_shape/2（小卷积网，形近字线 11-21）：load 遇 schema hou_shape/2 才走新分支，judge 开头按 schema 分流；"
+                 "hou_shape/1（几何阈值）分支逐行不变（只把 chars 解包提前），没配置 json 的书 _hou_shape_pass 不调。代码证明等价＋tests/test_hou_shape.py。"
+                 "全唐文换 hou_shape/2 json 后按参数指纹（json sha）自然过期")
 _HOU_1120 = ("seed_admit 加书级刻形判法 group_flow_hou_shape（#1729，9ddaa9a2；缺省空、只在 group_flow 含 hou 且数据目录有 config/groups/hou_shape.json 时自动填，"
              "填了才进参数指纹 hs…；path_params 剔掉）：没配置时 _hou_shape_pass 不调，_codepoint_exempt 多的一句查 evidence.hou_shape 恒不中。"
              "全唐文 029 册全册 170 页（main 包 cv0.7.74-c81-g-03c8f4-k11-qtw029-d2-a3 当上游，中心库 rev 1382154 尚无 hou_shape.json）seed_admit 与 origin/dev 0aaeb8f9 产物逐字节相同；"
@@ -2310,6 +2313,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="8fcc28ea5c3650b6d7982f9deecbb33a7711757895565f32edf5ec9ddf13c24a",
           old="3bfef8bf750fde01b496fd5dfe1bf77c2825035ed2f69a2a65c92b70bc206095",
           evidence=_REF_ALIAS_1120),
+    # groups.hou_shape 加小网 schema（hou_shape/2；形近字线 11-21）——dev 哈希
+    Equiv(module="open_guji_cv.groups.hou_shape",
+          new="c3e2101f9888bd6e326f27f48b067279c5a4f0b113b9a8b0fd4647ddc85feefc",
+          old="b8c36f23d4a5861bdce91d9dafdd19cb3264b0be2f026f56dfafa61d03e2deb1",
+          evidence=_HOU_NET_1121),
 )
 
 
