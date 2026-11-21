@@ -475,6 +475,8 @@ _SHAPE_FIRST_1120 = ("seed_admit 加书级开关 lane_shape_first（#1734，795e
 _ALT_CUTS_1120 = ("row_segment 加书级 alt_cuts（备选格线表，缺省空、不进参数 dump；表空时不读不切）、context_decide 加 alt_columns"
                   "（备选列也做上下文裁决，缺省关、不进参数 dump）：脉经第 1 册 7、13、17、25 页 row_segment、context_decide 与 origin/dev 产物"
                   "逐字节相同；scripts/code_equiv.py check，2026-11-20（MJ，GUJI-774）")
+_HOU_LATE_1121 = ("seed_admit 加书级参数 group_flow_hou_shape_late（缺省 False、关时不进参数 dump）：5c vis_ruling 之后多一句 `if d_vr and p.group_flow_hou_shape_late and …` 关时不进；"
+                  "_hou_shape_pass 加参数 only_unjudged 缺省 False、多一句恒假的 continue。代码证明等价＋tests/test_hou_shape.py::test_late_flag_default_off_not_in_dump；2026-11-21（全唐文·形近字线）")
 _REF_ALIAS_1120 = ("seed_admit 加书级参数 group_flow_ref_alias（#1755，fea133e3；缺省空 dict、空时不进参数 dump）：groups.flow.group_flow_pass 开头 `if cfg.ref_alias:` 空时不进，"
                    "amap／veto_refs 原样传下；seed_admit 只多把空 dict 填进 FlowConfig.ref_alias。代码证明等价＋tests/test_flow_ref_alias.py::test_no_alias_unchanged；"
                    "全唐文 patch 线 v0.7.85（v0.7.82＋#1755）与 dev（fea133e3）各登本线哈希，2026-11-20（形近字线）。书配置写了别名表的书按参数指纹自然过期")
@@ -2317,6 +2319,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="8fcc28ea5c3650b6d7982f9deecbb33a7711757895565f32edf5ec9ddf13c24a",
           old="3bfef8bf750fde01b496fd5dfe1bf77c2825035ed2f69a2a65c92b70bc206095",
           evidence=_REF_ALIAS_1120),
+    # seed_admit 5c 之后补跑 hou_shape（group_flow_hou_shape_late；全唐文 ve1 候被码位归 𠋫；形近字线 11-21）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="9c24a8faf25e7a0d528654a9cdde020169a359efc3c1c982b9389d47cd7b3ab4",
+          old="f2e8faa50ba34a42617a04e7d69f0576fd8dc59a5d512bab664c835fd49af802",
+          evidence=_HOU_LATE_1121),
     # groups.hou_shape 加小网 schema（hou_shape/2；形近字线 11-21）——dev 哈希
     Equiv(module="open_guji_cv.groups.hou_shape",
           new="c3e2101f9888bd6e326f27f48b067279c5a4f0b113b9a8b0fd4647ddc85feefc",
