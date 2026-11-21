@@ -61,6 +61,10 @@
 
 - 绑定（`feedback/bindings.py`）加迁移补锚闸（A31 11-17，ZM 第一册线报）：补锚档 `source=backfill:migrated` 的行（cellvotes rebase 迁移事件无框，取 r9c 包同编号格的框）与上一版锚（`target.anchor.migrated_from.id`）落到的现格不同 → `review`（`why=migrated_prev_differs`）。原来 IoU 1.0 判 valid，人裁静默落进邻格。不进任何 Step 的 `code_deps`，产物指纹不变；只有带这类补锚行的页（现只殿本）绑定缓存重算。
 
+## [0.7.90] - 2026-11-21
+
+- 发版说明（殿本 patch 线，ZM 11-21，PATCH）：v0.7.86 ＋ #1763 seed_admit 5c 记 `evidence.vis_ctx`。只 seed_admit 指纹变（d14c7e84→61687d88），底库 b29 不变，不登 code_equiv。**不含** v0.7.87／0.7.88／0.7.89 与 dev 其他改动。
+
 ## [0.7.89] - 2026-11-21
 
 - 发版说明（全唐文·形近字线 11-21，PATCH）：v0.7.87 ＋ #1768 `groups.hou_shape` 支持 `hou_shape/2`（小卷积网判 候／𠋫，046–053 刻工第二竖偏长、几何阈值分不开；按册 5 折留出 Sheldon 标签 t=0.98 覆盖 193/222 错 1，疑点选错）。hou_shape/1 分支不变（本线 groups.hou_shape 不在 seed_admit code_deps，不用登 code_equiv），**各步代码指纹与 v0.7.87 相同**；全唐文中心库换 `config/groups/hou_shape.json`（schema hou_shape/2）后 seed_admit 按参数指纹过期。底库不变。**不含** v0.7.86／v0.7.88 与 dev 其他改动。
