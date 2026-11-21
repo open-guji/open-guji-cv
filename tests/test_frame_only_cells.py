@@ -66,3 +66,44 @@ def test_numeral_two_beside_frame_not_frame():
     corner[100:108, 14:200] = 1
     fc = RB._frame_mask(corner, P)
     assert RB._frame_only(corner[cell], fc[cell], P, 0.01)
+
+
+def test_strict_when_table_says_char():
+    """格位表说有字（strict，A22 U1 2026-11-18）：框角细横那条不采信，只有去掉长竖后几乎没墨才判空。"""
+    cell = slice(60, 171)
+    corner = _col(h=300, w=220)
+    corner[0:300, 8:14] = 1
+    corner[100:108, 14:200] = 1
+    fc = RB._frame_mask(corner, P)
+    assert RB._frame_only(corner[cell], fc[cell], P, 0.01)
+    assert not RB._frame_only(corner[cell], fc[cell], P, 0.01, strict=True)
+    bare = _col(h=300, w=220)
+    bare[0:300, 8:14] = 1
+    fb = RB._frame_mask(bare, P)
+    assert RB._frame_only(bare[cell], fb[cell], P, 0.01, strict=True)
+
+
+def _yi_column(n=6, period=100, w=180, yi_pos=1):
+    """n 格的列：yi_pos 格是一道居中细横（「一」，墨比 < 0.01），其余格是实心字。"""
+    g = np.full((n * period, w), 255, np.uint8)
+    for k in range(n):
+        y0 = k * period
+        if k + 1 == yi_pos:
+            g[y0 + 48:y0 + 51, 65:115] = 0
+        else:
+            g[y0 + 15:y0 + 85, 40:140] = 0
+    return g
+
+
+def test_table_char_rescues_end_cell_yi():
+    """列端（首格）的「一」：两邻有字的规矩够不着，格位表说有字时照救（殿本 vol21 186:7 类）。"""
+    from open_guji_cv.impl.keben.row_boundaries import segment_column, slot_mask_from_occupied
+    g = _yi_column()
+    kw = dict(period=100.0, n_body_slots=6, border_top=0.0, border_bottom=600.0, detect_jiazhu=False,
+              seam_band=0, grid_bounds=[k * 100.0 for k in range(7)])
+    plain = segment_column(g, **kw)
+    first = min(plain.cells, key=lambda c: c.y0)
+    assert first.kind == "blank"
+    tab = segment_column(g, slot_mask=slot_mask_from_occupied(set(range(1, 7)), 6), **kw)
+    first = min(tab.cells, key=lambda c: c.y0)
+    assert first.kind != "blank"
