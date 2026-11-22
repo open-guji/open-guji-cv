@@ -41,7 +41,7 @@
 
 | 类别 | 条数 | 例 | 想修的话 |
 |---|---|---|---|
-| `utils`/`products` → `clustering` | 13 | `utils.binarized → clustering.normalize`、`font_calibrate*`、`seed_witness`、`products.fp_migrate` | `clustering.normalize`／`canonical` 本质是底层图像工具，应下沉；**动它会让各册产物判过期**，要等统一窗口 |
+| `utils`/`products` → `clustering` | 10 | `utils.binarized → clustering.normalize`、`font_calibrate*`、`seed_witness` | `clustering.normalize`／`canonical` 本质是底层图像工具，应下沉；**动它会让各册产物判过期**，要等统一窗口 |
 | `core` → `steps`/`clustering`/`review` | 6 | `core.step` 为指纹／可选消费者查 `steps.*` | 改成由 `steps` 向 `core` 注册 |
 | `report` → `eval`/`feedback`/`review` | 6 | `report.progress`、`report.collate` | 汇总层依赖应用层，把共用函数下沉 |
 | `gold` → `feedback`/`steps` | 5 | `gold.transfer`、`gold.v2_align` | 同上 |

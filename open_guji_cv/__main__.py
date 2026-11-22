@@ -1,4 +1,5 @@
-"""`python -m open_guji_cv <command>` 与 `guji-cv <command>`：与 `guji` 是同一套命令（cli_v2）。
+"""`python -m open_guji_cv`：只给隔离步骤的子进程内部用（cli_v2.py 里 `--isolate-steps`），对外一律用 `guji`。
+2026-11-22 删了 `guji-cv` 入口。
 
 2026-10-06 cv 大清理（overview#413）：v1 的旧命令（cut / preprocess / extract / run / chars / cluster /
 label / seed / review / update / bench …）连同 v1 管线一起退役删除；还在用的 `glyph-db` 搬到

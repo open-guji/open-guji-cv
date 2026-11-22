@@ -535,52 +535,6 @@ def cmd_export(args) -> None:
     sys.exit(subprocess.run(cmd).returncode)
 
 
-def cmd_fp_migrate(args) -> None:
-    """路径参数出指纹后，把 manifest 的指纹改写成新公式（不重算产物；默认干跑）。
-    见 `products/fp_migrate.py` 模块头。"""
-    from .core.runlock import RunLockHeld, book_run_lock
-    from .products.fp_migrate import migrate_book, parse_old_paths
-    try:
-        old = parse_old_paths(args.old_path)
-    except ValueError as e:
-        raise SystemExit(str(e))
-    eng = _engine(args.book, args.pipeline, quiet=True)
-    pages = eng.book.resolve_pages(args.pages)
-    steps = [s for s in (args.steps or "").split(",") if s] or None
-    try:
-        with book_run_lock(eng.book.id, wait=False):
-            if getattr(args, "code_formula", False) and (old or args.trust):
-                raise ValueError("--code-formula 不与 --old-path / --trust 混用")
-            rep = migrate_book(eng, pages, old_paths=old, trust=args.trust,
-                               apply=args.apply, steps=steps, explain=getattr(args, 'explain', False),
-                               code_formula=getattr(args, "code_formula", False))
-    except (RunLockHeld, ValueError) as e:
-        print(f"✗ {e}", file=sys.stderr)
-        sys.exit(3)
-    if args.json:
-        print(json.dumps(rep, ensure_ascii=False))
-        return
-    print(f"{eng.book.id} · {eng.pipeline.id if hasattr(eng.pipeline, 'id') else args.pipeline} · "
-          f"{len(pages)} 页 · {'已写入' if args.apply else '干跑（加 --apply 才写）'}")
-    from .products.fp_migrate import format_diff, rare_fingerprint_parts
-    for sid, r in rep.items():
-        if "na" in r:
-            print(f"  {sid:16s} {r['na']}")
-            if getattr(args, 'explain', False) and sid == "rare_candidates":
-                print("      ↳ 指纹分量（★=可能随机器变）：")
-                for part in rare_fingerprint_parts(eng):
-                    print(f"        {'★' if part['machine'] else ' '} {part['name']}: {part['value']}"
-                          + (f"  —— {part['note']}" if part.get("note") else ""))
-            continue
-        print(f"  {sid:16s} 改写 {r['migrated']:3d}  本来就新 {r['already']:3d}")
-        for why, n in sorted(r["skipped"].items(), key=lambda kv: -kv[1]):
-            print(f"      ↳ 跳过 {n:3d} 页：{why}")
-        for pg, d in sorted(r.get("detail", {}).items()):
-            print(f"        p{pg:04d} {d['why']}")
-            for df in d["diffs"]:
-                print(f"            · {format_diff(df)}")
-
-
 def cmd_locate_gutter(args) -> None:
     """版心定位（给拆页用，#174）：输入原图，输出版心 x 与置信度。只定位、不裁图、不接管线。
     判据见 `seg/locate_gutter.py`（竖线复用 Step1 的 find_vertical_lines）。"""
@@ -815,189 +769,6 @@ def cmd_seed_witness(args) -> None:
     print(f"→ {out}")
 
 
-def _pdf_embedded_image(doc, pg):
-    """扫描页里那张**唯一的内嵌图**的 (xref, 宽, 高)；不是「一页一张图」就返回 None。
-
-    扫描 PDF 的正常形态是一页一张整版位图。有多张（或没有）的页多半是矢量/文字页
-    或拼贴页，只能走渲染。
-    """
-    try:
-        imgs = pg.get_images(full=True)
-    except Exception:
-        return None
-    if len(imgs) != 1:
-        return None
-    xref = imgs[0][0]
-    try:
-        info = doc.extract_image(xref)
-    except Exception:
-        return None
-    return xref, info.get("width", 0), info.get("height", 0)
-
-
-def _salvage_jpx(raw: bytes) -> bytes:
-    """JPEG2000 末 tile 残缺时的抢救：在最后一个 SOT 处截断、补 EOC。
-
-    国图北行日錄刻本实测：某页 25 个 tile-part 的最后一个数据不全，**MuPDF 渲染
-    出一张全白图并且 exit 0**（静默坏页），OpenCV 报 `Stream too short`。丢掉残缺
-    的那个 tile 就能解出其余的——丢的那块通常只占页面一小角。
-    """
-    sots: list[int] = []
-    i = 0
-    while i < len(raw) - 1:
-        if raw[i] == 0xFF and raw[i + 1] == 0x90:          # SOT
-            lsot = int.from_bytes(raw[i + 2:i + 4], "big")
-            sots.append(i)
-            i += 2 + max(lsot, 2)
-            continue
-        i += 1
-    if not sots:
-        return raw
-    return raw[:sots[-1]] + b"\xff\xd9"
-
-
-def _warn_downscale(problems: list, page_no: int, pg, got, dpi) -> None:
-    """渲染出来比内嵌图小很多时告警——这是「静默降分辨率」那个坑的正面拦截。"""
-    if got is None or not got[1]:
-        return
-    pr = pg.rect
-    if not pr.width:
-        return
-    eff = (dpi / 72.0) if dpi else 1.0
-    ratio = got[1] / (float(pr.width) * eff)
-    if ratio > 1.2:
-        problems.append(
-            f"页 {page_no}：**渲染结果比内嵌图小 {ratio:.2f} 倍**"
-            f"（页框 {pr.width:.0f}×{pr.height:.0f} pt vs 内嵌图 {got[1]}×{got[2]} px）"
-            f"——分辨率丢了，改用 --mode embedded，或 --dpi {int(round(72 * ratio * eff))}")
-
-
-def cmd_import_pdf(args) -> None:
-    """把 PDF 逐页抽成灰度 PNG（`<out>/<页号>.png`，从 1 起）。
-
-    ## 默认取**内嵌图**，不是渲染
-
-    扫描 PDF 的页框尺寸（pt）**不一定**等于内嵌图像的像素数。北行日錄刻本那两个
-    PDF 页框 672×562 pt、内嵌图 2801×2343 px——按页框 1:1 渲染只有原生分辨率的
-    1/4.17，字身从 71px 缩到 17px，Step3 根本没法切，而且 exit 0 不报任何警告。
-
-    所以默认路径是 `extract_image` 取内嵌码流（`--mode embedded`，缺省）：
-    一页一张图时直接拿原始像素，拿不到才退回渲染并**明确告知**。
-    `--mode render` 强制渲染（矢量/文字 PDF、或内嵌图是分块拼的）；给了 `--dpi`
-    即隐含 render。
-
-    ## 每页都体检
-
-    抽完逐页报「尺寸异常 / 近乎全白全黑」——**静默坏页是最难发现的一类坏数据**，
-    全白页会一路往下跑，到 Step3 才莫名其妙零列。见 `_salvage_jpx`。
-    """
-    from pathlib import Path
-    import numpy as np
-    import pymupdf
-    from .utils.image_io import imwrite
-
-    doc = pymupdf.open(args.pdf)
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    sel = None
-    if args.pages:
-        sel = set()
-        for part in args.pages.split(","):
-            a, _, b = part.partition("-")
-            sel.update(range(int(a), int(b or a) + 1))
-
-    mode = args.mode
-    if args.dpi and mode == "embedded":
-        mode = "render"                      # 显式给了 dpi 就是要渲染
-
-    def _render(pg) -> np.ndarray:
-        if args.dpi:
-            pix = pg.get_pixmap(dpi=args.dpi, colorspace=pymupdf.csGRAY)
-        else:
-            pix = pg.get_pixmap(matrix=pymupdf.Matrix(1, 1), colorspace=pymupdf.csGRAY)
-        return np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width)
-
-    n = n_skip = 0
-    n_embedded = n_render = n_salvaged = 0
-    problems: list[str] = []
-    tmp = out / "_import_tmp.bin"
-
-    for i in range(len(doc)):
-        page_no = i + 1
-        if sel is not None and page_no not in sel:
-            continue
-        target = out / f"{page_no}.png"
-        if target.exists() and not args.force:
-            n_skip += 1
-            continue
-        pg = doc[i]
-        img = None
-
-        if mode == "embedded":
-            got = _pdf_embedded_image(doc, pg)
-            if got is not None:
-                xref, iw, ih = got
-                import cv2
-                raw = doc.extract_image(xref)["image"]
-                tmp.write_bytes(raw)
-                img = cv_imread(str(tmp), cv2.IMREAD_UNCHANGED)
-                if img is None:                      # 码流坏了，试抢救
-                    tmp.write_bytes(_salvage_jpx(raw))
-                    img = cv_imread(str(tmp), cv2.IMREAD_UNCHANGED)
-                    if img is not None:
-                        n_salvaged += 1
-                        problems.append(f"页 {page_no}：内嵌码流残缺，已截断末 tile 抢救"
-                                        f"（丢失部分通常在页面一角，**务必目视核对**）")
-                if img is not None:
-                    if img.ndim == 3:
-                        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                    n_embedded += 1
-                else:
-                    problems.append(f"页 {page_no}：内嵌图解不开（抢救也失败），退回渲染")
-            if img is None:
-                img = _render(pg)
-                n_render += 1
-                _warn_downscale(problems, page_no, pg, got, args.dpi)
-        else:
-            img = _render(pg)
-            n_render += 1
-            _warn_downscale(problems, page_no, pg,
-                            _pdf_embedded_image(doc, pg), args.dpi)
-
-        if img is None:
-            problems.append(f"页 {page_no}：抽不出图，已跳过")
-            continue
-
-        ink = float((img < 192).mean())
-        if ink < 0.002:
-            problems.append(f"页 {page_no}：**近乎全白**（墨占比 {ink:.4f}）——疑似坏页或空页")
-        elif ink > 0.98:
-            problems.append(f"页 {page_no}：近乎全黑（墨占比 {ink:.4f}）——疑似扫描背面或封面")
-        imwrite(str(target), img)
-        n += 1
-
-    tmp.unlink(missing_ok=True)
-
-    sizes: dict[tuple[int, int], int] = {}
-    for f in out.glob("*.png"):
-        try:
-            import cv2
-            im = cv_imread(str(f), cv2.IMREAD_UNCHANGED)
-            if im is not None:
-                sizes[(im.shape[1], im.shape[0])] = sizes.get((im.shape[1], im.shape[0]), 0) + 1
-        except Exception:
-            pass
-
-    print(f"抽出 {n} 页（内嵌 {n_embedded} / 渲染 {n_render}"
-          f"{f' / 抢救 {n_salvaged}' if n_salvaged else ''}），"
-          f"跳过 {n_skip} 页 → {out}（PDF 共 {len(doc)} 页）")
-    if len(sizes) > 1:
-        top = sorted(sizes.items(), key=lambda kv: -kv[1])
-        print("  ⚠️ 尺寸不一致：" + "；".join(f"{w}×{h} × {c} 页" for (w, h), c in top[:4]))
-    for p in problems:
-        print("  ⚠️ " + p)
-
-
 def cmd_binarize(args) -> None:
     """整页二值副本：灰度扫描 → `binarized/<book>/<page>.png`（白底黑字）。
 
@@ -1157,7 +928,6 @@ COMMANDS_V2 = {
     "binarize": cmd_binarize,
     "split": cmd_split,
     "locate-gutter": cmd_locate_gutter,
-    "import-pdf": cmd_import_pdf,
     "witness-align": cmd_witness_align,
     "witness-align-stream": cmd_witness_align_stream,
     "calibrate": cmd_calibrate,
@@ -1169,7 +939,6 @@ COMMANDS_V2 = {
     "status": cmd_status,
     "book": cmd_book,
     "export": cmd_export,
-    "fp-migrate": cmd_fp_migrate,
     "rare": cmd_rare,
     "variants": cmd_variants,
     "snapshot": cmd_snapshot,
@@ -1474,20 +1243,21 @@ def _plugin_too_old(module, name: str) -> bool:
 
 
 def register_subcommands(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("pipeline", help="[v2] 跑一条 pipeline（或其中一段）",
+    p = sub.add_parser("pipeline", help="跑一条 pipeline（或其中一段）",
                        epilog="装了 guji-manager 时 pipeline 也是第二步「自动化流程」的命令前缀："
                               "`guji pipeline <命令> …` 等于 `guji <命令> …`，`guji pipeline commands` 列出本步命令。")
     p.add_argument("pipeline", help=f"pipeline id，如 {DEFAULT_PIPELINE}")
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
-    p.add_argument("--from", dest="from_step", default=None, help="起始步骤 id")
-    p.add_argument("--to", dest="to_step", default=None, help="终止步骤 id（含）")
+    p.add_argument("--from", dest="from_step", default=None,
+                   help="起始：步骤 id 或大步名（layout 版面／cut 切字／read 识字／decide 定字）")
+    p.add_argument("--to", dest="to_step", default=None, help="终止（含）：步骤 id 或大步名")
     p.add_argument("--no-prep", action="store_true",
                    help="不在开跑前备输入（建钉版字形库、备 Step5-b 模板索引）；由 manager 先 prep（拆分 M2，doc/契约.md）")
     p.add_argument("--no-pack", action="store_true",
                    help="整册（--pages all）从头跑到尾时缺省自动把产物打包存 R2；加这个不存（也可 GUJI_AUTO_PACK=0）")
     _add_pages(p)
 
-    p = sub.add_parser("step", help="[v2] 只跑一步")
+    p = sub.add_parser("step", help="只跑一步")
     p.add_argument("step", help="步骤 id")
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
@@ -1496,7 +1266,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
 
 
     p = sub.add_parser("binarize",
-                       help="[v2] 整页二值副本 → binarized/<book>/（进库与人裁看的都是它）")
+                       help="整页二值副本 → binarized/<book>/（进库与人裁看的都是它）")
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
     p.add_argument("--pages", default=None, help="只做这些页（默认全书）")
     p.add_argument("--force", action="store_true", help="已有也重做")
@@ -1508,7 +1278,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "旧版这里写死 0.2，是常数改成 0.10 时漏改的）")
 
     p = sub.add_parser("preclean",
-                       help="[v2] Step0：生成预清理后的页图（只处理 yaml 里登记的页）")
+                       help="Step0：生成预清理后的页图（只处理 yaml 里登记的页）")
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
     p.add_argument("--pages", default=None,
                    help="只做这些页（默认：不带 --calibrate 时是 yaml 里登记的全部，"
@@ -1519,33 +1289,33 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "（本底墨占比的中位/p95/p99），换书时用")
 
     p = sub.add_parser("split",
-                       help="[v2] Step0 分页：按 yaml 的 page_split 段把扫描页裁成逻辑页（上下两栏拼一页的影印本）")
+                       help="Step0 分页：按 yaml 的 page_split 段把扫描页裁成逻辑页（上下两栏拼一页的影印本）")
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
     p.add_argument("--pages", default=None, help="只做这些**扫描页**（页号表达式，如 1-5,9）；默认全部")
     p.add_argument("--force", action="store_true", help="已有产物也重做")
 
     p = sub.add_parser("locate-gutter",
-                       help="[v2] 版心定位（拆页用）：整叶扫描图 → 版心 x 与置信度（原图坐标，左原点）")
+                       help="版心定位（拆页用）：整叶扫描图 → 版心 x 与置信度（原图坐标，左原点）")
     p.add_argument("image", help="原图路径")
     p.add_argument("--band", default=None, help="只看这段高度 y0,y1（一张图上下两叶时分开找）")
     p.add_argument("--ink-threshold", type=int, default=128)
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("witness-align",
-                       help="[v2] 列级证人对齐：一行一列的整理本 → 逐字位候选标签（现代链播种/评测用）")
+                       help="列级证人对齐：一行一列的整理本 → 逐字位候选标签（现代链播种/评测用）")
     p.add_argument("book")
     p.add_argument("--first-page", type=int, default=None, help="扫描页 1 对应的影印页码")
     p.add_argument("--witness", default=None, help="整理本文件；默认 references[0].file")
 
     p = sub.add_parser("witness-align-stream",
-                       help="[v2] 字流证人对齐：换行与刻本不同的证人（同书异版）→ 逐字位标签")
+                       help="字流证人对齐：换行与刻本不同的证人（同书异版）→ 逐字位标签")
     p.add_argument("book")
     p.add_argument("--witness", default=None, help="证人文件；默认 references[0].file")
     p.add_argument("--min-block", type=int, default=8,
                    help="只收长度 ≥ 这个的 equal 块（默认 8，与 align_label 的 8-gram 同量级）")
 
     p = sub.add_parser("calibrate",
-                       help="[v2] 册级先验复核：measure_* 实测 vs books/<id>.yaml 现值的对照表（不改 yaml）")
+                       help="册级先验复核：measure_* 实测 vs books/<id>.yaml 现值的对照表（不改 yaml）")
     p.add_argument("book")
     p.add_argument("--pages", default=None, help="页号表达式；默认 yaml 的 pages")
     p.add_argument("--with-bottom-gap", action="store_true",
@@ -1553,7 +1323,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--json", default=None)
 
     p = sub.add_parser("survey",
-                       help="[v2] Step0 页面预检：原图尺寸 → 按册中位数标异常页（任务卡 #54 第22条）")
+                       help="Step0 页面预检：原图尺寸 → 按册中位数标异常页（任务卡 #54 第22条）")
     p.add_argument("book")
     p.add_argument("--pages", default=None, help="页号表达式；默认全书（book.pages 或 all_pages）")
     p.add_argument("--ratio-high", type=float, default=None, help="默认 1.3（>= 这个倍数算偏大）")
@@ -1561,7 +1331,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--json", default=None)
 
     p = sub.add_parser("calibrate-font",
-                       help="[v2] 字体判定：标签字位在各套字体来源里的 recall@1/@5 与可分性 margin")
+                       help="字体判定：标签字位在各套字体来源里的 recall@1/@5 与可分性 margin")
     p.add_argument("book")
     p.add_argument("--labels", default=None, help="labels.jsonl；默认 products/<book>/witness_align/labels.jsonl")
     p.add_argument("--editions", default=None, help="逗号分隔的 edition_tag；默认库里全部 kind=font 的来源")
@@ -1580,7 +1350,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--json", default=None)
 
     p = sub.add_parser("seed-witness",
-                       help="[v2] 证人标签 × 字体 top-1 一致 → 播种 modern:<book> 字形库")
+                       help="证人标签 × 字体 top-1 一致 → 播种 modern:<book> 字形库")
     p.add_argument("book")
     p.add_argument("--fonts", default="font:simsun,font:iming", help="逗号分隔的字体 edition_tag（任一 top-1 一致即可）")
     p.add_argument("--labels", default=None)
@@ -1603,36 +1373,24 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "候选检索默认只查 kinds=('woodblock',)，记成 print 会让播进去的字形"
                         "在检索里静默查不到")
 
-    p = sub.add_parser("import-pdf", help="[v2] PDF 逐页抽成灰度 PNG（<out>/<页号>.png）")
-    p.add_argument("pdf")
-    p.add_argument("--out", required=True, help="输出目录")
-    p.add_argument("--mode", choices=["embedded", "render"], default="embedded",
-                   help="embedded（缺省）= 取内嵌图原始像素，扫描 PDF 用这个；"
-                        "render = 按页框渲染，矢量/文字 PDF 用这个（给了 --dpi 即隐含 render）")
-    p.add_argument("--dpi", type=int, default=None,
-                   help="渲染 dpi（隐含 --mode render）；不给且走 render 时按页框 1:1——"
-                        "⚠️ 页框 pt 数不一定等于内嵌图像素数，那样会静默降分辨率")
-    p.add_argument("--pages", default=None, help="只抽这些页，如 1-5,9")
-    p.add_argument("--force", action="store_true")
-
-    p = sub.add_parser("snapshot", help="[v2] 冻结一本书若干步的产物，供下游用 GUJI_PRODUCTS_DIR 读")
+    p = sub.add_parser("snapshot", help="冻结一本书若干步的产物，供下游用 GUJI_PRODUCTS_DIR 读")
     p.add_argument("action", choices=["make", "list"])
     p.add_argument("book")
     p.add_argument("--steps", default=None, help="逗号分隔的步骤 id，默认该书已有的全部步")
     p.add_argument("--name", default=None, help="快照名，默认 <日期-时刻>-<commit>")
 
 
-    p = sub.add_parser("version", help="[v2] 装着的 cv 版本与 pipeline/manager 契约版本（--json 给 manager 用）")
+    p = sub.add_parser("version", help="装着的 cv 版本与 pipeline/manager 契约版本（--json 给 manager 用）")
     p.add_argument("--json", action="store_true")
 
-    p = sub.add_parser("status", help="[v2] 各步各页的新鲜 / 过期 / 缺失")
+    p = sub.add_parser("status", help="各步各页的新鲜 / 过期 / 缺失")
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     p.add_argument("--pages", default="dev_set")
     p.add_argument("--json", action="store_true")
     _add_override(p)
 
-    p = sub.add_parser("book", help="[v2] 册配置：show 看合并后的生效配置与来源层；split 把一组册相同的部分抽成基础配置")
+    p = sub.add_parser("book", help="册配置：show 看合并后的生效配置与来源层；split 把一组册相同的部分抽成基础配置")
     p.add_argument("action", choices=["show", "split"])
     p.add_argument("book", nargs="?", default=None, help="show：册号")
     p.add_argument("--books", default=None, help="split：册号清单，逗号分隔或 vol51-vol99 区间")
@@ -1642,7 +1400,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     _add_override(p)
 
 
-    p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")
+    p = sub.add_parser("export", help="导出（排版输出，归 guji-manager 第五步 output）：md = 逐列文本；format = lines.md/pages.json/norm.json（只读产物）")
     p.add_argument("action", choices=["md", "format"])
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
@@ -1653,30 +1411,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--split-table", default=None, help="format：合扫拆页裁剪表，缺省四庫的 split_table_siku.json")
 
 
-    p = sub.add_parser("fp-migrate",
-                       help="[v2] 路径参数出指纹后只改写 manifest 指纹、不重算（默认干跑）")
-    p.add_argument("book")
-    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
-    p.add_argument("--pages", default="all")
-    p.add_argument("--steps", default=None, help="只迁这几步（逗号分隔）；默认所有带路径参数的步")
-    p.add_argument("--old-path", action="append", default=[], metavar="STEP.FIELD=老值",
-                   help="产出这批产物那台机器上的路径，如 glyph_match.db_path=/home/user/ws/output/glyph.db；"
-                        "可重复。给了就按老路径重算老指纹、逐位相等才改（能证明只有路径变了）")
-    p.add_argument("--trust", action="store_true",
-                   help="不验老指纹（老路径说不清时）：只查上游 sha 与产物 sha。"
-                        "发现不了代码/参数变了，慎用")
-    p.add_argument("--code-formula", action="store_true",
-                   help="2026-10-06 代码指纹改成「只认代码、不认注释和 docstring」后的迁移：每一步按老口径回放指纹，"
-                        "逐位相等（代码、参数、册配置、上游都没变）才改写成新公式，免得各书白白重算")
-    p.add_argument("--apply", action="store_true", help="真写 manifest（缺省干跑）")
-    p.add_argument("--explain", action="store_true",
-                   help="对每个被跳过的页打印 manifest 记录的 upstream 与现算 upstream 的逐键差异"
-                        "（键、两边 sha、现由哪个步产出、记录的 sha 现对应哪个步的产物）；"
-                        "--steps 点到 rare_candidates 时另列其指纹里随机器变的分量")
-    p.add_argument("--json", action="store_true")
-
-
-    p = sub.add_parser("rare", help="[v2] 生僻字候选（单查或 --slots 批量）")
+    p = sub.add_parser("rare", help="生僻字候选（单查或 --slots 批量）")
     p.add_argument("book")
     p.add_argument("page", nargs="?", type=int, default=0)
     p.add_argument("col", nargs="?", type=int, default=0)
@@ -1690,7 +1425,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--comp", action="append", default=[], help="IDS 兜底：任意位置含此部件（可重复）")
 
 
-    p = sub.add_parser("variants", help="[v2] 本书用字账（只读）")
+    p = sub.add_parser("variants", help="本书用字账（只读）")
     p.add_argument("action", nargs="?", default="book", choices=["book"])
     p.add_argument("--edition", default="")
 
