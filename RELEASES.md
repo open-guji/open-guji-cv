@@ -56,6 +56,26 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 
 - `cv-2026.09.26-base`
 
+## v0.8.0
+
+对比 `v0.7.0`。用户 11-21 定升 MINOR（本版起新任务用 v0.8）。v0.7.1–v0.7.93 的 PATCH 明细见 CHANGELOG 各节，这里按主题归并。tag 经 ai-team 中转站打在 main 的发版合并提交上。
+
+### Added
+- 5a 形近字对：按书分类器 `groups/pair_clf.py`（5a.3）、笔画证据 `clustering/stroke_evidence.py`（5-b，缺省关）、库字档 `font.charset.lib_chars`（缺省关）、按刻形改字两件、相似度底座 `glyph_sim_base_v1`、`hou_shape` 小卷积网、字组登记（never_group、sb 组手写否决、zw/ry 等）。
+- seed_admit 书级开关一批（都缺省关、不进参数哈希）：`group_flow_hou_shape_late`、`group_flow_ref_alias`、`lane_shape_first`、`alt_note_region`、`alt_backed_gain`、`vis_ruling_half`、`vis_ruling_ctx_*`；5c 给待审格记 `evidence.vis_ctx`；语料等价登记 `same_output_as`。
+- row_segment／border_detect 书级开关：`alt_cuts`、`alt_nojz`、`roster_grid_slots`、`cut_repair`、`cut_free_seam`、`jiazhu_cc_min`、`head_raise_notch`、`column_warp.inner_b…`，页型表 `no_ref`／`roster_cols`，`jiazhu_step.row_split`。
+- `guji seg check` 页级检查 `gutter_ink`，`eval/seg_screen` 两条墨账；PUA 码表共享层读取侧（`pua_table_pin`）；书级钩子 `follow_ref_hooks.variant_rank` 等；五 patch 线（史記、殿本、全唐文）用的各档发版说明。
+
+### Changed
+- row_segment 1.50–1.54（印边墨、闭口方框字、叠横画数字、细横「一」、列端空格「一」不当框线／空白）；出单门：复审格旧人裁与现行字归一后相同不上单；重跑后覆盖逻辑清查；`status` 过期原因分出「语料钉变了」。
+- 异体边补 16 对兄弟异体；字对关系表 回/迴 定为纯形近。
+- 网站票读中心库 D1 的相关口径（manager v0.5.0 配套；cv 侧只动 `scripts/zhengli`，不进 Step 指纹）。
+
+### Removed
+- 作废版本：v0.7.81（底子错，用 v0.7.82）。
+
+影响：本版新增项都**缺省关**，各书不重跑不变；开了才改识别结果的是 5a/5b/seed_admit 新开关与 row_segment 1.50–1.54。逐步的 `code_hash` 变化见各 PATCH 节；跑哪册要不要重跑，仍以 `guji status` 的过期判断为准。
+
 ## v0.7.0
 
 对比 `v0.6.39`。用户 11-09 定升 MINOR：书级代码搬出 cv（四库字母整数版本号）、模型文件搬出 git。tag 经 ai-team 中转站打在 main 的发版合并提交上。
