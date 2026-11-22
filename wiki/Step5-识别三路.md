@@ -40,3 +40,5 @@ Step4 出来的每个字块，由三路各自去找证据。三路**互相独立
 整理本是**文本证据**：它在场时有一票否决权，但它自己也会错（缺字图占位、异体字录成通行字），所以不能单独放行，要和形状证据凑成双信号。
 
 细节：[doc/design/Step5-7-操作一览.md](https://github.com/open-guji/open-guji-cv/blob/dev/doc/design/Step5-7-操作一览.md)、字形匹配 [doc/design/glyph_match_stack.md](https://github.com/open-guji/open-guji-cv/blob/dev/doc/design/glyph_match_stack.md)、字形库优先设计 [doc/design/glyph_db_first_design.md](https://github.com/open-guji/open-guji-cv/blob/dev/doc/design/glyph_db_first_design.md)。
+
+> **v0.8 新增（书级开关，缺省关）**：5a 有跨书通用相似度底座 `glyph_sim_base_v1`（殿本、史記、全唐文合训）；形近字对判法按字组登记（如 `hou_shape` 判 候／𠋫、`never_group` 登记绝不并组的字对）；5-b 可开「库字档」`font.charset.lib_chars`，把本书字形库人裁过、5-b 自己给不出的字另开一档进候选。
