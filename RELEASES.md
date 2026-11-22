@@ -76,6 +76,8 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 
 影响：本版新增项都**缺省关**，各书不重跑不变；开了才改识别结果的是 5a/5b/seed_admit 新开关与 row_segment 1.50–1.54。逐步的 `code_hash` 变化见各 PATCH 节；跑哪册要不要重跑，仍以 `guji status` 的过期判断为准。
 
+**配底库 b33**（`check_base_corpus.py` 与 b33 一致，65 个文件；比 b32 多 `config/dicts/variants.pairkind.tsv`，已用 `guji corpus build-base` 建好）。钉旧底库的册要改钉 b33，否则起跑被语料校验拒绝。Wiki 已按 v0.8 重改。
+
 ## v0.7.0
 
 对比 `v0.6.39`。用户 11-09 定升 MINOR：书级代码搬出 cv（四库字母整数版本号）、模型文件搬出 git。tag 经 ai-team 中转站打在 main 的发版合并提交上。
