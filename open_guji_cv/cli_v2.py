@@ -1474,7 +1474,9 @@ def _plugin_too_old(module, name: str) -> bool:
 
 
 def register_subcommands(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("pipeline", help="[v2] 跑一条 pipeline（或其中一段）")
+    p = sub.add_parser("pipeline", help="[v2] 跑一条 pipeline（或其中一段）",
+                       epilog="装了 guji-manager 时 pipeline 也是第二步「自动化流程」的命令前缀："
+                              "`guji pipeline <命令> …` 等于 `guji <命令> …`，`guji pipeline commands` 列出本步命令。")
     p.add_argument("pipeline", help=f"pipeline id，如 {DEFAULT_PIPELINE}")
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
     p.add_argument("--from", dest="from_step", default=None, help="起始步骤 id")
@@ -1704,7 +1706,13 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="guji", description="open-guji-cv 四个抽象的 CLI")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     register_subcommands(sub)
-    hint = moved_command_hint(sys.argv[1:] if argv is None else argv, sub.choices)
+    if argv is None:
+        argv = sys.argv[1:]
+    for routed in hooks.call("route", list(argv)):   # 步骤前缀 `guji <步> <命令> …`（manager，见 core/hooks.py）
+        if routed is not None:
+            argv = routed
+            break
+    hint = moved_command_hint(argv, sub.choices)
     if hint:
         print(hint, file=sys.stderr)
         raise SystemExit(2)
