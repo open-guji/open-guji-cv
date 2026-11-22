@@ -1,4 +1,4 @@
-"""feedback/seg_overrides.py：按需读、列级视图、「屏蔽格位表」规则（doc/切分覆盖.md 第三节）。"""
+"""feedback/seg_overrides.py：按需读、列级视图、「屏蔽格位表」规则（doc/2-切字/切分覆盖.md 第三节）。"""
 from __future__ import annotations
 
 from open_guji_cv.feedback import lookup

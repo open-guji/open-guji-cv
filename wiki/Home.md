@@ -44,7 +44,7 @@ guji pipeline keben_body_v2 vol04 --pages 9 -w <工作区>
 guji product overlay vol04 row_segment --page 9 --out p9.png -w <工作区>
 ```
 
-完整流程见仓里 [doc/runbook/整理一册书.md](https://github.com/open-guji/open-guji-cv/blob/dev/doc/runbook/整理一册书.md)。
+完整流程见仓里 [doc/archive/runbook/整理一册书.md](https://github.com/open-guji/open-guji-cv/blob/dev/doc/runbook/整理一册书.md)。
 
 ## Wiki 维护规矩
 

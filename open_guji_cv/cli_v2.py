@@ -913,7 +913,7 @@ def cmd_snapshot(args) -> None:
 
 
 def cmd_version(args) -> None:
-    """装着的 pipeline 版本与契约版本（manager 用它核兼容；`--json` 是契约的一部分，见 doc/契约.md）。"""
+    """装着的 pipeline 版本与契约版本（manager 用它核兼容；`--json` 是契约的一部分，见 doc/参考/契约.md）。"""
     from .api import version_info
     info = version_info()
     if getattr(args, "json", False):
@@ -1252,7 +1252,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="起始：步骤 id 或大步名（layout 版面／cut 切字／read 识字／decide 定字）")
     p.add_argument("--to", dest="to_step", default=None, help="终止（含）：步骤 id 或大步名")
     p.add_argument("--no-prep", action="store_true",
-                   help="不在开跑前备输入（建钉版字形库、备 Step5-b 模板索引）；由 manager 先 prep（拆分 M2，doc/契约.md）")
+                   help="不在开跑前备输入（建钉版字形库、备 Step5-b 模板索引）；由 manager 先 prep（拆分 M2，doc/参考/契约.md）")
     p.add_argument("--no-pack", action="store_true",
                    help="整册（--pages all）从头跑到尾时缺省自动把产物打包存 R2；加这个不存（也可 GUJI_AUTO_PACK=0）")
     _add_pages(p)

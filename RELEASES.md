@@ -192,7 +192,7 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 - guji-proof 0.2 审阅字段模块 `open_guji_cv/review/proof_fields.py`。
 - 统一字组接口 `open_guji_cv/groups/` 与统一评测 `open_guji_cv/eval/groups.py`（尚未被任何 Step 引用）。
 - 字组参数守卫 `tests/test_group_params_guard.py`：不许再往 `SeedAdmitParams` 加新的字组参数。
-- 包分层守卫 `tests/test_architecture.py` 与 `doc/module_map.md`。
+- 包分层守卫 `tests/test_architecture.py` 与 `doc/参考/module_map.md`。
 
 ### Changed
 - 版本号规矩改为 `vX.Y.Z` tag、按 PR 滚动升版（`doc/版本号规矩.md`）。

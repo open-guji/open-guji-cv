@@ -1,4 +1,4 @@
-"""Step 2（单列射影变换 + 去噪）—— 见 `doc/segmentation_v2_pipeline.md`。
+"""Step 2（单列射影变换 + 去噪）—— 见 `doc/经验/切分四步-研发记录.md`。
 
 原 `utils/column_projection`，2026-10-30 切分模块化第 3 步拆开：列矫正与列窗口进 `seg/warp`，列投影／去噪／文字带
 进 `seg/profile`，这里留殿本版式的界行与版框残墨剥法（含双边框那套）、整列清理 `clean_column`、按版框修列顶、

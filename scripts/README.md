@@ -1,6 +1,6 @@
 # scripts/：散脚本索引
 
-> 2026-10-06 cv 大清理（overview#413）生成。**整理一册书请走 `guji` 子命令和 [doc/runbook/整理一册书.md](../doc/runbook/整理一册书.md)**；
+> 2026-10-06 cv 大清理（overview#413）生成。**整理一册书请走 `guji` 子命令和 [doc/archive/runbook/整理一册书.md](../doc/archive/runbook/整理一册书.md)**；
 > 这里的脚本参数约定互不统一，除了下面「runbook 点名」的几个，日常整理不要直接调。
 > 实验和一次性研究在 [../research/](../research/)。
 > 新增脚本时在本文件对应分组加一行；一次性脚本用完请放进 `research/<题目>/`，不要留在这里。

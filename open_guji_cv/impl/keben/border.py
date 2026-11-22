@@ -1,4 +1,4 @@
-"""Step 1（边框探测）的新坐标系接口——见 `doc/segmentation_v2_pipeline.md`。
+"""Step 1（边框探测）的新坐标系接口——见 `doc/经验/切分四步-研发记录.md`。
 
 原 `utils/border_geometry`，2026-10-30 切分模块化第 3 步拆开：数据类型进 `seg/frame_types`，界行折线拟合进
 `seg/polyline`，这里留殿本版式的部分——抬头框、双边外框与下框条、按横带证据把界行回直、整册标定、整页调度

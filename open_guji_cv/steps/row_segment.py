@@ -1294,7 +1294,7 @@ class RowSegmentStep(Step):
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
-        # 列级／格级人定切分一处读（feedback/seg_overrides.py；总表与优先级见 doc/切分覆盖.md）。按需读：职名页只读整列钉子。
+        # 列级／格级人定切分一处读（feedback/seg_overrides.py；总表与优先级见 doc/2-切字/切分覆盖.md）。按需读：职名页只读整列钉子。
         # 裁决不进指纹，该页下次重跑才生效（见 lookup 注）。
         from ..feedback.seg_overrides import SegOverrides
         ov = SegOverrides(ctx.book.id, store=ctx.store)
