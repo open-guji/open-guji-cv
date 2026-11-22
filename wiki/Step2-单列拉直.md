@@ -21,3 +21,5 @@
 挂在这一步上：每列判 ok／疑似／拒，拒的列（比如列宽和本页周期差太多、两列粘在一起）不进 Step3，交人看。闸的判据和分档见 [doc/segmentation_v2_pipeline.md](https://github.com/open-guji/open-guji-cv/blob/dev/doc/segmentation_v2_pipeline.md) Step 2 一节。
 
 代码：`seg/warp.py`（单列射影、列窗口）、`seg/profile.py`（去噪、投影）、殿本的界行残墨剥法在 `impl/keben/column.py`、`column_triage.py`。
+
+> **v0.8 起缺省**：`column_warp.det_warp` 缺省开、`row_segment.cut_judge` 缺省 `unet_f64`（切分开关收敛，2026-11-13 定）。殿本、史記、全唐文早已显式写，结果不变；没写的老书重跑时会按新缺省走。
