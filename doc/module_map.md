@@ -10,7 +10,7 @@
 
 | 层 | 包 | 一句话职责 |
 |---|---|---|
-| L0 基础 | `errors` `variants` `variant_ledger` `gloss` `detectors` `ocr` `hanzi` | 领域错误信号；异体关系图与本书用字账；单字释义；OCR 检测器与 paddle 子进程 worker；**自建汉字关系库 `hanzi`**（字、关系边、IDS 与部件、形近对，离线 sqlite，只用标准库，见 [design/汉字字形与关系库-总设计.md](design/汉字字形与关系库-总设计.md)）。无内部依赖 |
+| L0 基础 | `errors` `variants` `variant_ledger` `gloss` `detectors` `ocr` `hanzi` `pair_kind` | 领域错误信号；异体关系图与本书用字账；单字释义；OCR 检测器与 paddle 子进程 worker；**自建汉字关系库 `hanzi`**（字、关系边、IDS 与部件、形近对，离线 sqlite，只用标准库，见 [design/汉字字形与关系库-总设计.md](design/汉字字形与关系库-总设计.md)）。**字对关系表 `pair_kind`**（形近字两种关系 V 同义异体／C 纯形近的唯一真源，语义表与关系图加载时都套它）。无内部依赖 |
 | L1 设施 | `core` `products` `utils` `formats` `datastore` `strokes` | **Step 引擎**（`Step`／`StepSpec`／`STEPS` 注册表／`Engine`）；**产物仓**（`ProductStore`、`ImageCache`、产物 schema）；通用工具；对外交换格式（guji-page 等）；**中心库**（`datastore`：Postgres 表结构、从 guji-workspace 幂等导入与核对、R2 图片上传，只依赖标准库＋psycopg，不进任何 Step 的 `code_deps`）；**笔画识别 `strokes`**（已知字码时把笔画模板逐笔贴到字块上，出每笔位置、落墨率、独占率；差一笔、量几何两种判据的纯算法，判法外壳在 `groups`；设计见 ai-team `domain/CV/字形领域/笔画识别模块-设计-2026-11-07.md`） |
 | L2 算法与产出 | `clustering` `gold` `report` `render` `pagetype_model` `groups` | 字形匹配/聚类/播种（`clustering`，最大，约 2.4 万行）；金标信封与分片仓；Step9 汇总层；叠图与阅读排版；页型模型；**形近字／异体字组 `groups`**（注册表、方法数组、统一流程 `group_flow`；规范与各组卡见 [字组/](字组/README.md)） |
 | L3 管线 | `steps` `gates` `shadow` `feedback` | 各 Step 的适配（`import open_guji_cv.steps` 即注册全部 Step）；挂在 Step 上的闸；影子放行闸；人裁事件与路由（`EventLog`） |

@@ -27,7 +27,7 @@ PKG = "open_guji_cv"
 #: 层号越小越底层。同层互相 import 不限制。
 LAYER: dict[str, int] = {
     # L0 基础：无内部依赖的小模块
-    "errors": 0, "variants": 0, "variant_ledger": 0, "gloss": 0, "detectors": 0, "ocr": 0, "hanzi": 0,
+    "errors": 0, "variants": 0, "variant_ledger": 0, "gloss": 0, "detectors": 0, "ocr": 0, "hanzi": 0, "pair_kind": 0,
     # L1 设施：Step 引擎、产物 schema、通用工具、格式
     "core": 1, "products": 1, "utils": 1, "datastore": 1,
     # 笔画识别纯算法（模板配准、骨架法）；判法外壳在 groups，strokes 不许反过来 import groups（由「低层不许 import 高层」管）
@@ -94,7 +94,7 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
 SIDE_PIPELINE = "pipeline"
 SIDE_MANAGER = "manager"
 PIPELINE_PKGS: frozenset[str] = frozenset({
-    "errors", "variants", "variant_ledger", "gloss", "detectors", "ocr", "hanzi",
+    "errors", "variants", "variant_ledger", "gloss", "detectors", "ocr", "hanzi", "pair_kind",
     "core", "products", "utils", "seg", "strokes", "impl", "clustering", "pagetype_model", "groups",
     "gates", "steps", "shadow", "api", "__main__", "preflight",
     # 拆分 P6（2026-11-04）：manager 一侧已全部搬去 guji-manager，下面这些包里留下的都是 pipeline——
