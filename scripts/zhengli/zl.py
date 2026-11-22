@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """整理一册书：执行脚本（runbook v2 的机器化）。只用标准库，装好 venv 之前也能跑 `env` 步。
 
-用法（详见 doc/runbook/整理一册书.md）：
+用法（详见 doc/archive/runbook/整理一册书.md）：
   python scripts/zhengli/zl.py plan   --book vol05 --ws <ws>            # 看还剩哪些步
   python scripts/zhengli/zl.py run    --book vol05 --ws <ws> --bg       # 从头/断点续跑到第一个要人的闸
   python scripts/zhengli/zl.py run    --book vol05 --ws <ws> --only audit

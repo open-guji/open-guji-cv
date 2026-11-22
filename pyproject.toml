@@ -97,7 +97,7 @@ pdf = [
 ]
 # 影子放行闸（steps/seed_admit 的 shadow_veto，缺省关）、页型模型闸（border_detect_gate 的 pagetype_model，缺省关）
 # 与其训练/评估脚本要 scikit-learn（joblib 随它装）；
-# 不开 shadow_veto 就不需要。模型文件口径闸要求 major.minor 与训练一致（见 doc/shadow_gate.md）。
+# 不开 shadow_veto 就不需要。模型文件口径闸要求 major.minor 与训练一致（见 doc/4-定字/shadow_gate.md）。
 shadow = [
     "scikit-learn>=1.5",
     "pandas>=2.0",
@@ -122,9 +122,8 @@ dev = [
 ]
 
 [project.scripts]
-# python -m open_guji_cv 的 CLI 包装
-guji-cv = "open_guji_cv.__main__:main"
-# 四个抽象的 CLI（pipeline / step / status / cache …；console 由 guji-console 插件提供），同样的子命令也挂在 guji-cv 下
+# 唯一入口 guji（2026-11-22 删了 guji-cv）；guji-manager、guji-console 经插件并进来。
+# `python -m open_guji_cv` 只留给隔离步骤的子进程内部用，不对外写。
 guji = "open_guji_cv.cli_v2:main"
 
 [project.urls]
