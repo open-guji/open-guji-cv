@@ -18,7 +18,7 @@ from pathlib import Path
 from . import registry as R
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "doc" / "字组" / "字组总表.md"
+OUT = ROOT / "doc" / "4-定字" / "字组" / "字组总表.md"
 KIND = {"variant": "同义", "near_form": "不同义"}
 
 
