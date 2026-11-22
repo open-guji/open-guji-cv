@@ -251,7 +251,7 @@ def _g2(gid: str) -> tuple:
 #: - 补放须文意或数横给字（`lift_needs`）：整字 HOG 在列尾格会把边框线当成第二横（vol08:7:6:21），不许单独补放；
 #: - 整理本是组里另一个字就不补放（`lift_ref_veto`）：字块切错时两路字形一起错（vol19:116:9:8）；
 #: - 复核：任何一路给了另一个字就降审（只降不改）。
-#: vol04–20 已放行 7,545 格：数横给字 7,148、与放行字 0 不一致。见 `doc/4-定字/字组/yr.md`。
+#: vol04–20 已放行 7,545 格：数横给字 7,148、与放行字 0 不一致。见 `doc/字组/yr.md`。
 #: - 陪衬 子（A24 N01 11-08，第 7 轮复查）：一 的字块被库排成「二 1.000、一 1.000、子 0.97–0.98」（二能盖住一横），子 落在 delta 内又不是组员，
 #:   这类格进不了组、只能停在待审（护栏 conflict，N01）。殿本 35 格目视全是单横「一」；加进陪衬后只放宽进入，给字仍凭数横／文意。
 _YR_FLOW = FlowSpec((CTX, _img("yr"), YR_BARS), review=True, lift_needs=("ctx", "yr_bars"), lift_ref_veto=True,
@@ -260,7 +260,7 @@ _YR_FLOW = FlowSpec((CTX, _img("yr"), YR_BARS), review=True, lift_needs=("ctx", 
 #: 木本（2026-10-27，A24「压低木本送审」）：文意定字，字形库分不开（夹注小字 本 被库排成 木 1.00）。
 #: - 两条以上 L1 规则同说一个字算 strong（`rule_strong=2`）：复核改字（`review_fix_strong`）、补放越过整理本（`strong_over_ref`）；
 #: - 一条规则＋整理本同字也改字（`review_fix_ref_rule`）；其余照旧降审。
-#: 全册 main 包 60 册离线回放：送审 113→33，改字／补放 83 格逐格看图 0 错。见 `doc/4-定字/字组/mb.md`。
+#: 全册 main 包 60 册离线回放：送审 113→33，改字／补放 83 格逐格看图 0 错。见 `doc/字组/mb.md`。
 _MB_FLOW = FlowSpec((CTX, *_g2("mb")), review=True, review_fix_strong=True, strong_over_ref=True, rule_strong=2,
                     review_fix_ref_rule=True)
 
@@ -772,7 +772,7 @@ class Provisional:
 
 #: 暂归一兜底表（2026-10-27，A24「收尾同义形近字组送审」）：只收同义（`kind="variant"`）组，`to` 取 vol07–99 重落后放行最多的字形
 #: （已在书级 `codepoints` 暂归一的组取归到的字）。意思不同的字绝不进 `forms`：讖識䜟 的 識、
-#: 陪衬（家 卿 徵 刖 鍾…）都不在里面。登记见 cv `doc/4-定字/字组/README.md` 第二节「暂归一兜底」。
+#: 陪衬（家 卿 徵 刖 鍾…）都不在里面。登记见 cv `doc/字组/README.md` 第二节「暂归一兜底」。
 PROVISIONAL: dict[str, Provisional] = {
     gid: Provisional(to, frozenset(forms), gap=gid in {"yi_560", "qing"}, follow_ref=gid in {"can", "ba", "dian"},
                      ref_forms=frozenset("𭶑") if gid == "dian" else frozenset(),

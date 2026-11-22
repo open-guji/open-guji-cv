@@ -86,7 +86,7 @@ SPECS: dict[str, IdsSpec] = {
     #   单一方法按册留出都有高把握错（整字 HOG 错例到 1.5、IDS 一刀 0.1），改两刀（第二刀去「人」只比最下块）＋整字 HOG 两路一致：
     #   按册留出 702 格，整字 ≥0.4 且 IDS ≥0.03 起 0 错（两路同判错的最高 整字 1.38 但 IDS 只 0.011、IDS 最高 0.050 但整字 0.37）；
     #   取 整字 0.55、IDS 0.04 → 给 503（叅 273／㕘 155／參 75）、0 错。
-    #   建库 research/m7/glyph_expand/build_can_dual.py。见 doc/4-定字/字组/can.md。
+    #   建库 research/m7/glyph_expand/build_can_dual.py。见 doc/字组/can.md。
     "can": IdsSpec(frame="⿱厽{}", orient="h", prior=0.52, min_margin=0.04, sub_prior=0.45, dual=0.55, size=32, clean=True),
     # 以下几组（2026-10-20）：模板＝sheldon 合审裁过的殿本 vol04–10 格（中心库 confirm 事件），按字分类（by_form）。
     # 教敎（2026-10-21，sheldon 提示「差别在左上角」）：**整字里只取左上角一块做 HOG**（region 左 0–55%、上 0–46%，sheldon 在取框页调的）＋岭回归，
@@ -259,12 +259,12 @@ SPECS: dict[str, IdsSpec] = {
     "suo": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=5, whole="hog", region=(0.4, 1.0, 0.0, 0.5), lam=1.0, size=48,
                    clean=True),
     # 隱𨼆、算𮅕、闗關（2026-10-25，A24 vol21–50 首跑 V 类）：字形库没有少的一形，库排成常见形或别的字；模板＝殿本 vol21–50 已放行格
-    #   （每册每字 ≤12）＋送审格看图补标，建库 build_shape_pair.py。门槛与区域见 doc/4-定字/字组/ 同名卡。
+    #   （每册每字 ≤12）＋送审格看图补标，建库 build_shape_pair.py。门槛与区域见 doc/字组/ 同名卡。
     "yin": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.85, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "suan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.95, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "guanm": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     # 派𣲖、奇竒、歲嵗（2026-10-26，A24 vol51–99 首跑 V 类）：模板＝殿本 vol51–99 已放行格（每册每字 ≤12）＋陪衬，首轮留出错例看图改标；
-    #   按册留出 派𣲖 歲嵗 0.5 起 0 错；奇竒 陪衬 苛 判成 竒 最高 0.91 → 1.0（放行格每字 ≤160）。见 doc/4-定字/字组/ 同名卡。
+    #   按册留出 派𣲖 歲嵗 0.5 起 0 错；奇竒 陪衬 苛 判成 竒 最高 0.91 → 1.0（放行格每字 ≤160）。见 doc/字组/ 同名卡。
     "xuan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.35, min_class=8, whole="hog", region=(0.25, 1.0, 0.0, 0.8), lam=1.0,
                     size=48, clean=True),
     "fu": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.2, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
@@ -287,13 +287,13 @@ SPECS: dict[str, IdsSpec] = {
     "huiq": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     # 勢𫝑、發𤼵（2026-10-26，A24，sheldon 定按刻形分拆）：放行格两形混放，标签全是 sheldon 在标注页逐格过的（dataset variant/{shi,fa}）。
     #   勢𫝑 只差左上 坴／幸，整字 48：按册留出 167 格 0.4 起 0 错，取 0.5（给 122）。
-    #   發𤼵 右下 殳／矢，取右下框：按册留出 505 格（含陪衬 登務條）0.5 起 0 错（𤼵 给对 77／80）。见 doc/4-定字/字组/shi.md、fa.md。
+    #   發𤼵 右下 殳／矢，取右下框：按册留出 505 格（含陪衬 登務條）0.5 起 0 错（𤼵 给对 77／80）。见 doc/字组/shi.md、fa.md。
     #   10-26 补 vol51–99：勢𫝑 310 格 0.4 起 0 错，仍取 0.5；發𤼵 660 格最高错例 0.89（vol87:127:7:8 刻 矢、判 殳），门槛提到 0.9。
     "shi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "fa": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.9, min_class=8, whole="hog", region=(0.4, 1.0, 0.4, 1.0), lam=1.0,
                   size=48, clean=True),
     # 码位已定仍送审的形近族（2026-10-26，A24 全册任务 04）：整理本作 鄉鄕／㣲微／別别／鎭鎮、库首位是形近的另一个字（卿 徵徴 刖則所 鍾愼…）。
-    #   两码位并一类，形近字当陪衬进库（判成它们＝弃权），整字 48×48 一对多。门槛按册留出定，见 doc/4-定字/字组/ 同名卡。
+    #   两码位并一类，形近字当陪衬进库（判成它们＝弃权），整字 48×48 一对多。门槛按册留出定，见 doc/字组/ 同名卡。
     "xiang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "weim": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", region=(0.2, 0.75, 0.2, 1.0), lam=1.0,
                     size=48, clean=True),

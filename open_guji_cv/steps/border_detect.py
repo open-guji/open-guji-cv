@@ -538,7 +538,7 @@ class BorderDetectStep(Step):
                    "frame_layers", "columns"),
         # 纯函数：读原图算完直接返回，无实例级缓存、无数据库/模型一次性初始化，
         # `scripts/parallel_border_detect.py` 已验证页级并行与串行 sha256 逐位一致
-        # （2026-09-17，见 doc/经验/切分四步-研发记录.md「Step 1 性能」）。
+        # （2026-09-17，见 doc/segmentation_v2_pipeline.md「Step 1 性能」）。
         parallel_safe=True,
     )
 
