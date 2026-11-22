@@ -53,10 +53,13 @@
 
 ## [未发版]
 
+## [0.8.0] - 2026-11-21
+
+- **MINOR**（Sheldon 11-21 定升 0.8）：v0.7.0 以来的累积（书级开关与钩子、5a/5b 形近字对与库字档、字组与 never_group 登记、切分与出单门修复、网站票读中心库 D1 等）；本版起新任务用 v0.8。各档 PATCH 明细见下面 [0.7.x] 各节，影响见 RELEASES.md v0.8.0。
+
 ## [0.7.93] - 2026-11-21
 
-- 发版说明（全唐文 patch 线，形近字线 11-21，PATCH）：v0.7.92 ＋ #1778。Step 指纹对 v0.7.92 不变（seed_admit 已登 code_equiv）；全唐文 book_defaults 开 `seed_admit.group_flow_hou_shape_late: true` 后 seed_admit 起过期。配底库照 b32。
-- PATCH：seed_admit 加书级 `group_flow_hou_shape_late`（缺省关、关时不进参数 dump；#1778）：5c vis_ruling 放行后对还没有 `evidence.hou_shape` 的已放行非人裁 候／𠋫 格补跑刻形判。原先 5c 补放的 候 没被 hou_shape 判过，最后码位归一 候→𠋫 一律落成 𠋫（全唐文 ve1 044:66:8:7、053:23:9:6、053:34:2:9）；ve1 回放受影响 20 格：17 格 𠋫 不变、3 格改 候，0 错。
+- 发版说明（全唐文 patch 线，形近字线 11-21，PATCH）：v0.7.92 ＋ #1778（seed_admit 书级 `group_flow_hou_shape_late`，5c vis_ruling 后补跑 hou_shape，缺省关）；dev 已含 #1778。
 
 ## [0.7.92] - 2026-11-21
 

@@ -21,6 +21,18 @@
 
 每个 MINOR 一段：这一版多了什么。逐版细节见仓里 [CHANGELOG.md](https://github.com/open-guji/open-guji-cv/blob/dev/CHANGELOG.md)（含全部 PATCH）和 [RELEASES.md](https://github.com/open-guji/open-guji-cv/blob/dev/RELEASES.md)（MINOR 的发版说明）。
 
+### v0.8（2026-11-21，v0.8.0）
+
+- **新任务一律用 v0.8**：v0.7.0 以来 93 个 PATCH（11-10 到 11-21）累积，其中殿本、史記、全唐文各有自己的 patch 线。
+- **书级开关与钩子继续增加**：殿本职名页格网占号（`roster_grid_slots`）、全唐文丢笔两个开关、印框压格记空、整理本字别名 `group_flow_ref_alias` 等；缺省都关、不进参数哈希，不影响没用的书。
+- **切分开关收敛**：`det_warp`、`cut_judge=unet_f64` 缺省改开（见 Step2）。
+- **形近字与字形库**：5a 通用相似度底座、`hou_shape` 刻形判法、`never_group` 登记、字形库体检加「清边不变式」、库字档（见 Step5、字组与异体）。
+- **册 yaml 记缺页**：`gaps:` 只按图片页号记，导出时带出。
+- **人裁回流**：网站票改读中心库（D1），不再经 KV；绑定加迁移补锚闸，旧格号人裁不再静默挂到邻格。
+- **底库 b33**：新增 `config/dicts/variants.pairkind.tsv`；钉旧底库的册要换钉 b33。
+
+**本次 Wiki 改写（2026-11-21）**：Home 版本号、中心库说法（不再写 Neon）、Step2／Step5 补 v0.8 缺省与新开关说明。逐页截图未重出（切分结果逐字不变，殿本／史記／全唐文的例页仍对得上）。
+
 ### v0.7（2026-11-10，v0.7.0）
 
 - **书级代码**：只给一本书用的切分代码搬出 cv，进各书工作区仓 `code/`，有自己的整数版本号 `k<N>`（tag 走中转站）；cv 留三条版式的缺省实现 `impl/keben|modern|free`（原 `books/siku_zongmu|beixing|zengguang_youxue`），书仓 `code/` 为空也能跑。史記、全唐文已搬（k1；史記 k2 把印泥、雙行小注两行字数可不等也搬了过去）。共用 Step 不再加单书开关，改留钩子（`jiazhu_step`、`seal_ink`）。
