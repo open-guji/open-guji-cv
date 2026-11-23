@@ -290,7 +290,7 @@ def main() -> int:
     ap.add_argument("--all", action="store_true", help="report 含体检标记格")
     ap.add_argument("--fold-variants", action="store_true", help="report 把语义异体与 SAME_SHAPE_QTW 当同字")
     ap.add_argument("--out", default=None)
-    ap.add_argument("--model", help="cnn：5a 相似度 CNN 权重（如 models/glyph_sim_qtw/model.pt）")
+    ap.add_argument("--model", help="cnn／run：5a 相似度 CNN 权重（如 models/glyph_sim_qtw/model.pt）；run 带上就多报一路")
     ap.add_argument("--name", default="cnn", help="cnn：分数名（存 s_<name>.pkl，report 时用）")
     a = ap.parse_intermixed_args()
     work = Path(a.work)
@@ -302,6 +302,9 @@ def main() -> int:
         score(work, ["prod", "el_tau3", "fast"], a.procs)
         fit(work)
         names = ["prod", "el_tau3", "fast7_oof"]
+        if a.model:   # 生产里用 CNN 的书（全唐文 sim_model）一并报，名字取 --name
+            score_cnn(work, a.model, a.name)
+            names.append(a.name)
         rep = {"strict": report(work, names, a.all), "fold_variants": report(work, names, a.all, True)}
         if a.out:
             Path(a.out).write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
