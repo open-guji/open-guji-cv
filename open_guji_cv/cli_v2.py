@@ -488,53 +488,6 @@ def cmd_status(args) -> None:
         show(val)
 
 
-def cmd_export(args) -> None:
-    """`guji export md|format <册>`：把 runbook 里两条易错的散脚本收成固定口径（overview#413 C2）。
-
-    md     → scripts/render_guji_markdown.py（全部页逐个列出，不用手抄页号）→ reports/<册>/<册>.md
-    format → scripts/export_guji_format.py（章号、meta、拆页表按约定自动填）→ lines/pages/norm
-    两者都只读产物。子进程跑原脚本，口径与直接调脚本完全一致。
-    """
-    import subprocess
-    from .core.workspace import products_root, reports_root
-    repo = Path(__file__).resolve().parents[1]
-    scripts = repo / "scripts"
-    eng = _engine(args.book, args.pipeline, quiet=True)
-    pages = eng.book.resolve_pages(args.pages)
-    book = eng.book.id
-    out_dir = Path(args.out) if args.out else reports_root() / book
-    out_dir.mkdir(parents=True, exist_ok=True)
-    # 只导有 Step7 产物的页（目录、空白页等没跑到 seed_admit 的页跳过，免得整条命令因缺产物退出）
-    have = {int(f.stem[1:]) for f in (products_root() / book / "seed_admit").glob("p*.json")}
-    skipped = [p for p in pages if p not in have]
-    pages = [p for p in pages if p in have]
-    if skipped:
-        print(f"（跳过 {len(skipped)} 页：没有 seed_admit 产物 {skipped[:10]}{'…' if len(skipped) > 10 else ''}）",
-              file=sys.stderr)
-    if not pages:
-        print("✗ 没有可导出的页（seed_admit 产物为空）", file=sys.stderr); sys.exit(1)
-    if args.action == "md":
-        cmd = [sys.executable, str(scripts / "render_guji_markdown.py"), book, *map(str, pages),
-               "--out", str(out_dir / f"{book}.md")]
-    else:
-        from .core.volume_id import chapter_of
-        chapter = chapter_of(book, args.chapter)
-        if not chapter:
-            print(f"✗ 册号 {book} 推不出章号：册 yaml 写上 volume，或给 --chapter NNN", file=sys.stderr); sys.exit(2)
-        meta = Path(args.meta) if args.meta else repo / "doc/formats/samples/guji_format_v0.1" / f"meta_{book}.json"
-        if not meta.exists():
-            print(f"✗ 没有 meta：{meta}。照同目录 meta_vol03.json 改 volume 两项另存，或用 --meta 指定", file=sys.stderr)
-            sys.exit(2)
-        split = Path(args.split_table) if args.split_table else repo / "doc/formats/samples/guji_page_v0.2/split_table_siku.json"
-        cmd = [sys.executable, str(scripts / "export_guji_format.py"), "--products", str(products_root()),
-               "--book", book, "--chapter", chapter, "--meta", str(meta), "--out", str(out_dir),
-               "--pages", ",".join(map(str, pages))]
-        if split.exists():
-            cmd += ["--split-table", str(split)]
-    print("→ " + " ".join(cmd[1:]), file=sys.stderr)
-    sys.exit(subprocess.run(cmd).returncode)
-
-
 def cmd_locate_gutter(args) -> None:
     """版心定位（给拆页用，#174）：输入原图，输出版心 x 与置信度。只定位、不裁图、不接管线。
     判据见 `seg/locate_gutter.py`（竖线复用 Step1 的 find_vertical_lines）。"""
@@ -938,7 +891,6 @@ COMMANDS_V2 = {
     "step": cmd_step,
     "status": cmd_status,
     "book": cmd_book,
-    "export": cmd_export,
     "rare": cmd_rare,
     "variants": cmd_variants,
     "snapshot": cmd_snapshot,
@@ -1162,6 +1114,7 @@ MOVED_TO_MANAGER: dict[str, str] = {
     "product": "拆分 P4 第六批，2026-11-04",
     "products": "拆分 P4 第六批，2026-11-04",
     "perf": "拆分 P4 第六批，2026-11-04",
+    "export": "原 Step9 排版输出，2026-11-23（cv v0.9.0）；现为 guji output export",
 }
 #: 搬走的命令要 guji-manager 至少哪一版（`guji_manager.__version__`）。旧版 manager 里可能留着早先复制的过期副本
 #: （如云端快照 10-27 的种子带着当时的 opinions），版本不够就不认它的这条命令、提示更新，免得悄悄跑旧逻辑。
@@ -1398,17 +1351,6 @@ def register_subcommands(sub: argparse._SubParsersAction, plugins: bool = True) 
     p.add_argument("--effective", action="store_true", help="show：打印合并后的完整配置并标注来源层")
     p.add_argument("--json", action="store_true")
     _add_override(p)
-
-
-    p = sub.add_parser("export", help="导出（排版输出，归 guji-manager 第五步 output）：md = 逐列文本；format = lines.md/pages.json/norm.json（只读产物）")
-    p.add_argument("action", choices=["md", "format"])
-    p.add_argument("book")
-    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
-    p.add_argument("--pages", default="all")
-    p.add_argument("--out", default=None, help="输出目录；缺省 reports/<册>/")
-    p.add_argument("--chapter", default=None, help="format：章号 NNN，缺省按 volNN 推")
-    p.add_argument("--meta", default=None, help="format：缺省 doc/formats/samples/guji_format_v0.1/meta_<册>.json")
-    p.add_argument("--split-table", default=None, help="format：合扫拆页裁剪表，缺省四庫的 split_table_siku.json")
 
 
     p = sub.add_parser("rare", help="生僻字候选（单查或 --slots 批量）")

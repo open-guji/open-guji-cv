@@ -14,4 +14,4 @@
 - 形近字组：[字组/](字组/README.md)；设计见 [形近字组-5a分流与第7步对接](../design/形近字组-5a分流与第7步对接.md)、[形近字组-按对分类器](../design/形近字组-按对分类器.md)、[variant_strategy](../design/variant_strategy.md)。
 - 相关设计：[14-准确率优先-Step6与Step7重设计](../design/14-准确率优先-Step6与Step7重设计.md)、[降人审漏斗-管线侧对照](../design/降人审漏斗-管线侧对照.md)、[15-人裁锚定与重切后重绑定](../design/15-人裁锚定与重切后重绑定.md)。
 
-原第 8 步（人裁事件回流、入库）和第 9 步（排版输出、`guji export`）已移到 guji-manager：入库归它的第二步 `pipeline`，排版输出归第五步 `output`。cv 里 `report/`、`feedback/` 的代码暂留，作为库函数给 manager 调。
+原第 8 步（人裁事件回流、入库）和第 9 步（排版输出）已移到 guji-manager：入库归它的第二步 `pipeline`，排版输出归第五步 `output`（`guji output export md|format|wikisource|reflow`、`guji output collation-report`）。第 9 步的代码（导出、对勘、体检表）在 cv v0.9.0 整个搬进 manager `guji_manager/output/`；cv 只留字位流 `report/slots.py` 和整理本 `report/witness.py`，`feedback/` 留作库函数给 manager 调。
