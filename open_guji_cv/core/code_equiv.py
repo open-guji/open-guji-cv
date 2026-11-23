@@ -2383,6 +2383,12 @@ ENTRIES: tuple[Equiv, ...] = (
           new="e7a452410888e9e1fe042432bcbfa62352ab6fd1910d22852bad34fe40195873",
           old="910317f58be2061fbe06468ba3abf2de685e6250440b1008b8308fd37561fa4b",
           evidence=_FRAME_1123),
+    # v0.7.95（殿本 patch 线 = v0.7.94 + dev #1814 移植）：seed_admit 加 ref_lib_5b_veto（缺省 None＝关、关时不进 dump、分支不执行），按本线哈希登记（A20 2026-11-23）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='340e78ad61651d216cd9cc3db77ae72c983c464e2f02943cee0d28159d1a746a',
+          old='d2026a75ec5c0f97f5e47c4cff41a9de5c4678d96f70a83da285197be0f5ac07',
+          evidence='与 dev #1814 同一改动按本线移植（dev 上已证殿本 vol20 7 页 seed_admit 与 origin/dev 逐字节相同）；'
+                   '本线缺省 SeedAdmitParams().model_dump() 与 v0.7.94 相同（tests/test_seed_admit_ref_lib_5b_veto.py），开关关时新分支不执行'),
 )
 
 
