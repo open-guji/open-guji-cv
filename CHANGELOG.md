@@ -76,6 +76,10 @@
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
 
+## [0.7.95] - 2026-11-23
+
+殿本 patch 线：v0.7.94 ＋ dev #1814（seed_admit 书级开关 `ref_lib_5b_veto`／`ref_lib_5b_veto_lead`，缺省关）。「整理本＝库首位」放行（`ref_lib`）的格，5-b 首位是别的汉字、分 ≥ 门槛、领先 ≥ 门槛（缺省 0.02）→ 退回人审（doubt `ref_lib_5b_veto`），只降级。供殿本带它重跑 5a A/B（CV3 11-23）。本线 seed_admit 还没拆出 `seed_admit_params`，按本线结构手工移植（去键照 `_drop_off_rare` 原写法）。**开关关着时产物不变**：seed_admit 代码哈希 d2026a75→340e78ad 已登 code_equiv，其余各步 code_hash 与 v0.7.94 相同，底库 b29 不变。
+
 ## [0.7.94] - 2026-11-23
 
 - 发版说明（殿本 patch 线，ZM 11-23，PATCH）：v0.7.90 ＋ 模型表补回 `glyph_sim_base_v1`（model_pack KINDS、model-registry 两行、provenance，照 v0.7.89），供殿本 5a 新相似度 A/B 的 C 臂从 R2 取模型。各步 code_hash 与 v0.7.90 相同，底库 b29。
