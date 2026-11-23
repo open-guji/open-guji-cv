@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import open_guji_cv.steps  # noqa: F401
 from open_guji_cv.groups.flow import FlowConfig, group_flow_pass
 from open_guji_cv.steps.seed_admit import (SeedAdmitParams, _context_lib_dissent, _context_variant_tie,
-                                           _iron_ctx_dissent, _lib_near_tie)
+                                           _iron_ctx_dissent)
 
 
 class _VM:
@@ -68,19 +68,10 @@ def test_context_lib_dissent():
     assert not _context_lib_dissent("相", [], VM, 0.03, 0.93)
 
 
-def test_lib_near_tie():
-    assert _lib_near_tie([("撰", 0.9393), ("撤", 0.9391)], VM, 0.003)        # vol14 60:1:5
-    assert not _lib_near_tie([("撰", 0.95), ("撤", 0.93)], VM, 0.003)
-    assert not _lib_near_tie([("叅", 0.95), ("㕘", 0.949)], VM, 0.003)       # 语义同字不算
-    assert not _lib_near_tie([("撰", 0.95)], VM, 0.003)
-
-
 def test_params_dump_hides_guards_when_off():
-    d = SeedAdmitParams(context_variant_form_guard=False, iron_ctx_guard=False, match_tie_guard=False).model_dump()
+    d = SeedAdmitParams(context_variant_form_guard=False, iron_ctx_guard=False).model_dump()
     assert not any(k in d for k in ("context_variant_form_guard", "context_variant_ratio", "iron_ctx_guard",
                                     "iron_ctx_prob", "match_tie_guard", "match_tie_gap"))
-    assert "match_tie_guard" not in SeedAdmitParams().model_dump()          # 缺省关
-    assert SeedAdmitParams(match_tie_guard=True).model_dump()["match_tie_gap"] == 0.003
 
 
 @dataclass

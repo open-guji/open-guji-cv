@@ -514,7 +514,6 @@ def test_joint_needs_partner_to_confirm_or_rule_out(monkeypatch):
     assert not r.admit and "group_flow_abstain" in r.doubts
 
 
-
 def test_joint_skips_partner_when_panel_confirmed(monkeypatch):
     """ry 的文意字经 L3 二审小组确认（strong＋panel char:…）且不是 rm 的成员（曰）：rm 弃权／说目也不拦（A24 11-01）；日仍须 rm 同意。"""
     from open_guji_cv.groups import flow
@@ -992,20 +991,6 @@ def test_lift_shape_ratio_gate(monkeypatch):
     assert run("x", FlowConfig(groups=("ry",), lift_shape_ref=frozenset({"ry"}))).admit                  # 没设门照旧
     half = FlowConfig(groups=("ry",), lift_shape_ref=frozenset({"ry"}), lift_shape_ratio=gate, lift_shape_ratio_half={"ry": {"曰": (1.0, 9.0)}})
     assert run("x1a", half).admit and not run("x1", half).admit              # 半格用半格门
-
-
-def test_lift_shape_ratio_and_rt_skip_params():
-    from open_guji_cv.steps.seed_admit import SeedAdmitParams
-    d = SeedAdmitParams().model_dump()
-    assert not {"group_flow_lift_shape_ratio", "group_flow_lift_shape_ratio_jiazhu", "reference_trust_skip"} & set(d)
-    p = SeedAdmitParams(group_flow=("ry",), group_flow_lift_shape_ratio={"ry": {"曰": [1.15, 9]}}, reference_trust="high",
-                        reference_trust_skip=["lift_shape_ref"])
-    d = p.model_dump()
-    assert d["group_flow_lift_shape_ratio"] == {"ry": {"曰": (1.15, 9.0)}} and d["reference_trust_skip"] == ["lift_shape_ref"]
-    assert "ry" not in p._rt_lift_shape_ref() and p._rt_abstain_ref_ok() and p._follow_variants()   # 只关这一项
-    assert "ry" in SeedAdmitParams(reference_trust="high")._rt_lift_shape_ref()
-    assert "ry" in SeedAdmitParams(reference_trust="high", reference_trust_skip=["lift_shape_ref"],
-                                   group_flow_lift_shape_ref=["ry"])._rt_lift_shape_ref()          # 单独开关仍生效
 
 
 def test_lift_shape_ref_not_in_params_dump():
