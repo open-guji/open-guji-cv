@@ -363,6 +363,10 @@ _NOTCH_1120 = ("border_detect 加 head_raise_notch（缺口列认主上框，imp
                "vol28 13 页（1,4,5,8,9,10,17,22,40,80,120,160,190，含缺口页 4/5/8/9/10/17/22；main 包 cv0.7.70-c36-g24-m3-r14cells 当上游）border_detect 与 origin/dev ced51c3 "
                "产物逐字节相同；column_warp 只调 impl/keben/border 里没改的函数；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-20（A22）")
 
+_FRAME_1123 = ("版面框型规则：册配置 frame_layers 支持 1（单线）、新增 side_frame（左右外框按页码奇偶）、borders 加可选字段 v_outer_estimated（False 不落盘）；"
+               "没写新配置的册走原路径：殿本 vol01 1–204、vol40 1–174 的 border_detect，vol40 1–40 的 border_detect_gate／column_warp，"
+               "与 dev d535a4b 产物逐字节相同；中心库无册写 frame_layers 1 或 side_frame；2026-11-23（A20 审；cv #1813）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1802,6 +1806,9 @@ ENTRIES: tuple[Equiv, ...] = (
           old='d2026a75ec5c0f97f5e47c4cff41a9de5c4678d96f70a83da285197be0f5ac07',
           evidence='与 dev #1814 同一改动按本线移植（dev 上已证殿本 vol20 7 页 seed_admit 与 origin/dev 逐字节相同）；'
                    '本线缺省 SeedAdmitParams().model_dump() 与 v0.7.94 相同（tests/test_seed_admit_ref_lib_5b_veto.py），开关关时新分支不执行'),
+    Equiv(module='open_guji_cv.steps.border_detect', new='TBD1', old='d1e2b0bb6f9f2112b97982d5292b91a0e63fd3052958c1488453bee6cb019834', evidence=_FRAME_1123),
+    Equiv(module='open_guji_cv.impl.keben.border', new='TBD2', old='dcc3f23d5ce58621db0a8bb9be9c6fc360cdbe86a2c5abacb42ba97fd4177352', evidence=_FRAME_1123),
+    Equiv(module='open_guji_cv.seg.frame_types', new='TBD3', old='TBD4', evidence=_FRAME_1123),
 )
 
 

@@ -325,6 +325,10 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     # 只在开启时写这个键：关着的册（四庫等）指纹逐位不变，不触发全量重跑。
     if getattr(book, "binarized_input", False):
         payload["bin_input"] = True
+    # 左右外框规则 `side_frame`（版面，2026-11-23）：只给 border_detect、且写了的册加键，没写的册指纹逐位不变
+    # （不进 `book_deps`，同 rare_charset，见 core/ref_profile.py 模块头）。
+    if step.spec.id == "border_detect" and getattr(book, "side_frame", None):
+        payload["side_frame"] = dict(sorted(book.side_frame.items()))
     # Step5-b 的字表语料由册配置 `rare_charset` 指定（参校本属性 C 块）：只在写了的册加键，没写的册指纹逐位不变
     # （不进 `book_deps`，那会让所有册指纹变，见 core/ref_profile.py 模块头）。
     if step.spec.id == "rare_candidates" and getattr(book, "rare_charset", None):
