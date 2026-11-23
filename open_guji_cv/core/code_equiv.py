@@ -2389,6 +2389,13 @@ ENTRIES: tuple[Equiv, ...] = (
           old='d2026a75ec5c0f97f5e47c4cff41a9de5c4678d96f70a83da285197be0f5ac07',
           evidence='与 dev #1814 同一改动按本线移植（dev 上已证殿本 vol20 7 页 seed_admit 与 origin/dev 逐字节相同）；'
                    '本线缺省 SeedAdmitParams().model_dump() 与 v0.7.94 相同（tests/test_seed_admit_ref_lib_5b_veto.py），开关关时新分支不执行'),
+    Equiv(module='open_guji_cv.gates.border_detect_gate',
+          new='ed2327519cc6b2ba7328b746bd4146eff832764286f81b71f67122a43bd11fb8',
+          old='803fcffb9dfc915e1ba80512694639857ebd6fb9c7ef6610f5143e4c30d800a8',
+          evidence='no_frame_skip 书级开关（缺省关，空白封里／纯色页按封面跳过；CV1 11-23，cv 版面已知问题 #6）：开关关着时新分支不走、参数 dump 不含该键；'
+                   '全唐文 060 册 7 页（88,93,1,2,3,10,50）、脈經 01 册 7 页（3,4,47,10,20,30,40，墨层书）、殿本 vol01 8 页（1,8,9,24,40,100,149,188）'
+                   '的 border_detect＋border_detect_gate 产物与 dev 4a26d7c 逐字节相同（gate 不能单独跑，按 border_detect 一起比）；'
+                   'scripts/code_equiv.py check --gate border_detect_gate，2026-11-23'),
 )
 
 
