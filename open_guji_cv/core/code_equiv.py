@@ -2362,6 +2362,15 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence=("seed_admit `_drop_off_rare` 一百多段 if 改成声明表 `_DUMP_DROP`，规则逐条不变（397 册＋bool 字段两两翻转 11,730 组 "
                     "params_hash 不变）：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（同 PR1 那条）seed_admit 与 origin/dev 1e0fcf5 "
                     "产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-23（CV4）")),
+    # seed_admit 加 ref_lib_5b_veto（ref_lib 放行的 5-b 否决，缺省 None＝关、关时不进 dump；A23 2026-11-23）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='15eb6681d5619b21f43abc0cc5c91cc3fb36de4ac7176e6972919b1f4cad2cde',
+          old='110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6',
+          evidence='seed_admit 在 vol20 7 页（--pages 40-42,82,110,170,219）上与 origin/dev 产物逐字节相同；殿本 vol20 7 页（A23 ref_lib_5b_veto 本地复现页）'),
+    Equiv(module='open_guji_cv.steps.seed_admit_params',
+          new='643684242a05ba1f58b29f0197840b5ba4ed6a9f8963d4a87db18a14f954c800',
+          old='e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091',
+          evidence='seed_admit 在 vol20 7 页（--pages 40-42,82,110,170,219）上与 origin/dev 产物逐字节相同；殿本 vol20 7 页（A23 ref_lib_5b_veto 本地复现页）'),
     Equiv(module="open_guji_cv.steps.border_detect",
           new="fdbe485e6e303385a852dae36b4582a264bdf9671e8cc87772d7342912a34c27",
           old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
