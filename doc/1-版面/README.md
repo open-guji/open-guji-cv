@@ -14,3 +14,4 @@
 - 1b 的实现由版式（`impl/keben|modern|free`）和书仓 `code/` 提供，见 [../参考/切分代码结构.md](../参考/切分代码结构.md)。
 - 人定切分（某页某列按人说的切）：[../2-切字/切分覆盖.md](../2-切字/切分覆盖.md)。
 - 相关设计：[列宽均匀约束](../design/列宽均匀约束.md)、[彩图墨层与二值体检](../design/彩图墨层与二值体检.md)、[图片格与插图](../design/图片格与插图-处理流程.md)、[印章遮挡格](../design/印章遮挡格-判据与放行.md)、[现代排印链](../参考/modern_print_pipeline.md)、[自由版式](../design/自由版式切分-游学鳌头.md)。
+- 评测：版面 benchmark（线／边框／列数行数／页型）：`python -m open_guji_cv.eval.layout_bench`，指标口径见 `open_guji_cv/eval/layout_metrics.py` 模块头，金标格式与标注方法见 open-guji-dataset `layout/README.md`。
