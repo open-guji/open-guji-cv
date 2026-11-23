@@ -99,6 +99,8 @@ def doc_from_borders(borders: dict | Any, gate: dict | None = None, n_y: int = 2
         doc["policy"] = gate.get("page_type_policy")
         if gate.get("n_cols") is not None:
             doc["n_cols"] = gate["n_cols"]
+        # 闸实际采用的期望列数（含册配置里按页覆盖的 expected_cols_pages，如殿本 vol01 p100 实有 10 列）
+        doc["expected_cols"] = gate.get("expected_cols")
     return doc
 
 

@@ -297,7 +297,8 @@ def worst_pages(per_page: list[tuple[str, dict]], n: int = 10) -> list[tuple[str
 def health(pred: LayoutDoc, expected_cols: int | None = None) -> dict:
     """没有金标时的自洽性体检：只看预测本身像不像一页合格的版面。
 
-    - n_cols_ok：竖线数是否 = expected_cols + 1；
+    - n_cols_ok：竖线数是否 = expected_cols + 1（expected_cols 缺省取预测文档里闸采用的值，
+      它含册配置的按页覆盖；要独立核就显式传，页上真实列数不同的页会被如实判错）；
     - pitch_cv：相邻竖线间距（页面中高处）的变异系数；列距应当近似均匀，
       CV 大多半是漏线、多线或跑飞（北行这类残破线的书看它最有用）；
     - pitch_dev_max：最偏的间距相对中位数的比；
@@ -307,6 +308,8 @@ def health(pred: LayoutDoc, expected_cols: int | None = None) -> dict:
     """
     W, H = pred.get("width") or 0, pred.get("height") or 0
     lines = [p for p in (_pts(v) for v in pred.get("vlines", [])) if p is not None]
+    if expected_cols is None:
+        expected_cols = pred.get("expected_cols")       # 缺省取闸当时用的期望（含按页覆盖）
     out: dict[str, Any] = {"n_lines": len(lines)}
     out["n_cols_ok"] = None if expected_cols is None else (len(lines) == expected_cols + 1)
     if len(lines) >= 3:
