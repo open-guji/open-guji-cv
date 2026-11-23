@@ -62,6 +62,10 @@
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
 
+## [0.7.94] - 2026-11-23
+
+- 发版说明（殿本 patch 线，ZM 11-23，PATCH）：v0.7.90 ＋ 模型表补回 `glyph_sim_base_v1`（model_pack KINDS、model-registry 两行、provenance，照 v0.7.89），供殿本 5a 新相似度 A/B 的 C 臂从 R2 取模型。各步 code_hash 与 v0.7.90 相同，底库 b29。
+
 ## [0.9.0] - 2026-11-23
 
 - **MINOR**（Sheldon 11-22 定，11-23 说「可以发新版」）：九步并成四大步、cv 自己的入口 `guji-cv`、原 Step8／Step9 移到 guji-manager。23 步 `code_hash` 与 v0.8.0 相同，各书产物不过期。影响见 RELEASES.md v0.9.0。
