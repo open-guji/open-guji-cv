@@ -122,9 +122,6 @@ def test_past_leaf_column_defaults_to_blank(tmp_path, monkeypatch):
     assert got[3].evidence["occluded"]["ref_blank"]
     got, _ = _run_seed(tmp_path / "b", monkeypatch, params=p, coord=[], fallback={"3": "列行对应不成立"})
     assert got[3].evidence["occluded"]["via"] == "none"
-    got, _ = _run_seed(tmp_path / "c", monkeypatch, coord=[], fallback={"3": COORD_PAST_LEAF},
-                       params=SeedAdmitParams(lane_seal=False, occluded_past_leaf_blank=False))
-    assert got[3].evidence["occluded"]["via"] == "none"
 
 
 def test_ref_empty_column_defaults_to_blank_only_when_switched_on(tmp_path, monkeypatch):

@@ -49,10 +49,6 @@ def _key(slot):
     return f"{BOOK}:{PAGE}:{COL}:{slot}"
 
 
-def test_default_on():
-    assert SeedAdmitParams().human_unbound_review is True
-
-
 def test_no_lost_changes_nothing(tmp_path, monkeypatch):
     r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(), {})
     assert all(x.admit for x in r.values())
@@ -75,12 +71,6 @@ def test_lost_ruling_agrees_keeps_admit(tmp_path, monkeypatch):
     lost = {_key(2): {"char": "水", "status": "void", "event": "e1"}}
     r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(), lost)
     assert r[2].admit and r[2].evidence["human_unbound"]["char"] == "水"
-
-
-def test_switch_off_ignores_lost(tmp_path, monkeypatch):
-    lost = {_key(2): {"char": "火", "status": "review", "event": "e1"}}
-    r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(human_unbound_review=False), lost)
-    assert r[2].admit and "human_unbound" not in (r[2].evidence or {})
 
 
 def test_shift_ok_off_by_default_demotes(tmp_path, monkeypatch):
