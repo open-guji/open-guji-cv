@@ -581,3 +581,41 @@ def test_book_fingerprint_unchanged_without_side_frame():
                  bottom=HLineRec(y_at_right=9, slope=0, kind="bottom"), verticals=[])
     assert "v_outer_estimated" not in bd.model_dump()
     assert bd.model_copy(update={"v_outer_estimated": True}).model_dump()["v_outer_estimated"] is True
+
+
+# ---------------------------------------------------- 内框线拉回（inner_pull，2026-11-23）
+
+def _带外框粗条页(bar_rows=(300, 318), inner_row=None):
+    """上下版框：下边在 y=300..317 有一条 18px 的外框粗条；inner_row 给了就在那儿画细内框线。"""
+    mask = np.zeros((400, 1000), np.uint8)
+    mask[100:103, 100:900] = 255
+    mask[bar_rows[0]:bar_rows[1], 100:900] = 255
+    if inner_row is not None:
+        mask[inner_row:inner_row + 3, 100:900] = 255
+    for x in (150, 850):
+        mask[100:bar_rows[1], x:x + 3] = 255
+    return mask
+
+
+def test_pull_inner_line_moves_off_thick_outer_bar():
+    from open_guji_cv.impl.keben.border import pull_inner_line
+    mask = _带外框粗条页(inner_row=265)
+    bot = HLine(y_at_right=309.0, slope=0.0, kind="bottom")       # 落在粗条里
+    new, moved = pull_inner_line(mask, bot, "bottom", _verts2(), 1000, 400, gap=45.0)
+    assert 264 <= new.y_at(0) <= 268 and moved > 30
+
+
+def test_pull_inner_line_estimates_when_inner_missing_and_leaves_clean_pages():
+    from open_guji_cv.impl.keben.border import pull_inner_line
+    mask = _带外框粗条页()
+    bot = HLine(y_at_right=309.0, slope=0.0, kind="bottom")
+    new, _ = pull_inner_line(mask, bot, "bottom", _verts2(), 1000, 400, gap=45.0)
+    assert new.y_at(0) == pytest.approx(318 - 45, abs=3)           # 外沿 − 册内外间距
+    # 没给 gap 不估
+    same, m0 = pull_inner_line(mask, bot, "bottom", _verts2(), 1000, 400, gap=None)
+    assert m0 == 0.0 and same == bot
+    # 线本来就在细内框线上、粗条在 +30 外面：不动
+    m2 = _带外框粗条页(bar_rows=(330, 348), inner_row=300)
+    ok = HLine(y_at_right=301.0, slope=0.0, kind="bottom")
+    r, m = pull_inner_line(m2, ok, "bottom", _verts2(), 1000, 400, gap=45.0)
+    assert m == 0.0 and r == ok

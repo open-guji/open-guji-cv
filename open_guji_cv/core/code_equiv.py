@@ -367,6 +367,11 @@ _FRAME_1123 = ("版面框型规则：册配置 frame_layers 支持 1（单线）
                "没写新配置的册走原路径：殿本 vol01 1–204、vol40 1–174 的 border_detect，vol40 1–40 的 border_detect_gate／column_warp，"
                "与 dev d535a4b 产物逐字节相同；中心库无册写 frame_layers 1 或 side_frame；2026-11-23（A20 审；cv #1813）")
 
+_INNER_PULL_1123 = ("版面 border_detect 新参数 inner_pull（缺省关、不进参数 dump）与 pull_inner_line：内框线落在外板框粗条上时拉回内板框，只在参数开且册声明 frame_layers 2 时走。"
+                    "关着时：layout-gold 79 页的原图（殿本 vol01–10／30、全唐文 005／060／120／190、史記 05／20／40、脈經 01–06）× 无配置与 frame_layers 2/2 两种调用，"
+                    "detect_borders 的 Borders 产物 JSON sha256 与 origin/dev 4a26d7c 逐一相同（158/158）；2026-11-23（CV1；cv #1813 之后）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1806,9 +1811,9 @@ ENTRIES: tuple[Equiv, ...] = (
           old='d2026a75ec5c0f97f5e47c4cff41a9de5c4678d96f70a83da285197be0f5ac07',
           evidence='与 dev #1814 同一改动按本线移植（dev 上已证殿本 vol20 7 页 seed_admit 与 origin/dev 逐字节相同）；'
                    '本线缺省 SeedAdmitParams().model_dump() 与 v0.7.94 相同（tests/test_seed_admit_ref_lib_5b_veto.py），开关关时新分支不执行'),
-    Equiv(module='open_guji_cv.steps.border_detect', new='TBD1', old='d1e2b0bb6f9f2112b97982d5292b91a0e63fd3052958c1488453bee6cb019834', evidence=_FRAME_1123),
-    Equiv(module='open_guji_cv.impl.keben.border', new='TBD2', old='dcc3f23d5ce58621db0a8bb9be9c6fc360cdbe86a2c5abacb42ba97fd4177352', evidence=_FRAME_1123),
-    Equiv(module='open_guji_cv.seg.frame_types', new='TBD3', old='TBD4', evidence=_FRAME_1123),
+    Equiv(module='open_guji_cv.steps.border_detect', new='48ea4cfd07629fe45e2cdf204eb119b575256a0c21e2765b45ae58ac341c11f3', old='d1e2b0bb6f9f2112b97982d5292b91a0e63fd3052958c1488453bee6cb019834', evidence=_FRAME_1123 + _INNER_PULL_1123),
+    Equiv(module='open_guji_cv.impl.keben.border', new='f83cc97bd92b20b4e28664f04acdfc845819bbdc3240a8fd73fd6167d71c667e', old='dcc3f23d5ce58621db0a8bb9be9c6fc360cdbe86a2c5abacb42ba97fd4177352', evidence=_FRAME_1123 + _INNER_PULL_1123),
+    Equiv(module='open_guji_cv.seg.frame_types', new='e7a452410888e9e1fe042432bcbfa62352ab6fd1910d22852bad34fe40195873', old='910317f58be2061fbe06468ba3abf2de685e6250440b1008b8308fd37561fa4b', evidence=_FRAME_1123),
 )
 
 
