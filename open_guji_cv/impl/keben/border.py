@@ -590,7 +590,8 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                           verticals: list[VLine], width: int, height: int,
                           outer_shift: dict | None = None,
                           book_gap: dict | None = None,
-                          frame_layers: dict | None = None) -> dict:
+                          frame_layers: dict | None = None,
+                          outer_side: str | None = None) -> dict:
     """上下版框的外框偏移 + 纸边侧竖直外框偏移。
 
     坐标口径是**外延**（朝外那一侧的半高边缘），跟 `detect_head_raise()` 的
@@ -613,13 +614,20 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
     内沿1，bottom 外延8/内沿3/中心1），所以剩下那点差**部分是标注口径的
     散布，不全是探测误差**，别照着它继续调参。竖直外框那一侧口径是干净的
     （外延 12/14，金标离真墨外延平均 4.1px）。
+
+    **按套书规则（2026-11-23，册配置 `frame_layers` / `side_frame`）**：框型是书的版式、不是逐页猜的。
+    - `frame_layers[边]==1`：这一边只有一条线（脈經上下），一律记 `single`，只量粗条宽度（`*_bar_extent`），
+      不找外框、不兜底；
+    - `frame_layers[边]==2`：外框一定存在，只量位置（量不到按册基准估，标 `*_outer_estimated`）；
+    - `outer_side`（由 `side_frame` 按页码奇偶定，"left"/"right"）：纸边侧有外框、靠版心一侧没有；
+      只在这一侧量竖直外框，不再两侧比强弱；量不到按 `book_gap["side"]`（缺则上下基准的均值）估。
     """
     binm = (mask > 0).astype(np.uint8)
     out: dict = dict(top_outer_offset=None, bottom_outer_offset=None,
                      top_frame_kind=None, bottom_frame_kind=None,
                      top_bar_extent=None, bottom_bar_extent=None,
                      top_outer_estimated=False, bottom_outer_estimated=False,
-                     v_outer_side=None, v_outer_offset=None)
+                     v_outer_side=None, v_outer_offset=None, v_outer_estimated=False)
     vx = sorted((width - 1) - v.x_at(height / 2.0) for v in verticals)
     xs = np.arange(int(vx[0] + 30), int(vx[-1] - 30), 2)
     # 界行探到图外（史記09 年表页）时 xs 会越过图宽、取墨 IndexError：去掉越界的列。只去 ≥ 图宽的，没越界的页逐字节不变
@@ -629,6 +637,8 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
     if len(ys) > 10 and len(verticals) >= 2:
         best = None
         for side, vi, sign in (("right", 0, -1.0), ("left", len(verticals) - 1, 1.0)):
+            if outer_side in ("left", "right") and side != outer_side:
+                continue        # 按套书规则：靠版心一侧没有外框，不量
             base = np.array([(width - 1) - verticals[vi].x_at(y) for y in ys])
             offs = np.arange(OUTER_GAP_MIN, OUTER_GAP_MAX + 1, 1.0) * sign
             prof = []
@@ -643,6 +653,21 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 best = (side, r[0], r[1])
         if best is not None:
             out["v_outer_side"], out["v_outer_offset"] = best[0], best[1]
+    if outer_side in ("left", "right") and out["v_outer_side"] is None and len(verticals) >= 2:
+        # 规则说这一侧有外框，但这页看不清（磨没/裁掉/糊了）：按册基准估位置，标 estimated
+        g = (book_gap or {}).get("side")
+        if g is None and book_gap and book_gap.get("top") is not None and book_gap.get("bottom") is not None:
+            g = (book_gap["top"] + book_gap["bottom"]) / 2.0
+        if g is not None:
+            vi = 0 if outer_side == "right" else len(verticals) - 1
+            edge = (width - 1) - verticals[vi].x_at(height / 2.0)   # 旧坐标（左上原点）里内框线的 x
+            sgn = -1.0 if outer_side == "right" else 1.0
+            off = min(float(g) + OUTER_ESTIMATE_SLACK, float(OUTER_GAP_MAX))
+            room = edge if sgn < 0 else (width - 1 - edge)
+            off = min(off, max(0.0, room - 1.0))
+            if off > 0:
+                out["v_outer_side"], out["v_outer_offset"] = outer_side, off * sgn
+                out["v_outer_estimated"] = True
     prior = None if out["v_outer_offset"] is None else abs(out["v_outer_offset"])
     if len(xs) > 10:
         for kind, line, sign in (("top", top, -1.0), ("bottom", bottom, 1.0)):
@@ -650,6 +675,20 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
             # 书级声明了这条边有 2 层，就不许判 single——版式是全书一致的，
             # 这一页看着像一根粗条，是内外框之间被污糊连成了片（见 BookSpec.frame_layers）。
             declared = (frame_layers or {}).get(kind)
+            if declared == 1:
+                # 版式就是单线：不找外框，只量这条粗条（从内框线起往外连续的粗墨）的宽度
+                ext = 0
+                for o in range(0, OUTER_GAP_MAX + 1):
+                    yy = (base + o * sign).astype(int)
+                    ok = (yy >= 0) & (yy < height)
+                    v = binm[yy[ok], xs[ok]].mean() if ok.any() else 0.0
+                    if v >= SINGLE_BAR_INK:
+                        ext = o + 1
+                    elif o >= SINGLE_BAR_LEAD:
+                        break
+                out[f"{kind}_frame_kind"] = "single"
+                out[f"{kind}_bar_extent"] = float(ext) if ext else None
+                continue
             # 先判單邊框：从内框线起往外连续的粗墨。是粗条就不找第二条了。
             run0, start0 = 0, None
             for o in range(0, OUTER_GAP_MAX + 1):
@@ -705,7 +744,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
     if book_gap:
         for kind, line, sign in (("top", top, -1.0), ("bottom", bottom, 1.0)):
             declared = (frame_layers or {}).get(kind)
-            if out[f"{kind}_outer_offset"] is not None:
+            if declared == 1 or out[f"{kind}_outer_offset"] is not None:
                 continue
             # 没声明层数时保持老行为：判了 single 就不再兜底。
             # 声明 2 层的边不会走到这里判 single（上面拦了），继续兜底。
@@ -1228,6 +1267,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     outer_shift: dict | None = None,
                     book_outer_gap: dict | None = None,
                     frame_layers: dict | None = None,
+                    outer_side: str | None = None,
                     head_raise_extend: bool = True,
                     head_raise_scale: float = 1.0,
                     grid_lattice_fallback: bool = False,
@@ -1355,7 +1395,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
             top, head_raise = nt
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
                                  outer_shift=outer_shift, book_gap=book_outer_gap,
-                                 frame_layers=frame_layers)
+                                 frame_layers=frame_layers, outer_side=outer_side)
     return BorderDetectionResult(width=w, height=h, top=top, bottom=bottom,
                                   verticals=verticals, head_raise=head_raise,
                                   vline_segments=vseg, bend_w80_med=w80_med,
