@@ -211,7 +211,7 @@ def test_r4_blind_guard_holds_ref_far_behind_lib():
 
 @pytest.mark.parametrize("doubt", ["ctx_guard_ref", "group_flow_ref_dissent", "group_flow_coord_dissent"])
 def test_r4_keeps_ref_review_cells(doubt):
-    """护栏拿整理本字拦下的格（vol20 45:5:18 諸→諧）不再按整理本字放回；开关可关。"""
+    """护栏拿整理本字拦下的格（vol20 45:5:18 諸→諧）不再按整理本字放回（`lane_keep_ref_review`，恒开）。"""
     chars = BODY[:30]
     def run(**params):
         out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.95)", doubt], char="夫")})
@@ -219,8 +219,6 @@ def test_r4_keeps_ref_review_cells(doubt):
         return _run(out, lib={5: "夫"}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, **params)
     n, rs = run()
     assert n == 0 and not rs[5].admit
-    n, rs = run(lane_keep_ref_review=False)
-    assert n == 1 and rs[5].char == "天"
 
 
 def test_r4_lib_guard_blocks_witness_branch():
@@ -342,12 +340,10 @@ def test_r5_lib_veto():
 
 
 def test_r5_lib_veto_spares_second_place():
-    """默认字正是库第二名 → 不否决（印泥下近形两字分不开）；开关关掉照旧否决。"""
+    """默认字正是库第二名 → 不否决（印泥下近形两字分不开）。"""
     lib = {3: [("木", 0.97), ("本", 0.968)]}
     n, rs = _seal({3: ("本", "coord")}, coord={3: "本"}, lane_seal=True, lib=lib)
     assert n == 1 and rs[3].char == "本"
-    n, rs = _seal({3: ("本", "coord")}, coord={3: "本"}, lane_seal=True, lib=lib, lane_seal_lib_veto_second=False)
-    assert n == 0 and rs[3].evidence["lane_skip"]["why"] == "lib_veto"
     n, rs = _seal({3: ("水", "coord")}, coord={3: "水"}, lane_seal=True, lib={3: [("本", 0.98), ("木", 0.97)]})
     assert n == 0                     # 默认字不在库前二：照旧否决
 
@@ -376,17 +372,12 @@ def test_r5_codepoint_variant_admits_canonical():
     assert rs[3].evidence["lane"]["variant_norm"] == "codepoint"
     n, rs = _seal({3: ("𩔖", "coord")}, coord={3: "𩔖"}, lane_seal=True, lib=lib)     # 本书没定码位：走暂归一组
     assert n == 1 and rs[3].char == "類" and rs[3].evidence["lane"]["variant_norm"] == "provisional"
-    n, rs = _seal({3: ("𩔖", "coord")}, coord={3: "𩔖"}, lane_seal=True, lib=lib, canon=canon,
-                  lane_seal_codepoint_variant=False)
-    assert n == 0
 
 
 def test_r5_provisional_variant_admits_group_form():
     """两形同在暂归一组（PROVISIONAL）→ 放组定的字，记 provisional。"""
     n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)])       # 旨㫖 暂归一到 㫖
     assert n == 1 and r.char == "㫖" and r.evidence["lane"]["variant_norm"] == "provisional"
-    n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)], lane_seal_codepoint_variant=False)
-    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
 
 
 def test_r5_page_shift_guard():
@@ -396,9 +387,6 @@ def test_r5_page_shift_guard():
     lib = {i: text[i] for i in range(1, len(text))}        # 第 i 格图上是第 i+1 个字
     n, rs = _seal(cells, coord={i: ch for i, ch in enumerate(text, 1)}, lane_seal=True, lib=lib)
     assert n == 0 and rs[1].evidence["lane_skip"]["why"] == "page_shift"
-    n, _ = _seal(cells, coord={i: ch for i, ch in enumerate(text, 1)}, lane_seal=True, lib=lib,
-                 lane_seal_shift_guard=False, lane_seal_lib_veto=0)
-    assert n == len(text)
     lib_ok = {i: ch for i, ch in enumerate(text, 1)}
     n, _ = _seal(cells, coord={i: ch for i, ch in enumerate(text, 1)}, lane_seal=True, lib=lib_ok)
     assert n == len(text)
@@ -490,23 +478,18 @@ def test_keep_rare_skips_group_members():
     assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
 
 
-def test_keep_rare_off_restores_guard():
-    n, r = _keep_rare("䘮", [("䘮", 0.989), ("喪", 0.955)], lane_variant_keep_rare=False)
-    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
-
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
 
 
 @pytest.mark.parametrize("doubt", ["group_flow_disagree", "group_flow_ctx_contra"])
 def test_r4_never_lifts_group_flow_contra(doubt):
     """字组流程里文意给了别的字而留审的格（vol11 18:5:11 顧炎武日知錄被 witness3 按整理本放成曰）：
-    补放通道不按整理本字放回，`lane_keep_ref_review` 关了也不放。"""
+    补放通道不按整理本字放回。"""
     chars = BODY[:30]
-    for keep in (True, False):
-        out = _page(chars, {5: dict(doubts=[doubt], char="夫")})
-        wits = [_wit(f"{k}.txt", "前" + chars[:4] + "天" + chars[5:] + "後") for k in "dwy"]
-        n, rs = _run(out, lib={5: "天"}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, lane_keep_ref_review=keep)
-        assert n == 0 and not rs[5].admit
+    out = _page(chars, {5: dict(doubts=[doubt], char="夫")})
+    wits = [_wit(f"{k}.txt", "前" + chars[:4] + "天" + chars[5:] + "後") for k in "dwy"]
+    n, rs = _run(out, lib={5: "天"}, coord=_ids({5: "天"}), wits=wits, lane_coord=True)
+    assert n == 0 and not rs[5].admit
 
 
 # ── 异体形近规则先于印章（occluded_variant_first，A31 10-28）──────────────────
@@ -529,22 +512,12 @@ def test_seal_variant_first_admits_when_lib_top_is_default():
     assert r.evidence["lane"]["variant_first"] == "㫖"
 
 
-def test_seal_variant_first_off_keeps_old_guard():
-    n, r = _seal_variant([("旨", 0.97), ("㫖", 0.96)], occluded_variant_first=False, lane_seal_codepoint_variant=False)
-    assert n == 0 and not r.admit and r.evidence["lane_skip"]["why"] == "cand_variant"
-
-
 def test_seal_variant_first_needs_lib_top_equal_and_cov():
-    kw = dict(lane_seal_codepoint_variant=False)             # 暂归一放宽另测（test_r5_provisional_variant_admits_group_form）
-    n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)], **kw)  # 库首位是异体：形说不准，照旧送审
-    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
-    n, r = _seal_variant([("旨", 0.85), ("㫖", 0.84)], **kw)  # 覆盖度 < seal_lib_cov
-    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
-
-
-def test_occluded_variant_first_default_not_in_dump():
-    assert "occluded_variant_first" not in SeedAdmitParams(db_path="x").model_dump()
-    assert SeedAdmitParams(db_path="x", occluded_variant_first=False).model_dump()["occluded_variant_first"] is False
+    # 库首位是异体（㫖）：本规则不放；旨㫖 同在暂归一组，由 `lane_seal_codepoint_variant` 放组定的字（另测）
+    n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)])
+    assert n == 1 and r.char == "㫖" and "variant_first" not in r.evidence["lane"]
+    n, r = _seal_variant([("旨", 0.85), ("㫖", 0.84)])  # 覆盖度 < seal_lib_cov：本规则不放（落到暂归一）
+    assert n == 1 and r.char == "㫖" and "variant_first" not in r.evidence["lane"]
 
 
 def test_follow_ref_decide_allows_occluded_only_when_variant_first():
@@ -564,7 +537,7 @@ def _flow_occluded(monkeypatch, lifted_char, **params):
 
     def fake(seq, amap, cands_of, blocked, cfg, **kw):
         rec = next(r for r in seq if r.slot == 3)
-        assert not blocked(rec) if params.get("occluded_variant_first", True) else blocked(rec)
+        assert not blocked(rec)
         rec.admit, rec.channel, rec.provenance, rec.char, rec.doubts = True, "group_flow", "context", lifted_char, []
         return _NS(lifted=1, demoted=0)
     monkeypatch.setattr(flow, "group_flow_pass", fake)
@@ -578,11 +551,6 @@ def test_group_flow_occluded_admits_only_when_char_is_default(monkeypatch):
     assert net == 1 and r.admit and r.char == "黃" and r.evidence["occluded_variant_first"] == "group_flow"
     net, r = _flow_occluded(monkeypatch, "黄")            # 给了别的字：退回待审，字和疑问原样
     assert net == 0 and not r.admit and r.char == "黃" and r.doubts == ["occluded"] and r.channel is None
-
-
-def test_group_flow_occluded_still_blocked_when_off(monkeypatch):
-    net, r = _flow_occluded(monkeypatch, "黃", occluded_variant_first=False)
-    assert r.admit      # 关着时 blocked() 为真（fake 里断言过），这里的放行是 fake 硬放的，不退回
 
 
 def _flow_form_open(monkeypatch, **params):
@@ -602,14 +570,7 @@ def _flow_form_open(monkeypatch, **params):
 
 
 def test_group_flow_form_open_default_on(monkeypatch):
-    assert _flow_form_open(monkeypatch, group_flow_form_open=False) is True
-    assert _flow_form_open(monkeypatch) is False       # 缺省开（sheldon 11-07）
-
-
-def test_group_flow_form_open_default_not_in_dump():
-    gf = {"group_flow": ("jys",)}            # group_flow 为空时整个 group_flow* 前缀都不进 dump
-    assert "group_flow_form_open" not in SeedAdmitParams(db_path="x", **gf).model_dump()
-    assert SeedAdmitParams(db_path="x", group_flow_form_open=False, **gf).model_dump()["group_flow_form_open"] is False
+    assert _flow_form_open(monkeypatch) is False       # 恒开（sheldon 11-07 定缺省开，11-23 起不再是参数）
 
 
 # ── R4 本书 codepoints 已归一的异体对（lane_coord_codepoint_variant）──────────────

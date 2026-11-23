@@ -68,12 +68,6 @@ def test_context_lib_dissent():
     assert not _context_lib_dissent("相", [], VM, 0.03, 0.93)
 
 
-def test_params_dump_hides_guards_when_off():
-    d = SeedAdmitParams(context_variant_form_guard=False, iron_ctx_guard=False).model_dump()
-    assert not any(k in d for k in ("context_variant_form_guard", "context_variant_ratio", "iron_ctx_guard",
-                                    "iron_ctx_prob", "match_tie_guard", "match_tie_gap"))
-
-
 @dataclass
 class Rec:
     id: str
@@ -151,8 +145,6 @@ def test_seed_admit_context_variant_form(tmp_path, monkeypatch):
     dec = dict(char="叅", margin=1.0, ranked=[("叅", 0.5002), ("㕘", 0.4998)])
     r = _run_ctx(tmp_path, monkeypatch, cands, dec)
     assert not r.admit and "context_variant_form" in r.doubts
-    r = _run_ctx(tmp_path, monkeypatch, cands, dec, {"context_variant_form_guard": False})
-    assert r.admit and r.channel == "context" and r.char == "叅"
 
 
 def test_seed_admit_context_page_end(tmp_path, monkeypatch):

@@ -16,10 +16,6 @@ class _Merge:
         return self._m.get(c, c)
 
 
-def test_guard_default_on():
-    assert SeedAdmitParams().iron_confusable_guard is True
-
-
 def test_blocks_vol04_cases_via_coord_witness():
     # 三格现役对位字都缺（None），证人只在坐标对位里
     for iron, ref in [("曰", "日"), ("曰", "日"), ("人", "八")]:

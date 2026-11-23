@@ -2343,6 +2343,14 @@ ENTRIES: tuple[Equiv, ...] = (
                     "main 包 cv0.7.93-c82-g-631101-k11-qtw020-vf1-a4）、史記 02 18 页（4,9,19,24,33,41,44,53,86,95,102,106,114,141,173,180,185,199，"
                     "main 包 cv0.7.59-c10-g23-m2-k25-job5767）seed_admit 与 origin/dev 4aab078 产物逐字节相同；"
                     "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-23（CV4）")),
+    # seed_admit 36 个无书关过的护栏／通道改恒开（CV4 整理 PR2）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="1c4303ae2b831737b75a01ddef5f10167ca3bc23c2c3a19e7bd17e8dec07d518",
+          old="1f1f1fb43270438a7f7ae51c94fbf4f26b93ba7317a21bd05334211b1820663c",
+          evidence=("seed_admit 36 个缺省开、397 册无一册关过的开关改恒开、不再是参数（清单见 seed_admit._ALWAYS_ON；写 true 照读，"
+                    "原进 dump 的照原值补回，397 册＋bool 字段两两翻转 11,730 组 params_hash 不变）：殿本 vol28 16 页、全唐文 020 16 页、"
+                    "史記 02 18 页（页号与产物包同 PR1 那条）seed_admit 与 origin/dev 0d0e9f7 产物逐字节相同；"
+                    "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-23（CV4）")),
 )
 
 

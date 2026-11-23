@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from open_guji_cv.steps.seed_admit import SeedAdmitParams, _RETIRED, _RETIRED_IN_DUMP
+from open_guji_cv.steps.seed_admit import SeedAdmitParams, _ALWAYS_ON, _ALWAYS_ON_IN_DUMP, _RETIRED, _RETIRED_IN_DUMP
 
 
 def test_retired_default_values_ignored():
@@ -24,7 +24,7 @@ def test_dump_keeps_retired_fixed_values():
         if k == "lane_coord_codepoint_skip":          # 只在码位异体 lane 开着时进 dump（与退役前同）
             continue
         assert k in d and d[k] == (list(v) if isinstance(v, tuple) else v)
-    for k in set(_RETIRED) - set(_RETIRED_IN_DUMP):
+    for k in set(_RETIRED) - set(_RETIRED_IN_DUMP) - set(_ALWAYS_ON):
         assert k not in d
 
 
@@ -32,3 +32,13 @@ def test_codepoint_skip_follows_codepoint_lane():
     on = SeedAdmitParams(lane_coord_codepoint_variant=True).model_dump(mode="json")
     assert "lane_coord_codepoint_skip" in on
     assert "lane_coord_codepoint_skip" not in SeedAdmitParams(lane_coord_codepoint_variant=False).model_dump(mode="json")
+
+
+def test_always_on_keys():
+    """恒开的护栏（2026-11-23 PR2）：写 true 照读、写 false 报错；不进 dump 的照旧不进。"""
+    assert SeedAdmitParams(**{k: True for k in _ALWAYS_ON}).model_dump() == SeedAdmitParams().model_dump()
+    with pytest.raises(ValueError, match="退役"):
+        SeedAdmitParams(edge_pair=False)
+    d = SeedAdmitParams(rare_ref=True, lane_seal=True).model_dump(mode="json")
+    assert all(k not in d for k in set(_ALWAYS_ON) - set(_ALWAYS_ON_IN_DUMP))
+    assert d["rare_ref_coord"] is True and d["iron_ref_guard"] is True

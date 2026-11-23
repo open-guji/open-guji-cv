@@ -113,18 +113,6 @@ def test_load_table_derived_from_daizhige_rows_and_multi(tmp_path):
     assert fams["F1007"] == frozenset("瓠𤬄")
 
 
-def test_family_demote_off_only_counts(tmp_path):
-    st = _st(tmp_path, **{"1": ("F1001", "乖")})
-    rec = AdmitRec(id=f"{B}:1:1", slot=1, admit=True, char="乘", doubts=[], channel="context", provenance="match", evidence={})
-    out = _pua_code_pass([ColumnAdmit(col=1, chars=[rec])], {f"{B}:1:1": ("乖", None)}, st, TABLE, p=SeedAdmitParams(pua_code_family_demote=False))
-    assert out == (0, 1, 0) and rec.admit and rec.char == "乘"
-
-
-def test_new_knobs_not_in_default_dump():
-    d = SeedAdmitParams().model_dump()
-    assert "pua_code_family_demote" not in d
-
-
 def test_multi_code_family_only(tmp_path):
     """纯多字码（只登族、无单字）：族内字认，族外降审，不改字。"""
     tab = ({}, {"F1111": frozenset("甲乙")})
