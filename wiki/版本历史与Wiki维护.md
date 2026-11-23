@@ -21,11 +21,13 @@
 
 每个 MINOR 一段：这一版多了什么。逐版细节见仓里 [CHANGELOG.md](https://github.com/open-guji/open-guji-cv/blob/dev/CHANGELOG.md)（含全部 PATCH）和 [RELEASES.md](https://github.com/open-guji/open-guji-cv/blob/dev/RELEASES.md)（MINOR 的发版说明）。
 
-### 2026-11-22：按四大步重排（还没发版，随下一个 MINOR 生效）
+### v0.9（2026-11-23，v0.9.0）：按四大步重排
 
 - 原九步并成四大步：**1 版面**（Step0–2）、**2 切字**（Step3–4）、**3 识字**（Step5）、**4 定字**（Step6–7）；Step8 入库、Step9 排版输出移到 guji-manager。步骤 id、产物、指纹都没变。
 - 六个 Step 页合成四个大步页：`1-版面`、`2-切字`、`3-识字`、`4-定字`；Step0 页面预检从「管线全景」挪进「1 版面」。
 - cv 有自己的命令行入口 `guji-cv`（本 Wiki 里 cv 的命令都写它；大步工具可带前缀，如 `guji-cv layout preclean`）；manager 的命令写总入口 `guji`（`guji start …`、`guji pipeline …`）。`--from`／`--to` 可写大步名 `layout`／`cut`／`read`／`decide`。删了 `fp-migrate`、`import-pdf`。
+- 原第 9 步的代码（导出、对勘、体检表）整个搬进 guji-manager：`guji output export md|format|wikisource|reflow`、`guji output collation-report`；cv 删了 `guji export`。
+- 识别结果不变：23 步 `code_hash` 与 v0.8.0 相同，各书不用重跑；截图沿用 v0.8 的。
 - doc 与 Wiki 分工：doc 只写事实与 schema（各大步的「步骤与产物.md」从代码生成），介绍、教程、怎么用写在这里。
 
 ### v0.8（2026-11-21，v0.8.0）
