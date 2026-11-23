@@ -56,6 +56,21 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 
 - `cv-2026.09.26-base`
 
+## v0.9.0
+
+对比 `v0.8.0`。用户 11-22 定九步并四大步，11-23 说「可以发新版」。tag 经 ai-team 中转站打在 main 的发版合并提交上。
+
+### Changed
+- 九步并成四大步：1 版面 `layout`（原 Step0–2）、2 切字 `cut`（Step3–4）、3 识字 `read`（Step5）、4 定字 `decide`（Step6–7）。骨架 `_skeleton.yaml` 加 `stages:`；`guji-cv pipeline --from/--to` 可写大步名。步骤 id、产物、指纹都不变。
+- cv 自己的命令行入口 `guji-cv`（＝`python -m open_guji_cv`）只有 cv 的命令；大步工具可带前缀（`guji-cv layout preclean`、`guji-cv read rare`、`guji-cv decide variants`）。`guji` 是 guji-manager 的总入口，`guji pipeline <命令>` 经 route 钩子转到 cv。
+- doc 按四大步重整（入口 `doc/README.md`，各大步 `步骤与产物.md` 由 `scripts/gen_stage_docs.py` 从代码生成）；Wiki 按四大步重排。
+
+### Removed
+- 原 Step9 排版输出的代码整个搬进 guji-manager（`guji output export md|format|wikisource|reflow`、`guji output collation-report`）：删 `report/` 的 collate 等 6 个模块、7 个导出／对勘脚本、`guji export`。原 Step8 入库归 manager 第二步。
+- `guji fp-migrate`（连 `products/fp_migrate.py`）、`guji import-pdf`（manager `source commons` 已收 PDF）。
+
+影响：23 步 `code_hash` 与 v0.8.0 相同，各书产物不过期、不用重跑。底库仍是 b33（`config/` 未变）。要用排版输出须装 guji-manager v0.6.0 起。Wiki 已按 v0.9 重改。
+
 ## v0.8.0
 
 对比 `v0.7.0`。用户 11-21 定升 MINOR（本版起新任务用 v0.8）。v0.7.1–v0.7.93 的 PATCH 明细见 CHANGELOG 各节，这里按主题归并。tag 经 ai-team 中转站打在 main 的发版合并提交上。
