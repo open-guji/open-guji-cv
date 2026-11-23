@@ -104,6 +104,8 @@ def _main_env(tmp_path, monkeypatch, decide_map, run_map, published):
     bt = _git_repo(tmp_path / "bt")
     monkeypatch.setitem(sys.modules, "ensure_manager", types.SimpleNamespace(ensure=lambda: None))
     monkeypatch.setattr(ac.rp, "text_id_of", lambda ws: "96mid1ogzk")
+    # 盘余量门（MIN_FREE_GB，缺省 8GB）不能跟着跑测试那台机器的真实余量走：盘紧的机器上会停在第一册之前
+    monkeypatch.setattr(ac, "free_gb", lambda p: 1e6)
     monkeypatch.setattr(ac, "decide", lambda ws, b, lv=False: {"verdict": decide_map.get(b, "go"), "why": "", "main": "L",
                                                                "online_rev": "x", "status": {"voted": 0}})
     monkeypatch.setattr(ac, "run_book", lambda ws, b, *a, **k: dict(run_map[b]))

@@ -522,8 +522,8 @@ def sheet_findings(doc: dict, ws: Path, book: str) -> list:
 
 def sheet_gate(doc: dict, ws: Path, book: str, a) -> None:
     """出单门（11-13 ZM）：体检有「拦」的类就不上线；要照上线加 --ack-sheet-audit "<原因>"。
-    这些类对应连着出过的错：机器无字（印章遮挡）被写成「机器改判为 □，推翻人裁」、换图源后失效的老人裁被当成「被机器推翻」、
-    只因标点专名要重挂的格混进判字单。"""
+    拦的类对应连着出过的错：换图源后失效的老人裁被当成「被机器推翻」、改判前后同字、只因标点专名要重挂的格混进判字单。
+    机器无字（□）推翻人裁 11-19 起只提示、照常上单（以 manager `review.sheet_audit` 的 ERROR／WARN 分类为准）。"""
     fs = sheet_findings(doc, ws, book)
     if fs is None:
         print("ⓘ guji-manager 没有 review.sheet_audit（<0.4.46）：跳过单子体检")
