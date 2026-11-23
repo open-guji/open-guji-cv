@@ -891,7 +891,7 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     products, export = products_root(ws), Path(a.export_dir)
     cord = export / f"{chapter}.cord.json"
     if not cord.exists():
-        sys.exit(f"✗ {cord} 不存在：先用同一份产物导出 char／cord（zl.py export 或 export_guji_format.py）")
+        sys.exit(f"✗ {cord} 不存在：先用同一份产物导出 char／cord（zl.py export 或 python -m guji_manager.output.guji_format_export）")
     online = proofing_path(ws, text_id, chapter)
     old = json.loads(online.read_text(encoding="utf-8")) if online.exists() else None
     rev = a.rev or next_rev((old or {}).get("rev"), chapter)
@@ -1365,7 +1365,7 @@ def cmd_from_pack(a) -> int:
     if not tv:
         sys.exit("✗ 要 --book-text <book-text 仓>（读线上文本版本）或 --text-version")
     export = (Path(a.out_root) if a.out_root else ws / "reports" / book / "_publish") / f"export-{a.label}"
-    cmd = [py, CV / "scripts/export_guji_format.py", "--products", products, "--book", book, "--chapter", chapter,
+    cmd = [py, "-m", "guji_manager.output.guji_format_export", "--products", products, "--book", book, "--chapter", chapter,
            "--out", export, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
     for flag, f in (("--meta", meta_file(book, export.parent)),
                     ("--split-table", CV / "doc/formats/samples/guji_page_v0.2/split_table_siku.json")):

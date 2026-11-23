@@ -11,8 +11,6 @@
 - `zhengli/zl.py`：整理一册书**执行脚本**（幂等、可断点续跑，只在需看图／人裁处停；见 runbook〇·五）；`zhengli/snap_import.py`：容忍 CRLF 的 `guji snap import` 包装。
 - 粗校出口与待审单（`zhengli/`）：`collect_exit.py`＋`exit_report.py`（R1–R5 出口报告）；`ledger.py`（粗校台账、统一人审率口径，GUJI-667）；`pending_list.py`（册级待审单 pending.json）、`sprite_build.py`／`ex_build.py`／`alt_build.py`（精校页字块雪碧图、同字例子、相似字图），后四个 10-20 从 ai-team 迁入（GUJI-652；`decision_build.py` 11-09 已删，book-text 只录首选字）。
 - `relanding/`：重落后核对（`manifest_cmp.py` 比 params_hash／指纹，`relanding_diff.py` 比放行差异与红线格，`products_snapshot.py` 留快照；用法见其 README）。
-- `render_guji_markdown.py`：Step9 结果整理 · 坐标转字符位：命令行入口。
-- `export_guji_format.py`：CV 产物 → guji-page → guji-format 一章（A2：`NNN.pages.json` 生成；F3，overview#398）。只读产物，不改现有导出。
 
 ## 评测（`guji eval run` 调用或手动跑；对真书数据的质量量法，不是测试）（52）
 
@@ -66,7 +64,6 @@
 - `build_char_review.py`：按字复核页：把指定几个字的**全部**字位排成一页，大图 + 上下文，**当场就能改**。
 - `build_charset.py`：字表标准：把「字体 cmap ↔ Unicode」与 Unihan 异体字关系固化成两份表。
 - `build_clustering_dataset.py`：生成保守聚类 purity 数据集（open-guji-dataset/char-clustering）。
-- `build_collation_report.py`：⚠️ **已退役（2026-09-27）**——用 `guji collate <book> --strips` 代替。
 - `build_column_border_review.py`：Step2 上下版框残墨的金标标注页（`char-segmentation/column-warp` 的第二部分）。
 - `build_column_warp_review.py`：Step2（单列射影变换 + 去噪 + 界行清除）金标标注页。
 - `build_confusable_families.py`：从**字体字形**建形近家族全对表（1214 字 × 全对 = 736k 对，4 分钟）。
@@ -105,11 +102,8 @@
 - `export_column_border_gold.py`：把「单列矫正·上下版框核校」的人裁结果并进 column-warp 金标。
 - `export_column_warp_gold.py`：把「单列矫正·文字带核校」标注页里的人裁结果导成 column-warp 金标。
 - `export_confusable_prompt.py`：把形近对消歧集导成**不含答案**的题面，供大模型（或人）盲测。
-- `export_guji_format.py`：CV 产物 → guji-page → guji-format 一章（A2：`NNN.pages.json` 生成；F3，overview#398）。只读产物，不改现有导出。
-- `export_guji_page.py`：CV 产物 → guji-page v0.2（每字带坐标的页面文本）。只读产物，不改任何现有导出。
 - `export_step3_input.py`：把 Step2 已经处理好、且**过了金标**的列推给 Step3 当输入。
 - `export_train_bundle.py`：把本机才有的训练/评测数据打成一个包，给没有工作区的机器（云端会话）用。
-- `export_wikisource.py`：Step9 结果整理 · 一键导出维基文库 `Page:` 页 wikitext。
 
 ## 字形库维护（12）
 
@@ -197,13 +191,11 @@
 - `prepare_corpus.py`：语料预处理：外部古文语料 → 可直接训 n-gram 的单文件（可选简→繁）。
 - `probe_struct_heads.py`：Step A′：冻结现役 CNN 主干，只在它的 256-d embedding 上训结构头 + 槽位部件头（线性探针 / 小 MLP）。
 - `reconcile_lines_anchors.py`：锚点对账（F3，overview#398）：CV 产物 → guji-page → lines.md，再数 lines.md 推锚点，与 CV 格 id 逐位比。
-- `reflow_md.py`：Step9 结果整理 · 9.2' 文本版分段 + 标点：命令行入口。
 - `regen_step2_columns.py`：用 Step 1 的新结果重算 Step 2 的输入（单列矫正图）。
 - `rekey_instances.py`：切分层重建后的金标重键（(col,idx) 按格位面积重叠映射到新网格）。
 - `rekey_triplets_by_patch.py`：三元组集按**自带的图**重键到当前管线（不借外部映射表）。
 - `relabel_vol01_48_2_neg1.py`：`v2:vol01:48:2:-1`：库里存的字是「王」，目视核对后应为「聖」——改字命令。
 - `remap_cutline_gold.py`：切线金标按列窗几何**精确重映射**：旧列图行号 → 页面坐标 → 新列图行号。
-- `render_guji_markdown.py`：Step9 结果整理 · 坐标转字符位：命令行入口。
 - `render_guji_page_overlay.py`：guji-page 校验图：把字框画回一张图（本页图、源叶、缩放档都行），并量一下对没对准。
 - `render_self_assess.py`：把自评样本渲染成判读表：〔语境图（红框=紧裁框）｜成品图块〕。
 - `repair_seed_queue.py`：种子队列体检 + 修复：唯一性、幽灵行、上下文错位。
@@ -231,6 +223,6 @@
 - `track_review_rate.py`：人审率台账：每册每次重跑记一行，用来 track「审得越多、后面越省」到底有多快。
 - `train_font_cnn.py`：**单字体** CNN：一套字体一个模型，用时多模型各出候选再比较。
 - `train_glyph_cnn.py`：拆字识别 v2：学到的特征。小 CNN + 部件多标签辅助头 + 字体合成补类。
-- `upload_wikisource.py`：把 `export_wikisource.py` 出的逐页 wikitext 上传到 zh.wikisource `Page:` 页。
+- `upload_wikisource.py`：把 `guji output export wikisource`（guji-manager）出的逐页 wikitext 上传到 zh.wikisource `Page:` 页。
 - `verify_cloud_glyphdb.py`：云端字形库重建通道体检（Step5a-库验通道，2026-09-09）。
 - `verify_gold_migration.py`：校验金标迁移无损：items.jsonl 读出来的，与评测脚本从旧文件读的**逐条相同**。

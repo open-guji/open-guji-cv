@@ -293,7 +293,7 @@ def cmd_apply(a) -> int:
         rp.book_text_to_dev(Path(a.book_text))
     tv = rp.online_text_version(Path(a.book_text), plan["text_id"], plan["chapter"])
     export = out / "export"
-    cmd = [sys.executable, CV / "scripts/export_guji_format.py", "--products", sandbox, "--book", book,
+    cmd = [sys.executable, "-m", "guji_manager.output.guji_format_export", "--products", sandbox, "--book", book,
            "--chapter", plan["chapter"], "--out", export, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
     for flag, f in (("--meta", rp.meta_file(book, out)),
                     ("--split-table", CV / "doc/formats/samples/guji_page_v0.2/split_table_siku.json")):

@@ -32,7 +32,7 @@ dependencies = [
     "PyYAML>=6.0",
     # char_patch 现算字块、多处插值要用；缺了不报错，截条图静默出空白（overview#274），所以进核心依赖
     "scipy>=1.10",
-    # 对勘（report/collate）与候选生成的繁简转换；纯 Python 小包。以前没声明，缺了对勘直接报错（overview#413 R6）
+    # 候选生成的繁简转换（对勘 collate 已搬 guji-manager）；纯 Python 小包（overview#413 R6）
     "opencc-python-reimplemented>=0.1.7",
     # guji-page 导出自检（formats/guji_page.check）
     "jsonschema>=4.0",
