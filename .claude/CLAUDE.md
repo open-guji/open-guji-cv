@@ -4,7 +4,7 @@
 - 默认使用中文进行交流
 
 ## 项目概述
-古籍刻本图像 → 逐字结果的引擎，分四大步：**1 版面** `layout`（原 Step0–1，只认位置、判类型）、**2 切字** `cut`（原 Step2–4，含单列拉直；2026-11-22 用户定）、**3 识字** `read`（原 Step5）、**4 定字** `decide`（原 Step6–7）。原 Step8 入库、Step9 排版输出已移到 guji-manager（第二步 `pipeline`、第五步 `output`）。cv 有自己的命令行入口 `guji-cv`（cv 文档都写它）；`guji` 是 guji-manager 的总入口，manager 通过 `guji pipeline …` 调 cv（2026-11-22 用户定）。
+古籍刻本图像 → 逐字结果的引擎，分四大步：**1 版面** `layout`（原 Step0–1，只认位置、判类型）、**2 切字** `cut`（原 Step2–4，含单列拉直；2026-11-22 用户定）、**3 识字** `read`（原 Step5-a/b，只从字块图取证）、**4 定字** `decide`（原 Step5-d 整理本对位、Step6–7；整理本对位 2026-11-22 用户定移来）。原 Step8 入库、Step9 排版输出已移到 guji-manager（第二步 `pipeline`、第五步 `output`）。cv 有自己的命令行入口 `guji-cv`（cv 文档都写它）；`guji` 是 guji-manager 的总入口，manager 通过 `guji pipeline …` 调 cv（2026-11-22 用户定）。
 **2026-11-04 起本仓只是 pipeline**（凡影响识别产物的）；工作区、中心库、R2、任务库、审阅、评测、整理命令都在 [guji-manager](https://github.com/open-guji/guji-manager)（`guji_manager`，经入口点并进 `guji` 命令）。改 manager 不用给 pipeline 发版。分界见 `doc/design/拆分-pipeline与manager.md`。
 数据集与评测在隔壁仓 `open-guji-dataset`；原图在 `guji-workspace`（git，2026-10-19 起只存原图）；册配置、人裁、台账、字形库在**中心库**（`guji db sync`，见 `doc/参考/datastore.md` 第六节）；产物在各机本地。
 
