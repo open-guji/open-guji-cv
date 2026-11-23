@@ -11,7 +11,7 @@
   python scripts/zhengli/ledger.py --ws <工作区> --book vol04 \\
       [--pending <NNN.pending.json>] [--pages-json <NNN.pages.json>] [--recut <册-重切清单.tsv>] \\
       [--punct <NNN.punct.json>] [--out <台账.jsonl>]
-缺省：pages.json 取 `guji export format` 的默认落点 `<工作区>/reports/<册>/<NNN>.pages.json`；
+缺省：pages.json 取 `guji output export format` 的默认落点 `<工作区>/reports/<册>/<NNN>.pages.json`；
 pending 取数据目录 `feedback/lists/proofing/*/<NNN>.pending.json`（恰好一份才用，否则要 --pending）；
 重切清单取数据目录 `feedback/lists/<册>-重切清单.tsv`（没有就当空单）；
 台账取数据目录 `feedback/lists/ledger/<册>.jsonl`（数据目录 = `ops.release_gates.lists_dir()`，迁过中心库的
@@ -28,7 +28,7 @@ pending 取数据目录 `feedback/lists/proofing/*/<NNN>.pending.json`（恰好�
   `occluded.ref_blank`；`kind=blank`：版式留白），不进 `cells`——即 runbook S17「close-check 待审数 ≠
   导出 pending 数，差的是非字格」那条口径。所以分母天然不含非字格；分子里落在非字 mark 上的待审格
   计入 `nonchar_review`、不进人审率。
-- **标题槽**：cv 产物里**没有**标记标题的字段（Step1–7 都不判标题；`report/absent.py` 的卷端题／卷末题
+- **标题槽**：cv 产物里**没有**标记标题的字段（Step1–7 都不判标题；guji-manager `output/absent.py` 的卷端题／卷末题
   要拿语料查「证人里有没有」，是对勘用的，不是标题判定）。现有数据里唯一明写标题的是 book-text 的
   punct 层（GUJI-240，`kind: heading`，`pos: before` 锚标题首字，标题到下一个分段符 `kind: break` 为止）。
   所以：给了 `--punct` 就按它的 heading→break 区间（按 pages.json 格序、用锚点对）扣标题槽；**没给就
@@ -358,7 +358,7 @@ def _default_pages_json(book: str) -> Path:
         return p
     hits = sorted(d.glob("*.pages.json"))
     if len(hits) != 1:
-        raise SystemExit(f"{d} 下找到 {len(hits)} 个 pages.json：先 `guji export format {book} -w <工作区>`，"
+        raise SystemExit(f"{d} 下找到 {len(hits)} 个 pages.json：先 `guji output export format {book} -w <工作区>`，"
                          f"或用 --pages-json 指定")
     return hits[0]
 

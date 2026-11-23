@@ -45,7 +45,7 @@ def exclude_pairs(path: Path = EXCLUDE_TSV) -> dict[frozenset, str]:
     return out
 
 
-GROUP_TABLE = ROOT / "doc" / "字组" / "字组总表.md"
+GROUP_TABLE = ROOT / "doc" / "4-定字" / "字组" / "字组总表.md"
 
 
 def doc_near_groups(path: Path = GROUP_TABLE) -> list[tuple[str, frozenset]]:
