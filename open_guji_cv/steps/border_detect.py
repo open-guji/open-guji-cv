@@ -448,6 +448,12 @@ class BorderDetectParams(BaseModel):
     倾角 0.035，真框在 128–146 行），整页上框、抬头全错。开了贴图顶时在 ±0.05 各档倾角里找离开图顶的最好峰。
     缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
 
+    inner_pull: bool = False
+    """内框线落在外板框粗条上时拉回内板框（`impl/keben/border.pull_inner_line`，2026-11-23）：双线版框的书内板框线磨淡时，
+    探出的上／下框会落在外框粗条上（殿本下框偏 8–33px，全唐文下框 31px，layout-gold 已知问题 1／4）。只对册配置声明了
+    `frame_layers: 2` 的边起作用，估位用册 `outer_gap`。layout-gold 79 页：偏差 >8px 的边 43→38，改善 19 处、回退 2 处（金标本身有歧义的页）。
+    缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
+
     expected_cols_pages: dict[int, int] = {}
     """按页列数（2026-11-12，殿本 vol01 p100：图上 10 列、版框只探出 9 列，参校本质检）：`{页: 本页列数}`，覆盖册级 `expected_cols`。
     职名页、个别页列数与册级不同时用；一般同 `vline_overrides` 配用（给出本页全部竖线）。border_detect、border_detect_gate、
@@ -506,6 +512,8 @@ class BorderDetectParams(BaseModel):
             d.pop("bottom_lock_reslope", None)
         if isinstance(d, dict) and not self.top_edge_reslope:
             d.pop("top_edge_reslope", None)
+        if isinstance(d, dict) and not self.inner_pull:
+            d.pop("inner_pull", None)
         if isinstance(d, dict) and not self.expected_cols_pages:
             d.pop("expected_cols_pages", None)
         if isinstance(d, dict) and not self.vline_overrides:
@@ -611,6 +619,7 @@ class BorderDetectStep(Step):
                                   **({"bottom_weak_ratio": p.bottom_weak_ratio} if p.bottom_weak_ratio else {}),
                                   **({"bottom_lock_reslope": True} if p.bottom_lock_reslope else {}),
                                   **({"top_edge_reslope": True} if p.top_edge_reslope else {}),
+                                  **({"inner_pull": True} if p.inner_pull else {}),
                                   **({"head_raise_notch": True} if p.head_raise_notch else {}),
                                   **hint_kw, **lattice_kw, **bend_kw)
 

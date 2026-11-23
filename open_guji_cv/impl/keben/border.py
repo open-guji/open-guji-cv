@@ -856,6 +856,99 @@ def push_bottom_to_bar(binm: np.ndarray, bottom: HLine, verticals: list[VLine],
     return bottom, 0.0
 
 
+# ---------------------------------------------------------------- 内框线：线落在外板框上时拉回内板框
+
+#: `pull_inner_line`（2026-11-23，册配置声明 `frame_layers: 2`、参数 `inner_pull` 开时用）。双线版框的书，
+#: 内板框线磨淡或印不出时，探出的线会落在**外板框的粗条**上或紧贴它的内沿（殿本下框偏 8–33px、全唐文下框 31px、
+#: 史記上框 19px，layout-gold 已知问题 1/4）。金标口径是内板框线位置。
+#: 判据：线所在处（±INNER_ON_BAR 内）有一条粗条（≥INNER_THICK_MIN 行的连续墨带，行覆盖 ≥INNER_BAR_COV）——内框线只有
+#: 2~6px，粗条必是外框。是外框就往文字一侧找：粗条内沿之内 INNER_SEARCH_GAP~(册 outer_gap + INNER_SEARCH_EXTRA) px 里
+#: 的细条（≤INNER_THIN_MAX 行、覆盖 ≥INNER_THIN_COV）取最靠文字的那条当内框线；找不到按「外沿 − 册 outer_gap」估
+#: （不给 outer_gap 就不动）。线不在粗条上（含内框线清楚、粗条在 +18~+30 外面的页）原样不动。
+INNER_ON_BAR = 8
+INNER_BAR_COV = 0.5
+INNER_THICK_MIN = 10
+INNER_THIN_COV = 0.30
+INNER_THIN_MAX = 9
+INNER_SEARCH_GAP = 6
+INNER_SEARCH_EXTRA = 25
+INNER_GAP_TOL = (0.5, 1.7)  # 细条离粗条外沿的距离须在册 outer_gap 的这个比例内才信（内外框间距全书基本一致）
+INNER_OUT = 70           # 线外（朝外）看多远，找粗条外沿
+
+
+def pull_inner_line(binm: np.ndarray, line: HLine, kind: str, verticals: list[VLine],
+                    width: int, height: int, gap: float | None) -> tuple[HLine, float]:
+    """线落在外板框粗条上（或紧贴内沿）时，拉回内板框线。返回 (新线, 朝文字一侧拉了多少 px，没动＝0)。"""
+    from dataclasses import replace as _replace
+    if len(verticals) < 2:
+        return line, 0.0
+    vx = sorted((width - 1) - v.x_at(height * 0.5) for v in verticals)
+    x0, x1 = int(vx[0] + 15), min(int(vx[-1] - 15), binm.shape[1])
+    if x1 - x0 < 100:
+        return line, 0.0
+    xs = np.arange(x0, x1)
+    base = np.array([line.y_at((width - 1) - x) for x in xs])
+    out_sign = 1.0 if kind == "bottom" else -1.0       # 朝外（版框外沿）的 y 方向
+    lo_o, hi_o = -(INNER_SEARCH_EXTRA + int(gap or 30) + INNER_SEARCH_GAP + 20), INNER_OUT
+    offs = np.arange(lo_o, hi_o + 1)                   # 外向为正
+    cov = np.zeros(len(offs))
+    for i, o in enumerate(offs):
+        yy = (base + o * out_sign).astype(int)
+        ok = (yy >= 0) & (yy < height)
+        if ok.any():
+            cov[i] = float((binm[yy[ok], xs[ok]] > 0).mean())
+    bar = cov >= INNER_BAR_COV
+    # 离线（偏移 0）最近的粗条：连续（容 1 行缝）的 ≥INNER_BAR_COV 带
+    z = -lo_o
+    cand = None
+    i = 0
+    while i < len(bar):
+        if not bar[i]:
+            i += 1
+            continue
+        j = i
+        while j + 2 < len(bar) and (bar[j + 1] or bar[j + 2]):
+            j += 1 if bar[j + 1] else 2
+        if j - i + 1 >= INNER_THICK_MIN and offs[i] - INNER_ON_BAR <= 0 <= offs[j] + INNER_ON_BAR:
+            cand = (i, j)
+            break
+        i = j + 1
+    if cand is None:
+        return line, 0.0
+    i0, j0 = cand
+    inner_edge, outer_edge = int(offs[i0]), int(offs[j0])      # 外向为正：粗条内沿、外沿
+    inside = inner_edge < 0 <= outer_edge                      # 线压在粗条里（否则只是紧贴它的内沿）
+    # 粗条内沿之内找细条（朝文字 = 偏移更小）
+    best = None
+    k = i0 - INNER_SEARCH_GAP
+    lim = i0 - INNER_SEARCH_GAP - (int(gap or 30) + INNER_SEARCH_EXTRA)
+    while k > max(lim, 0):
+        if cov[k] >= INNER_THIN_COV:
+            e = k
+            while e - 1 > 0 and cov[e - 1] >= INNER_THIN_COV:
+                e -= 1
+            if k - e + 1 <= INNER_THIN_MAX:
+                best = (e + k) / 2.0              # 细条中心的下标
+            k = e - 1
+            continue
+        k -= 1
+    if best is not None and gap:
+        d = outer_edge - float(offs[0] + best)             # 细条离粗条外沿多远，该约等于册内外框间距
+        if not (INNER_GAP_TOL[0] * gap <= d <= INNER_GAP_TOL[1] * gap):
+            best = None
+    if best is not None:
+        new_off = float(offs[0] + best)
+    elif gap and inside:
+        new_off = float(outer_edge - gap)
+        new_off = min(new_off, float(inner_edge - 4))
+    else:
+        return line, 0.0
+    shift = new_off * out_sign                  # 线在 y 上要挪的量（朝外为正的偏移 → y）
+    if abs(new_off) < 4:
+        return line, 0.0
+    return _replace(line, y_at_right=line.y_at_right + shift), float(-new_off)
+
+
 # ---------------------------------------------------------------- 界行：按证据重定位
 
 #: `snap_verticals_to_evidence`（2026-09-20）。折线拟合只认「墨落在线上 ±1px」，界行
@@ -1268,6 +1361,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     book_outer_gap: dict | None = None,
                     frame_layers: dict | None = None,
                     outer_side: str | None = None,
+                    inner_pull: bool = False,
                     head_raise_extend: bool = True,
                     head_raise_scale: float = 1.0,
                     grid_lattice_fallback: bool = False,
@@ -1383,6 +1477,10 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
         bottom, bottom_pushed = push_bottom_to_bar(binm_new, bottom, verticals, w, h)
     else:
         bottom_pushed = 0.0
+    if inner_pull and (frame_layers or {}).get("bottom") == 2 and bottom_hint is None:
+        bottom, _ = pull_inner_line(binm_new, bottom, "bottom", verticals, w, h, (book_outer_gap or {}).get("bottom"))
+    if inner_pull and (frame_layers or {}).get("top") == 2 and top_hint is None:
+        top, _ = pull_inner_line(binm_new, top, "top", verticals, w, h, (book_outer_gap or {}).get("top"))
     verticals_straight = list(verticals)
     verticals, vseg, w80_med, w80_max, vlines_snapped = _bend_verticals(
         mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline, bend_w80_med)
