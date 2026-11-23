@@ -98,6 +98,8 @@ def doc_from_borders(borders: dict | Any, gate: dict | None = None, n_y: int = 2
     bot_y = np.array([r.bottom.y_at(x) for x in xs_new])
     xtl = (W - 1) - xs_new                            # 换成左上原点
     top = {"pts": [[float(x), float(y)] for x, y in zip(xtl, top_y)]}
+    raised = head_raise_spans(r)
+    straight_top = top
     bottom = {"pts": [[float(x), float(y)] for x, y in zip(xtl, bot_y)]}
     ym = (float(np.mean(top_y)), float(np.mean(bot_y)))
     ys = np.linspace(ym[0], ym[1], n_y)
@@ -111,7 +113,10 @@ def doc_from_borders(borders: dict | Any, gate: dict | None = None, n_y: int = 2
     doc: LayoutDoc = {"width": W, "height": H, "vlines": vl, "top": top, "bottom": bottom,
                       "n_cols": max(len(vl) - 1, 0), "rows_per_col": None,
                       "page_type": None, "policy": None, "tags": []}
-    doc["frame"] = _frame_from_borders(b, top, bottom, vl)
+    doc["frame"] = _frame_from_borders(b, straight_top, bottom, vl)   # 外框先按直线上框推
+    if raised:                                        # 抬头列：上内框、上外框是阶梯折线
+        doc["top"] = {"pts": top_polyline_pts(straight_top["pts"], raised, W, "inner")}
+        _raise_outer_top(doc["frame"], r, raised, W)
     if gate:
         doc["page_type"] = gate.get("page_type")
         doc["policy"] = gate.get("page_type_policy")
@@ -120,6 +125,56 @@ def doc_from_borders(borders: dict | Any, gate: dict | None = None, n_y: int = 2
         # 闸实际采用的期望列数（含册配置里按页覆盖的 expected_cols_pages，如殿本 vol01 p100 实有 10 列）
         doc["expected_cols"] = gate.get("expected_cols")
     return doc
+
+
+def head_raise_spans(r) -> list[tuple[float, float, float, float]]:
+    """抬头列 → [(x_右起, x_左起, inner_y, outer_y)]，x 从页面右缘起算（产物坐标）。
+    同一列多级台阶取 inner_y 最小（最高的一级）；列的左右边取该列两条界行在抬头内框高度处的 x。"""
+    best: dict[int, Any] = {}
+    for h in r.head_raise or []:
+        if h.col not in best or h.inner_y < best[h.col].inner_y:
+            best[h.col] = h
+    out = []
+    nv = len(r.verticals)
+    for col in sorted(best):
+        if not (1 <= col < nv):
+            continue
+        h = best[col]
+        a, b = r.verticals[col - 1].x_at(h.inner_y), r.verticals[col].x_at(h.inner_y)
+        out.append((float(min(a, b)), float(max(a, b)), float(h.inner_y), float(h.outer_y)))
+    return out
+
+
+def top_polyline_pts(base: list[list[float]], spans: list, W: int, which: str) -> list[list[float]]:
+    """把直线上框 base（左上原点点列）改成阶梯折线：每个抬头列在其左右边处各加两个同 x 的点，
+    中间取抬头框的 y（which=inner 取 inner_y，outer 取 outer_y；金标同一台阶用同 x 两点）。"""
+    ys = np.array([p[1] for p in base]); xs = np.array([p[0] for p in base])
+    o = np.argsort(xs, kind="stable"); xs, ys = xs[o], ys[o]
+    k = 2 if which == "inner" else 3
+    spans_tl = sorted(((W - 1) - sp[1], (W - 1) - sp[0], sp[k]) for sp in spans)
+    pts: list[list[float]] = []
+    for x, y in zip(xs, ys):
+        if any(a <= x <= b for a, b, _ in spans_tl):
+            continue
+        pts.append([float(x), float(y)])
+    prev_b = prev_yy = None
+    for i, (a, b, yy) in enumerate(spans_tl):
+        yb_a, yb_b = float(np.interp(a, xs, ys)), float(np.interp(b, xs, ys))
+        if prev_b is not None and abs(a - prev_b) < 2.0:      # 相邻抬头列：台阶直接接，不回落到主框
+            pts.pop(); pts.pop()                              # 去掉上一列落回主框的点
+            pts += [[prev_b, prev_yy], [prev_b, yy], [b, yy], [b, yb_b]]
+        else:
+            pts += [[a, yb_a], [a, yy], [b, yy], [b, yb_b]]
+        prev_b, prev_yy = b, yy
+    pts.sort(key=lambda p: p[0])
+    # 同 x 的点保持「先主框后台阶」的次序：排序稳定，上面加点时已按此序
+    return pts
+
+
+def _raise_outer_top(frame: dict, r, spans: list, W: int) -> None:
+    f = frame.get("top") or {}
+    if f.get("kind") == "double" and f.get("outer"):
+        f["outer"] = {"pts": top_polyline_pts(f["outer"]["pts"], spans, W, "outer")}
 
 
 def _shift(pts: list[list[float]], d: float, horiz: bool) -> list[list[float]]:

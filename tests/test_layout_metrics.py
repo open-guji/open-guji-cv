@@ -192,3 +192,32 @@ def test_frame_errors_kind_and_outer():
     assert not r["bottom"]["ok"] and r["bottom"]["outer"] is None
     assert not r["left"]["ok"]
     assert lm.frame_errors({}, p) is None
+
+
+def test_doc_from_borders_head_raise_polyline():
+    """抬头列：上内框/上外框在该列两条界行之间是阶梯折线（同 x 两点表示台阶），其余列仍是主框。"""
+    b = {"width": W, "height": H, "expected_cols": 3,
+         "top": {"y_at_right": 300.0, "slope": 0.0, "kind": "top"},
+         "bottom": {"y_at_right": 2700.0, "slope": 0.0, "kind": "bottom"},
+         "top_frame_kind": "double", "top_outer_offset": -30.0,
+         "verticals": [{"x_at_top": 100.0 + i * 180.0, "slope": 0.0} for i in range(4)],
+         "head_raise": [{"col": 2, "inner_y": 150.0, "outer_y": 100.0, "estimated": False}]}
+    d = lg.doc_from_borders(b)
+    # 第 2 列在产物坐标 x∈[280,460]，换成左上原点 [W-1-460, W-1-280]
+    a, c = W - 1 - 460.0, W - 1 - 280.0
+    top = lm._pts(d["top"])
+    assert lm.y_at(top, [(a + c) / 2])[0] == pytest.approx(150.0)
+    assert lm.y_at(top, [a - 50.0])[0] == pytest.approx(300.0)
+    outer = lm._pts(d["frame"]["top"]["outer"])
+    assert lm.y_at(outer, [(a + c) / 2])[0] == pytest.approx(100.0)
+    assert lm.y_at(outer, [a - 50.0])[0] == pytest.approx(270.0)
+    assert lg.validate_doc(d) == []
+
+
+def test_doc_from_borders_no_head_raise_unchanged():
+    b = {"width": W, "height": H, "expected_cols": 2,
+         "top": {"y_at_right": 300.0, "slope": 0.0, "kind": "top"},
+         "bottom": {"y_at_right": 2700.0, "slope": 0.0, "kind": "bottom"},
+         "verticals": [{"x_at_top": 100.0 + i * 180.0, "slope": 0.0} for i in range(3)]}
+    d = lg.doc_from_borders(b)
+    assert len(d["top"]["pts"]) == 24 and {p[1] for p in d["top"]["pts"]} == {300.0}
