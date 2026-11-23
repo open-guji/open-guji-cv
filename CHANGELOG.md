@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.95] - 2026-11-23
+
+殿本 patch 线：v0.7.94 ＋ dev #1814（seed_admit 书级开关 `ref_lib_5b_veto`／`ref_lib_5b_veto_lead`，缺省关）。「整理本＝库首位」放行（`ref_lib`）的格，5-b 首位是别的汉字、分 ≥ 门槛、领先 ≥ 门槛（缺省 0.02）→ 退回人审（doubt `ref_lib_5b_veto`），只降级。供殿本带它重跑 5a A/B（CV3 11-23）。本线 seed_admit 还没拆出 `seed_admit_params`，按本线结构手工移植（去键照 `_drop_off_rare` 原写法）。**开关关着时产物不变**：seed_admit 代码哈希 d2026a75→340e78ad 已登 code_equiv，其余各步 code_hash 与 v0.7.94 相同，底库 b29 不变。
+
 ## [0.7.94] - 2026-11-23
 
 殿本 patch 线：v0.7.90 ＋ 模型表补回 `glyph_sim_base_v1`（`core/model_pack.KINDS` 的 `glyph_sim_base` 一行、`config/model-registry.json` 两行、`config/model-provenance.json` 一节，照 v0.7.89 原样）。殿本 5a 新相似度 A/B（CV3 11-23）C 臂要执行机按模型表从 R2 取 `models/glyph_sim_base_v1/`，v0.7.86／0.7.90 的模型表里没有这项。**各步 code_hash 与 v0.7.90 相同**（实算），底库 b29 不变，没开 `sim_model` 的册输出不变。
