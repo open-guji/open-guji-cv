@@ -561,14 +561,19 @@ def test_add_del_chars_route_to_cellmap(tmp_path, monkeypatch):
 
 
 def test_sheet_gate_blocks_false_overturn(capsys):
-    """出单门（11-13）：机器无字当「推翻人裁」、失效老人裁当「被推翻」、锚点格混进判字单，都不让上线。"""
+    """出单门（11-13）：失效老人裁当「被推翻」、改判前后同字、锚点格混进判字单，都不让上线。
+    机器无字（□）推翻人裁 11-19 起只提示、照常上单（sheldon：以新包为准，manager sheet_audit WARN）。"""
     pytest.importorskip("guji_manager.review.sheet_audit")
     ws = Path("/nonexistent-ws")
     good = {"cells": [{"cell": "1:1:1", "pending_reason": "hard_pair"}], "anchor_cells": [{"cell": "9:1:1", "src": "closeout_anchor"}]}
     a = type("A", (), {})()
     rp.sheet_gate(good, ws, "vol06", a)                       # 通过，不退出
+    empty = {"cells": [{"cell": "1:4:7", "recheck": True, "pending_reason": "machine_changed",
+                        "note": "机器改判「卷」→「□」，推翻人裁，请核"}]}
+    rp.sheet_gate(empty, ws, "vol06", a)                      # 只提示，不退出
+    assert "overturn_empty" in capsys.readouterr().out
     bad = {"cells": [{"cell": "1:4:7", "recheck": True, "pending_reason": "machine_changed",
-                      "note": "机器改判「卷」→「□」，推翻人裁，请核"}]}
+                      "note": "机器改判「卷」→「卷」，推翻人裁，请核"}]}
     with pytest.raises(SystemExit) as e:
         rp.sheet_gate(bad, ws, "vol06", a)
     assert "单子体检不过" in str(e.value)
