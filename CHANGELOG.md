@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.94] - 2026-11-23
+
+殿本 patch 线：v0.7.90 ＋ 模型表补回 `glyph_sim_base_v1`（`core/model_pack.KINDS` 的 `glyph_sim_base` 一行、`config/model-registry.json` 两行、`config/model-provenance.json` 一节，照 v0.7.89 原样）。殿本 5a 新相似度 A/B（CV3 11-23）C 臂要执行机按模型表从 R2 取 `models/glyph_sim_base_v1/`，v0.7.86／0.7.90 的模型表里没有这项。**各步 code_hash 与 v0.7.90 相同**（实算），底库 b29 不变，没开 `sim_model` 的册输出不变。
+
 ## [0.7.90] - 2026-11-20
 
 殿本 patch 线：v0.7.86 + #1763（cherry-pick 0eca6af）。用户 11-20 同意殿本升级、第 1 册整册重跑（ZM 发）；配底库 b29 不变。**不含** dev 线、史記（0.7.88）、全唐文（0.7.87／0.7.89）patch 线其他改动。
