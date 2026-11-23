@@ -91,7 +91,7 @@ datastore = [
 llm = [
     "anthropic>=2.3",
 ]
-# PDF 抽页（guji import-pdf）
+# PDF 抽页（原 guji import-pdf 已删，PDF 由 manager `source commons` 收；留着给零散脚本）
 pdf = [
     "pymupdf>=1.23",
 ]
@@ -122,8 +122,9 @@ dev = [
 ]
 
 [project.scripts]
-# 唯一入口 guji（2026-11-22 删了 guji-cv）；guji-manager、guji-console 经插件并进来。
-# `python -m open_guji_cv` 只留给隔离步骤的子进程内部用，不对外写。
+# cv 自己的入口 guji-cv（只有 cv 的命令，大步工具可写前缀：guji-cv layout preclean …）。
+guji-cv = "open_guji_cv.cli_v2:cv_main"
+# 总入口 guji：guji-manager、guji-console 经插件并进来；manager 文档写 guji pipeline …（route 钩子改写到 cv 命令）。
 guji = "open_guji_cv.cli_v2:main"
 
 [project.urls]

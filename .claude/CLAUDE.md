@@ -4,7 +4,7 @@
 - 默认使用中文进行交流
 
 ## 项目概述
-古籍刻本图像 → 逐字结果的引擎，分四大步：**1 版面** `layout`（原 Step0–2）、**2 切字** `cut`（原 Step3–4）、**3 识字** `read`（原 Step5）、**4 定字** `decide`（原 Step6–7）。原 Step8 入库、Step9 排版输出已移到 guji-manager（第二步 `pipeline`、第五步 `output`）。cv 整个属于 manager 第二步，命令文档里写 `guji pipeline <命令>`（2026-11-22 用户定）。
+古籍刻本图像 → 逐字结果的引擎，分四大步：**1 版面** `layout`（原 Step0–2）、**2 切字** `cut`（原 Step3–4）、**3 识字** `read`（原 Step5）、**4 定字** `decide`（原 Step6–7）。原 Step8 入库、Step9 排版输出已移到 guji-manager（第二步 `pipeline`、第五步 `output`）。cv 有自己的命令行入口 `guji-cv`（cv 文档都写它）；`guji` 是 guji-manager 的总入口，manager 通过 `guji pipeline …` 调 cv（2026-11-22 用户定）。
 **2026-11-04 起本仓只是 pipeline**（凡影响识别产物的）；工作区、中心库、R2、任务库、审阅、评测、整理命令都在 [guji-manager](https://github.com/open-guji/guji-manager)（`guji_manager`，经入口点并进 `guji` 命令）。改 manager 不用给 pipeline 发版。分界见 `doc/design/拆分-pipeline与manager.md`。
 数据集与评测在隔壁仓 `open-guji-dataset`；原图在 `guji-workspace`（git，2026-10-19 起只存原图）；册配置、人裁、台账、字形库在**中心库**（`guji db sync`，见 `doc/参考/datastore.md` 第六节）；产物在各机本地。
 
@@ -28,7 +28,7 @@
 | 已退役与过期的文档 | [doc/archive/](../doc/archive/)（含旧 CLAUDE.md 的长索引原文） |
 
 ## 怎么干活
-- **前台用控制台，后台用 `guji` 命令**：`guji pipeline <管线> <册>`（`--from/--to` 可写大步名）、`guji pipeline step`、`guji pipeline status` 在本仓；`close-check` / `recheck` / `cache` / `collate` / `gold` / `eval` / `db` …由 guji-manager 提供（装上就并进 `guji`，没装会提示装法）。唯一入口是 `guji`（`guji-cv` 已删）。
+- **前台用控制台，后台用命令行**：cv 自己的入口 `guji-cv`（大步工具可带前缀，如 `guji-cv layout preclean`）：`guji-cv pipeline <管线> <册>`（`--from/--to` 可写大步名）、`guji-cv step`、`guji-cv status` 在本仓；`close-check` / `recheck` / `cache` / `collate` / `gold` / `eval` / `db` …由 guji-manager 提供，走总入口 `guji`（manager 文档里写 `guji pipeline …`）。
   别直接调 `scripts/` 下的散脚本做书的整理，manager 文档里点名的除外。
 - 当前只优化**正文页**；目录、职名、序跋、牌记先不管，指标按正文与非正文分开报。
 - 旧的 v1 命令（`python -m open_guji_cv run/extract/preprocess`）已退役，不要在上面加东西。

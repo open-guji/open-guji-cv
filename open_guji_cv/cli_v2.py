@@ -1242,7 +1242,7 @@ def _plugin_too_old(module, name: str) -> bool:
     return _version_tuple(have) < _version_tuple(need)
 
 
-def register_subcommands(sub: argparse._SubParsersAction) -> None:
+def register_subcommands(sub: argparse._SubParsersAction, plugins: bool = True) -> None:
     p = sub.add_parser("pipeline", help="跑一条 pipeline（或其中一段）",
                        epilog="装了 guji-manager 时 pipeline 也是第二步「自动化流程」的命令前缀："
                               "`guji pipeline <命令> …` 等于 `guji <命令> …`，`guji pipeline commands` 列出本步命令。")
@@ -1430,23 +1430,54 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--edition", default="")
 
 
-    load_plugin_commands(sub)
+    if plugins:
+        load_plugin_commands(sub)
     install_workspace_option(sub)
 
 
-def main(argv: list[str] | None = None) -> None:
+#: cv 四大步（2026-11-22）里各大步自己的工具命令。`guji-cv <大步> <命令> …` 与 `guji-cv <命令> …` 等价；
+#: 跑管线、单步、状态、册配置这些不属于某一大步的命令不带前缀。
+STAGE_COMMANDS: dict[str, tuple[str, ...]] = {
+    "layout": ("survey", "preclean", "split", "locate-gutter", "calibrate", "binarize"),
+    "cut": (),
+    "read": ("rare", "calibrate-font", "witness-align", "witness-align-stream", "seed-witness"),
+    "decide": ("variants",),
+}
+
+
+def strip_stage_prefix(argv: list[str]) -> list[str]:
+    """`guji-cv <大步> <命令> …` → `guji-cv <命令> …`；命令不属于这一大步就报错，免得写错前缀也悄悄能跑。"""
+    i = next((k for k, a in enumerate(argv) if not a.startswith("-")), None)
+    if i is None or argv[i] not in STAGE_COMMANDS:
+        return argv
+    stage, rest = argv[i], argv[i + 1:]
+    allowed = STAGE_COMMANDS[stage]
+    if not rest or rest[0].startswith("-"):
+        raise SystemExit(f"guji-cv {stage} 下的命令：{'、'.join(allowed) or '（没有）'}")
+    if rest[0] not in allowed:
+        raise SystemExit(f"`{rest[0]}` 不属于大步 {stage}；{stage} 下的命令：{'、'.join(allowed) or '（没有）'}")
+    return argv[:i] + rest
+
+
+def main(argv: list[str] | None = None, *, prog: str = "guji", plugins: bool = True) -> None:
+    """`guji`：给 guji-manager 用的总入口（并进 manager 的命令、经 route 钩子认 `guji <步> <命令>`）。
+    cv 自己的入口是 `guji-cv`（`cv_main`），只有 cv 的命令。"""
     if argv is None:
         from .utils.batch_slice import enter_batch_slice
         enter_batch_slice(sys.argv[1:])   # 服务器上跑批自动进内存额度切片
-    parser = argparse.ArgumentParser(prog="guji", description="open-guji-cv 四个抽象的 CLI")
+    parser = argparse.ArgumentParser(prog=prog, description="open-guji-cv 命令行" if not plugins
+                                     else "guji：guji-manager 与 open-guji-cv 的总入口")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
-    register_subcommands(sub)
+    register_subcommands(sub, plugins=plugins)
     if argv is None:
         argv = sys.argv[1:]
-    for routed in hooks.call("route", list(argv)):   # 步骤前缀 `guji <步> <命令> …`（manager，见 core/hooks.py）
-        if routed is not None:
-            argv = routed
-            break
+    if plugins:
+        for routed in hooks.call("route", list(argv)):   # 步骤前缀 `guji <步> <命令> …`（manager，见 core/hooks.py）
+            if routed is not None:
+                argv = routed
+                break
+    else:
+        argv = strip_stage_prefix(list(argv))
     hint = moved_command_hint(argv, sub.choices)
     if hint:
         print(hint, file=sys.stderr)
@@ -1461,6 +1492,12 @@ def main(argv: list[str] | None = None) -> None:
         parser.print_help()
         return
     handler(args)
+
+
+def cv_main(argv: list[str] | None = None) -> None:
+    """cv 自己的命令行入口 `guji-cv`（也是 `python -m open_guji_cv`）：只有 cv 的命令，不并 manager 的；
+    大步工具可写前缀 `guji-cv layout preclean …`。manager 的 hooks（钉版、准备输入、耗时）照样生效。"""
+    main(argv, prog="guji-cv", plugins=False)
 
 
 if __name__ == "__main__":
