@@ -86,12 +86,6 @@ ROWS_KEEP_MIN = 0.5
 BAR_AFTER_MIN_PEAK = 0.10
 #: `first_valley`：界行衰减到这一格以后，墨又回升超过这么多，这一格就是界行与字之间的谷
 FIRST_VALLEY_RISE = 0.02
-#: `inner_bar_span`（column_warp 书级开关，全唐文）：贴边档的「内侧孤立竖线」离边超过列宽这么多、
-#: 且这条在本横条里有墨的行占比不到 INNER_BAR_MIN_ROWS，就是字的竖笔，不是第二道线。
-#: 全唐文 001/009/014 三册 107 列实测（2026-11-18，R038）：真双线（页边列内框）离边 ≤ 0.11 列宽、
-#: 行占比多为 0.95~1.0（淡的 0.14~0.47）；被误抹的字笔（十 的竖、忄、贴右的竖）离边 0.15~0.27、行占比 0.11~0.37。
-INNER_BAR_FAR_FRAC = 0.13
-INNER_BAR_MIN_ROWS = 0.5
 
 
 def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
@@ -100,7 +94,6 @@ def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
                       bar_max_width: int = 22, inset_look_frac: float = 0.28,
                       bar_after_min_peak: float = BAR_AFTER_MIN_PEAK,
                       first_valley: bool = False,
-                      inner_bar_span: bool = False,
                       ) -> tuple[int, int]:
     """找矫正图里**文字带的左右边界** `(x_left, x_right)`（半开区间，右端不含）。
 
@@ -123,10 +116,6 @@ def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
     `first_valley=True`（写本书级，`column_warp.tight_rule_band`）：贴边档的边界取界行衰减后的**第一个谷**
     （之后墨回升超过 `FIRST_VALLEY_RISE`），不取窗口最低点——写本字贴着界行写，「以」的左竖落在窗口里、
     跟右半「人」之间那道缝比界行与字之间的缝还白，取最低点就连这一竖一起抹掉（史記 02:27:1:4b）。
-
-    `inner_bar_span=True`（全唐文书级，`column_warp.inner_bar_span`）：贴边档的内侧孤立竖线离边超过
-    `INNER_BAR_FAR_FRAC` 列宽、又只在本横条不到 `INNER_BAR_MIN_ROWS` 的行里有墨，就当字的竖笔不抹——
-    「十」的竖贴着右界行、在 240 行横条里只占上半截，按窄条判成内框，带外一抹就剩「亠」（001:121:1:6a、R033/R038）。
 
     "扫到窗口最低点"这个写法是拿人裁金标标定出来的
     （`char-segmentation/column-warp`）。**上一版是"先吃墨占比 >= 0.35 的界行
@@ -170,9 +159,6 @@ def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
         if a >= len(wide) or k >= len(wide):
             return None
         if k - a <= bar_max_width and float(wide[a:k].max()) >= bar_after_min_peak:
-            if inner_bar_span and k > INNER_BAR_FAR_FRAC * n \
-                    and float(ink[:, order[a:k]].any(axis=1).mean()) < INNER_BAR_MIN_ROWS:
-                return None                           # 离边远又不贯通 = 字的竖笔
             return k
         return None
 

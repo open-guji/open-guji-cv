@@ -18,8 +18,8 @@ from pathlib import Path
 
 OVERRIDE_ENV = "GUJI_BOOK_OVERRIDE"
 
-#: 身份与图源（含缺页 `gaps`：这一册图源的事实）：只能写在册 yaml 里，基础配置、运行覆盖都不许写
-IDENTITY_KEYS = frozenset({"id", "title", "raw_dir", "raw_pattern", "pages", "sets", "freeze", "gaps"})
+#: 身份与图源：只能写在册 yaml 里，基础配置、运行覆盖都不许写
+IDENTITY_KEYS = frozenset({"id", "title", "raw_dir", "raw_pattern", "pages", "sets", "freeze"})
 #: 书 id、册序（`core/volume_id.py`）：书 id 写在基础配置、册序写在册 yaml，但都是身份，运行覆盖不许改
 VOLUME_ID_KEYS = frozenset({"book_id", "volume", "volume_width", "chapter_width"})
 #: 实测的版式先验：换书必须重标，不许写进基础配置（运行覆盖可以，做实验用）

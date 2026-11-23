@@ -42,9 +42,6 @@ class Pipeline:
     #: 刻本链与现代链里默认参数不同，差异写在这里而不是分叉代码；CLI `--params` /
     #: 控制台的覆盖仍然优先于它（见 `Engine.__init__`）。
     params: dict[str, dict] = field(default_factory=dict)
-    #: 四大步（2026-11-22）：大步名 → 本管线里属于它的步骤 id（按管线顺序）。只是分组，不进指纹；
-    #: `slice()` 的起止可以写大步名。由骨架 `stages:` 展开（`expand_stages`）。
-    stages: dict[str, list[str]] = field(default_factory=dict)
 
     # ── 图 ───────────────────────────────────────────────────────────
     def step(self, sid: str) -> Step:
@@ -129,16 +126,7 @@ class Pipeline:
             )
         raise ValueError(f"pipeline {self.id} 没有步骤 {sid!r}")
 
-    def stage_of(self, sid: str) -> str | None:
-        """步骤 `sid` 属于哪个大步（layout／cut／read／decide）；不属于任何大步给 None。"""
-        return next((k for k, v in self.stages.items() if sid in v), None)
-
     def slice(self, from_step: str | None = None, to_step: str | None = None) -> list[str]:
-        """`from_step`／`to_step` 可写步骤 id，也可写大步名（取该大步的第一步／最后一步）。"""
-        if from_step and from_step in self.stages and from_step not in self.steps:
-            from_step = self._stage_end(from_step, first=True)
-        if to_step and to_step in self.stages and to_step not in self.steps:
-            to_step = self._stage_end(to_step, first=False)
         i = self._index(from_step)
         i = i if i is not None else 0
         j = self._index(to_step)
@@ -146,12 +134,6 @@ class Pipeline:
         if i >= j:
             raise ValueError(f"步骤范围为空: {from_step} → {to_step}")
         return self.steps[i:j]
-
-    def _stage_end(self, stage: str, first: bool) -> str:
-        members = self.stages[stage]
-        if not members:
-            raise ValueError(f"pipeline {self.id} 的大步 {stage!r} 里没有步骤")
-        return members[0] if first else members[-1]
 
     def edges(self) -> list[tuple[str, str, str]]:
         """(上游, 下游, 产物种类) 三元组，给控制台画图。"""
@@ -229,30 +211,6 @@ def expand_slots(chain: dict, skeleton: dict, pid: str = "?") -> list[str]:
     return out
 
 
-def expand_stages(chain: dict, skeleton: dict, steps: list[str]) -> dict[str, list[str]]:
-    """骨架 `stages:` + 链 yaml 的 `slots:` → {大步名: 本管线里属于它的步骤 id}（按 `steps` 顺序）。
-
-    骨架里大步成员写步骤 id，或写 `slot:<槽位>`（这个槽位里链放的步骤都归这一大步）。
-    槽位 `recognition` 不点名，里面的步骤按 id 归。一步只能归一个大步。"""
-    given = chain.get("slots") or {}
-    defaults = skeleton.get("slots") or {}
-    owner: dict[str, str] = {}
-    for stage, members in (skeleton.get("stages") or {}).items():
-        for m in members or []:
-            m = str(m)
-            ids = ([str(i) for i in given.get(m[5:], defaults.get(m[5:], []))]
-                   if m.startswith("slot:") else [m])
-            for sid in ids:
-                if sid in owner and owner[sid] != stage:
-                    raise ValueError(f"步骤 {sid} 同时归大步 {owner[sid]} 和 {stage}")
-                owner[sid] = stage
-    out: dict[str, list[str]] = {k: [] for k in (skeleton.get("stages") or {})}
-    for sid in steps:
-        if sid in owner:
-            out[owner[sid]].append(sid)
-    return out
-
-
 def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
     import open_guji_cv.steps  # noqa: F401  —— 触发 Step 注册
 
@@ -262,16 +220,13 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
         raise FileNotFoundError(f"没有这条 pipeline: {path}")
     from .yaml_cache import load_yaml_cached
     d = load_yaml_cached(path)
-    stages: dict[str, list[str]] = {}
     if "slots" in d:                  # 链 yaml 只写槽位，步骤顺序由骨架展开
         if "steps" in d:
             raise ValueError(f"pipeline {pid}: slots: 和 steps: 不能同时写")
         sk_path = pdir / f"{SKELETON_ID}.yaml"
         if not sk_path.exists():
             raise FileNotFoundError(f"pipeline {pid} 用了 slots:，但没有骨架 {sk_path}")
-        skeleton = load_yaml_cached(sk_path)
-        d = {**d, "steps": expand_slots(d, skeleton, pid)}
-        stages = expand_stages(d, skeleton, d["steps"])
+        d["steps"] = expand_slots(d, load_yaml_cached(sk_path), pid)
     params_raw = d.get("params") or {}
     if not isinstance(params_raw, dict) or any(not isinstance(v, dict) for v in params_raw.values()):
         raise ValueError(f"pipeline {pid} 的 params: 必须是 {{step_id: {{字段: 值}}}}")
@@ -281,7 +236,6 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
         selector=d.get("selector") or {}, needs=d.get("needs") or {},
         notes=d.get("notes", ""),
         params={str(k): dict(v) for k, v in params_raw.items()},
-        stages=stages,
     )
     p.validate()
     for sid in p.params:

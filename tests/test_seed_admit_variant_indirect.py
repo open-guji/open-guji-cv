@@ -67,7 +67,7 @@ def test_relation_layer_facts():
     assert vm.semantic("𢑴") == vm.semantic("彞") == vm.semantic("彝")
     assert _direct_variant_edge("𢑴", "彝") and _direct_variant_edge("彞", "彝")
     assert not _direct_variant_edge("𢑴", "彞"), "有了直接边，本测试的前提就变了"
-    assert not _direct_variant_edge("冶", "治")   # twedu 有边，但字对关系表判 C（纯形近），边被摘掉（2026-11-21）
+    assert _direct_variant_edge("冶", "治")   # twedu 单向，但是直接边
     assert _direct_variant_edge("彝", "彞")
 
 

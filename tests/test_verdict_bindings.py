@@ -151,25 +151,3 @@ def test_rebind_library_shapes_respects_stale_marks(monkeypatch):
     assert "v:1:1:1" not in out          # 撤下在最新裁决之后：作废
     assert out["v:1:1:2"] == "宇"        # 撤下之后又裁了：有效
     assert out["v:1:1:3"] == "字"        # 没撤下：原样
-
-
-def test_rebind_library_shapes_keeps_relabel_after_void(monkeypatch):
-    """库内审阅改标：旧人裁事件作废的同时库里以人裁身份改了字，这份新字要进文本（全唐文 侯／𠋫，11-18）。"""
-    import open_guji_cv.feedback.lookup as L
-    rows = {
-        "e1": {"event": "e1", "key": "v:1:1:1", "ts": "2026-11-03T17:27:05Z", "shape": "𠋫", "status": "valid", "bound": "v:1:1:1"},
-        "e2": {"event": "e2", "key": "v:1:1:2", "ts": "2026-11-03T17:27:05Z", "shape": "𠋫", "status": "valid", "bound": "v:1:1:2"},
-        "e3": {"event": "e3", "key": "v:1:1:3", "ts": "2026-11-03T17:27:05Z", "shape": "𠋫", "status": "merged", "bound": None},
-    }
-    monkeypatch.setattr(B, "book_bindings", lambda book, log=None: rows)
-    monkeypatch.setattr(L, "stale_human_marks", lambda book: {k: "20261110T0233" for k in ("v:1:1:1", "v:1:1:2", "v:1:1:3")})
-    lib = {"v:1:1:1": "侯", "v:1:1:2": "𠋫", "v:1:1:3": "侯"}
-    at = {"v:1:1:1": "2026-11-10T02:33:00+00:00", "v:1:1:3": "2026-11-10T02:33:00+00:00"}
-    lost: dict = {}
-    out = B.rebind_library_shapes("v", lib, lost=lost, relabeled_at=at)
-    assert out.get("v:1:1:1") == "侯"      # 作废当时改标重进：采信新字
-    assert "v:1:1:2" not in out            # 只作废、没改标：照旧不采信
-    assert "v:1:1:3" not in out and lost["v:1:1:3"]["char"] == "侯"   # 改了标但格绑不上：进绑丢闸
-    assert "v:1:1:1" not in B.rebind_library_shapes("v", lib)         # 不传改标时刻：旧行为
-    early = {"v:1:1:1": "2026-11-09T00:00:00+00:00"}
-    assert "v:1:1:1" not in B.rebind_library_shapes("v", lib, relabeled_at=early)   # 改标早于作废：作废

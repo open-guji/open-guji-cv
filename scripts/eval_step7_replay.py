@@ -26,7 +26,7 @@ Step7 对每个字位给一个放行判定：`admit`（自动放行，带通道 
    下面单独标 `sampled` 档）。
 2. **回放里的 match 通道有泄漏**：库里的刻例大多来自这些人裁（人裁进库），`glyph_match` 对同一格
    可能是在拿「人自己入库的那一份」匹配自己。严格的回放要留一法（摘掉该格入库的刻例再跑 Step5-a/7）
-   ——那要整库 + 上游重跑，本脚本不做，只在报告里把这条风险标出来（见 doc/4-定字/step7_replay_eval.md §4）。
+   ——那要整库 + 上游重跑，本脚本不做，只在报告里把这条风险标出来（见 doc/step7_replay_eval.md §4）。
 3. **产物与事件的时间差**：产物是某次跑批的快照，人裁是更早（或更晚）发生的；格编号 `book:page:col:slot`
    在重切后会漂。所以找不到格的（`nocell`）单独计数。
 
@@ -167,7 +167,7 @@ def main() -> int:
         elif cls == "auto":
             b, pg, col, slot = (key.split(":") + ["", "", "", ""])[:4]
             # 编号漂移嫌疑：同列相邻格放行的字恰好就是人裁字 → 八成是重切后格号错位，
-            # 不是放行错了（vol02 旧快照上成片出现，见 doc/4-定字/step7_replay_eval.md §3）
+            # 不是放行错了（vol02 旧快照上成片出现，见 doc/step7_replay_eval.md §3）
             drift = (not ok) and slot.lstrip("-").isdigit() and any(
                 same((cells.get(f"{b}:{pg}:{col}:{int(slot) + d}") or {}).get("char", ""), human_char)
                 for d in (-2, -1, 1, 2))

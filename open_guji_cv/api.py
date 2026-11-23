@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """pipeline 的公开面：manager 只许 import 这里与 `open_guji_cv.products.kinds`（产物 schema），
-不许直接 import `clustering` / `utils` / `steps` 的内部。设计与契约见 `doc/design/拆分-pipeline与manager.md`、`doc/参考/契约.md`。
+不许直接 import `clustering` / `utils` / `steps` 的内部。设计与契约见 `doc/design/拆分-pipeline与manager.md`、`doc/契约.md`。
 
 这一层只转发现有函数，不放逻辑，所以随便什么时候改都不动 Step 指纹。
 """
