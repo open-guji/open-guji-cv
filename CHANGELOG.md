@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（只动评测与训练脚本，不动产物）：识字 benchmark 第 2 期 c——`eval_advset.py`／`eval_match_pool.py` 按册号奇偶另报 dev／test（调门槛只看 dev）；`train_glyph_sim_cnn.py` 的 `--exclude` 认 items.jsonl／rare.jsonl／每行一格的 .txt，新增 `--exclude-chars`（对抗集留出字整类不进训练），配 dataset `glyph-match/train_exclude/`。
 - PATCH（只加评测脚本，不动产物）：`scripts/eval_advset.py`——3a 子基准 A2「库外拒识」，在 dataset `glyph-match/advset-<书>/`（库外形近字对抗集，自带归一图）上用生产逐对判官量库外字被判 same 的题数，分形近层／异体层，`--against` 出翻转清单。登记在 guji-manager（`advset`／`advset_shiji`／`advset_qtw`）。测试 `test_eval_advset.py`。
 - PATCH（只加评测脚本，不动产物）：`scripts/eval_match_pool.py`——固定候选池分片的通用评测（首位命中、放行、误放，按类别分报），先用于 3a 子基准 A5 退化（dataset `glyph-match/damaged-*`，真实残损集）。登记 `match_pool`／`match_pool_shiji`。测试 `test_eval_match_pool.py`。
 - PATCH：四大步：整理本对位 `align_ref` 从 3 识字移到 4 定字（Sheldon 2026-11-22 定：第三步只管从字块图取证；align_ref 不读字块图，是文本证据与合证据）。4 定字小步改称 4a 整理本对位、4b 上下文、4c 放行。只改骨架 `stages:` 分组与文档，步骤 id、顺序、产物、指纹都不变（A23）。` 下加一行、写明档位。（下面到 `## [未发版]` 之前的几行是早先误写在文件头的 v0.7.x／v0.8.0 条目，原样保留。）
