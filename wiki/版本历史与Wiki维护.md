@@ -23,6 +23,7 @@
 
 ### v0.9（2026-11-23，v0.9.0）：按四大步重排
 
+- 2026-11-22 用户定：单列拉直（原 1d `column_warp`／`column_crop`／`column_trace`）从 1 版面移到 2 切字，成 2a；原 2a 逐字切分、2b 字框收缩改称 2b、2c。1 版面只管认位置、判类型。步骤 id、产物、指纹都没变。
 - 原九步并成四大步：**1 版面**（Step0–2）、**2 切字**（Step3–4）、**3 识字**（Step5）、**4 定字**（Step6–7）；Step8 入库、Step9 排版输出移到 guji-manager。步骤 id、产物、指纹都没变。
 - 六个 Step 页合成四个大步页：`1-版面`、`2-切字`、`3-识字`、`4-定字`；Step0 页面预检从「管线全景」挪进「1 版面」。
 - cv 有自己的命令行入口 `guji-cv`（本 Wiki 里 cv 的命令都写它；大步工具可带前缀，如 `guji-cv layout preclean`）；manager 的命令写总入口 `guji`（`guji start …`、`guji pipeline …`）。`--from`／`--to` 可写大步名 `layout`／`cut`／`read`／`decide`。删了 `fp-migrate`、`import-pdf`。

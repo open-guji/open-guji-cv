@@ -1,12 +1,14 @@
 # 2 切字（cut）
 
-原九步的 Step3–4。输入拉直后的单列图，切成带类型的字格（字、空格、夹注、印章、插图…），再把每格收成紧框，交给 [3 识字](../3-识字/README.md)。
+原九步的 Step2–4。输入原图和 [1 版面](../1-版面/README.md) 认出的版框、界行、印章，先把每列拉直（射影、缩放）、把字和版框界行分开，再切成带类型的字格（字、空格、夹注、印章、插图…），再把每格收成紧框，交给 [3 识字](../3-识字/README.md)。
 
 | 小步 | 步骤 id | 产出 |
 |---|---|---|
-| 2a 逐字切分 | 刻本 `row_segment`／现代 `row_segment_runs`／自由版式 `cell_cut` | `cells`（字格＋读序）；闸 `row_segment_gate` |
-| 2b 字框收缩 | `cell_shrink` | `char_index`（紧框＋flags）、`char_patch`（字块图） |
+| 2a 单列拉直 | 刻本 `column_warp`／现代 `column_crop`／自由版式 `column_trace`、`line_ocr` | `column_windows`、`column_image`；闸 `column_gate` 判每列能不能切 |
+| 2b 逐字切分 | 刻本 `row_segment`／现代 `row_segment_runs`／自由版式 `cell_cut` | `cells`（字格＋读序）；闸 `row_segment_gate` |
+| 2c 字框收缩 | `cell_shrink` | `char_index`（紧框＋flags）、`char_patch`（字块图） |
 
+- 单列拉直 2026-11-22 起从 1 版面移来（用户定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。步骤 id、产物、指纹不变。
 - 各步的输入输出、闸、参数缺省值：[步骤与产物.md](步骤与产物.md)（从代码生成）。
 - 人定切分（15 种，优先级）：[切分覆盖.md](切分覆盖.md)。
 - 切分代码分层（`seg/` 原语、`impl/` 版式、书仓 `code/`）：[../参考/切分代码结构.md](../参考/切分代码结构.md)。

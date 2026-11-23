@@ -19,16 +19,17 @@ def test_every_step_in_exactly_one_stage_in_order(pid):
 
 def test_keben_stage_members():
     pl = load_pipeline("keben_body_v2")
-    assert pl.stages["layout"] == ["page_survey", "invert_detect", "border_detect", "seal_detect", "column_warp"]
-    assert pl.stages["cut"] == ["row_segment", "cell_shrink"]
+    assert pl.stages["layout"] == ["page_survey", "invert_detect", "border_detect", "seal_detect"]
+    assert pl.stages["cut"] == ["column_warp", "row_segment", "cell_shrink"]
     assert pl.stages["read"] == ["glyph_match", "rare_candidates", "align_ref"]
     assert pl.stages["decide"] == ["context_decide", "seed_admit"]
     assert pl.stage_of("cell_shrink") == "cut"
+    assert pl.stage_of("column_warp") == "cut"   # 拉直归 2 切字（2026-11-22 用户定）
 
 
 def test_slice_by_stage_name():
     pl = load_pipeline("keben_body_v2")
-    assert pl.slice("cut", "cut") == ["row_segment", "cell_shrink"]
+    assert pl.slice("cut", "cut") == ["column_warp", "row_segment", "cell_shrink"]
     assert pl.slice("layout", "cut")[-1] == "cell_shrink"
     assert pl.slice("read", None) == ["glyph_match", "rare_candidates", "align_ref", "context_decide", "seed_admit"]
     assert pl.slice("row_segment", "read")[-1] == "align_ref"   # 步骤 id 与大步名可混用
