@@ -2350,7 +2350,13 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence=("seed_admit 36 个缺省开、397 册无一册关过的开关改恒开、不再是参数（清单见 seed_admit._ALWAYS_ON；写 true 照读，"
                     "原进 dump 的照原值补回，397 册＋bool 字段两两翻转 11,730 组 params_hash 不变）：殿本 vol28 16 页、全唐文 020 16 页、"
                     "史記 02 18 页（页号与产物包同 PR1 那条）seed_admit 与 origin/dev 0d0e9f7 产物逐字节相同；"
-                    "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-23（CV4）")),
+                    "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-23（CV4）")),    # seed_admit 参数指纹去键规则改声明表 _DUMP_DROP（CV4 整理 PR3）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="41c7aa982d60d8710ec30c5883955b3514ad9e3f798bd7175d3f47f033544f7e",
+          old="1f1f1fb43270438a7f7ae51c94fbf4f26b93ba7317a21bd05334211b1820663c",
+          evidence=("seed_admit `_drop_off_rare` 一百多段 if 改成声明表 `_DUMP_DROP`，规则逐条不变（397 册＋bool 字段两两翻转 11,730 组 "
+                    "params_hash 不变）：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（同 PR1 那条）seed_admit 与 origin/dev 1e0fcf5 "
+                    "产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-23（CV4）")),
 )
 
 
