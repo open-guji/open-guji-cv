@@ -587,6 +587,9 @@ class BorderDetectStep(Step):
         bad = set(hint) - {"top", "bottom"}
         if bad:
             raise ValueError(f"border_detect.hline_hints.{page} 只认 top／bottom，多了 {sorted(bad)}")
+        # 套书规则：左右外框在纸边侧，按页码奇偶定（册配置 side_frame）；没声明不传，与加字段前一模一样
+        _side = (ctx.book.side_frame or {}).get("even" if page % 2 == 0 else "odd")
+        side_kw = {"outer_side": _side} if _side in ("left", "right") else {}
         hint_kw = {f"{k}_hint": float(v) for k, v in hint.items() if v is not None}
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
@@ -601,6 +604,7 @@ class BorderDetectStep(Step):
                                   outer_shift=ctx.book.outer_shift,
                                   book_outer_gap=ctx.book.outer_gap,
                                   frame_layers=ctx.book.frame_layers,
+                                  **side_kw,
                                   vline_polyline=ctx.book.vline_polyline,
                                   head_raise_scale=p.head_raise_scale,
                                   top_weak_ratio=p.top_weak_ratio, top_weak_floor=p.top_weak_floor,

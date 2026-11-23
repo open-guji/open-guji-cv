@@ -21,6 +21,7 @@ import numpy as np
 LayoutDoc = dict[str, Any]
 STATES = ("intact", "faint", "broken", "inferred")
 POLICIES = ("standard", "custom", "skip")
+FRAME_KINDS = ("double", "single", "none")   # 内外双线／只有一条线／没有（装订侧）
 # 页型 → 网格策略（与 clustering/page_type.py 的口径一致：blank 并入 body）
 TYPE_POLICY = {"body": "standard", "blank": "standard", "roster": "standard", "toc": "standard",
                "edict": "custom", "uncertain": "standard", "table": "skip",
@@ -57,6 +58,22 @@ def validate_doc(doc: LayoutDoc) -> list[str]:
     n = doc.get("n_cols")
     if n is not None and doc.get("vlines") and len(doc["vlines"]) not in (n + 1, n):
         bad.append(f"n_cols={n} 与竖线条数 {len(doc['vlines'])} 对不上（应为 n 或 n+1）")
+    for side, f in (doc.get("frame") or {}).items():
+        if side not in ("top", "bottom", "left", "right"):
+            bad.append(f"frame 不认识的边 {side}")
+            continue
+        k = f.get("kind")
+        if k not in FRAME_KINDS:
+            bad.append(f"frame.{side}.kind 不认识：{k}")
+        o = f.get("outer")
+        if k == "double" and not (o and len(o.get("pts") or []) >= 2):
+            bad.append(f"frame.{side} kind=double 但没有外框线")
+        if k != "double" and o:
+            bad.append(f"frame.{side} kind={k} 不该有外框线")
+        for pt in (o or {}).get("pts") or []:
+            if not (-0.5 <= pt[0] <= W + 0.5 and -0.5 <= pt[1] <= H + 0.5):
+                bad.append(f"frame.{side} 外框线有点在图外")
+                break
     if doc.get("policy") is not None and doc["policy"] not in POLICIES:
         bad.append(f"policy 不认识：{doc['policy']}")
     return bad
@@ -94,6 +111,7 @@ def doc_from_borders(borders: dict | Any, gate: dict | None = None, n_y: int = 2
     doc: LayoutDoc = {"width": W, "height": H, "vlines": vl, "top": top, "bottom": bottom,
                       "n_cols": max(len(vl) - 1, 0), "rows_per_col": None,
                       "page_type": None, "policy": None, "tags": []}
+    doc["frame"] = _frame_from_borders(b, top, bottom, vl)
     if gate:
         doc["page_type"] = gate.get("page_type")
         doc["policy"] = gate.get("page_type_policy")
@@ -102,6 +120,35 @@ def doc_from_borders(borders: dict | Any, gate: dict | None = None, n_y: int = 2
         # 闸实际采用的期望列数（含册配置里按页覆盖的 expected_cols_pages，如殿本 vol01 p100 实有 10 列）
         doc["expected_cols"] = gate.get("expected_cols")
     return doc
+
+
+def _shift(pts: list[list[float]], d: float, horiz: bool) -> list[list[float]]:
+    return [[x, y + d] if horiz else [x + d, y] for x, y in pts]
+
+
+def _frame_from_borders(b, top: dict, bottom: dict, vl: list[dict]) -> dict:
+    """产物的框型字段 → `frame`。横边：`*_frame_kind`（缺→none）＋ `*_outer_offset`（上负下正，
+    相对内框线）；竖边：外框只在纸边一侧（`v_outer_side`），偏移取 |v_outer_offset|，
+    右侧外框在最右竖线右边，左侧在最左竖线左边；另一侧记 none。"""
+    fr: dict[str, dict] = {}
+    for side, ln in (("top", top), ("bottom", bottom)):
+        kind = getattr(b, f"{side}_frame_kind", None) or "none"
+        off = getattr(b, f"{side}_outer_offset", None)
+        f = {"kind": kind, "outer": None, "inner_w": None, "outer_w": None}
+        if kind == "double" and off is not None:
+            f["outer"] = {"pts": _shift(ln["pts"], float(off), True)}
+        elif kind == "double":
+            f["kind"] = "none"                 # 双线但外框没量出位置：不冒充
+        fr[side] = f
+    side_out = getattr(b, "v_outer_side", None)
+    off = getattr(b, "v_outer_offset", None)
+    for side, idx, sgn in (("right", 0, 1.0), ("left", -1, -1.0)):
+        f = {"kind": "none", "outer": None, "inner_w": None, "outer_w": None}
+        if side_out == side and off is not None and vl:
+            f["kind"] = "double"
+            f["outer"] = {"pts": _shift(vl[idx]["pts"], sgn * abs(float(off)), False)}
+        fr[side] = f
+    return fr
 
 
 # ───────────────── 旧金标 → LayoutDoc ─────────────────

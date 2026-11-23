@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """生成 config/dicts/variants.pairkind.tsv（字对关系表，见 open_guji_cv/pair_kind.py）。
 
-来源优先级：已有「人定」行（原样保留）> never_group.json（C）> A31初判（下面两张名单，按字义自动定）。
+来源优先级：已有「人定」行（原样保留）> never_group.json（C）> CV4判 > A31初判（下面两张名单，按字义自动定）。
 用法：python scripts/build_pair_kind.py   （重生成；人定行不丢）
 """
 import json
@@ -14,6 +14,12 @@ NEVER = ROOT / "config" / "variants" / "never_group.json"
 # A31 初判（2026-11-21）：只有 twedu／汉语大字典单一来源的对，按字义定。每项两个字连写。
 V="變𠮓 䜿豎 㕘參 鳧鳬 明眀 㣲微 凟瀆 㝠冥 瓉瓚 攜𢹂 彝𢑴 象𧰼 䘏卹 竄𥨥 祇祗 䆒究 潁頴 埤𡌨 隸𨽻 那郍 派𣲖 撰𢰅 漾𣻌 䝉蒙 厎底 狶豨 隱𨼆 䍐罕 侯𠋫 㓂寇 裦襃 選𨕖 䨇雙 涵𣹢 倚𠋣 麓𪋤 巂雟 彝𢑱 閻𨶒 濂濓 㝷尋 㳫沓 淫滛 棻𦯳 贑贛 慿憑 盡𥁞 弻弼 虗虛 傳𫝊 䴡麗 㓨刺 發𤼵 圖圗 確礭 瑣𤨏 䆳邃 妃𡚱 急𢚩 隸𨽾 㑹會 樹𣗳 裦褒 䜟讖 卑𤰞 䧟陷 䘮喪 㸃點 冡冢 䕫夔 䟦跋 敶陳 傚效 仝全".split()
 C="辦辨 戴載 冐冑 摸模 晝畫 摳樞 壬王 朿束 閣閤 觧鮮 庭廷 脯酺 伺司 俸奉 壯牡 壙曠 土士 冐胄 例列 卣鹵 且旦 廬盧 卬卯 簿薄 儀義 昂昴 東柬 宄究 大太 曼蔓 戌戍 刀刁 管菅 丹舟 戊戌 爪瓜 閈閉".split()
+
+# CV4 判（2026-11-23，GM3 复核全唐文异体闸时提出；依据见 config/dicts/variants.tsv 同日注释）。
+# 巿(fú，韍)与市(shì)：形近不同义，edges.tsv 只有 zi:UCV／zi:link 字形统一类的边，不是异体，按文意判。
+CV4_V = {"䕶護": "教育部異體字字典 護 A03894_012；全唐文 001:47:5:1",
+         "蹖踳": "chǔn 义同踳（集韻、魏都賦李善注）；全唐文 013:106:4:20"}
+CV4_C = {"巿市": "巿 fú＝韍、市 shì，形近不同义；全唐文异体闸复核 4 格"}
 
 HEAD = ("# 字对关系表：V 同义异体 / C 纯形近。说明见 open_guji_cv/pair_kind.py；由 scripts/build_pair_kind.py 生成，人定行保留。\n"
         "# 字甲\t字乙\tV|C\t来源\t备注\n")
@@ -31,6 +37,10 @@ def main():
         rows[_pair(s)] = ("V", "A31初判", "")
     for s in C:
         rows[_pair(s)] = ("C", "A31初判", "")
+    for s, note in CV4_V.items():
+        rows[_pair(s)] = ("V", "CV4判", note)
+    for s, note in CV4_C.items():
+        rows[_pair(s)] = ("C", "CV4判", note)
     if NEVER.exists():
         for p in json.loads(NEVER.read_text(encoding="utf-8")).get("pairs", []):
             if len(p) == 2 and p[0] != p[1]:

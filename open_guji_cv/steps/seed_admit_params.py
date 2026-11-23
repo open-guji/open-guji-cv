@@ -160,6 +160,7 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.solo_cal_allow, ("solo_cal_allow",)),
     (lambda p: not p.solo_cal_5b_canon, ("solo_cal_5b_canon",)),
     (lambda p: not p.lead_5b, ("lead_5b", "lead_5b_gap_out", "lead_5b_gap_in", "lead_5b_lib_min")),
+    (lambda p: p.ref_lib_5b_veto is None, ("ref_lib_5b_veto", "ref_lib_5b_veto_lead")),
     (lambda p: p.num_run_cov_5b is None, ("num_run_cov_5b", "num_run_gap_5b")),
     (lambda p: p.solo_5b_same_cov is None, ("solo_5b_same_cov",)),
     (lambda p: p.num_run_cov is None, ("num_run_cov", "num_run_gap")),
@@ -1084,6 +1085,14 @@ class SeedAdmitParams(BaseModel):
     lead_5b_gap_out: float = 0.023
     lead_5b_gap_in: float = 0.015
     lead_5b_lib_min: float = 0.935
+    ref_lib_5b_veto: float | None = None
+    """「整理本＝库首位」放行（通道 `ref_lib`）的 5-b 否决（A23 2026-11-23，殿本 5a A/B；缺省 None＝关、关时不进 dump）。
+    `ref_lib` 不看库分数：整理本字与 5a 库首位字面相同就放。整理本把生僻字规范成常用字（靃→霍）而库里没有这个生僻字时，
+    5a 首位恰好落到常用字上，两条弱证据一致就放错了。开着时：`ref_lib` 放行的格，5-b 首位是别的汉字、5-b 分 ≥ 这个值、
+    且领先 5-b 其余候选 ≥ `ref_lib_5b_veto_lead` → 不放，记 `ref_lib_5b_veto` 送人审。
+    依据：殿本 vol20／vol44 现行产物 ref_lib 放行 42 格，0.95／0.02 拦下 7 格：靃→霍 4 格（现行算法已放错）、
+    載（应为戴）1 格、竄／𥨥、涉／渉 各 1 格存疑；新相似度（底座＋平均分）下 vol20 的 8 格 靃→霍 全拦。"""
+    ref_lib_5b_veto_lead: float = 0.02
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 

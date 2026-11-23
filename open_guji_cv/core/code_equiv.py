@@ -503,6 +503,11 @@ _SEAL_MANUAL_1121 = ("seed_admit 加书级 occluded_manual_seal_blank／occluded
                      "_occluded 多一个恒假分支、关时不读 seals）：全唐文 057 12 页（3,10,20,40,60,80,90,93,110,130,150,168；main 包 "
                      "cv0.7.87-c76-g-631101-k11-qtw057-vc1-a3）seed_admit 与 origin/dev 225d6167 产物逐字节相同；scripts/code_equiv.py check，"
                      "GUJI_CORPUS_DRIFT=warn，2026-11-21（A31，QTW 印框格记空）")
+_FRAME_1123 = ("版面框型规则：册配置 frame_layers 支持 1（单线）、新增 side_frame（左右外框按页码奇偶）、borders 加可选字段 v_outer_estimated（False 不落盘）；"
+               "没写新配置的册走原路径：殿本 vol01 1–204、vol40 1–174 的 border_detect，vol40 1–40 的 border_detect_gate／column_warp，"
+               "与 dev d535a4b 产物逐字节相同；中心库无册写 frame_layers 1 或 side_frame；2026-11-23（A20 审；cv #1813）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2357,6 +2362,27 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence=("seed_admit `_drop_off_rare` 一百多段 if 改成声明表 `_DUMP_DROP`，规则逐条不变（397 册＋bool 字段两两翻转 11,730 组 "
                     "params_hash 不变）：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（同 PR1 那条）seed_admit 与 origin/dev 1e0fcf5 "
                     "产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-23（CV4）")),
+    # seed_admit 加 ref_lib_5b_veto（ref_lib 放行的 5-b 否决，缺省 None＝关、关时不进 dump；A23 2026-11-23）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='15eb6681d5619b21f43abc0cc5c91cc3fb36de4ac7176e6972919b1f4cad2cde',
+          old='110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6',
+          evidence='seed_admit 在 vol20 7 页（--pages 40-42,82,110,170,219）上与 origin/dev 产物逐字节相同；殿本 vol20 7 页（A23 ref_lib_5b_veto 本地复现页）'),
+    Equiv(module='open_guji_cv.steps.seed_admit_params',
+          new='643684242a05ba1f58b29f0197840b5ba4ed6a9f8963d4a87db18a14f954c800',
+          old='e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091',
+          evidence='seed_admit 在 vol20 7 页（--pages 40-42,82,110,170,219）上与 origin/dev 产物逐字节相同；殿本 vol20 7 页（A23 ref_lib_5b_veto 本地复现页）'),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="fdbe485e6e303385a852dae36b4582a264bdf9671e8cc87772d7342912a34c27",
+          old="301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916",
+          evidence=_FRAME_1123),
+    Equiv(module="open_guji_cv.impl.keben.border",
+          new="7401f1dbd7d03195f07ca34a8ad64f4571e92a079e93a36ffb9dc05505577611",
+          old="fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e",
+          evidence=_FRAME_1123),
+    Equiv(module="open_guji_cv.seg.frame_types",
+          new="e7a452410888e9e1fe042432bcbfa62352ab6fd1910d22852bad34fe40195873",
+          old="910317f58be2061fbe06468ba3abf2de685e6250440b1008b8308fd37561fa4b",
+          evidence=_FRAME_1123),
 )
 
 

@@ -4,6 +4,9 @@
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
 - **PATCH**（11-23，GUJI-776 SJ 验收）：`core/corpus_pin._check_pin_once` 的「语料库 vN 清单与当前文件不符」同一工作区、同一版本、同一批文件只警告一次（原先按册去重，一次 db sync 摸 42 册就打 42 遍）。只改提示，不进指纹（L0）。
+
+- PATCH（缺省关，产物逐字节不变，code_equiv 登记）：seed_admit 书级开关 `ref_lib_5b_veto`／`ref_lib_5b_veto_lead`——「整理本＝库首位」放行（`ref_lib`）的 5-b 否决：5-b 首位是别的汉字、分 ≥ 门槛、领先 ≥ 门槛 → 退回人审（doubt `ref_lib_5b_veto`）。起因殿本字书 靃 被整理本规范成 霍、库首位也落到 霍（A23 11-23）。
+
 - PATCH（纯搬家，产物逐字节不变、Step 指纹不变）：seed_admit 的参数类 `SeedAdmitParams` 与退役／恒开参数表、去键表搬到 `steps/seed_admit_params.py`（CV4 整理），`seed_admit` 照旧 re-export；新模块进 code_deps，经 `code_equiv.SPLITS` 合回原指纹。
 
 - PATCH（产物逐字节不变，code_equiv 登记）：seed_admit 参数指纹去键规则由 `_drop_off_rare` 里一百多段 if 改成声明表 `_DUMP_DROP`（CV4 整理 PR3，规则逐条不变；397 册＋两两翻转 11,730 组 params_hash 不变）。
@@ -70,6 +73,8 @@
 - 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时殿本 vol30、全唐文 020、史記 42 逐字节同，登 code_equiv `_FREE_SEAM_1117`。建议值 0.35。
 
 ## [未发版]
+
+- PATCH（语料表，Step 代码指纹不变；底库语料变，下次出底库时进）：异体人工表补 䕶→護、蹖→踳；字对关系表 `variants.pairkind.tsv` 记 䕶護、蹖踳 为 V，巿市 为 C（形近不同义）。起因 GM3 复核全唐文异体闸 18 格（CV4）。
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
 
