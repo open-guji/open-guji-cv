@@ -74,7 +74,7 @@ class SeedAdmitStep(Step):
         optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review"), ("rare_candidates", "rare_ref_sparse"),
                                 ("rare_candidates", "solo_5b_cov"), ("rare_candidates", "solo_adapt_pct"),
                                 ("rare_candidates", "num_run_cov_5b"), ("rare_candidates", "solo_cal_5b_cov"),
-                                ("rare_candidates", "lead_5b")),
+                                ("rare_candidates", "lead_5b"), ("rare_candidates", "ref_lib_5b_veto")),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -953,6 +953,11 @@ class SeedAdmitStep(Step):
                                  _coord_refs(ctx, page, coord_cache))
             n_auto += d_l5
             n_review -= d_l5
+        if p.ref_lib_5b_veto is not None:
+            # 5b-v ref_lib_5b_veto（降）：整理本＝库首位放行、5-b 明确偏向别的字 → 退回人审（缺省关）
+            d_rv = _ref_lib_5b_veto_pass(p, out, _opt(ctx, "rare_candidates", page))
+            n_auto -= d_rv
+            n_review += d_rv
         n_code_fix = n_code_mismatch = 0
         if p.pua_code_table:
             # 5b' code_table（改字，不降审）：格的私用码在码表里、非人裁放行字≠码表字 → 改放码表字；族外字降审。放在 vis_ruling 之前
@@ -1850,6 +1855,39 @@ def _lead_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
             rec.evidence = {**rec.evidence, "no_glyph_lib": True,
                             "lead_5b": {"rare": ch, "lead": lead, "by": how, "lib": lib_top[0],
                                         "lib_cov": round(float(lib_top[1]), 4)}}
+            n += 1
+    return n
+
+
+def ref_lib_5b_veto_decide(char: str, rare: list, score: float, lead: float) -> tuple[str, float, float] | None:
+    """`SeedAdmitParams.ref_lib_5b_veto` 的判据，纯函数。`rare`：5-b 候选 [(字, 分)]（5-b 原序）。
+    → (5-b 首位, 分, 领先量)＝要否决；None＝不否决。"""
+    if not rare or not char:
+        return None
+    r0, s0 = rare[0][0], float(rare[0][1])
+    if not r0 or r0 == char or is_gap(r0) or not _is_hanzi(r0) or s0 < score:
+        return None
+    ld = s0 - max((float(s) for d, s in rare[1:] if d != r0), default=0.0)
+    return (r0, round(s0, 4), round(ld, 4)) if ld >= lead else None
+
+
+def _ref_lib_5b_veto_pass(p: "SeedAdmitParams", out: list, rare) -> int:
+    """`ref_lib` 放行格里 5-b 明确偏向别的字的退回人审。→ 退回格数。见 `SeedAdmitParams.ref_lib_5b_veto`。"""
+    if rare is None:
+        return 0
+    rlist = {r.id: [(x.char, x.score) for x in r.candidates] for cc in rare.columns for r in cc.chars if r.candidates}
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if not rec.admit or rec.channel != "ref_lib":
+                continue
+            got = ref_lib_5b_veto_decide(rec.char, rlist.get(rec.id) or [], p.ref_lib_5b_veto, p.ref_lib_5b_veto_lead)
+            if got is None:
+                continue
+            r0, s0, ld = got
+            rec.admit, rec.channel, rec.provenance = False, None, ""
+            rec.doubts = [*(rec.doubts or []), "ref_lib_5b_veto"]
+            rec.evidence = {**rec.evidence, "ref_lib_5b_veto": {"rare": r0, "score": s0, "lead": ld}}
             n += 1
     return n
 
