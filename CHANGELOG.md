@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH：字对关系表（#1781）两处修正（GM2，QTW 11-22 全唐文 016/036/052 前后对比反馈）：①关系图套 V 对时把原来源盖掉了——原文件多只存一个方向，往空的反方向写 `[local:pairkind]` 后建图两向互写，74 对 V 只剩 `local:pairkind` 一家、n_bridge 掉到 1（如 㑹／會 原 hydzd＋twedu），`edge_pair` 等要 ≥2 家来源的口径不再认；现在两向来源并起来再补标记，`local:pairkind` 在已有别的异体来源时不多算一家，74 对的 tier／n_bridge 与套表前逐对相同。②C 对删了关系图的边，规则 A（`rare_ref` 各支）与 `lead_5b` 靠「库首位与整理本字有边就拦（形取谁说不准，留给人）」的护栏跟着松了：052:11:8:11 刻 冲、库 冲 0.982／沖 0.9816，#1781 后被 `rare_ref` 放成 沖。新增 `variants.look_alike`（有边，或在字对关系表里，V／C 都算），这两处改用它。052 的另两格（冡→冢、會 被 shadow_veto 送审）是 V 并后 `replace_form: lib` 取库首位、而库首位本身认错（冢 0.9656／冡 0.9505、㑹 0.9755／會 0.9669），同一机制在 052 放对 祇×3、雟，不在本 PR 改，见 PR 说明。
+
 - 文档（11-23，GM2）：`doc/design/待审原因PendingReason.md` 正文搬到 guji-manager `doc/参考/待审原因/规范-PendingReason.md`（代码 11-04 已在 manager），这里只留指向。不动代码。
 - PATCH（只动评测与训练脚本，不动产物）：识字 benchmark 第 2 期 c——`eval_advset.py`／`eval_match_pool.py` 按册号奇偶另报 dev／test（调门槛只看 dev）；`train_glyph_sim_cnn.py` 的 `--exclude` 认 items.jsonl／rare.jsonl／每行一格的 .txt，新增 `--exclude-chars`（对抗集留出字整类不进训练），配 dataset `glyph-match/train_exclude/`。
 - PATCH（只加评测脚本，不动产物）：`scripts/eval_advset.py`——3a 子基准 A2「库外拒识」，在 dataset `glyph-match/advset-<书>/`（库外形近字对抗集，自带归一图）上用生产逐对判官量库外字被判 same 的题数，分形近层／异体层，`--against` 出翻转清单。登记在 guji-manager（`advset`／`advset_shiji`／`advset_qtw`）。测试 `test_eval_advset.py`。
@@ -61,6 +63,10 @@
 ## [未发版]
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
+
+## [0.7.94] - 2026-11-23
+
+- 发版说明（殿本 patch 线，ZM 11-23，PATCH）：v0.7.90 ＋ 模型表补回 `glyph_sim_base_v1`（model_pack KINDS、model-registry 两行、provenance，照 v0.7.89），供殿本 5a 新相似度 A/B 的 C 臂从 R2 取模型。各步 code_hash 与 v0.7.90 相同，底库 b29。
 
 ## [0.9.0] - 2026-11-23
 

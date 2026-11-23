@@ -110,15 +110,19 @@ def _apply_pair_kinds(pairs: dict, directed: dict | None):
     for key, k in kinds.items():
         a, b = sorted(key)
         if k == V:
+            # 两个方向的来源并起来再补 TAG：原文件常只存一个方向（pairs[冡][冢]），只往空的反方向写 [TAG]
+            # 会在建图时（adj 两向互写）把原来源盖掉，V 对 n_bridge 掉到 1、edge_pair 不再认（QTW 11-22 #1781 对比后查出）。
+            tags = sorted(set(pairs.get(a, {}).get(b, [])) | set(pairs.get(b, {}).get(a, [])) | {TAG})
             for x, y in ((a, b), (b, a)):
-                tags = pairs.setdefault(x, {}).setdefault(y, [])
-                if TAG not in tags:
-                    tags.append(TAG)
+                pairs.setdefault(x, {})[y] = list(tags)
         else:
             for x, y in ((a, b), (b, a)):
                 pairs.get(x, {}).pop(y, None)
                 directed.get(x, {}).pop(y, None)
     return pairs, directed
+
+
+_PAIRKIND_TAG = "local:pairkind"      # 同 pair_kind.TAG（这里不 import，免得模块加载时成环）
 
 
 class VariantGraph:
@@ -259,7 +263,12 @@ class VariantGraph:
         tags = self.sources_of(a, b)
         if not tags:
             return VariantEdge(None)
-        return VariantEdge(self.edge_tier(a, b), tags, len(set(tags) & BRIDGE_SOURCES),
+        bridge = set(tags) & BRIDGE_SOURCES
+        if len(bridge) > 1:
+            # local:pairkind 只是字对关系表「这对是 V」的标记，不是另一家独立字典：已有别的异体来源时不多算一家，
+            # n_bridge 与套表前一致（edge_pair 等要 ≥2 家来源的口径不因套表变宽）。
+            bridge.discard(_PAIRKIND_TAG)
+        return VariantEdge(self.edge_tier(a, b), tags, len(bridge),
                            not (set(tags) - NEVER_SOURCES))
 
     def edge_tier(self, a: str, b: str) -> str | None:
@@ -320,6 +329,18 @@ def variants_of(char: str) -> list[tuple[str, tuple[str, ...]]]:
 def are_variants(a: str, b: str) -> bool:
     """见 :meth:`VariantGraph.are_variants`。"""
     return _graph().are_variants(a, b)
+
+
+def look_alike(a: str, b: str) -> bool:
+    """「形取谁说不准」类护栏用：关系图有边（`are_variants`），或这对字在字对关系表里（V 或 C 都算）。
+
+    字对关系表把 C（纯形近／异义）的边从关系图删了，只说明两字不同义，不说明长得不像；靠「有边就拦」的护栏
+    （规则 A rare_ref、lead_5b 等）要照样拦这些对，不然库首位与整理本字是 C 对、库分不开时会按整理本字放行
+    （QTW 11-22：全唐文 052:11:8:11 刻 冲、库 冲 0.982／沖 0.9816，#1781 后被 rare_ref 放成 沖）。"""
+    if a == b:
+        return False
+    from .pair_kind import pair_kind
+    return _graph().are_variants(a, b) or pair_kind(a, b) is not None
 
 
 def variant_group(char: str,
