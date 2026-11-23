@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from ...core.spec import RAW_TR, ProductKindSpec
 from ...core.step import register_kind
@@ -91,6 +91,8 @@ class Borders(BaseModel):
     v_outer_side: str | None = None
     v_outer_offset: float | None = None
     v_outer_estimated: bool = False
+    """规则（册配置 `side_frame`）说该有外框、这页没量到而按 `outer_gap.side` 估位。False **不落盘**、True 才落盘
+    （同 `cells.alt_columns`），没用新规则的老册产物逐字节不变；读回缺省 False。"""
     vline_segments: int = 1
     bend_w80_med: float | None = None
     bend_w80_max: float | None = None
@@ -119,6 +121,13 @@ class Borders(BaseModel):
             bend_w80_med=_f(r.bend_w80_med), bend_w80_max=_f(r.bend_w80_max),
             vline_filled=[bool(x) for x in (r.vline_filled or [])],
         )
+
+    @model_serializer(mode="wrap")
+    def _drop_false_v_outer_estimated(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not d.get("v_outer_estimated"):
+            d.pop("v_outer_estimated", None)
+        return d
 
     def to_result(self) -> BorderDetectionResult:
         return BorderDetectionResult(

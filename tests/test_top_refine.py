@@ -562,3 +562,22 @@ def test_side_frame_yaml_parse():
         _load_side_frame({"even": "middle"})
     with pytest.raises(ValueError):
         _load_side_frame({"third": "left"})
+
+
+def test_book_fingerprint_unchanged_without_side_frame():
+    """没写 side_frame 的册指纹逐位不变；写了才多一个键。borders 的 v_outer_estimated False 不落盘。"""
+    from open_guji_cv.core.engine import _self_payload
+    from open_guji_cv.core.book import BookSpec
+    from open_guji_cv.steps.border_detect import BorderDetectStep
+    from open_guji_cv.products.kinds.borders import Borders, HLineRec
+    import dataclasses
+    from helpers import make_book as _mini_book
+    step = BorderDetectStep()
+    b0 = {k for k in _self_payload(step, _mini_book(), "ph")}
+    b1 = {k for k in _self_payload(step, _mini_book(side_frame={"even": "left"}), "ph")}
+    assert "side_frame" not in b0 and "side_frame" in b1
+    assert "side_frame" not in _self_payload(step, _mini_book(), "ph")["book"]
+    bd = Borders(width=10, height=10, expected_cols=9, top=HLineRec(y_at_right=1, slope=0, kind="top"),
+                 bottom=HLineRec(y_at_right=9, slope=0, kind="bottom"), verticals=[])
+    assert "v_outer_estimated" not in bd.model_dump()
+    assert bd.model_copy(update={"v_outer_estimated": True}).model_dump()["v_outer_estimated"] is True
