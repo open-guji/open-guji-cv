@@ -19,8 +19,13 @@
  "n_cols": int | None,                        # 正文列数（竖线数 - 1 的页别）
  "rows_per_col": [int, ...] | None,           # 每列字格数，右起；None=未标
  "page_type": str | None, "policy": "standard|custom|skip" | None,
- "tags": [str, ...]}                          # 分层用：faint/broken/seal/wide/inverted/ink/bent…
+ "tags": [str, ...],                          # 分层用：faint/broken/seal/wide/inverted/ink/bent…
+ "frame": {"top"|"bottom"|"left"|"right":     # 框型（2026-11-23 起，可缺）
+           {"kind": "double|single|none",     # 内外双线／只有一条（脈經上下）／没有（装订侧）
+            "outer": {"pts": [...]} | None,   # kind=double 时的外框折线
+            "inner_w": px|None, "outer_w": px|None}}}   # 线粗（像素）
 ```
+`top`/`bottom` 是内框线（single 时就是那唯一一条）；左右内框线是 `vlines[-1]`（左）、`vlines[0]`（右）。
 竖线按**从右到左**排。适配器在 `layout_gold.py`。
 
 指标口径（和 doc 方案一致）
@@ -186,6 +191,39 @@ def hline_error(gold_h: dict | None, pred_h: dict | None) -> dict | None:
     return {"med": float(np.median(e)), "p95": float(np.percentile(e, 95)), "max": float(e.max())}
 
 
+FRAME_SIDES = ("top", "bottom", "left", "right")
+
+
+def frame_errors(gold: LayoutDoc, pred: LayoutDoc) -> dict | None:
+    """框型与外框位置。金标没写 `frame` 返回 None。
+    kind：四边各比一次；两边都是 double 时再量外框线的位置偏差（沿金标外框线的范围采样；
+    横边比 y、竖边比 x）。预测没写 frame 的边按 kind 缺失算错。"""
+    gf = gold.get("frame")
+    if not gf:
+        return None
+    pf = pred.get("frame") or {}
+    out: dict[str, Any] = {}
+    for s in FRAME_SIDES:
+        g = gf.get(s)
+        if not g:
+            continue
+        p = pf.get(s) or {}
+        rec: dict[str, Any] = {"gold": g.get("kind"), "pred": p.get("kind"),
+                               "ok": p.get("kind") == g.get("kind"), "outer": None}
+        if g.get("kind") == "double" and p.get("kind") == "double":
+            gp, pp = _pts(g.get("outer")), _pts(p.get("outer"))
+            if gp is not None and pp is not None:
+                if s in ("top", "bottom"):
+                    xs = np.linspace(gp[:, 0].min(), gp[:, 0].max(), N_SAMPLES)
+                    e = np.abs(y_at(pp, xs) - y_at(gp, xs))
+                else:
+                    ys = np.linspace(gp[:, 1].min(), gp[:, 1].max(), N_SAMPLES)
+                    e = np.abs(x_at(pp, ys) - x_at(gp, ys))
+                rec["outer"] = {"med": float(np.median(e)), "p95": float(np.percentile(e, 95))}
+        out[s] = rec
+    return out
+
+
 # ───────────────────────── 单页 ─────────────────────────
 
 def page_metrics(gold: LayoutDoc, pred: LayoutDoc) -> dict:
@@ -212,6 +250,7 @@ def page_metrics(gold: LayoutDoc, pred: LayoutDoc) -> dict:
                          "gold_type": gold.get("page_type"), "pred_type": pred.get("page_type")}
     else:
         rec["policy"] = None
+    rec["frame"] = frame_errors(gold, pred)
     rec["tags"] = list(gold.get("tags", []))
     rec["book"] = gold.get("book")
     rec["stratum"] = gold.get("stratum")
@@ -265,6 +304,18 @@ def _summarize(rs: list[dict]) -> dict:
         es = [r[name] for r in rs if r.get(name)]
         s[f"{name}_frame_px"] = ({"pages": len(es), "median": _pct([e["med"] for e in es], 50),
                                   "p95": _pct([e["p95"] for e in es], 50)} if es else None)
+    fr = [r["frame"] for r in rs if r.get("frame")]
+    if fr:
+        allk = [x for f in fr for x in f.values()]
+        outer = [x["outer"] for x in allk if x.get("outer")]
+        s["frame"] = {
+            "pages": len(fr),
+            "kind_acc": sum(1 for x in allk if x["ok"]) / len(allk),
+            "kind_acc_by_side": {side: (sum(1 for f in fr if side in f and f[side]["ok"])
+                                        / max(1, sum(1 for f in fr if side in f)))
+                                 for side in FRAME_SIDES},
+            "outer_px": ({"n": len(outer), "median": _pct([o["med"] for o in outer], 50),
+                          "p95": _pct([o["p95"] for o in outer], 50)} if outer else None)}
     nc = [r["n_cols"] for r in rs if r.get("n_cols")]
     s["n_cols_acc"] = (sum(1 for x in nc if x["ok"]) / len(nc)) if nc else None
     rows = [r["rows"] for r in rs if r.get("rows") and r["rows"]["have_pred"]]
