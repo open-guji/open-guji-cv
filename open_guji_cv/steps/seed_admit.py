@@ -3234,7 +3234,7 @@ def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict,
     只看现役对位里**没有**的格，拿坐标对位字当整理本字（护栏见 `_rare_ref_coord_ok`）。
     `keep_ref_review`（＝`lane_keep_ref_review`）：护栏拿整理本字拦下的格（`_LANE_REF_REVIEW`）不按整理本字放回，
     同审路（vol18:115:6:3 刻「本」、整理本与 5-b 都作「木」、字组文意判「本」，旧版 rare_ref 放成「木」）。"""
-    from ..variants import are_variants
+    from ..variants import look_alike as are_variants   # C 对也拦（字对关系表删了 C 边，护栏不能跟着松）
     group_chars: frozenset[str] = frozenset()
     if coord:
         from ..groups.registry import GROUPS
@@ -3839,7 +3839,7 @@ def _lead_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
     """无参照格库与 5-b 不一致时听 5-b。→ 升级格数。见 `SeedAdmitParams.lead_5b`。"""
     if rare is None:
         return 0
-    from ..variants import are_variants
+    from ..variants import look_alike as are_variants   # C 对也跳过（同规则 A）
     rlist = {r.id: [(x.char, x.score) for x in r.candidates] for cc in rare.columns for r in cc.chars if r.candidates}
     n = 0
     for col in out:
