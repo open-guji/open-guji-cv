@@ -508,6 +508,11 @@ _FRAME_1123 = ("版面框型规则：册配置 frame_layers 支持 1（单线）
                "与 dev d535a4b 产物逐字节相同；中心库无册写 frame_layers 1 或 side_frame；2026-11-23（A20 审；cv #1813）")
 
 
+_INNER_PULL_1123 = ("版面 border_detect 新参数 inner_pull（缺省关、不进参数 dump）与 pull_inner_line：内框线落在外板框粗条上时拉回内板框，只在参数开且册声明 frame_layers 2 时走。"
+                    "关着时：layout-gold 79 页的原图（殿本 vol01–10／30、全唐文 005／060／120／190、史記 05／20／40、脈經 01–06）× 无配置与 frame_layers 2/2 两种调用，"
+                    "detect_borders 的 Borders 产物 JSON sha256 与 origin/dev 4a26d7c 逐一相同（158/158）；2026-11-23（CV1；cv #1813 之后）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2389,6 +2394,14 @@ ENTRIES: tuple[Equiv, ...] = (
           old='d2026a75ec5c0f97f5e47c4cff41a9de5c4678d96f70a83da285197be0f5ac07',
           evidence='与 dev #1814 同一改动按本线移植（dev 上已证殿本 vol20 7 页 seed_admit 与 origin/dev 逐字节相同）；'
                    '本线缺省 SeedAdmitParams().model_dump() 与 v0.7.94 相同（tests/test_seed_admit_ref_lib_5b_veto.py），开关关时新分支不执行'),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="44e27e8698b3e6bc5bdb7a8ec2aedd2bc4735b73eb286076e876425a7e0c5129",
+          old="fdbe485e6e303385a852dae36b4582a264bdf9671e8cc87772d7342912a34c27",
+          evidence=_INNER_PULL_1123),
+    Equiv(module="open_guji_cv.impl.keben.border",
+          new="f83cc97bd92b20b4e28664f04acdfc845819bbdc3240a8fd73fd6167d71c667e",
+          old="7401f1dbd7d03195f07ca34a8ad64f4571e92a079e93a36ffb9dc05505577611",
+          evidence=_INNER_PULL_1123),
 )
 
 
