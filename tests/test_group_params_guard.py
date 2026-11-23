@@ -12,7 +12,7 @@
 
 「属于某个字组」＝名字等于某组 id 或以「<组 id>_」开头（组 id 取自注册表 `GROUPS`，所以新登记一个字组，
 它的前缀自动受保护），再加两个历史前缀 `ji_yi_si`（jys 的旧名）与 `near_form`。
-只做静态扫描（读 `seed_admit.py` 的语法树），不 import 引擎、不碰数据。
+只做静态扫描（读 `seed_admit_params.py` 的语法树），不 import 引擎、不碰数据。
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from pathlib import Path
 
 from open_guji_cv.groups import GROUPS
 
-SRC = Path(__file__).resolve().parents[1] / "open_guji_cv" / "steps" / "seed_admit.py"
+SRC = Path(__file__).resolve().parents[1] / "open_guji_cv" / "steps" / "seed_admit_params.py"   # 2026-11-23 参数类搬到这里
 
 #: 历史前缀：jys 的旧名、近形家族。新字组的前缀由注册表自动给出。
 LEGACY_PREFIXES = ("ji_yi_si", "near_form")

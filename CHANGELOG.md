@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（纯搬家，产物逐字节不变、Step 指纹不变）：seed_admit 的参数类 `SeedAdmitParams` 与退役／恒开参数表、去键表搬到 `steps/seed_admit_params.py`（CV4 整理），`seed_admit` 照旧 re-export；新模块进 code_deps，经 `code_equiv.SPLITS` 合回原指纹。
+
 - PATCH（产物逐字节不变，code_equiv 登记）：seed_admit 参数指纹去键规则由 `_drop_off_rare` 里一百多段 if 改成声明表 `_DUMP_DROP`（CV4 整理 PR3，规则逐条不变；397 册＋两两翻转 11,730 组 params_hash 不变）。
 
 - PATCH（产物逐字节不变，code_equiv 登记）：seed_admit 36 个缺省开、397 册没有一册关过的护栏／通道改恒开、不再是参数（CV4 整理 PR2）：iron_*_guard、ref_lib_*_guard、variant_indirect_guard、edge_pair、rare_ref_coord／nf、occluded_variant_first、lane_seal_* 三个、vis_rulings、codepoint_semantic、evict_review、human_unbound_review 等，清单见 `_ALWAYS_ON`。册配置写 true 照读、写 false 报错；原进参数指纹的照原值补回，各册 params_hash 不变。`use_context`、`occluded_gate`（manager 读）与测试隔离用的 `context_page_end_review`、`context_garble_guard` 暂留。
