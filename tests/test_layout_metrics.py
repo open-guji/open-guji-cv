@@ -177,3 +177,18 @@ def test_bench_run_reads_products(tmp_path):
     assert rep["pages_run"] == 1 and rep["health"]["n_cols_ok"] == 1.0
     assert rep["page_type"]["pages"] == 1 and rep["page_type"]["all"]["acc"] == 1.0   # cover 无对应页，略过
     assert lb.parse_pages("1-3,7") == {1, 2, 3, 7}
+
+
+def test_frame_errors_kind_and_outer():
+    from open_guji_cv.eval import layout_metrics as lm
+    g = {"frame": {"top": {"kind": "double", "outer": {"pts": [[0, 10], [100, 10]]}},
+                   "bottom": {"kind": "single", "outer": None},
+                   "left": {"kind": "double", "outer": {"pts": [[5, 0], [5, 100]]}}}}
+    p = {"frame": {"top": {"kind": "double", "outer": {"pts": [[0, 14], [100, 14]]}},
+                   "bottom": {"kind": "double", "outer": {"pts": [[0, 90], [100, 90]]}},
+                   "left": {"kind": "none", "outer": None}}}
+    r = lm.frame_errors(g, p)
+    assert r["top"]["ok"] and abs(r["top"]["outer"]["med"] - 4) < 1e-6
+    assert not r["bottom"]["ok"] and r["bottom"]["outer"] is None
+    assert not r["left"]["ok"]
+    assert lm.frame_errors({}, p) is None
