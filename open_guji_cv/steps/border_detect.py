@@ -535,7 +535,7 @@ class BorderDetectStep(Step):
         book_deps=("leaf_layout", "expected_cols", "bottom_gap",
                    "top_band_frac", "bottom_band_frac", "column_grid", "col_pitch",
                    "frame_height", "vline_polyline", "outer_shift", "outer_gap",
-                   "frame_layers", "columns"),
+                   "frame_layers", "side_frame", "columns"),
         # 纯函数：读原图算完直接返回，无实例级缓存、无数据库/模型一次性初始化，
         # `scripts/parallel_border_detect.py` 已验证页级并行与串行 sha256 逐位一致
         # （2026-09-17，见 doc/segmentation_v2_pipeline.md「Step 1 性能」）。
@@ -587,6 +587,9 @@ class BorderDetectStep(Step):
         bad = set(hint) - {"top", "bottom"}
         if bad:
             raise ValueError(f"border_detect.hline_hints.{page} 只认 top／bottom，多了 {sorted(bad)}")
+        # 套书规则：左右外框在纸边侧，按页码奇偶定（册配置 side_frame）；没声明不传，与加字段前一模一样
+        _side = (ctx.book.side_frame or {}).get("even" if page % 2 == 0 else "odd")
+        side_kw = {"outer_side": _side} if _side in ("left", "right") else {}
         hint_kw = {f"{k}_hint": float(v) for k, v in hint.items() if v is not None}
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
@@ -601,6 +604,7 @@ class BorderDetectStep(Step):
                                   outer_shift=ctx.book.outer_shift,
                                   book_outer_gap=ctx.book.outer_gap,
                                   frame_layers=ctx.book.frame_layers,
+                                  **side_kw,
                                   vline_polyline=ctx.book.vline_polyline,
                                   head_raise_scale=p.head_raise_scale,
                                   top_weak_ratio=p.top_weak_ratio, top_weak_floor=p.top_weak_floor,

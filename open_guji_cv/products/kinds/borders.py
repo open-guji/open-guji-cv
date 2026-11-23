@@ -90,6 +90,7 @@ class Borders(BaseModel):
     vlines_snapped: int = 0
     v_outer_side: str | None = None
     v_outer_offset: float | None = None
+    v_outer_estimated: bool = False
     vline_segments: int = 1
     bend_w80_med: float | None = None
     bend_w80_max: float | None = None
@@ -113,6 +114,7 @@ class Borders(BaseModel):
             bottom_pushed=float(getattr(r, "bottom_pushed", 0.0) or 0.0),
             vlines_snapped=int(getattr(r, "vlines_snapped", 0) or 0),
             v_outer_side=r.v_outer_side, v_outer_offset=_f(r.v_outer_offset),
+            v_outer_estimated=bool(getattr(r, "v_outer_estimated", False)),
             vline_segments=int(r.vline_segments),
             bend_w80_med=_f(r.bend_w80_med), bend_w80_max=_f(r.bend_w80_max),
             vline_filled=[bool(x) for x in (r.vline_filled or [])],
@@ -131,6 +133,7 @@ class Borders(BaseModel):
             bottom_outer_estimated=self.bottom_outer_estimated,
             bottom_pushed=self.bottom_pushed, vlines_snapped=self.vlines_snapped,
             v_outer_side=self.v_outer_side, v_outer_offset=self.v_outer_offset,
+            v_outer_estimated=self.v_outer_estimated,
             vline_segments=self.vline_segments,
             vline_filled=list(self.vline_filled),
             bend_w80_med=self.bend_w80_med, bend_w80_max=self.bend_w80_max,
