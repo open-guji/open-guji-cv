@@ -121,6 +121,154 @@ _ALWAYS_ON_IN_DUMP: dict = {k: True for k in _ALWAYS_ON if k not in (
 _RETIRED.update({k: True for k in _ALWAYS_ON})
 
 
+#: 参数指纹的去键规则（`SeedAdmitParams._drop_off_rare`，2026-11-23 CV4 整理 PR3 由一百多段 if 改成表，规则逐条不变）：
+#: 每行（条件, 键）：条件为真就把这些键从 dump 里去掉。通用口径是「书级开关关着时、或参数取缺省值时不进 dump」，
+#: 这样没开某开关的书 `params_hash` 与加字段前逐位相同、产物不过期。新加书级参数照这个口径加一行。
+#: 缺省开的开关（symbol_review、rare_ref、shadow_veto、context_guard_*）关着时开关本身留在 dump 里（显式 False），
+#: 只去附属字段——否则 dump 再读回来会变回缺省的开。条件只看参数本身，行与行之间没有先后依赖。
+_DUMP_DROP: tuple = (
+    (lambda p: not p.symbol_review, ("symbol_min_human",)),
+    (lambda p: p.rare_ref_coord_min_cov == _RARE_REF_COORD_MIN_COV, ("rare_ref_coord_min_cov",)),
+    (lambda p: not p.occluded_ref_empty_blank, ("occluded_ref_empty_blank",)),
+    (lambda p: not p.occluded_manual_seal_blank, ("occluded_manual_seal_blank",)),
+    (lambda p: not p.occluded_seal_align_yield, ("occluded_seal_align_yield",)),
+    (lambda p: not (p.occluded_manual_seal_blank or p.occluded_seal_align_yield), ("occluded_seal_keep_cov",)),
+    (lambda p: not p.pua_code_table, ("pua_code_table",)),
+    (lambda p: not p.pua_table_digest, ("pua_table_digest",)),
+    (lambda p: not p.pua_code_admit, ("pua_code_admit", "pua_code_admit_cov")),
+    (lambda p: not p.group_flow_llm_skip_half, ("group_flow_llm_skip_half",)),
+    (lambda p: not p.vis_ruling_half, ("vis_ruling_half",)),
+    (lambda p: not p.vis_ruling_ctx_subclasses, ("vis_ruling_ctx_subclasses",)),
+    (lambda p: not p.group_flow_ruling_first, ("group_flow_ruling_first",)),
+    (lambda p: not p.p_ref_admit, ("p_ref_admit",)),
+    (lambda p: (not p.p_ref_admit or p.p_ref_max_cov is None), ("p_ref_max_cov",)),
+    (lambda p: (not p.p_ref_admit or not p.p_ref_adjacent), ("p_ref_adjacent",)),
+    (lambda p: (not p.p_ref_admit or not p.p_ref_jiazhu), ("p_ref_jiazhu",)),
+    (lambda p: (not p.p_ref_admit or not p.p_ref_skip_variant), ("p_ref_skip_variant",)),
+    (lambda p: (not p.p_ref_admit or p.p_ref_min_cov == 0.8), ("p_ref_min_cov",)),
+    (lambda p: (not p.p_ref_admit or p.p_ref_irregular_gap is None), ("p_ref_irregular_gap",)),
+    (lambda p: not p.alt_require_matched, ("alt_require_matched",)),
+    (lambda p: not p.alt_note_region, ("alt_note_region",)),
+    (lambda p: not p.alt_backed_gain, ("alt_backed_gain",)),
+    (lambda p: not p.consensus_fallback, ("consensus_fallback",)),
+    (lambda p: not p.blank_ink_nonchar,
+     ("blank_ink_nonchar", "blank_ink_max_cov", "blank_ink_col_min_agree", "blank_ink_col_min_frac")),
+    (lambda p: not p.fold_groups,
+     ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref", "fold_ref_char", "fold_aspect", "fold_occluded", "fold_occluded_lib_max_cov", "fold_aspect_ctx_veto", "fold_ctx_vias", "fold_ctx_strong")),
+    (lambda p: not p.fold_ruling_first, ("fold_ruling_first",)),
+    (lambda p: not p.fold_lib_top_in_group, ("fold_lib_top_in_group",)),
+    (lambda p: not p.fold_coord_ref, ("fold_coord_ref",)),
+    (lambda p: not p.fold_occluded, ("fold_occluded",)),
+    (lambda p: p.fold_occluded_lib_max_cov is None or not p.fold_occluded, ("fold_occluded_lib_max_cov",)),
+    (lambda p: p.fold_ref_char, ("fold_ref_char",)),
+    (lambda p: p.fold_aspect is None, ("fold_aspect",)),
+    (lambda p: p.fold_aspect_ctx_veto is None, ("fold_aspect_ctx_veto",)),
+    (lambda p: not p.fold_ctx_vias, ("fold_ctx_vias",)),
+    (lambda p: not p.fold_ctx_strong, ("fold_ctx_strong",)),
+    (lambda p: p.ruling_override_groups is None, ("ruling_override_groups",)),
+    (lambda p: p.ruling_ref_lead_min_unseen is None, ("ruling_ref_lead_min_unseen",)),
+    (lambda p: p.ruling_ref_lead_min_oov is None, ("ruling_ref_lead_min_oov",)),
+    (lambda p: p.ruling_glyph_min_score is None and p.ruling_glyph_min_margin is None,
+     ("ruling_glyph_min_score", "ruling_glyph_min_margin")),
+    (lambda p: not p.symbol_ref_blank, ("symbol_ref_blank", "symbol_ref_blank_cov")),
+    (lambda p: not (p.symbol_ref_blank and p.symbol_ref_gap),
+     ("symbol_ref_gap", "symbol_ref_gap_cov", "symbol_ref_gap_min_col")),
+    (lambda p: not p.shadow_veto, ("shadow_conf", "shadow_veto_variant_abstain")),
+    (lambda p: p.lane_group_img_veto is None, ("lane_group_img_veto",)),
+    (lambda p: not p.witness3_knn_veto, ("witness3_knn_veto",)),
+    (lambda p: not p.near_knn_gap, ("near_knn_gap",)),
+    (lambda p: not p.rare_ref_sparse,
+     ("rare_ref_sparse", "rare_ref_sparse_max_n", "rare_ref_sparse_lead", "rare_ref_sparse_variant")),
+    (lambda p: p.solo_5b_cov is None, ("solo_5b_cov", "solo_5b_gap", "solo_5b_min_n")),
+    (lambda p: not p.no_ref_pages, ("no_ref_pages",)),
+    (lambda p: not p.no_ref_params, ("no_ref_params",)),
+    (lambda p: p.consensus_lib_cov is None, ("consensus_lib_cov",)),
+    (lambda p: p.solo_adapt_pct is None,
+     ("solo_adapt_pct", "solo_adapt_floor", "solo_adapt_gap", "solo_adapt_min_n", "solo_adapt_window", "solo_adapt_profile", "solo_adapt_fingerprint")),
+    (lambda p: p.solo_adapt_risk_gap is None, ("solo_adapt_risk_gap",)),
+    (lambda p: not p.solo_adapt_abstain_ok, ("solo_adapt_abstain_ok", "solo_adapt_abstain_skip")),
+    (lambda p: p.solo_adapt_near_slack is None, ("solo_adapt_near_slack", "solo_adapt_near_gap")),
+    (lambda p: not p.solo_adapt_nf_ok, ("solo_adapt_nf_ok",)),
+    (lambda p: not p.solo_cal, ("solo_cal", "solo_cal_tiers", "solo_cal_skip", "solo_cal_5b_cov")),
+    (lambda p: p.solo_cal_5b_cov is None, ("solo_cal_5b_cov",)),
+    (lambda p: not p.solo_cal_allow, ("solo_cal_allow",)),
+    (lambda p: not p.solo_cal_5b_canon, ("solo_cal_5b_canon",)),
+    (lambda p: not p.lead_5b, ("lead_5b", "lead_5b_gap_out", "lead_5b_gap_in", "lead_5b_lib_min")),
+    (lambda p: p.num_run_cov_5b is None, ("num_run_cov_5b", "num_run_gap_5b")),
+    (lambda p: p.solo_5b_same_cov is None, ("solo_5b_same_cov",)),
+    (lambda p: p.num_run_cov is None, ("num_run_cov", "num_run_gap")),
+    (lambda p: p.num_run_juan_cov is None, ("num_run_juan_cov",)),
+    (lambda p: not p.replace_form_edge_exclude, ("replace_form_edge_exclude",)),
+    (lambda p: not p.ref_lib_coord_dissent, ("ref_lib_coord_dissent",)),
+    (lambda p: not p.solo_coord_dissent, ("solo_coord_dissent",)),
+    (lambda p: not p.lane_coord_blind_guard,
+     ("lane_coord_blind_guard", "lane_coord_blind_min_n", "lane_coord_blind_lib_cov", "lane_coord_blind_gap")),
+    (lambda p: not p.rare_ref, ("rare_ref_coord", "rare_ref_coord_min_cov")),
+    (lambda p: not (p.rare_ref and p.rare_ref_coord_group_top), ("rare_ref_coord_group_top",)),
+    (lambda p: not p.rare_ref, ("rare_ref_nf", "rare_ref_nf_max_n", "rare_ref_nf_cov")),
+    (lambda p: not p.shadow_veto, ("shadow_model", "shadow_model_fingerprint")),
+    (lambda p: not p.approx_fingerprint, ("approx_fingerprint",)),
+    (lambda p: not p.solo_ctx_veto, ("solo_ctx_veto",)),
+    (lambda p: not p.seal_blank_page, ("seal_blank_page", "seal_blank_thr", "seal_blank_overlap", "seal_blank_ink_out")),
+    (lambda p: not p.lane_coord_codepoint_variant,
+     ("lane_coord_codepoint_variant", "lane_coord_codepoint_gap", "lane_coord_codepoint_skip")),
+    (lambda p: not p.human_unbound_shift_ok, ("human_unbound_shift_ok",)),
+    (lambda p: not p.group_flow_lift_ref_veto, ("group_flow_lift_ref_veto",)),
+    (lambda p: not p.group_flow_lift_shape_ref, ("group_flow_lift_shape_ref",)),
+    (lambda p: not p.group_flow_ref_alias, ("group_flow_ref_alias",)),
+    (lambda p: not p.group_flow_hou_shape_late, ("group_flow_hou_shape_late",)),
+    (lambda p: p.reference_trust == 'none', ("reference_trust",)),
+    (lambda p: not p.ref_topk_follow, ("ref_topk_follow",)),
+    (lambda p: not p.ref_lib_coord, ("ref_lib_coord", "ref_lib_coord_cov", "ref_lib_coord_gap")),
+    (lambda p: not p.group_flow_abstain_ref_ok, ("group_flow_abstain_ref_ok",)),
+    (lambda p: not p.group_flow_ref_free, ("group_flow_ref_free",)),
+    (lambda p: not p.group_flow_exclude, ("group_flow_exclude",)),
+    (lambda p: p.group_flow_same_writing_keep == list(_SAME_WRITING_KEEP), ("group_flow_same_writing_keep",)),
+    (lambda p: p.group_flow_review_fix_agree == ['yr'], ("group_flow_review_fix_agree",)),
+    (lambda p: not p.group_flow_dissent_keep, ("group_flow_dissent_keep", "group_flow_dissent_margin")),
+    (lambda p: not (p.group_flow_dissent_keep and p.group_flow_dissent_l1), ("group_flow_dissent_l1",)),
+    (lambda p: not p.group_flow_ctx_agree, ("group_flow_ctx_agree",)),
+    (lambda p: not p.group_flow_ref_pair, ("group_flow_ref_pair", "group_flow_ref_pair_margin")),
+    (lambda p: not p.group_flow_ref_pair_coord, ("group_flow_ref_pair_coord",)),
+    (lambda p: not p.group_flow_tolerate_extra, ("group_flow_tolerate_extra",)),
+    (lambda p: not p.group_flow_provisional_to, ("group_flow_provisional_to",)),
+    (lambda p: p.group_flow_pv_ref_gap == 0.01 and p.group_flow_pv_ref_cov == 0.95,
+     ("group_flow_pv_ref_gap", "group_flow_pv_ref_cov")),
+    (lambda p: not p.group_flow_pair_shape, ("group_flow_pair_shape",)),
+    (lambda p: not p.group_flow_pair_shapes, ("group_flow_pair_shapes",)),
+    (lambda p: not p.group_flow_pair_shape_veto, ("group_flow_pair_shape_veto",)),
+    (lambda p: not p.group_flow_pair_shape_nm_5b, ("group_flow_pair_shape_nm_5b",)),
+    (lambda p: not p.group_flow_near_knn, ("group_flow_near_knn",)),
+    (lambda p: not p.pair_form, ("pair_form", "pair_form_fingerprint")),
+    (lambda p: not p.lane_shape_first, ("lane_shape_first", "lane_shape_first_fingerprint")),
+    (lambda p: not p.stroke_veto, ("stroke_veto", "stroke_veto_fingerprint")),
+    (lambda p: not p.match_ref_diff_guard, ("match_ref_diff_guard",)),
+    (lambda p: not p.lane_seal_title_tolerance, ("lane_seal_title_tolerance", "lane_seal_title_prefix")),
+    (lambda p: not p.juan_rule, ("juan_rule", "juan_cov")),
+    (lambda p: p.patch_missing == 'error', ("patch_missing",)),
+    (lambda p: not (p.lane_witness3 or p.lane_coord or p.lane_seal),
+     ("lane_witness3", "lane_coord", "lane_seal", "lane_witnesses", "lane_seal_via", "lane_seal_title_marks", "lane_seal_title_formula", "lane_seal_title_norm", "lane_seal_lib_veto", "lane_seal_shift_guard", "lane_seal_lib_veto_second", "lane_seal_lib_veto_min_n", "lane_seal_codepoint_variant", "lane_witness_fingerprint", "lane_variant_guard", "lane_variant_topk", "lane_variant_keep_rare")),
+    (lambda p: not p.lane_lib_veto, ("lane_lib_veto",)),
+    (lambda p: not (p.lane_lib_veto and p.lane_lib_veto_pairs), ("lane_lib_veto_pairs",)),
+    (lambda p: not (p.lane_witness3 or p.lane_coord or p.lane_seal or p.rare_ref), ("lane_keep_ref_review",)),
+    (lambda p: not p.lane_header_formula, ("lane_header_formula", "lane_header_formula_re")),
+    (lambda p: not p.pua_rules, ("pua_rules", "pua_rule_cov")),
+    (lambda p: not p.semantic_extra, ("semantic_extra",)),
+    (lambda p: not p.follow_ref_variants, ("follow_ref_variants",)),
+    (lambda p: not p.follow_ref_seen, ("follow_ref_seen",)),
+    (lambda p: not (p.follow_ref_seen and p.follow_ref_seen_conflict), ("follow_ref_seen_conflict",)),
+    (lambda p: not p.follow_ref and not p.follow_ref_variants and not p.follow_ref_seen,
+     ("follow_ref", "follow_ref_cov", "follow_ref_gap")),
+    (lambda p: not p.context_lib_dissent_gap, ("context_lib_dissent_gap", "context_lib_dissent_cov")),
+    (lambda p: not p.context_page_end_review, ("context_page_end_review",)),
+    (lambda p: not p._context_guard_on(), ("context_guard_cov",)),
+    (lambda p: p.edge_pair_to == "freq", ("edge_pair_to",)),
+    (lambda p: p.edge_pair_cov == 0.92, ("edge_pair_cov",)),
+    (lambda p: p.edge_pair_gap == 0.005, ("edge_pair_gap",)),
+    (lambda p: p.edge_pair_group_seam, ("edge_pair_group_seam",)),
+    (lambda p: p.edge_pair_group_seam_nf_gap == 0.03 or not p.edge_pair_group_seam, ("edge_pair_group_seam_nf_gap",)),
+)
+
 class SeedAdmitParams(BaseModel):
     variants: str = ""                  # 异体表；空 = VariantMap 默认
     semantic_extra: str = ""            # 书级补语义对「异体=正字,…」，叠在 VariantMap 之上（如史記 圗=圖：语义同、字形层照刻形）；空＝不补、不进 dump（A22 11-16）
@@ -1361,324 +1509,23 @@ class SeedAdmitParams(BaseModel):
 
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
-        """关着的可选字段不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
-
-        `approx_gate`／`approx_fingerprint` 同理（overview#276）：闸是缺省值（关）时不进 dump；
-        库里一条近似例都没有时指纹为空、也不进 dump——没用上近似字的书参数哈希不变、产物不过期。
-        """
+        """参数 dump（进 `params_hash`）：补回退役／恒开参数的固定值，再按 `_DUMP_DROP` 去掉关着的、取缺省值的键。"""
         d = handler(self)
-        if isinstance(d, dict):
-            d.update(_RETIRED_IN_DUMP)
-            d.update(_ALWAYS_ON_IN_DUMP)
-        # symbol_review／rare_ref／shadow_veto／context_guard_ref_prefer 2026-10-24 起缺省开：关着时开关本身
-        # 留在 dump 里（显式 False），只去掉附属字段——否则 dump 再读回来会变回缺省的开
-        if isinstance(d, dict) and not self.symbol_review:
-            d.pop("symbol_min_human", None)
-        if isinstance(d, dict) and self.rare_ref_coord_min_cov == _RARE_REF_COORD_MIN_COV:
-            d.pop("rare_ref_coord_min_cov", None)
-        if isinstance(d, dict) and not self.occluded_ref_empty_blank:
-            d.pop("occluded_ref_empty_blank", None)
-        if isinstance(d, dict) and not self.occluded_manual_seal_blank:
-            d.pop("occluded_manual_seal_blank", None)
-        if isinstance(d, dict) and not self.occluded_seal_align_yield:
-            d.pop("occluded_seal_align_yield", None)
-        if isinstance(d, dict) and not (self.occluded_manual_seal_blank or self.occluded_seal_align_yield):
-            d.pop("occluded_seal_keep_cov", None)
-        if isinstance(d, dict) and not self.pua_code_table:
-            d.pop("pua_code_table", None)
-        if isinstance(d, dict) and not self.pua_table_digest:
-            d.pop("pua_table_digest", None)
-        if isinstance(d, dict) and not self.pua_code_admit:
-            d.pop("pua_code_admit", None)
-            d.pop("pua_code_admit_cov", None)
-        if isinstance(d, dict) and not self.group_flow_llm_skip_half:
-            d.pop("group_flow_llm_skip_half", None)
-        if isinstance(d, dict) and not self.vis_ruling_half:
-            d.pop("vis_ruling_half", None)
-        if isinstance(d, dict) and not self.vis_ruling_ctx_subclasses:
-            d.pop("vis_ruling_ctx_subclasses", None)
-        if isinstance(d, dict) and not self.group_flow_ruling_first:
-            d.pop("group_flow_ruling_first", None)
-        if isinstance(d, dict) and not self.p_ref_admit:
-            d.pop("p_ref_admit", None)
-        if isinstance(d, dict) and (not self.p_ref_admit or self.p_ref_max_cov is None):
-            d.pop("p_ref_max_cov", None)
-        if isinstance(d, dict) and (not self.p_ref_admit or not self.p_ref_adjacent):
-            d.pop("p_ref_adjacent", None)
-        if isinstance(d, dict) and (not self.p_ref_admit or not self.p_ref_jiazhu):
-            d.pop("p_ref_jiazhu", None)
-        if isinstance(d, dict) and (not self.p_ref_admit or not self.p_ref_skip_variant):
-            d.pop("p_ref_skip_variant", None)
-        if isinstance(d, dict) and (not self.p_ref_admit or self.p_ref_min_cov == 0.8):
-            d.pop("p_ref_min_cov", None)          # 缺省值不进 dump
-        if isinstance(d, dict) and (not self.p_ref_admit or self.p_ref_irregular_gap is None):
-            d.pop("p_ref_irregular_gap", None)
-        if isinstance(d, dict) and not self.alt_require_matched:
-            d.pop("alt_require_matched", None)
-        if isinstance(d, dict) and not self.alt_note_region:
-            d.pop("alt_note_region", None)
-        if isinstance(d, dict) and not self.alt_backed_gain:
-            d.pop("alt_backed_gain", None)
-        if isinstance(d, dict) and not self.consensus_fallback:
-            d.pop("consensus_fallback", None)
-        if isinstance(d, dict) and not self.blank_ink_nonchar:
-            for k in ("blank_ink_nonchar", "blank_ink_max_cov", "blank_ink_col_min_agree", "blank_ink_col_min_frac"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.fold_groups:
-            for k in ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref", "fold_ref_char", "fold_aspect", "fold_occluded", "fold_occluded_lib_max_cov",
-                      "fold_aspect_ctx_veto", "fold_ctx_vias", "fold_ctx_strong"):
-                d.pop(k, None)
-        if isinstance(d, dict) and self.fold_groups:
-            for k in ("fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref", "fold_occluded"):
-                if not getattr(self, k):
+        if not isinstance(d, dict):
+            return d
+        d.update(_RETIRED_IN_DUMP)
+        d.update(_ALWAYS_ON_IN_DUMP)
+        for cond, keys in _DUMP_DROP:
+            if cond(self):
+                for k in keys:
                     d.pop(k, None)
-            if self.fold_occluded_lib_max_cov is None or not self.fold_occluded:
-                d.pop("fold_occluded_lib_max_cov", None)
-            if self.fold_ref_char:
-                d.pop("fold_ref_char", None)
-            if self.fold_aspect is None:
-                d.pop("fold_aspect", None)
-            if self.fold_aspect_ctx_veto is None:
-                d.pop("fold_aspect_ctx_veto", None)
-            if not self.fold_ctx_vias:
-                d.pop("fold_ctx_vias", None)
-            if not self.fold_ctx_strong:
-                d.pop("fold_ctx_strong", None)
-        if isinstance(d, dict) and self.ruling_override_groups is None:
-            d.pop("ruling_override_groups", None)
-        if isinstance(d, dict) and self.ruling_ref_lead_min_unseen is None:
-            d.pop("ruling_ref_lead_min_unseen", None)
-        if isinstance(d, dict) and self.ruling_ref_lead_min_oov is None:
-            d.pop("ruling_ref_lead_min_oov", None)
-        if isinstance(d, dict) and self.ruling_glyph_min_score is None and self.ruling_glyph_min_margin is None:
-            d.pop("ruling_glyph_min_score", None)
-            d.pop("ruling_glyph_min_margin", None)
-        if isinstance(d, dict) and not self.symbol_ref_blank:
-            d.pop("symbol_ref_blank", None)
-            d.pop("symbol_ref_blank_cov", None)
-        if isinstance(d, dict) and not (self.symbol_ref_blank and self.symbol_ref_gap):
-            for k in ("symbol_ref_gap", "symbol_ref_gap_cov", "symbol_ref_gap_min_col"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.group_flow:
+        if not self.group_flow:                  # 没开字组流程：group_flow* 一概不进 dump
             for k in [k for k in d if k.startswith("group_flow")]:
                 d.pop(k, None)
-        if isinstance(d, dict) and not self.shadow_veto:
-            for k in ("shadow_conf", "shadow_veto_variant_abstain"):
-                d.pop(k, None)
-        if isinstance(d, dict) and self.lane_group_img_veto is None:
-            d.pop("lane_group_img_veto", None)
-        if isinstance(d, dict) and not self.witness3_knn_veto:
-            d.pop("witness3_knn_veto", None)
-        if isinstance(d, dict) and not self.near_knn_gap:
-            d.pop("near_knn_gap", None)
-        if isinstance(d, dict) and not self.rare_ref_sparse:
-            for k in ("rare_ref_sparse", "rare_ref_sparse_max_n", "rare_ref_sparse_lead", "rare_ref_sparse_variant"):
-                d.pop(k, None)
-        if isinstance(d, dict) and self.solo_5b_cov is None:
-            for k in ("solo_5b_cov", "solo_5b_gap", "solo_5b_min_n"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.no_ref_pages:
-            d.pop("no_ref_pages", None)
-        if isinstance(d, dict) and not self.no_ref_params:
-            d.pop("no_ref_params", None)
-        if isinstance(d, dict) and self.consensus_lib_cov is None:
-            d.pop("consensus_lib_cov", None)
-        if isinstance(d, dict) and self.solo_adapt_pct is None:
-            for k in ("solo_adapt_pct", "solo_adapt_floor", "solo_adapt_gap", "solo_adapt_min_n", "solo_adapt_window",
-                      "solo_adapt_profile", "solo_adapt_fingerprint"):
-                d.pop(k, None)
-        if isinstance(d, dict) and self.solo_adapt_risk_gap is None:
-            d.pop("solo_adapt_risk_gap", None)
-        if isinstance(d, dict) and not self.solo_adapt_abstain_ok:
-            d.pop("solo_adapt_abstain_ok", None)
-            d.pop("solo_adapt_abstain_skip", None)
-        if isinstance(d, dict) and self.solo_adapt_near_slack is None:
-            d.pop("solo_adapt_near_slack", None)
-            d.pop("solo_adapt_near_gap", None)
-        if isinstance(d, dict) and not self.solo_adapt_nf_ok:
-            d.pop("solo_adapt_nf_ok", None)
-        if isinstance(d, dict) and not self.solo_cal:
-            for k in ("solo_cal", "solo_cal_tiers", "solo_cal_skip", "solo_cal_5b_cov"):
-                d.pop(k, None)
-        if isinstance(d, dict) and self.solo_cal_5b_cov is None:
-            d.pop("solo_cal_5b_cov", None)
-        if isinstance(d, dict) and not self.solo_cal_allow:
-            d.pop("solo_cal_allow", None)
-        if isinstance(d, dict) and not self.solo_cal_5b_canon:
-            d.pop("solo_cal_5b_canon", None)
-        if isinstance(d, dict) and not self.lead_5b:
-            for k in ("lead_5b", "lead_5b_gap_out", "lead_5b_gap_in", "lead_5b_lib_min"):
-                d.pop(k, None)
-        if isinstance(d, dict) and self.num_run_cov_5b is None:
-            d.pop("num_run_cov_5b", None)
-            d.pop("num_run_gap_5b", None)
-        if isinstance(d, dict) and self.solo_5b_same_cov is None:
-            d.pop("solo_5b_same_cov", None)
-        if isinstance(d, dict) and self.num_run_cov is None:
-            d.pop("num_run_cov", None)
-            d.pop("num_run_gap", None)
-        if isinstance(d, dict) and self.num_run_juan_cov is None:
-            d.pop("num_run_juan_cov", None)
-        if isinstance(d, dict) and not self.replace_form_edge_exclude:
-            d.pop("replace_form_edge_exclude", None)
-        if isinstance(d, dict) and not self.ref_lib_coord_dissent:
-            d.pop("ref_lib_coord_dissent", None)
-        if isinstance(d, dict) and not self.solo_coord_dissent:
-            d.pop("solo_coord_dissent", None)
-        if isinstance(d, dict) and not self.lane_coord_blind_guard:
-            for k in ("lane_coord_blind_guard", "lane_coord_blind_min_n", "lane_coord_blind_lib_cov", "lane_coord_blind_gap"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.rare_ref:
-            d.pop("rare_ref_coord", None)
-            d.pop("rare_ref_coord_min_cov", None)
-        if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord_group_top):
-            d.pop("rare_ref_coord_group_top", None)
-        if isinstance(d, dict) and not self.rare_ref:
-            for k in ("rare_ref_nf", "rare_ref_nf_max_n", "rare_ref_nf_cov"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.shadow_veto:
-            for k in ("shadow_model", "shadow_model_fingerprint"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.approx_fingerprint:
-            d.pop("approx_fingerprint", None)
-        if isinstance(d, dict) and not self.solo_ctx_veto:
-            d.pop("solo_ctx_veto", None)
-        if isinstance(d, dict) and not self.seal_blank_page:
-            for k in ("seal_blank_page", "seal_blank_thr", "seal_blank_overlap", "seal_blank_ink_out"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.lane_coord_codepoint_variant:
-            for k in ("lane_coord_codepoint_variant", "lane_coord_codepoint_gap", "lane_coord_codepoint_skip"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.human_unbound_shift_ok:
-            d.pop("human_unbound_shift_ok", None)
-        if isinstance(d, dict) and not self.group_flow_lift_ref_veto:
-            d.pop("group_flow_lift_ref_veto", None)
-        if isinstance(d, dict) and not self.group_flow_lift_shape_ref:
-            d.pop("group_flow_lift_shape_ref", None)
-        if isinstance(d, dict) and not self.group_flow_ref_alias:
-            d.pop("group_flow_ref_alias", None)
-        if isinstance(d, dict) and not self.group_flow_hou_shape_late:
-            d.pop("group_flow_hou_shape_late", None)
-        if isinstance(d, dict) and self.reference_trust == "none":
-            d.pop("reference_trust", None)
-        if isinstance(d, dict) and not self.ref_topk_follow:
-            d.pop("ref_topk_follow", None)
-        if isinstance(d, dict) and not self.ref_lib_coord:
-            for k in ("ref_lib_coord", "ref_lib_coord_cov", "ref_lib_coord_gap"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.group_flow_abstain_ref_ok:
-            d.pop("group_flow_abstain_ref_ok", None)
-        if isinstance(d, dict) and not self.group_flow_ref_free:
-            d.pop("group_flow_ref_free", None)
-        if isinstance(d, dict) and not self.group_flow_exclude:
-            d.pop("group_flow_exclude", None)
-        if isinstance(d, dict) and self.group_flow_same_writing_keep == list(_SAME_WRITING_KEEP):
-            d.pop("group_flow_same_writing_keep", None)
-        if isinstance(d, dict) and self.group_flow_review_fix_agree == ["yr"]:
-            d.pop("group_flow_review_fix_agree", None)
-        if isinstance(d, dict) and not self.group_flow_dissent_keep:
-            for k in ("group_flow_dissent_keep", "group_flow_dissent_margin"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not (self.group_flow_dissent_keep and self.group_flow_dissent_l1):
-            d.pop("group_flow_dissent_l1", None)
-        if isinstance(d, dict) and not self.group_flow_ctx_agree:
-            d.pop("group_flow_ctx_agree", None)
-        if isinstance(d, dict) and not self.group_flow_ref_pair:
-            for k in ("group_flow_ref_pair", "group_flow_ref_pair_margin"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.group_flow_ref_pair_coord:
-            d.pop("group_flow_ref_pair_coord", None)
-        if isinstance(d, dict) and not self.group_flow_tolerate_extra:
-            d.pop("group_flow_tolerate_extra", None)
-        if isinstance(d, dict) and not self.group_flow_provisional_to:
-            d.pop("group_flow_provisional_to", None)
-        if isinstance(d, dict) and self.group_flow_pv_ref_gap == 0.01 and self.group_flow_pv_ref_cov == 0.95:
-            for k in ("group_flow_pv_ref_gap", "group_flow_pv_ref_cov"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.group_flow_pair_shape:
-            d.pop("group_flow_pair_shape", None)
-        if isinstance(d, dict) and not self.group_flow_pair_shapes:
-            d.pop("group_flow_pair_shapes", None)
-        if isinstance(d, dict) and not self.group_flow_pair_shape_veto:
-            d.pop("group_flow_pair_shape_veto", None)
-        if isinstance(d, dict) and not self.group_flow_pair_shape_nm_5b:
-            d.pop("group_flow_pair_shape_nm_5b", None)
-        if isinstance(d, dict) and not self.group_flow_near_knn:
-            d.pop("group_flow_near_knn", None)
-        if isinstance(d, dict) and not self.pair_form:
-            d.pop("pair_form", None)
-            d.pop("pair_form_fingerprint", None)
-        if isinstance(d, dict) and not self.lane_shape_first:
-            d.pop("lane_shape_first", None)
-            d.pop("lane_shape_first_fingerprint", None)
-        if isinstance(d, dict) and not self.stroke_veto:
-            d.pop("stroke_veto", None)
-            d.pop("stroke_veto_fingerprint", None)
-        if isinstance(d, dict) and not self.match_ref_diff_guard:
-            d.pop("match_ref_diff_guard", None)
-        if isinstance(d, dict) and not self.lane_seal_title_tolerance:
-            d.pop("lane_seal_title_tolerance", None)
-            d.pop("lane_seal_title_prefix", None)
-        if isinstance(d, dict) and not self.juan_rule:
-            d.pop("juan_rule", None)
-            d.pop("juan_cov", None)
-        if isinstance(d, dict) and self.patch_missing == "error":
-            d.pop("patch_missing", None)
-        if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
-            for k in ("lane_witness3", "lane_coord", "lane_seal", "lane_witnesses", "lane_seal_via",
-                      "lane_seal_title_marks", "lane_seal_title_formula", "lane_seal_title_norm",
-                      "lane_seal_lib_veto", "lane_seal_shift_guard", "lane_seal_lib_veto_second", "lane_seal_lib_veto_min_n",
-                      "lane_seal_codepoint_variant",
-                      "lane_witness_fingerprint", "lane_variant_guard",
-                      "lane_variant_topk", "lane_variant_keep_rare"):
-                d.pop(k, None)
-        if isinstance(d, dict) and not self.lane_lib_veto:
-            d.pop("lane_lib_veto", None)
-        if isinstance(d, dict) and not (self.lane_lib_veto and self.lane_lib_veto_pairs):
-            d.pop("lane_lib_veto_pairs", None)
-        if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal or self.rare_ref):
-            d.pop("lane_keep_ref_review", None)
-        if isinstance(d, dict) and not self.lane_header_formula:
-            d.pop("lane_header_formula", None)
-            d.pop("lane_header_formula_re", None)
-        if isinstance(d, dict) and not self.pua_rules:
-            d.pop("pua_rules", None)
-            d.pop("pua_rule_cov", None)
-        if isinstance(d, dict) and not self.semantic_extra:
-            d.pop("semantic_extra", None)
-        if isinstance(d, dict) and not self.follow_ref_variants:
-            d.pop("follow_ref_variants", None)
-        if isinstance(d, dict) and not self.follow_ref_seen:
-            d.pop("follow_ref_seen", None)
-        if isinstance(d, dict) and not (self.follow_ref_seen and self.follow_ref_seen_conflict):
-            d.pop("follow_ref_seen_conflict", None)
-        if isinstance(d, dict) and not self.follow_ref and not self.follow_ref_variants and not self.follow_ref_seen:
-            for k in ("follow_ref", "follow_ref_cov", "follow_ref_gap"):
-                d.pop(k, None)
-        if isinstance(d, dict) and self.follow_ref and self._follow_variants():
+        if self.follow_ref and self._follow_variants():
             # 表项不再接管 variants 路径（史記 r45 嵗=歳，cv#1438）：只有「表非空且按参校本取异体」的书输出会变，
             # 修订号进 dump 只让它们过期（别的书 dump 不变，代码改动登 code_equiv）。
             d["follow_ref_variants_rev"] = FOLLOW_REF_VARIANTS_REV
-        if isinstance(d, dict):
-            if self.edge_pair_to == "freq":
-                d.pop("edge_pair_to", None)     # 缺省值不进 dump
-            if self.edge_pair_cov == 0.92:
-                d.pop("edge_pair_cov", None)
-            if self.edge_pair_gap == 0.005:
-                d.pop("edge_pair_gap", None)
-            if self.edge_pair_group_seam:
-                d.pop("edge_pair_group_seam", None)      # 缺省开；关了才写
-            if self.edge_pair_group_seam_nf_gap == 0.03 or not self.edge_pair_group_seam:
-                d.pop("edge_pair_group_seam_nf_gap", None)
-        if isinstance(d, dict) and not self.context_lib_dissent_gap:
-            d.pop("context_lib_dissent_gap", None)
-            d.pop("context_lib_dissent_cov", None)
-        if isinstance(d, dict) and not self.context_page_end_review:
-            d.pop("context_page_end_review", None)
-        if isinstance(d, dict) and not self._context_guard_on():
-            # diff／ref_blank（10-23）、ref_prefer（10-24）已缺省开：全关是显式选择，这三个 False 留在 dump 里
-            for k in ("context_guard_cov",):
-                d.pop(k, None)
         return d
 
     @model_validator(mode="before")
