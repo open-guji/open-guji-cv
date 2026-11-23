@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（缺省关，产物逐字节不变，code_equiv 登记）：seed_admit 书级开关 `ref_lib_5b_veto`／`ref_lib_5b_veto_lead`——「整理本＝库首位」放行（`ref_lib`）的 5-b 否决：5-b 首位是别的汉字、分 ≥ 门槛、领先 ≥ 门槛 → 退回人审（doubt `ref_lib_5b_veto`）。起因殿本字书 靃 被整理本规范成 霍、库首位也落到 霍（A23 11-23）。
+
 - PATCH（纯搬家，产物逐字节不变、Step 指纹不变）：seed_admit 的参数类 `SeedAdmitParams` 与退役／恒开参数表、去键表搬到 `steps/seed_admit_params.py`（CV4 整理），`seed_admit` 照旧 re-export；新模块进 code_deps，经 `code_equiv.SPLITS` 合回原指纹。
 
 - PATCH（产物逐字节不变，code_equiv 登记）：seed_admit 参数指纹去键规则由 `_drop_off_rare` 里一百多段 if 改成声明表 `_DUMP_DROP`（CV4 整理 PR3，规则逐条不变；397 册＋两两翻转 11,730 组 params_hash 不变）。
