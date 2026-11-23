@@ -8,12 +8,11 @@ from open_guji_cv.steps.seed_admit import SeedAdmitParams, _p_ref_pass
 B = "tbook:1"
 
 
-def _run(cells, amap, on=True, coord=None, mmap=None, **kw):
+def _run(cells, amap, on=True, mmap=None, **kw):
     recs = [AdmitRec(id=f"{B}:1:{s}", slot=int("".join(ch for ch in s if ch.isdigit())), admit=c.get("admit", False), char=c.get("char"),
                      doubts=list(c.get("doubts", [])), channel=c.get("channel"), provenance=c.get("provenance", ""), evidence=c.get("ev") or {})
             for s, c in cells.items()]
     n = _p_ref_pass(SeedAdmitParams(db_path="x", p_ref_admit=on, **kw), [ColumnAdmit(col=1, chars=recs)], {f"{B}:1:{s}": (v, None) for s, v in amap.items()},
-                     {f"{B}:1:{s}": v for s, v in coord.items()} if coord is not None else None,
                     {f"{B}:1:{s}": SimpleNamespace(candidates=v) for s, v in mmap.items()} if mmap is not None else None)
     return n, {r.id.split(":")[-1]: r for r in recs}
 
@@ -71,27 +70,6 @@ def test_knobs_not_in_dump_when_default():
     assert d["p_ref_max_cov"] == 0.93 and d["p_ref_jiazhu"] is True and "p_ref_adjacent" not in d
 
 
-def test_p_ref_coord_takes_coord_ref_only_when_no_text_label():
-    """p_ref_coord（P02）：文本对位没标签的格退到坐标对位字；有文本标签的以文本为准；非 coord 调用方不受影响。"""
-    ok = {"admit": True, "char": "甲"}
-    cells = {"1": ok, "2": {"char": "機", "ev": {"cov": 0.90}}, "3": ok}
-    assert _run(cells, {}, coord={"2": "整"})[0] == 1
-    n, r = _run(cells, {}, coord={"2": "整"})
-    assert (r["2"].char, r["2"].evidence["p_ref"]["via"]) == ("整", "coord")
-    assert _run(cells, {}, coord=None)[0] == 0                                           # 没给 coord 等于关
-    n, r = _run(cells, {"2": "文"}, coord={"2": "整"})
-    assert r["2"].char == "文" and r["2"].evidence["p_ref"]["via"] == "align"           # 文本对位优先
-    assert _run(cells, {}, coord={"2": "整"}, p_ref_max_cov=0.85)[0] == 0                 # cov 旋钮同管
-    assert _run({"1": ok, "2": {"char": "機"}, "3": {"char": "誤"}}, {}, coord={"2": "整", "3": "正"})[0] == 0   # 相邻成片照拦
-
-
-def test_p_ref_coord_knob_not_in_dump_when_default():
-    d = SeedAdmitParams(db_path="x", p_ref_admit=True).model_dump()
-    assert "p_ref_coord" not in d
-    assert SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_coord=True).model_dump()["p_ref_coord"] is True
-    assert "p_ref_coord" not in SeedAdmitParams(db_path="x", p_ref_coord=True).model_dump()
-
-
 def test_skip_variant_guard():
     """p_ref_skip_variant：机器字与整理本字有直接异体边（羨／羡）不取整理本字；非异体照放。"""
     ok = {"admit": True, "char": "甲"}
@@ -100,30 +78,6 @@ def test_skip_variant_guard():
     assert _run({"1": ok, "2": {"char": "機"}}, {"2": "整"}, p_ref_skip_variant=True)[0] == 1
     d = SeedAdmitParams(db_path="x", p_ref_admit=True).model_dump()
     assert "p_ref_skip_variant" not in d
-
-
-def test_coord_own_knobs_independent_of_p01_knobs():
-    """1.50：坐标对位格用自己的 cov 上限与相邻开关；P01（文本对位）格仍按 p_ref_max_cov／p_ref_adjacent。"""
-    ok = {"admit": True, "char": "甲"}
-    two = {"1": ok, "2": {"char": "機", "ev": {"cov": 0.90}}, "3": {"char": "誤", "ev": {"cov": 0.90}}}
-    # P01 开相邻：文本对位的相邻格照放；坐标对位的相邻格仍拦
-    assert _run(two, {"2": "整", "3": "正"}, p_ref_adjacent=True)[0] == 2
-    assert _run(two, {}, coord={"2": "整", "3": "正"}, p_ref_adjacent=True)[0] == 0
-    assert _run(two, {}, coord={"2": "整", "3": "正"}, p_ref_adjacent=True, p_ref_coord_adjacent=True)[0] == 2
-    # cov 上限：coord 用自己的；None 沿用 p_ref_max_cov
-    hi = {"1": ok, "2": {"char": "機", "ev": {"cov": 0.96}}}
-    assert _run(hi, {"2": "整"}, p_ref_max_cov=0.97)[0] == 1
-    assert _run(hi, {}, coord={"2": "整"}, p_ref_max_cov=0.97)[0] == 1                      # 沿用
-    assert _run(hi, {}, coord={"2": "整"}, p_ref_max_cov=0.97, p_ref_coord_max_cov=0.94)[0] == 0
-    assert _run(hi, {"2": "整"}, p_ref_max_cov=0.97, p_ref_coord_max_cov=0.94)[0] == 1      # 不影响文本对位格
-
-
-def test_coord_own_knobs_not_in_dump_when_default():
-    d = SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_coord=True).model_dump()
-    assert not {"p_ref_coord_max_cov", "p_ref_coord_adjacent"} & set(d)
-    d = SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_coord=True, p_ref_coord_max_cov=0.94).model_dump()
-    assert d["p_ref_coord_max_cov"] == 0.94 and "p_ref_coord_adjacent" not in d
-    assert "p_ref_coord_max_cov" not in SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_coord_max_cov=0.94).model_dump()
 
 
 def test_irregular_ref_gap_bypasses_cov_cap_only_for_variant_form_refs():

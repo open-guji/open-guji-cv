@@ -180,15 +180,11 @@ def test_r4_all_witnesses_and_coord_agree_without_lib():
 
 
 def test_r4_non_han_ref_and_few_stroke_not_taken():
-    """史記 r12：坐标对位字非汉字、库首位是别的字 → 不取参校字；少笔画名单（库首位／参校字在内且不同）→ 不取，留审。开关缺省关。"""
+    """史記 r12：坐标对位字非汉字、库首位是别的字 → 不取参校字（少笔画名单 lane_coord_few_stroke 无书用，2026-11-23 删）。"""
     n, rs = _r4("夫", "ခ", "ခခခ", lane_coord=True)
     assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "ref_non_han"
     n, rs = _r4("三", "一", "一一一", lane_coord=True)                       # 缺省：照旧取参校字
     assert n == 1 and rs[5].char == "一"
-    n, rs = _r4("三", "一", "一一一", lane_coord=True, lane_coord_few_stroke=("一", "二", "三"))
-    assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "few_stroke"
-    n, rs = _r4("夫", "天", "天天天", lane_coord=True, lane_coord_few_stroke=("一", "二", "三"))   # 不涉及少笔画字：照放
-    assert n == 1 and rs[5].char == "天"
 
 
 def _blind(cands, coord_char, lib_n, **params):
@@ -412,48 +408,6 @@ def test_r5_title_column_blocked():
     """卷端／版心题列（坐标对位连起来含「總目」）整列不放。"""
     n, _ = _seal({1: ("書", "coord"), 2: ("總", "coord")}, coord={1: "書", 2: "總", 3: "目"}, lane_seal=True)
     assert n == 0
-
-
-# ── R5 补充：库首位同字当第二证据（seal_lib_agree，overview#471 去章）──────────
-
-def test_seal_lib_agree_off_by_default():
-    n, _ = _seal({1: ("書", "coord")}, coord={1: "書", 2: "總", 3: "目"}, lane_seal=True)
-    assert n == 0
-    n, _ = _seal({5: ("宇", "align")}, lane_seal=True, lane_seal_via="coord")
-    assert n == 0
-
-
-def test_seal_lib_agree_passes_title_column_and_align_via():
-    cells = {1: ("書", "coord"), 2: ("總", "coord"), 5: ("宇", "align")}
-    coord = {1: "書", 2: "總", 3: "目"}
-    chars = BODY[:20]
-    pend = {s: dict(doubts=["occluded"], char=c, evidence={"occluded": {"density": 9.0, "via": v}})
-            for s, (c, v) in cells.items()}
-    out = _page(chars, pend)
-    n, rs = _run(out, coord=_ids(coord), lane_seal=True, seal_lib_agree=True,
-                 lib={1: "書", 2: "他", 5: "宇"})
-    assert n == 2
-    assert rs[1].admit and rs[1].char == "書" and rs[1].channel == "seal"
-    assert rs[1].evidence["lane"]["lib_agree"] == 0.95
-    assert not rs[2].admit            # 库首位不同字：照旧送审（题列仍整列拦）
-    assert rs[5].admit and rs[5].char == "宇"
-
-
-def test_seal_lib_agree_needs_cov_and_keeps_guards():
-    pend = {1: dict(doubts=["occluded"], char="書", evidence={"occluded": {"density": 9.0, "via": "coord"}})}
-    n, _ = _run(_page(BODY[:20], pend), coord=_ids({1: "書", 2: "總", 3: "目"}), lane_seal=True,
-                seal_lib_agree=True, seal_lib_cov=0.99, lib={1: "書"})
-    assert n == 0                     # 库覆盖度 0.95 < 0.99
-    jys = {1: dict(doubts=["occluded"], char="己", evidence={"occluded": {"density": 9.0, "via": "coord"}})}
-    n, _ = _run(_page("己" + BODY[1:20], jys), coord=_ids({1: "己"}), lane_seal=True, seal_lib_agree=True, lib={1: "己"})
-    assert n == 0                     # 己已巳一族不走
-
-
-def test_seal_lib_agree_off_not_in_dump():
-    d = SeedAdmitParams(db_path="x", lane_seal=True).model_dump()
-    assert "seal_lib_agree" not in d and "seal_lib_cov" not in d
-    d = SeedAdmitParams(db_path="x", lane_seal=True, seal_lib_agree=True).model_dump()
-    assert d["seal_lib_agree"] is True and d["seal_lib_cov"] == 0.9
 
 
 def test_human_and_excluded_untouched():
@@ -682,12 +636,6 @@ def test_r4_codepoint_variant_admits_book_codepoint():
 
 def test_r4_codepoint_variant_needs_gap_over_other_chars():
     n, rs = _r4cp([("淸", 0.94), ("精", 0.938)], "清", lane_coord_codepoint_variant=True)
-    assert n == 0 and not rs[5].admit
-
-
-def test_r4_codepoint_variant_skip_list():
-    n, rs = _r4cp([("淸", 0.94), ("精", 0.80)], "清", lane_coord_codepoint_variant=True,
-                  lane_coord_codepoint_skip="淸")
     assert n == 0 and not rs[5].admit
 
 
