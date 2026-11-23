@@ -75,7 +75,7 @@ def render(stage: str, title: str, n: int, steps: list[str], chains: dict[str, l
     L = [f"# {n} {title}：步骤、产物与参数",
          "",
          "> 由 `scripts/gen_stage_docs.py` 从代码生成，**不要手改**；改了 Step 或产物定义后重跑。"
-         f"命令里写大步名 `{stage}`：`guji pipeline <管线> <册> --from {stage} --to {stage}`。",
+         f"命令里写大步名 `{stage}`：`guji-cv pipeline <管线> <册> --from {stage} --to {stage}`。",
          "",
          "| 步骤 id | 名称 | 单位 | 版本 | 用在哪条链 | 出口闸 |",
          "|---|---|---|---|---|---|"]

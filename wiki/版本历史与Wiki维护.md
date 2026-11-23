@@ -25,7 +25,7 @@
 
 - 原九步并成四大步：**1 版面**（Step0–2）、**2 切字**（Step3–4）、**3 识字**（Step5）、**4 定字**（Step6–7）；Step8 入库、Step9 排版输出移到 guji-manager。步骤 id、产物、指纹都没变。
 - 六个 Step 页合成四个大步页：`1-版面`、`2-切字`、`3-识字`、`4-定字`；Step0 页面预检从「管线全景」挪进「1 版面」。
-- 命令一律写带 manager 大步前缀的形式（`guji pipeline …`、`guji start …`）；`--from`／`--to` 可写大步名 `layout`／`cut`／`read`／`decide`。删了 `guji fp-migrate`、`guji import-pdf` 和 `guji-cv` 入口。
+- cv 有自己的命令行入口 `guji-cv`（本 Wiki 里 cv 的命令都写它；大步工具可带前缀，如 `guji-cv layout preclean`）；manager 的命令写总入口 `guji`（`guji start …`、`guji pipeline …`）。`--from`／`--to` 可写大步名 `layout`／`cut`／`read`／`decide`。删了 `fp-migrate`、`import-pdf`。
 - doc 与 Wiki 分工：doc 只写事实与 schema（各大步的「步骤与产物.md」从代码生成），介绍、教程、怎么用写在这里。
 
 ### v0.8（2026-11-21，v0.8.0）

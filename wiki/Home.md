@@ -13,7 +13,7 @@ open-guji-cv 是开源古籍的**图像引擎**：把一张古籍影印页切成
 | open-guji-cv（本仓） | guji-manager |
 |---|---|
 | 产物的**每个字节怎么算出来**：版面、切字、识字、定字四大步，产物格式、指纹与过期 | 一切**对外交互**，分五步：`start` 新书启动、`pipeline` 自动化流程（含跑 cv）、`text` 文意与知识提取、`feedback` 反馈迭代、`output` 排版输出 |
-| `guji pipeline <管线> <册>`、`guji pipeline step`、`guji pipeline status`，以及各大步的工具命令 | `guji start …`、`guji pipeline job …`、`guji output export`…（原第 8 步入库、第 9 步排版输出都在这边） |
+| `guji-cv pipeline <管线> <册>`、`guji-cv step`、`guji-cv status`，以及各大步的工具命令 | `guji start …`、`guji pipeline job …`、`guji output export`…（原第 8 步入库、第 9 步排版输出都在这边） |
 
 人审、任务库、中心库怎么操作，看 guji-manager 的 Wiki。这里讲图像这一侧。
 
@@ -40,8 +40,8 @@ python -c "import torch, scipy, cv2"          # 缺件不报错只会悄悄降�
 
 guji db pull -w <工作区>                        # 册配置、字形库、语料从中心库拉
 guji start source pull vol04 -w <工作区>       # 原图
-guji pipeline keben_body_v2 vol04 --pages 9 -w <工作区>                     # 四大步全跑
-guji pipeline keben_body_v2 vol04 --pages 9 --from layout --to cut -w <工作区> # 只跑版面、切字
+guji-cv pipeline keben_body_v2 vol04 --pages 9 -w <工作区>                     # 四大步全跑
+guji-cv pipeline keben_body_v2 vol04 --pages 9 --from layout --to cut -w <工作区> # 只跑版面、切字
 guji pipeline product overlay vol04 row_segment --page 9 --out p9.png -w <工作区>
 ```
 

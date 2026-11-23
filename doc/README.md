@@ -13,13 +13,13 @@ cv 只做 guji-manager 第二步 `pipeline` 里的「跑 CV 管线」，管线�
 
 原第 8 步入库归 manager 第二步，原第 9 步排版输出归 manager 第五步 `output`。
 
-命令（文档一律写带前缀的形式；不带前缀的老写法照样能跑）：
+cv 自己的命令行入口是 `guji-cv`（`python -m open_guji_cv` 同）；guji-manager 通过总入口 `guji pipeline …` 调同一批命令。大步工具可带前缀：`guji-cv layout preclean …`、`guji-cv read rare …`。
 
 ```bash
-guji pipeline keben_body_v2 vol04 -w <工作区> --pages 9 --from layout --to cut   # 跑一段，可写大步名或步骤 id
-guji pipeline step row_segment vol04 -w <工作区> --pages 9                       # 只跑一步
-guji pipeline status vol04 -w <工作区> --pages all                               # 各步新鲜／过期／缺失
-guji version --json                                                              # 装着的 cv 版本与契约版本
+guji-cv pipeline keben_body_v2 vol04 -w <工作区> --pages 9 --from layout --to cut   # 跑一段，可写大步名或步骤 id
+guji-cv step row_segment vol04 -w <工作区> --pages 9                       # 只跑一步
+guji-cv status vol04 -w <工作区> --pages all                               # 各步新鲜／过期／缺失
+guji-cv version --json                                                           # 装着的 cv 版本与契约版本
 ```
 
 每个大步目录里有一份 `步骤与产物.md`，由 `scripts/gen_stage_docs.py` 从代码生成（测试 `tests/test_stage_docs.py` 守着它不过时）。
