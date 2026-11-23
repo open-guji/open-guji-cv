@@ -36,7 +36,7 @@ def report(items, ways):
             top1 = gmax > omax
             acc = top1 and any(x[0] and x[1] == gmax for x in g)
             fs = [(c, x) for c, x in o if x[0] and x[1] >= gmax]
-            for k in (it["kind"], "全部"):
+            for k in (it["kind"], "全部", A.split_of(it["query_id"])):
                 a = agg[k]
                 a["n"] += 1
                 a["rank1"] += top1
@@ -68,7 +68,9 @@ def main():
     for name, r in res.items():
         print("  " + name + "  " + "  ".join(
             f"{k} 首位 {100 * v['rank1_rate']:.1f}% 放行 {100 * v['accept_rate']:.1f}% 误放 {v['false_same']}（n={v['n']}）"
-            for k, v in sorted(r.items(), key=lambda t: t[0] != "全部")))
+            for k, v in sorted(r.items(), key=lambda t: t[0] != "全部") if k not in ("dev", "test")))
+        print("    " + "  ".join(f"{k} 首位 {100 * r[k]['rank1_rate']:.1f}% 误放 {r[k]['false_same']}（n={r[k]['n']}）"
+                                for k in ("dev", "test") if k in r))
     way = "cnn+fuse" if "cnn+fuse" in res else "cov"
     h = res[way]
     out = dict(shard=str(shard), book=info["book"], n=len(items), crops_from=info.get("crops_from"),

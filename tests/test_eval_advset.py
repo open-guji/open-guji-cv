@@ -22,3 +22,9 @@ def test_report_layers_and_flips():
     assert (var["n_query"], var["false_same"]) == (1, 1)
     assert flips["cov|形近"] == ["q1|廬→盧|c1"]
     assert flips["cov|异体"] == ["q2|歳→歲|c3"]
+
+
+def test_split_by_volume_parity():
+    assert ev.split_of("v2:008:156:9:9") == "test"
+    assert ev.split_of("v2:vol01:88:1:16a") == "dev"
+    assert ev.split_of("v2:05:77:1:1") == "dev"

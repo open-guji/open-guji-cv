@@ -98,6 +98,13 @@ def _fuse_wmax(items, P, res):
     return out
 
 
+def split_of(iid: str) -> str:
+    """dev／test 按册号奇偶分（方案 v2：调门槛、挑方法只看 dev，报数看 test）。格号 v2:<册>:页:列:字，册号取数字。"""
+    parts = iid.split(":")
+    vol = "".join(ch for ch in (parts[1] if len(parts) > 1 else "") if ch.isdigit())
+    return "dev" if vol and int(vol) % 2 else "test"
+
+
 def _report(items, ways):
     res, flips = {}, {}
     held = np.array([it["held"] for it in items])
@@ -119,8 +126,10 @@ def _report(items, ways):
                     part_hits += 1
             r[layer] = dict(n_query=n, n_held=len({it["held"] for it, s in zip(items, sc)}),
                             false_same=hits, false_same_rate=hits / n if n else None,
-                            partner_false_same=part_hits)
+                            partner_false_same=part_hits,
+                            by_split={sp: sum(split_of(x.split("|", 1)[0]) == sp for x in bad) for sp in ("dev", "test")})
             flips[f"{name}|{layer}"] = sorted(bad)
+        r["n_by_split"] = {sp: sum(split_of(it["query_id"]) == sp for it in items) for sp in ("dev", "test")}
         res[name] = r
     return res, flips
 
@@ -142,7 +151,8 @@ def main():
     for name, r in res.items():
         x, v = r["形近"], r["异体"]
         print(f"  {name:9s} 形近误认 {x['false_same']}/{x['n_query']}（{100 * (x['false_same_rate'] or 0):.2f}%，"
-              f"其中对家 {x['partner_false_same']}）  异体下 same {v['false_same']}/{v['n_query']}")
+              f"其中对家 {x['partner_false_same']}；dev {x['by_split']['dev']}／test {x['by_split']['test']}）"
+              f"  异体下 same {v['false_same']}/{v['n_query']}")
     head = res["cnn+fuse"] if "cnn+fuse" in res else res["cov"]
     out = dict(shard=str(shard), book=info["book"], n=len(items), crops_from=info.get("crops_from"),
                sim_model=a.sim_model, result=res, flips=flips,
