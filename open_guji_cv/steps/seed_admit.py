@@ -3567,7 +3567,8 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
             continue                                 # 越过整理本：字与整理本字不同属白名单字组 → 留审
         ds = list(r.doubts or [])
         vr = {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass", "route")}
-        vr.update({k: v[k] for k in ("via", "ref_lead", "ruling_key", "ruling_ver") if v.get(k)})   # 非窗口精确命中才有 ruling_key   # 终审 ref_lead 证人放行：via=ref_lead（层、领先量）
+        # 终审 ref_lead 证人放行：via=ref_lead（层、领先量）；ruling_key／ruling_ver 只在非窗口精确命中时有
+        vr.update({k: v[k] for k in ("via", "ref_lead", "ruling_key", "ruling_ver") if v.get(k)})
         r.evidence = {**(r.evidence or {}), "vis_ruling": vr,
                       "lifted_from": {"char": r.char, "doubts": ds}}
         if half_ok and is_half:
