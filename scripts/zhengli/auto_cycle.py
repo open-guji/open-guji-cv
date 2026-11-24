@@ -94,6 +94,18 @@ def main_changed(ws: Path, book: str, prev: dict) -> bool:
     return False
 
 
+#: manager `guji pipeline` 收尾（land --apply）落定时写：{digest, pack}（GM4 换包按条目对账，11-24）
+LANDED = "_land/landed.json"
+
+
+def landed_pack(ws: Path, book: str) -> str | None:
+    """收尾按哪个产物包落定了待审条目（`reports/<册>/_land/landed.json` 的 pack）；没有、读不了 → None。"""
+    try:
+        return json.loads((Path(ws) / "reports" / book / LANDED).read_text(encoding="utf-8")).get("pack") or None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def decide(ws: Path, book: str, land_votes: bool = False) -> dict:
     """返回 {verdict, why, main, online_rev, status}。只读。
     land_votes：线上单有票但没投完时不等，判 go，由 plan 把票落成人裁（落不了的由 apply 的票账门拦下，不丢票）。"""
@@ -108,6 +120,9 @@ def decide(ws: Path, book: str, land_votes: bool = False) -> dict:
         return {"verdict": "no-main", "why": "册没有 main 产物包", "online_rev": rev}
     rev_pack = next((r for r in rows if r["label"] == rp.pack_label(rev)), None)
     base = {"online_rev": rev, "main": main["label"], "main_time": main["time"]}
+    landed = landed_pack(ws, book)
+    if landed and landed == main["label"]:      # 收尾已按这个 main 包对账落定（待审没变就不换 rev、不出 rev-<rev> 包）
+        return {**base, "verdict": "fresh", "why": f"已按 main 包 {landed} 对账落定（{LANDED}），线上单 {rev}"}
     # 包的时间是它跑完存库的时间，不是标 main 的时间（r5 先存、后标 main 的情形会反过来），所以不比时间：
     # 出单版包的备注记了「基于 main 包 <标签>」，与现在的 ★main 标签相同才算新；备注里没有（旧单）一律当过期。
     m = re.search(r"基于 main 包 (\S+)", (rev_pack or {}).get("note", ""))
