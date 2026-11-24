@@ -529,6 +529,11 @@ _ANCHOR_1124 = ("裁定格锚点后备键（RulingStore.get_anchor、rulings.pag
                 "（页号与产物包同 _VER_EQUIV_1124），三书中心库现有裁定库在场，seed_admit 与 origin/dev 2ecc951 产物逐字节相同；"
                 "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4，裁定键长期方案③）")
 
+_VALIDATE_1124 = ("写裁定前校验（rulings.validate／validate_payload、RulingLog.append 拒写；看图判版本与子类表挪到 rulings.VIS_RULING_SPECS，"
+                  "seed_admit 引用同一份，值不变）：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（页号与产物包同 _VER_EQUIV_1124），"
+                  "三书中心库现有裁定库在场，seed_admit 与 origin/dev 939ec88 产物逐字节相同；scripts/code_equiv.py check，"
+                  "GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4，裁定键长期方案①）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2452,6 +2457,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="51da67a783eca81b6b3d6cb1a3202c53358f8ae6d99a2ba3bed5a2e8044020cb",
           old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
           evidence=_ANCHOR_1124),
+    # 写裁定前校验（CV4，裁定键长期方案①，GM4 11-24）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="9a4a4a6e299ecb3d90d1baeb97fb4fbe13e48ef3883bc826784df114e6a9cdb7",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_VALIDATE_1124),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="b5e9cc4e459c1a0e3b05677069445080b32066073ccc31172e8e341ed6bddc01",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_VALIDATE_1124),
 )
 
 
