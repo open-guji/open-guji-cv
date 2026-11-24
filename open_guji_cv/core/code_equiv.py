@@ -2470,6 +2470,13 @@ ENTRIES: tuple[Equiv, ...] = (
           new="48114ec6b04e2a85a6f3550c4ca98235058f5b61f45aacfa3db4aa2e35ea94d6",
           old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
           evidence=_LOOSE_1124),
+    # seed_admit 69 个门槛收成常量（CV4 整理 PR4，Sheldon 11-24 定）：字段改 `_CONSTANTS`＋只读属性，参数指纹 12,472 组全同
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="0e45e99f8310562215d11c37c1c6cae104054f4821befd7e55cb083bbc5c1515",
+          old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
+          evidence="seed_admit 与 62c715fd 产物逐字节相同：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190）、"
+                   "全唐文 020 16 页（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170）、"
+                   "史記 02 18 页（4,9,19,24,33,41,44,53,86,95,102,106,114,141,173,180,185,199）"),
 )
 
 
