@@ -242,7 +242,9 @@ def cmd_apply(a) -> int:
         if not log.step("写人裁并消费", [*GUJI, "cellvotes", "write", book, plan["draft_dir"], "--batch", plan["batch"],
                                     "--reviewer", plan["reviewer"], "-w", ws], cwd=CV, env=env):
             return 1
-        if not log.step("推库（guji db sync）", [*GUJI, "db", "sync", "-w", ws], cwd=CV, env=env):
+        if getattr(a, "defer_sync", False):
+            log.note("--defer-sync：落票后不推库，整趟最后统一 guji db sync")
+        elif not log.step("推库（guji db sync）", [*GUJI, "db", "sync", "-w", ws], cwd=CV, env=env):
             return 1
     else:
         log.note("没有可写的票，跳过落票")
@@ -347,6 +349,8 @@ def cmd_apply(a) -> int:
         issue += ["--ack-unlanded-votes", a.ack_unlanded_votes]
     if getattr(a, "cells", None):            # 旧单出在换图源之前：票按格级对照表把旧格号对到新格（republish 换单门）
         issue += ["--cells", a.cells]
+    if getattr(a, "defer_sync", False):      # 整趟换包：本册不推库，由 guji swap 最后统一推一次
+        issue += ["--defer-sync", "--no-publish-web"]
     if getattr(a, "no_web", False):          # 批量时每册不单独触发网站发布，由 auto_cycle 最后统一发一次
         issue += ["--no-publish-web"]
     cv_commit = plan.get("engine_commit") if engine != CV else plan["pack_cv_commit"]   # 重跑用的是哪份 cv 就记哪份
@@ -588,6 +592,7 @@ def main(argv=None) -> int:
     p.add_argument("--allow-cv-drift", action="store_true", help="本机 cv 与出单版不同也照跑重跑那一步")
     p.add_argument("--dry-run", action="store_true", help="只核计划、打出要跑的命令，不执行")
     p.add_argument("--no-web", action="store_true", help="出单、推库、升 book-text，但不触发网站发布、不冒烟（批量用，最后统一发）")
+    p.add_argument("--defer-sync", action="store_true", help="落票后和出单后都不 db sync、不发站（整趟换包：最后统一 sync 一次；省每册 2–3 次约 90 秒的中心库往返）")
     p = sp.add_parser("audit", help="只读：一张单的 G0 票账（写入／一致／看不出／挂起／未落），有未落退出码 1")
     p.add_argument("--book", required=True)
     p.add_argument("-w", "--workspace", required=True)
