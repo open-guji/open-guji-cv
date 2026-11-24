@@ -47,6 +47,8 @@ _CONF_RANK = {"high": 3, "mid": 2, "low": 1}
 
 
 ANCHOR_MAX_WIN_DIFF = 3   # 格锚点命中时，裁定窗口与现窗口的编辑距离上限（GM4 审 #1832）
+#: 格锚点宽松档比的窗口长度（前后各 2 字，至少一侧相同；GM4 合并方案 11-24）
+ANCHOR_WIN = 2
 
 
 def edit_distance(a: str, b: str) -> int:
@@ -75,11 +77,13 @@ def load_ver_equiv(path: str | Path) -> dict:
     equiv:                      # 有向：查 to 没中时，用 from 写下的裁定；group 省略＝所有组
       - {group: O, from: ctx-m1-old, to: ctx-m1}
       - {from: ry-l2-2, to: rm-l2-1}
+    void:                       # 作废的版本（反向登记，GM4 11-24）：格锚点宽松档（`ruling_anchor_loose`）不认它们写的裁定
+      - ctx-wenyi-1             # 写字符串＝所有组；也可写 {group: ry, ver: ry-l2-1}
     ```
-    多步登记（a→b、b→c）按传递闭包算。格式不对直接抛错，不静默当空表。"""
+    多步登记（a→b、b→c）按传递闭包算。格式不对直接抛错，不静默当空表。`void` 在返回里是 {(组|"*", 版本)}（版本去掉 `#模型` 后缀比）。"""
     p = Path(path)
     if not p.exists():
-        return {"pairs": {}, "model_suffix": False}
+        return {"pairs": {}, "model_suffix": False, "void": set()}
     d = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     if not isinstance(d, dict):
         raise ValueError(f"{p}: 顶层须是映射")
@@ -88,7 +92,15 @@ def load_ver_equiv(path: str | Path) -> dict:
         if not isinstance(e, dict) or not e.get("from") or not e.get("to"):
             raise ValueError(f"{p}: equiv[{i}] 须有 from、to")
         pairs.setdefault((str(e.get("group") or "*"), str(e["to"])), []).append(str(e["from"]))
-    return {"pairs": pairs, "model_suffix": bool(d.get("model_suffix", False))}
+    void: set = set()
+    for i, e in enumerate(d.get("void") or []):
+        if isinstance(e, str) and e:
+            void.add(("*", base_ver(e)))
+        elif isinstance(e, dict) and e.get("ver"):
+            void.add((str(e.get("group") or "*"), base_ver(str(e["ver"]))))
+        else:
+            raise ValueError(f"{p}: void[{i}] 须是版本名或 {{group, ver}}")
+    return {"pairs": pairs, "model_suffix": bool(d.get("model_suffix", False)), "void": void}
 
 
 def merge_suffix_rows(rows: list[dict]) -> dict | None:
@@ -314,12 +326,14 @@ class RulingStore:
         return bool(self._anc)
 
     def get_anchor(self, group: str, prompt_ver: str, cell: str, cells_sha: str | None, ref: str | None,
-                   left: str | None = None, right: str | None = None) -> dict | None:
+                   left: str | None = None, right: str | None = None, loose: bool = False) -> dict | None:
         """格锚点后备键：格号＋写裁定时的 `cells_sha`＋整理本对位字 `ref` 全对、版本是 `prompt_ver` 或其等价版本
         （登记表与「只差模型后缀」同 `get_equiv`；多条时取先命中的版本，同一版本后到覆盖；只差后缀的各条按 `merge_suffix_rows` 合并）。
         窗口护栏（GM4 审 #1832）：大模型当时按裁定里的窗口判文意，现窗口（`left`／`right`）与它的编辑距离（前后两段相加）
         须 ≤ `ANCHOR_MAX_WIN_DIFF`，超了或裁定没记窗口都弃权；`window_diff` 记进返回的副本。
-        → payload 副本（`ruling_key="anchor"`、`ruling_ver`、`window_diff`）｜None。"""
+        → payload 副本（`ruling_key="anchor"`、`ruling_ver`、`window_diff`）｜None。
+
+        `loose=True`（书级 `ruling_anchor_loose`，GM4 合并方案 11-24）走 `_anchor_loose`。"""
         if not cell or not cells_sha:
             return None
         self._load()
@@ -331,6 +345,8 @@ class RulingStore:
         if not rows:
             return None
         eq = self.ver_equiv()
+        if loose:
+            return self._anchor_loose(group, prompt_ver, rows, eq, left, right)
         for ver in [prompt_ver, *self.equiv_vers(group, prompt_ver)]:
             x = rows.get(ver)
             if x is None and eq["model_suffix"]:
@@ -344,6 +360,44 @@ class RulingStore:
                     return None
                 return {**x, "ruling_key": "anchor", "ruling_ver": x.get("prompt_ver"), "window_diff": d}
         return None
+
+    def _anchor_loose(self, group: str, prompt_ver: str, rows: dict, eq: dict, left: str | None, right: str | None) -> dict | None:
+        """格锚点宽松档（GM4 合并方案，GM3／CV0 确认 11-24）。`rows`＝同组同格同 cells_sha、ref 已对上的各版本（旧→新）。
+        - 版本：本组 `validate_payload` 认的任意版本（去后缀比），减去 `ver_equiv.yaml` 的 `void`；不收看图 L4 缓存（`vis1:`）；
+          O 组各版本子类白名单不同，只收 `prompt_ver` 与其等价版本（含只差后缀的）；串组不认（行本就按组建）；
+        - 多条取最新；字（或「其他」）不一致 → `{"ruling_conflict": True, …}`，调用方不放行、记证据；
+        - 只收 conf=high；
+        - 窗口：裁定记的前后 2 字与现窗口**至少一侧相同**（取代编辑距离），没记窗口弃权；`win_sides` 记哪侧相同。"""
+        from ..groups.vis_llm import VER as L4_VER
+        void = eq.get("void") or set()
+        ok_base = ({base_ver(v) for v in [prompt_ver, *self.equiv_vers(group, prompt_ver)]}
+                   if group == VIS_RULING_GROUP else None)
+        cand = []
+        for v, x in rows.items():
+            b = base_ver(v or "")
+            if (group, b) in void or ("*", b) in void or b.startswith(L4_VER + ":"):
+                continue
+            if ok_base is not None and b not in ok_base:
+                continue
+            if validate_payload(x, eq)[0]:
+                continue
+            cand.append(x)
+        if not cand:
+            return None
+        if len({(x.get("char"), bool(x.get("other"))) for x in cand}) > 1:
+            return {"ruling_conflict": True, "ruling_key": "anchor",
+                    "rows": [{"char": x.get("char"), "other": bool(x.get("other")), "prompt_ver": x.get("prompt_ver")} for x in cand]}
+        x = cand[-1]
+        if x.get("conf") != "high":
+            return None
+        c = x.get("ctx") or {}
+        if "left" not in c or "right" not in c:
+            return None
+        sides = [s for s, a, b in (("left", c["left"][-ANCHOR_WIN:], (left or "")[-ANCHOR_WIN:]),
+                                   ("right", c["right"][:ANCHOR_WIN], (right or "")[:ANCHOR_WIN])) if a == b]
+        if not sides:
+            return None
+        return {**x, "ruling_key": "anchor", "ruling_ver": x.get("prompt_ver"), "win_sides": sides}
 
     def cell_codes(self) -> dict[str, dict]:
         """格号 → 这一格在新图源文本层里的私用码记录（`prompt_ver="src-2"`，`put_cell_code` 写的）。

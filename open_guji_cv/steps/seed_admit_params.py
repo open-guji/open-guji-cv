@@ -105,6 +105,7 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.group_flow_llm_skip_half, ("group_flow_llm_skip_half",)),
     (lambda p: not p.vis_ruling_half, ("vis_ruling_half",)),
     (lambda p: not p.vis_ruling_ctx_subclasses, ("vis_ruling_ctx_subclasses",)),
+    (lambda p: not p.ruling_anchor_loose, ("ruling_anchor_loose",)),
     (lambda p: not p.group_flow_ruling_first, ("group_flow_ruling_first",)),
     (lambda p: not p.p_ref_admit, ("p_ref_admit",)),
     (lambda p: (not p.p_ref_admit or p.p_ref_max_cov is None), ("p_ref_max_cov",)),
@@ -434,6 +435,12 @@ class SeedAdmitParams(BaseModel):
     粗校第 4 层「AI 处理文意」：没有字组问的待审格（参校本缺字、复审、库缺例等）由两路独立对话盲判，同字且都 high、字在候选内才写
     `admit_ok`，子类按写入方定（全唐文形近字线 11-18 用 `A`）。其余放行条件与 Z/N 相同：整理本对位字须与裁定记的一致、越过整理本要在白名单。
     开之前须用人裁金标量这一类两路判读 0 错（Sheldon 11-18：形近字文意可以用 AI 判断，属第 4 层固定步骤）。"""
+    ruling_anchor_loose: bool = False
+    """格锚点后备键的宽松档（GM4 合并方案，GM3／CV0 确认 11-24；书级，缺省关、关时不进参数 dump、行为不变；开的册 seed_admit 起往下过期）。
+    关：锚点照 #1832——版本＝本问版本或其等价版本，窗口与裁定记的编辑距离 ≤3。
+    开（`RulingStore._anchor_loose`）：同格同 cells_sha 同 ref 下，本组 `validate` 认的任意版本（减 `ver_equiv.yaml` 的 `void`，O 组仍按目标版本）、
+    多条取最新、字不一致记 `ruling_conflict` 不放行；只收 high（fold 遍也是）；窗口改为前后 2 字至少一侧相同。
+    窗口键、版本等价表照旧先查；在线问前查缓存（`RulingCache`）仍按精确键。开之前须 20 册强制锚点回放人裁真错 0。"""
     group_flow_ruling_first: list[str] = Field(default_factory=list)
     """这几组的文意解法先查裁定库（对话裁定，`feedback.rulings`），命中就照裁定给字，不再看 L1 规则、L2 表／小头（书级，缺省空、不进参数 dump、行为不变）。
     没命中照旧走 L1 → L2 → L3。复核时（`review_fix` 的组，如己已巳）已放行格的上下文有裁定、字不同 → 改成裁定字。
