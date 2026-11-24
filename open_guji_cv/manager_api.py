@@ -397,6 +397,9 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "CTX_WIDTH": ("groups.context", "WIDTH"),
     "seed_admit_clf_ctx": ("steps.seed_admit", "_clf_ctx"),
     "seed_admit_override_ok": ("steps.seed_admit", "_override_ok"),
+    # 产物 → 待审格（pipeline 收尾对账待审条目用，GM4 换包按条目对账 2026-11-24）：只读产物与字块图缓存
+    "pending_cells": ("feedback.pending_cells", "pending_cells"),
+    "machine_pending": ("feedback.pending_cells", "machine_pending"),
 }
 
 __all__ = sorted(_EXPORTS)
