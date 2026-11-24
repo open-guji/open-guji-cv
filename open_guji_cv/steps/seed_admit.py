@@ -3574,7 +3574,7 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None, cells_sha: str | None
             # 格锚点后备键（GM4／CV4 11-24，裁定键长期方案③）：窗口键都没中 → 格号＋写裁定时 cells_sha＋ref 全对，
             # 且裁定字在库候选里或＝整理本字；其余护栏同上
             hit = next(((ver, x) for ver, subs in specs
-                        for x in [store.get_anchor(_VIS_RULING_GROUP, ver, r.id, cells_sha, ref_)]
+                        for x in [store.get_anchor(_VIS_RULING_GROUP, ver, r.id, cells_sha, ref_, left, right)]
                         if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
                         and _ruling_han(x["char"]) and x.get("subclass") in subs and _anchor_cand_ok(x["char"], r.id, ref_, mmap)), None)
         vt, v = hit if hit else (None, None)
@@ -3593,6 +3593,8 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None, cells_sha: str | None
         vr = {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass", "route")}
         # 终审 ref_lead 证人放行：via=ref_lead（层、领先量）；ruling_key／ruling_ver 只在非窗口精确命中时有
         vr.update({k: v[k] for k in ("via", "ref_lead", "ruling_key", "ruling_ver") if v.get(k)})
+        if v.get("ruling_key") == "anchor":
+            vr["window_diff"] = v.get("window_diff")
         r.evidence = {**(r.evidence or {}), "vis_ruling": vr,
                       "lifted_from": {"char": r.char, "doubts": ds}}
         if half_ok and is_half:
@@ -3822,12 +3824,14 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, c
                 if v is None and cells_sha:
                     # 格锚点后备键（裁定键长期方案③）：格号＋写裁定时 cells_sha＋整理本对位字全对，裁定字在库候选或＝对位字
                     aref = (amap.get(r.id) or (None,))[0]
-                    a = store.get_anchor(gid, l3[gid]["ver"], r.id, cells_sha, aref)
+                    a = store.get_anchor(gid, l3[gid]["ver"], r.id, cells_sha, aref, *wins[r.id])
                     if a and a.get("char") and _anchor_cand_ok(a["char"], r.id, aref, mmap):
                         v = a
                 if v and v.get("char") in mem and v.get("conf") in ("high", "mid") and not v.get("other"):
                     ch, via = v["char"], "ruling"
-                    extra = {k: v[k] for k in ("ruling_key", "ruling_ver") if v.get(k)}   # 版本等价命中（GM4／CV4 11-24）
+                    extra = {k: v[k] for k in ("ruling_key", "ruling_ver") if v.get(k)}   # 版本等价／格锚点命中（GM4／CV4 11-24）
+                    if v.get("ruling_key") == "anchor":
+                        extra["window_diff"] = v.get("window_diff")
             if ch is None and p.fold_ctx_vias:
                 g_ev = (r.evidence or {}).get("group") or {}
                 t = next((t for t in g_ev.get("solvers") or [] if t.get("solver") == "ctx"), None) if g_ev.get("id") == gid else None
