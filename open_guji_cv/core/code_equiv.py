@@ -513,6 +513,11 @@ _INNER_PULL_1123 = ("版面 border_detect 新参数 inner_pull（缺省关、不
                     "detect_borders 的 Borders 产物 JSON sha256 与 origin/dev 4a26d7c 逐一相同（158/158）；2026-11-23（CV1；cv #1813 之后）")
 
 
+_OUTER_BAR_1124 = ("border_detect 加 outer_bar（左右外框线先找粗外框条再找内框细线，impl/keben/border.refit_outer_by_bar；缺省关、不进参数 dump，"
+                   "_bend_verticals／refit_bends／detect_borders 多一个缺省 False 的参数、关时那一支不进；其余是新函数定义）：殿本 vol01 8 页（9,40,45,132,161,1,50,79）、"
+                   "脈經 01 3 页（3,4,47）、全唐文 120 2 页（8,118）、史記 05 3 页（3,8,58）border_detect 与 origin/dev 08b0d2c 产物逐字节相同；"
+                   "column_warp、border_detect_gate 只把 impl/keben/border 列进 code_deps、不调改动的函数；scripts/code_equiv.py check，2026-11-24（CV1）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2409,6 +2414,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="f83cc97bd92b20b4e28664f04acdfc845819bbdc3240a8fd73fd6167d71c667e",
           old="7401f1dbd7d03195f07ca34a8ad64f4571e92a079e93a36ffb9dc05505577611",
           evidence=_INNER_PULL_1123),
+    # border_detect outer_bar（外框线先粗条后细线，缺省关；CV1 11-24）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='0510de3a2163d7bf166e8a23c6b2a5fdd7e124c40acfd0e3502f7b1e66b36a91',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_OUTER_BAR_1124),
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='b0c0fb8c4f891a718541855f3f604292da003e6315a268906121dd3bc9a60304',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_OUTER_BAR_1124),
 )
 
 
