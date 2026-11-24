@@ -102,8 +102,101 @@ def merge_suffix_rows(rows: list[dict]) -> dict | None:
     return out
 
 
+#: seed_admit 消费的看图判／终审裁定（group=O）：提示词版本 → 收的子类（`_vis_ruling_pass` 从这里取；ctx-m1 的子类各书可在册配置
+#: `vis_ruling_ctx_subclasses` 加，所以写入校验对 ctx-m1 不查子类）
+VIS_RULING_GROUP = "O"
+VIS_RULING_SPECS = (("vis-o1", frozenset({"A68", "B99", "D130", "L04"})), ("src-1", frozenset({"PUA", "GB"})), ("ctx-m1", frozenset({"Z", "N"})))
+#: group=O 下另外认的版本：src-2＝格→私用码记录（`put_cell_code`）
+_O_OTHER_VERS = frozenset({CELL_CODE_VER})
+
+
+def group_prompt_vers() -> dict[str, str]:
+    """各字组 L3 提示词的版本（仓内 `config/groups/<组>/prompt.md` 的 `ver`），fold 遍与在线 L3 按它查裁定。"""
+    global _GROUP_VERS
+    if _GROUP_VERS is None:
+        from ..groups.ctx_l3 import load_prompt
+        from ..groups.flow import rules_path
+        from ..groups.registry import FLOW_GROUPS
+        d = {}
+        for g in FLOW_GROUPS:
+            try:
+                p = rules_path(g).with_name("prompt.md")
+            except Exception:                      # noqa: BLE001 —— 没有 config_dir 的组
+                continue
+            if p.exists():
+                v = load_prompt(p)[0].get("ver")
+                if v:
+                    d[g] = v
+        _GROUP_VERS = d
+    return _GROUP_VERS
+
+
+_GROUP_VERS: dict | None = None
+
+
+def validate_payload(payload: dict, equiv: dict | None = None) -> tuple[list[str], list[str]]:
+    """写裁定前的校验（GM4／CV4 2026-11-24，裁定键长期方案①）→ (错误, 提醒)。有错误就不该写：seed_admit 永远查不到它（白写）。
+
+    认的版本（去掉 `#模型:effort` 后缀再比）：
+    - group=O：`VIS_RULING_SPECS` 的三种（vis-o1、src-1、ctx-m1）与 src-2；
+    - 其他字组：本组 `prompt.md` 的 `ver`（fold 遍、在线 L3 用它查）；
+    - 任何组：看图 L4 缓存 `vis1:<字块哈希>`；
+    - 版本等价表（`ver_equiv.yaml`）里登记给本组（或全组）的版本。
+    提醒（不拦）：vis-o1／src-1 写了 `admit_ok` 却不是 seed_admit 收的子类——这条只当记录，不会放行。"""
+    from ..groups.vis_llm import VER as L4_VER
+    errs: list[str] = []
+    warns: list[str] = []
+    g, ver = payload.get("group"), payload.get("prompt_ver")
+    if not g or not ver:
+        return ["缺 group 或 prompt_ver"], warns
+    b = base_ver(ver)
+    ok = {v for v, _ in VIS_RULING_SPECS} | _O_OTHER_VERS if g == VIS_RULING_GROUP else set()
+    gv = group_prompt_vers().get(g)
+    if gv:
+        ok.add(gv)
+    for (eg, to), frs in ((equiv or {}).get("pairs") or {}).items():
+        if eg in (g, "*"):
+            ok.update([to, *frs])
+    if b not in ok and not b.startswith(L4_VER + ":"):
+        errs.append(f"组 {g} 的版本 {ver!r} seed_admit 不认（可用：{sorted(ok)}、{L4_VER}:<哈希>；"
+                    f"换了提示词版本要写进 rulings/{EQUIV_FILE}）")
+    elif g == VIS_RULING_GROUP and payload.get("admit_ok"):
+        subs = dict(VIS_RULING_SPECS).get(b)
+        if b != "ctx-m1" and subs is not None and payload.get("subclass") not in subs:
+            warns.append(f"{b} 的子类 {payload.get('subclass')!r} 不在 seed_admit 收的 {sorted(subs)} 里，只当记录、不会放行")
+    return errs, warns
+
+
+validate = validate_payload          # 公共名（GM4 方案里叫 rulings.validate）
+
+
 class RulingLog(EventLog):
-    """裁定日志：同 `EventLog` 的格式与追加纪律，落 `<feedback>/rulings/`。"""
+    """裁定日志：同 `EventLog` 的格式与追加纪律，落 `<feedback>/rulings/`。
+
+    `append` 先对 `ctx_ruling` 事件跑 `validate`：版本 seed_admit 不认的整批拒写（`BadRequest`），子类提醒打到 stderr。
+    manager 终审、看图审、书仓脚本都直接 `RulingLog.append`，在这里挡住就都覆盖到（GM4／CV4 11-24）。
+    管线自己写的（`RulingStore.put`／`put_cell_code`：在线 L3／L4 缓存，版本取自当前提示词，按构造就认）传 `validate=False`，
+    免得校验口径与运行时差一点就让整页失败。"""
+
+    def append(self, events, validate: bool = True) -> int:
+        events = list(events)
+        if not validate:
+            return super().append(events)
+        eq = load_ver_equiv(self.events_dir / EQUIV_FILE)
+        bad = []
+        for e in events:
+            if e.kind != KIND:
+                continue
+            errs, warns = validate_payload(e.payload or {}, eq)
+            bad += [f"{e.id}: {m}" for m in errs]
+            for m in warns:
+                import sys
+                print(f"⚠️  裁定 {e.id}: {m}", file=sys.stderr)
+        if bad:
+            from ..errors import BadRequest
+            raise BadRequest("裁定拒写（seed_admit 查不到，写了也白写）：\n" + "\n".join(bad[:20])
+                             + (f"\n……共 {len(bad)} 条" if len(bad) > 20 else ""))
+        return super().append(events)
 
     @property
     def events_dir(self) -> Path:
@@ -278,7 +371,7 @@ class RulingStore:
             seq = max((e.seq for e in self.log.read(self._batch + "-cellcode", raw=True)), default=0) + 1
             ev = make_event(self._batch + "-cellcode", seq, KIND, EventTarget(step="seed_admit", unit="cell", key=cell, book=_book(cell)),
                             payload, actor="model")
-            self.log.append([ev])
+            self.log.append([ev], validate=False)
         return payload
 
     def put(self, group: str, prompt_ver: str, left: str, right: str, *, char, conf, why: str, model: str,
@@ -296,7 +389,7 @@ class RulingStore:
             key = cell or f"ctx:{payload['ctx']['hash']}"
             ev = make_event(self._batch, seq, KIND, EventTarget(step="seed_admit", unit="cell", key=key,
                                                                 book=_book(cell)), payload, actor="model")
-            self.log.append([ev])
+            self.log.append([ev], validate=False)
         return payload
 
 

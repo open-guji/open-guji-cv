@@ -89,9 +89,9 @@ def test_vis_ruling_pass_anchor_guards(tmp_path):
 def test_fold_pass_anchor(tmp_path):
     from open_guji_cv.steps import seed_admit as sa
     p = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_aspect=(0.85, 1.0))
-    st = _store_with_anchor(tmp_path, group="ry", ver="v1", char="曰", ref="日")
+    st = _store_with_anchor(tmp_path, group="ry", ver="ry-l2-2", char="曰", ref="日")
     r = AdmitRec(id=CELL, slot=2, admit=False, char="乙", doubts=[], channel=None, provenance="", evidence={"group": {"id": "ry"}})
-    orig, sa._l3_online = sa._l3_online, (lambda p_: {"ry": {"system": "s", "ver": "v1"}})
+    orig, sa._l3_online = sa._l3_online, (lambda p_: {"ry": {"system": "s", "ver": "ry-l2-2"}})
     try:
         args = ([ColumnAdmit(col=1, chars=[r])], {r.id: ("日", None)}, {r.id: NS(candidates=[("曰", 0.9)])})
         assert sa._fold_pass(p, *args, store=st, wh={r.id: (92, 100)}) == 0
