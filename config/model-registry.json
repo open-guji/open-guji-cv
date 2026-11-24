@@ -658,6 +658,22 @@
    "owner": "995ejelvk0"
   },
   {
+   "kind": "glyph_sim_shiji",
+   "path": "models/glyph_sim_shiji/calib.json",
+   "size": 610,
+   "sha256": "d4e930d089771290915a11ef7029e8e985f719c3d55bee1d2ad704519e4db3d4",
+   "level": "book",
+   "owner": "988g3f0wsu"
+  },
+  {
+   "kind": "glyph_sim_shiji",
+   "path": "models/glyph_sim_shiji/model.pt",
+   "size": 3778021,
+   "sha256": "cec39b1651e3fa4a31596c08e203a99b16e6fc16dc71d0f03bda01b0fd324a94",
+   "level": "book",
+   "owner": "988g3f0wsu"
+  },
+  {
    "kind": "pagetype",
    "path": "models/pagetype/pagetype_v1.joblib",
    "size": 57633,
