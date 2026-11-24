@@ -2019,9 +2019,11 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
                     and not _rare_cp(rec.char)    # 放行字是罕用码位不弃权（#431：𠮓→變、𣼣→漏）
                     and vmap.semantic(v.pick) == vmap.semantic(rec.char)):
                 continue                      # 异体同字：标签口径差，不是认错字（#431）
+            fold_ruled = (getattr(p, "ruling_anchor_loose", False) and rec.channel == "fold"
+                          and ((rec.evidence or {}).get("fold") or {}).get("via") == "ruling")
             _demote(rec, "shadow_veto")
             rec.admit, rec.channel, rec.provenance = False, None, ""
-            rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"]
+            rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"] + (["fold_ruling_vetoed"] if fold_ruled else [])
             rec.evidence = {**rec.evidence, "shadow_veto": v.evidence(gate.model, gate.conf, gate.low_conf)}
             n += 1
     return n
@@ -2241,6 +2243,9 @@ _LANE_HARD = frozenset({"context_blank_cell", "context_tall_cell", "form_open", 
                         # 字组流程复核时文意明确给了别的字（或解法互相冲突）而降审的格：待审补放通道不许再放回去
                         # （vol04：象彖复核降审的格被 coord_fallback 按整理本字又放行，降审白降）
                         "group_flow_disagree", "group_flow_conflict",
+                        # 宽松档（`ruling_anchor_loose`）下 fold 按裁定给的字被影子降审：不许待审通道再按整理本字放回
+                        # （20 册回放 vol49:179:9:4，裁定曰、影子日、coord_fallback 放回日；CV4 11-24）
+                        "fold_ruling_vetoed",
                         # 补放时文意给了与整理本不同的字、没放成的格（`flow.group_flow_pass`）：同理不许按整理本字放回
                         "group_flow_ctx_contra",
                         # 库判 diff 拦下的 ref_lib 格：整理本字正是被库否掉的那个，补放通道不按它放回

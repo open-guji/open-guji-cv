@@ -122,3 +122,9 @@ def test_fold_loose_high_only(tmp_path):
 def test_param_not_in_dump_when_off():
     assert "ruling_anchor_loose" not in SeedAdmitParams(db_path="x").model_dump(mode="json")
     assert SeedAdmitParams(db_path="x", ruling_anchor_loose=True).model_dump(mode="json")["ruling_anchor_loose"] is True
+
+
+def test_fold_ruling_vetoed_blocks_lanes():
+    """宽松档 fold 按裁定给的字被影子降审后，待审通道不许按整理本字放回（20 册回放 vol49:179:9:4）。"""
+    from open_guji_cv.steps import seed_admit as sa
+    assert "fold_ruling_vetoed" in sa._LANE_HARD
