@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- 重构（产物逐字节不变，code_equiv 登记；参数指纹 12,472 组全同）：seed_admit 69 个门槛收成常量（CV4 整理 PR4，Sheldon 11-24 定）——414 册无一册改过，从 `SeedAdmitParams` 字段改为 `seed_admit_params._CONSTANTS` 里的常量、类上只读属性（代码照旧读 `p.<名>`）。老配置写原值照读、写别的值报错；原先进参数指纹的照原值补回 dump。`no_ref_params` 不能再覆盖这些键。测试换值用 `tests.helpers.seed_admit_consts`。
+
 - CI（不动代码、不进指纹，L0）：新工作流 `指纹变更检查`＋`scripts/check_fp_change.py`：推 tag、开／改 PR 时比基线与本版各步规范指纹（已按 code_equiv 换算），变了却没登记、说明里也没写明「指纹变更：…」就红。起因 v0.7.83、v0.7.99 两次 patch 线漏登（GM2 11-24）。
 
 - PATCH（缺省关，产物逐字节不变，code_equiv 登记）：seed_admit 书级开关 `ruling_anchor_loose`——格锚点后备键的宽松档（GM4 合并方案，GM3／CV0 确认 11-24，选 CV0 的 (b) 书级开关）：版本认本组 `rulings.validate` 认的任意版本、减 `ver_equiv.yaml` 新增的 `void`（O 组仍按目标版本，不收 L4 缓存）；同格多条取最新、字不一致记 `ruling_conflict` 不放行；只收 high（fold 遍也是）；窗口改为前后 2 字至少一侧相同（证据 `win_sides`）。缺省关、关时不进参数 dump；`load_ver_equiv` 返回多 `void`。宽松档下 fold 按裁定给的字被影子（shadow_veto）降审时另记 `fold_ruling_vetoed`，进 `_LANE_HARD`，待审通道不按整理本字放回（20 册回放 vol49:179:9:4）。

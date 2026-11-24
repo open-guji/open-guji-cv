@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import open_guji_cv.steps  # noqa: F401
 from helpers import make_book, make_ctx, page_chars, page_decision, page_match, write_product
+from open_guji_cv.steps.seed_admit_params import _CONSTANTS
 from open_guji_cv.core.step import STEPS, RunContext
 from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.products.store import ProductStore
@@ -90,7 +91,8 @@ def test_normal_aspect_cell_still_admitted_via_context(tmp_path, monkeypatch):
     r = _all(_run(_ctx(tmp_path, monkeypatch), **case))[0]
     assert r.admit and r.channel == "context", r.doubts
     tall = {**_BLANK_CASE, "char_recs": [dict(slot=1, ink_ratio=0.3, width=33.0, height=108.0)]}
-    r = _all(_run(_ctx(tmp_path, monkeypatch, params=SeedAdmitParams(context_max_aspect=0)), **tall))[0]
+    monkeypatch.setitem(_CONSTANTS, "context_max_aspect", 0)
+    r = _all(_run(_ctx(tmp_path, monkeypatch), **tall))[0]
     assert r.admit and r.channel == "context", r.doubts
 
 
