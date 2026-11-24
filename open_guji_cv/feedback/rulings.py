@@ -18,6 +18,11 @@
 `get`／`RulingCache.lookup`（在线问之前查缓存）仍按精确键——二审小组按「版本#模型:effort」分键存，通配会把不同成员的答案串起来。
 格式见 `load_ver_equiv`。命中非精确键时，返回的 payload 是副本，多带 `ruling_key="ver_equiv"`、`ruling_ver`（实际命中的版本）。
 
+**格锚点后备键**（GM4／CV4 2026-11-24，裁定键长期方案③）：窗口键（含版本等价）都没中时，用「格号＋写裁定时这一页的 `cells_sha`
+（`page_cells_sha`，Step3 切分 sha＋字块 sha，同 `bindings.page_state`）＋整理本对位字 `ref`」三样全对的裁定（`get_anchor`）。
+只认 payload 里自带 `cells_sha` 的裁定：新裁定由写入方当场写；存量由 manager 回填，且只回填能证明是写裁定那一刻产物的。
+命中返回副本，带 `ruling_key="anchor"`、`ruling_ver`。调用方还要核「裁定字在候选或＝ref」，其余护栏照旧。
+
 事件 payload：`source="llm"`、`group`、`char`（组内字，或 None）、`other`（大模型认为组内字都不是）、`conf`(high/mid/low)、`why`（≤60 字）、
 `model`、`prompt_ver`、`ctx{left,right,hash}`、`cell`、`tok{in,out,cache_read}`、`pending_reason`（问时这格的待审原因，缺省 unknown）。弃权（低把握、其他）也记，免得反复问。
 """
@@ -38,6 +43,22 @@ WIDTH = 20
 CELL_CODE_VER = "src-2"      # 格→私用码记录（按格号取，不是窗口键）
 EQUIV_FILE = "ver_equiv.yaml"
 _CONF_RANK = {"high": 3, "mid": 2, "low": 1}
+
+
+ANCHOR_MAX_WIN_DIFF = 3   # 格锚点命中时，裁定窗口与现窗口的编辑距离上限（GM4 审 #1832）
+
+
+def edit_distance(a: str, b: str) -> int:
+    """Levenshtein 距离（窗口 ≤20 字，直接 DP）。"""
+    if a == b:
+        return 0
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
 
 
 def base_ver(ver: str | None) -> str:
@@ -98,6 +119,14 @@ def ctx_hash(left: str, right: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()[:24]
 
 
+def page_cells_sha(book: str, page: int, store) -> str | None:
+    """格锚点用的本页产物戳：`bindings.page_state` 的两份 sha（Step3 切分＋字块）用「+」连起来；切分 sha 取不到 → None。
+    写裁定的一方（manager 终审、看图审、书仓脚本）写 `payload.cells_sha` 时须用同一个函数，读写口径才一致。"""
+    from .bindings import page_state
+    cells, patch = page_state(book, page, store)
+    return f"{cells}+{patch or ''}" if cells else None
+
+
 def _book(cell: str | None) -> str | None:
     return cell.split(":", 1)[0] if cell and ":" in cell else None
 
@@ -115,12 +144,19 @@ class RulingStore:
     def _load(self) -> dict:
         if self._idx is None:
             idx: dict = {}
+            anc: dict = {}
             if self.log.events_dir.exists():
                 evs = [e for e in self.log.iter_all(raw=True) if e.kind == KIND]
                 for e in sorted(evs, key=replay_key):             # 后到覆盖
                     p = e.payload
                     idx[(p.get("group"), (p.get("ctx") or {}).get("hash"), p.get("prompt_ver"))] = p
+                    if p.get("cells_sha") and p.get("cell"):
+                        k = (p.get("group"), p["cell"], p["cells_sha"])
+                        rows = anc.setdefault(k, {})
+                        rows.pop(p.get("prompt_ver"), None)       # 同版本后到覆盖，且排到最后
+                        rows[p.get("prompt_ver")] = p
             self._idx = idx
+            self._anc = anc
         return self._idx
 
     def get(self, group: str, prompt_ver: str, left: str, right: str) -> dict | None:
@@ -177,6 +213,43 @@ class RulingStore:
                 x = self._suffix_hit(group, ver, h)
             if x is not None:
                 return {**x, "ruling_key": "ver_equiv", "ruling_ver": x.get("prompt_ver")}
+        return None
+
+    def has_anchors(self) -> bool:
+        """裁定库里有没有带 `cells_sha` 的裁定（没有就不必算本页 cells_sha）。"""
+        self._load()
+        return bool(self._anc)
+
+    def get_anchor(self, group: str, prompt_ver: str, cell: str, cells_sha: str | None, ref: str | None,
+                   left: str | None = None, right: str | None = None) -> dict | None:
+        """格锚点后备键：格号＋写裁定时的 `cells_sha`＋整理本对位字 `ref` 全对、版本是 `prompt_ver` 或其等价版本
+        （登记表与「只差模型后缀」同 `get_equiv`；多条时取先命中的版本，同一版本后到覆盖；只差后缀的各条按 `merge_suffix_rows` 合并）。
+        窗口护栏（GM4 审 #1832）：大模型当时按裁定里的窗口判文意，现窗口（`left`／`right`）与它的编辑距离（前后两段相加）
+        须 ≤ `ANCHOR_MAX_WIN_DIFF`，超了或裁定没记窗口都弃权；`window_diff` 记进返回的副本。
+        → payload 副本（`ruling_key="anchor"`、`ruling_ver`、`window_diff`）｜None。"""
+        if not cell or not cells_sha:
+            return None
+        self._load()
+        rows = self._anc.get((group, cell, cells_sha))
+        if not rows:
+            return None
+        ref = ref or ""
+        rows = {v: p for v, p in rows.items() if (p.get("ref") or "") == ref}
+        if not rows:
+            return None
+        eq = self.ver_equiv()
+        for ver in [prompt_ver, *self.equiv_vers(group, prompt_ver)]:
+            x = rows.get(ver)
+            if x is None and eq["model_suffix"]:
+                x = merge_suffix_rows([p for v, p in rows.items() if v != ver and base_ver(v) == base_ver(ver)])
+            if x is not None:
+                c = x.get("ctx") or {}
+                if "left" not in c or "right" not in c:
+                    return None
+                d = edit_distance(c["left"][-WIDTH:], (left or "")[-WIDTH:]) + edit_distance(c["right"][:WIDTH], (right or "")[:WIDTH])
+                if d > ANCHOR_MAX_WIN_DIFF:
+                    return None
+                return {**x, "ruling_key": "anchor", "ruling_ver": x.get("prompt_ver"), "window_diff": d}
         return None
 
     def cell_codes(self) -> dict[str, dict]:

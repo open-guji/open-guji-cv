@@ -838,7 +838,8 @@ class SeedAdmitStep(Step):
                                   coord=_coord_refs(ctx, page, coord_cache) if p.fold_coord_ref else None,
                                   wh={c.id: (c.width, c.height) for col in (_ci.columns if _ci else []) for c in col.chars}
                                   if _ci else None,
-                                  dmap=dmap if p.fold_aspect_ctx_veto is not None else None)
+                                  dmap=dmap if p.fold_aspect_ctx_veto is not None else None,
+                                  cells_sha=_anchor_cells_sha(ctx, page) if (p.fold_ruling_first or not p.fold_ref_char) else None)
                 n_auto += d_fd
                 n_review -= d_fd
         if p.rare_ref:
@@ -970,7 +971,7 @@ class SeedAdmitStep(Step):
                 n_auto += d_ca
                 n_review -= d_ca
         # 5c vis_ruling（升）：待审格的窗口命中看图判裁定 → 放行（无组入口，裁定库缓存；放在降审遍之前）
-        d_vr = _vis_ruling_pass(p, out, amap)
+        d_vr = _vis_ruling_pass(p, out, amap, cells_sha=_anchor_cells_sha(ctx, page), mmap=mmap)
         n_auto += d_vr
         n_review -= d_vr
         if d_vr and p.group_flow_hou_shape_late and p.group_flow and p.group_flow_hou_shape:
@@ -3499,7 +3500,23 @@ def _pua_code_admit_pass(out: list, amap: dict, mmap: dict, store=None, table=No
             n += 1
     return n
 
-def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
+def _anchor_cells_sha(ctx, page: int) -> str | None:
+    """格锚点后备键用的本页 cells_sha；裁定库里没有带 cells_sha 的裁定就不算（返回 None，行为与没有锚点时完全一样）。"""
+    if ctx is None or not _vis_cache().store_.has_anchors():
+        return None
+    from ..feedback.rulings import page_cells_sha
+    return page_cells_sha(ctx.book.id, page, ctx.store)
+
+
+def _anchor_cand_ok(ch: str, cid: str, ref: str | None, mmap: dict | None) -> bool:
+    """格锚点命中的附加条件：裁定字＝整理本对位字，或在这格库候选里。"""
+    if ref and ch == ref:
+        return True
+    m = (mmap or {}).get(cid)
+    return bool(m and any(c[0] == ch for c in (m.candidates or [])))
+
+
+def _vis_ruling_pass(p, out: list, amap: dict, store=None, cells_sha: str | None = None, mmap: dict | None = None) -> int:
     """无组格的看图判裁定（`SeedAdmitParams.vis_rulings`）：待审格按前后文窗口（与 `ctx_hash` 同口径，宽 20）查裁定库，
     命中高把握可放的裁定 → 放行成裁定的字（通道 `vis_ruling`，provenance `match`，`evidence.vis_ruling` 留裁定摘要）。
     另：已放行格命中 `route=code_conflict` 的 src-1 裁定（同一私用码在源文本里是另一个字）→ 降回待审（见下）。
@@ -3552,8 +3569,15 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
                     for x in [rget(_VIS_RULING_GROUP, ver, left, right)]
                     if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
                     and _ruling_han(x["char"]) and x.get("subclass") in subs), None)
-        vt, v = hit if hit else (None, None)
         ref_ = (amap.get(r.id) or (None,))[0]
+        if hit is None and cells_sha:
+            # 格锚点后备键（GM4／CV4 11-24，裁定键长期方案③）：窗口键都没中 → 格号＋写裁定时 cells_sha＋ref 全对，
+            # 且裁定字在库候选里或＝整理本字；其余护栏同上
+            hit = next(((ver, x) for ver, subs in specs
+                        for x in [store.get_anchor(_VIS_RULING_GROUP, ver, r.id, cells_sha, ref_, left, right)]
+                        if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
+                        and _ruling_han(x["char"]) and x.get("subclass") in subs and _anchor_cand_ok(x["char"], r.id, ref_, mmap)), None)
+        vt, v = hit if hit else (None, None)
         if not v:
             f = store.get(_VIS_RULING_GROUP, "ctx-m1", left, right)
             if f and f.get("gate") == "ref_lead_fail" and (f.get("ref") or "") == (ref_ or ""):
@@ -3569,6 +3593,8 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
         vr = {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass", "route")}
         # 终审 ref_lead 证人放行：via=ref_lead（层、领先量）；ruling_key／ruling_ver 只在非窗口精确命中时有
         vr.update({k: v[k] for k in ("via", "ref_lead", "ruling_key", "ruling_ver") if v.get(k)})
+        if v.get("ruling_key") == "anchor":
+            vr["window_diff"] = v.get("window_diff")
         r.evidence = {**(r.evidence or {}), "vis_ruling": vr,
                       "lifted_from": {"char": r.char, "doubts": ds}}
         if half_ok and is_half:
@@ -3707,7 +3733,7 @@ _FOLD_ASPECT_PAIRS = {"ry": ("日", "曰")}
 
 
 def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, coord: dict | None = None,
-               wh: dict | None = None, dmap: dict | None = None) -> int:
+               wh: dict | None = None, dmap: dict | None = None, cells_sha: str | None = None) -> int:
     """折叠组（`SeedAdmitParams.fold_groups`）：待审格的字组在名单里、整理本字在组内 → 放整理本字。→ 放行数净增。
     护栏（缺省关）：`fold_ruling_first` 有本组裁定先用裁定字；`fold_lib_top_in_group` 库首位须在组内；
     扩展 `fold_coord_ref`（`coord` 由调用方给）：现役对位缺用坐标对位、未入组格按库首位入折叠组。
@@ -3795,9 +3821,17 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, c
                             ch, via, extra = None, None, {}
             if ch is None and (p.fold_ruling_first or no_ref) and r.id in wins and gid in l3:
                 v = getattr(store, "get_equiv", store.get)(gid, l3[gid]["ver"], *wins[r.id])
+                if v is None and cells_sha:
+                    # 格锚点后备键（裁定键长期方案③）：格号＋写裁定时 cells_sha＋整理本对位字全对，裁定字在库候选或＝对位字
+                    aref = (amap.get(r.id) or (None,))[0]
+                    a = store.get_anchor(gid, l3[gid]["ver"], r.id, cells_sha, aref, *wins[r.id])
+                    if a and a.get("char") and _anchor_cand_ok(a["char"], r.id, aref, mmap):
+                        v = a
                 if v and v.get("char") in mem and v.get("conf") in ("high", "mid") and not v.get("other"):
                     ch, via = v["char"], "ruling"
-                    extra = {k: v[k] for k in ("ruling_key", "ruling_ver") if v.get(k)}   # 版本等价命中（GM4／CV4 11-24）
+                    extra = {k: v[k] for k in ("ruling_key", "ruling_ver") if v.get(k)}   # 版本等价／格锚点命中（GM4／CV4 11-24）
+                    if v.get("ruling_key") == "anchor":
+                        extra["window_diff"] = v.get("window_diff")
             if ch is None and p.fold_ctx_vias:
                 g_ev = (r.evidence or {}).get("group") or {}
                 t = next((t for t in g_ev.get("solvers") or [] if t.get("solver") == "ctx"), None) if g_ev.get("id") == gid else None

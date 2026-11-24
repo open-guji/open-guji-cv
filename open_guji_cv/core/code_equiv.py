@@ -524,6 +524,11 @@ _VER_EQUIV_1124 = ("裁定版本等价登记表（RulingStore.get_equiv；_vis_r
                    "main 包 cv0.7.59-c10-g23-m2-k25-job5767），三书中心库现有裁定库（殿本 52,312 条、全唐文 6,229、史記 714）在场，"
                    "seed_admit 与 origin/dev a941e67 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4，裁定键长期方案②）")
 
+_ANCHOR_1124 = ("裁定格锚点后备键（RulingStore.get_anchor、rulings.page_cells_sha、edit_distance；_vis_ruling_pass／fold 遍在窗口键都没中后查锚点，"
+                "只在裁定库里有带 cells_sha 的裁定时才算本页 sha——三书现库一条都没有）：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页"
+                "（页号与产物包同 _VER_EQUIV_1124），三书中心库现有裁定库在场，seed_admit 与 origin/dev 2ecc951 产物逐字节相同；"
+                "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4，裁定键长期方案③）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2438,6 +2443,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="0fd369d3398f0f49b5b70556e44af04253164676145ecb02c9ae30c0e63168d4",
           old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
           evidence=_VER_EQUIV_1124),
+    # 裁定格锚点后备键（CV4，裁定键长期方案③，GM4 11-24）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="3eb95b3fbb6515d162bc2c418cf4cc84e211110066eafcd508165be87a9ddc32",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_ANCHOR_1124),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="51da67a783eca81b6b3d6cb1a3202c53358f8ae6d99a2ba3bed5a2e8044020cb",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_ANCHOR_1124),
 )
 
 
