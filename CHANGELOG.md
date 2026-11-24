@@ -74,6 +74,8 @@
 
 ## [未发版]
 
+- PATCH（新开关缺省关，产物不变；border_detect／impl.keben.border 指纹经 code_equiv 登记不变，CV1 11-24）：`border_detect.outer_bar` 左右外框线先找粗外框条、再找内框细线（`impl/keben/border.refit_outer_by_bar`）。79 页版面基准 p95 合计 985→873、>20px 线 9→5。
+
 - PATCH（语料表，Step 代码指纹不变；底库语料变，下次出底库时进）：异体人工表补 䕶→護、蹖→踳；字对关系表 `variants.pairkind.tsv` 记 䕶護、蹖踳 为 V，巿市 为 C（形近不同义）。起因 GM3 复核全唐文异体闸 18 格（CV4）。
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
