@@ -387,7 +387,8 @@ def resume_guard(ws: Path, book: str, book_text: Path, text_id: str) -> dict:
     return {"verdict": "blocked", "why": f"补落没成（{res.get('status')}，{sheet}）：" + fail_reason(out)}
 
 
-def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_unlanded: str = "", cells_dir: str = "") -> dict:
+def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_unlanded: str = "", cells_dir: str = "",
+             defer_sync: bool = False) -> dict:
     env = {**os.environ, "GUJI_WORKSPACE": str(ws), "PYTHONIOENCODING": "utf-8"}
     label, rev = d["main"], d["online_rev"]
     man = pc.pack_info(ws, book, label)
@@ -417,7 +418,8 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str, ack_u
              "--plan", str(plan_path), "--hash", plan["hash"], "--book-text", str(book_text),
              "--reuse-products", str(sandbox), "--no-web",
              *(["--ack-unlanded-votes", ack_unlanded] if ack_unlanded else []),
-             *(["--cells", cells_dir] if cells_dir else [])], cwd=CV, env=env)
+             *(["--cells", cells_dir] if cells_dir else []),
+             *(["--defer-sync"] if defer_sync else [])], cwd=CV, env=env)
     log = plan_path.parent / "执行记录.md"
     out = ap.stdout + ap.stderr
     (plan_path.parent / "apply.out").write_text(out, encoding="utf-8")
@@ -479,6 +481,7 @@ def main(argv=None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="同 --only-decide")
     ap.add_argument("--max", type=int, default=0, help="最多重出几册（试跑用）")
     ap.add_argument("--no-publish", action="store_true", help="最后不统一发网站")
+    ap.add_argument("--defer-sync", action="store_true", help="每册都不 db sync、不发站（隐含 --no-publish）；调用方（guji swap run）整趟最后统一 sync 一次")
     ap.add_argument("--cells", default="", help="旧单出在换图源之前时的格级对照表目录（old_new_cells/，内有 <册>.tsv.gz），透传 apply --cells")
     ap.add_argument("--land-votes", action="store_true",
                     help="线上单有票没投完的册也换：plan 把票落成人裁；落不了（如页图与页表对不上）的由 apply 票账门拦下列出，不丢票")
@@ -493,6 +496,8 @@ def main(argv=None) -> int:
                     help="跑满这么多分钟就不再开新册（后台命令 2 小时上限，给 100 左右）；同一条命令再跑接着做")
     ap.add_argument("--publish-now", action="store_true", help="还有册没跑完也先把已 done 的发站冒烟")
     a = ap.parse_args(argv)
+    if a.defer_sync:
+        a.no_publish = True
     from ensure_manager import ensure as _ensure_manager  # 搬去 manager 的命令要它（拆分 P2）
     _ensure_manager()
     ws = Path(a.workspace).resolve()
@@ -546,7 +551,7 @@ def main(argv=None) -> int:
                         break
                     state["books"][book] = {**d, "verdict": "running", "at": dt.datetime.now(dt.timezone.utc).isoformat()}
                     save_state(sp, state)
-                    d = {**d, **run_book(ws, book, book_text, d, a.reviewer, a.ack_unlanded_votes, a.cells)}
+                    d = {**d, **run_book(ws, book, book_text, d, a.reviewer, a.ack_unlanded_votes, a.cells, a.defer_sync)}
                     print(f"{book}\t→ {d['verdict']}\t{d['why']}", flush=True)
                 d["at"] = dt.datetime.now(dt.timezone.utc).isoformat()
             if not (a.only_decide or a.dry_run):

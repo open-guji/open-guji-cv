@@ -799,7 +799,12 @@ def pack_rev(a, ws: Path, book: str, rev: str) -> str | None:
     return label
 
 def sync_and_publish(a, ws: Path) -> bool:
-    """`guji db sync`，成功了再触发网站发布。返回是否已触发。"""
+    """`guji db sync`，成功了再触发网站发布。返回是否已触发。
+
+    ``--defer-sync``（换包整趟用）：这里不推库、不发站，由调用方整趟推一次。"""
+    if getattr(a, "defer_sync", False):
+        print("ⓘ --defer-sync：本册不推库、不发站，等整趟统一 guji db sync")
+        return False
     p = run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
             env={**os.environ, "GUJI_WORKSPACE": str(ws)})
     if p.returncode:
@@ -1223,7 +1228,7 @@ def cmd_issue(a) -> int:
     a.publish_only = f"{text_id}/{chapter}"
     since = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     rc = cmd_push(a)
-    if rc or a.no_publish_web or a.no_wait:
+    if rc or a.no_publish_web or a.no_wait or getattr(a, "defer_sync", False):
         return rc
     concl = wait_publish(since)
     if concl != "success":
@@ -2223,6 +2228,7 @@ def main(argv=None) -> int:
             p.add_argument("--note", help="book-text 版本记录一行的说明（给了 --book-text 才升版）")
             p.add_argument("--no-publish-web", action="store_true", help="不触发网站发布")
             p.add_argument("--no-wait", action="store_true", help="触发网站发布后不等、不冒烟")
+            p.add_argument("--defer-sync", action="store_true", help="不推库、不发站（整趟换包：最后由 guji swap 统一 sync 一次）")
             p.add_argument("--engine", help="产物是哪份 cv 跑的（钉住的旧版 worktree）：出单版产物包用它存，包里记它的版本")
             p.add_argument("--no-pack", action="store_true", help="不存出单版产物包 rev-<rev>")
             p.add_argument("--allow-empty", action="store_true", help="新单 0 格也换上去")
