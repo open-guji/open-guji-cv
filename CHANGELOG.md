@@ -3,6 +3,9 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（库里没有带 cells_sha 的裁定时产物逐字节不变，code_equiv 登记）：裁定格锚点后备键（GM4／CV4 11-24，裁定键长期方案③）。窗口键（含版本等价）都没中时，`RulingStore.get_anchor` 按「格号＋写裁定时本页 `cells_sha`（`rulings.page_cells_sha`＝`bindings.page_state` 两份 sha 用 + 连）＋整理本对位字 `ref`」三样全对取裁定，另要求裁定字在库候选或＝ref，其余护栏照旧；`_vis_ruling_pass` 与 fold 遍用它，证据记 `ruling_key=anchor`。只认 payload 自带 `cells_sha` 的裁定（新裁定写入方当场写，存量由 manager 回填、只回填能证明是写裁定那一刻产物的）；库里一条都没有时不算 cells_sha。
+- PATCH（缺省无表时产物逐字节不变，code_equiv 登记）：裁定版本等价登记表（GM4／CV4 11-24，裁定键长期方案②）。数据目录 `<feedback>/rulings/ver_equiv.yaml`（随中心库同步，缺文件＝空表）登记「旧提示词版本→新版本」，可开 `model_suffix`（只差 `#模型` 后缀即等价，各后缀须同字、conf 取最低）。`RulingStore.get_equiv` 精确键没中再按表查；`_vis_ruling_pass` 放行与 fold 遍用它，护栏照旧，白名单按目标版本判；非精确命中的 `evidence.vis_ruling`／`evidence.fold` 多带 `ruling_key=ver_equiv`、`ruling_ver`。在线问前查缓存仍按精确键（二审小组按「版本#模型:effort」分键）。
+
 ## [0.7.97] - 2026-11-24
 
 殿本 patch 线：v0.7.95 ＋ dev #1813（版面按套书规则识别框型：`frame_layers` 支持 1 层单线，新增 `side_frame` 左右外框按页码奇偶，borders 加可选 `v_outer_estimated`）＋ dev #1820（`border_detect.inner_pull` 与 `pull_inner_line`，内框线落在外板框粗条上时拉回内板框，缺省关）。没写 `side_frame`／`inner_pull` 的册逻辑不变；殿本中心库已写 `frame_layers: {top: 2, bottom: 2}` 与 `side_frame`，border_detect 起产物过期。code_equiv 按本线哈希重登记（border_detect、border、frame_types）。（ZM，CV1／CV2 提）
