@@ -51,7 +51,9 @@ def test_seed_admit_defaults_not_in_dump():
     assert p.group_flow_same_writing_keep == list(_SAME_WRITING_KEEP) and p.group_flow_review_fix_agree == ["yr"]
     d = p.model_dump()
     assert "group_flow_same_writing_keep" not in d and "group_flow_review_fix_agree" not in d
-    assert "group_flow_same_writing_keep" in SeedAdmitParams(group_flow_same_writing_keep=[]).model_dump()
+    import pytest
+    with pytest.raises(ValueError, match="已退役"):           # 2026-11-24 起收成常量，不能再按书改
+        SeedAdmitParams(group_flow_same_writing_keep=[])
 
 
 def _run(monkeypatch, group, char, solved, **cfgkw):

@@ -9,6 +9,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 
+from tests.helpers import seed_admit_consts, split_seed_admit_consts
 from open_guji_cv.clustering.align_eval import build_ngram_index
 from open_guji_cv.clustering.variants import VariantMap
 from open_guji_cv.clustering.witness_cells import witness_readings
@@ -48,9 +49,11 @@ def _mm(lib: dict, guard: dict | None = None, stage: dict | None = None):
 
 
 def _run(out, *, lib=None, amap=None, coord=None, wits=(), guard=None, canon=None, lib_n=None, stage=None, **params):
-    p = SeedAdmitParams(db_path="x", **params)
-    n = _review_lanes_pass(p, out, _mm(lib or {}, guard, stage), amap or {}, coord or {}, _vm(),
-                           (lambda: list(wits)) if wits else None, canon=canon, lib_n=lib_n)
+    params, consts = split_seed_admit_consts(params)
+    with seed_admit_consts(**consts):
+        p = SeedAdmitParams(db_path="x", **params)
+        n = _review_lanes_pass(p, out, _mm(lib or {}, guard, stage), amap or {}, coord or {}, _vm(),
+                               (lambda: list(wits)) if wits else None, canon=canon, lib_n=lib_n)
     return n, {r.slot: r for r in out[0].chars}
 
 
