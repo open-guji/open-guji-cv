@@ -230,3 +230,26 @@ def test_admit_mode_require_matched():
     # 主切法反而有 4 格没坐标字、备选更少：照换
     assert _pick_alt_cols([7], main, alt, coord(7), coord(8), None, None, require_matched=True) == [7]
 
+
+
+def test_alt_same_ink_cells_ignores_blank_and_slot():
+    """备选只差空格框和格号（史記 r43 09:194:5：闸判抬头一格，格号 -1..14 对主切法 1..15）→ 不出备选。"""
+    from open_guji_cv.products.kinds.cells import CellRec
+    from open_guji_cv.steps.row_segment import _alt_same_ink_cells
+
+    def cell(slot, y0, kind="char"):
+        return CellRec(slot=slot, pos=slot, y0=y0, y1=y0 + 90, x0=0, x1=80, kind=kind, sub="", order=slot,
+                       ink_ratio=0.1)
+    main = [cell(i, 100 * i) for i in range(1, 15)] + [cell(15, 1500, "blank")]
+    shifted = [cell(i - 2, 100 * i) for i in range(1, 15)] + [cell(13, 1500, "blank"), cell(14, 1560, "blank")]
+    assert _alt_same_ink_cells(main, shifted)
+    moved = [cell(i, 100 * i + (5 if i == 7 else 0)) for i in range(1, 15)] + [cell(15, 1500, "blank")]
+    assert not _alt_same_ink_cells(main, moved)
+    became_blank = [cell(i, 100 * i, "blank" if i == 14 else "char") for i in range(1, 16)]
+    assert not _alt_same_ink_cells(main, became_blank)
+
+
+def test_alt_cut_rev_only_in_dump_when_on():
+    from open_guji_cv.steps.row_segment import ALT_CUT_REV, RowSegmentParams
+    assert "alt_cut_rev" not in RowSegmentParams().model_dump()
+    assert RowSegmentParams(alt_cut=True).model_dump()["alt_cut_rev"] == ALT_CUT_REV
