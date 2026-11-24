@@ -150,10 +150,10 @@ def test_no_ref_kind_maps_to_seed_admit_and_swaps_params_on_those_pages_only():
     assert make_book(page_kinds={"no_ref": [51, 52]}).params["seed_admit"] == {"no_ref_pages": [51, 52]}
     base = SeedAdmitParams()
     assert "no_ref_pages" not in base.model_dump() and "no_ref_params" not in base.model_dump()
-    p = SeedAdmitParams(no_ref_pages=["5-7"], no_ref_params={"solo_5b_cov": 0.95, "solo_5b_same_cov": 0.9})
+    p = SeedAdmitParams(no_ref_pages=["5-7"], no_ref_params={"solo_5b_cov": 0.95, "solo_5b_min_n": 1})
     assert no_ref_page_params(p, 4) is p
     q = no_ref_page_params(p, 6)
-    assert (q.solo_5b_cov, q.solo_5b_same_cov) == (0.95, 0.9) and p.solo_5b_cov is None
+    assert (q.solo_5b_cov, q.solo_5b_min_n) == (0.95, 1) and p.solo_5b_cov is None
     with pytest.raises(ValueError, match="不认的参数"):
         no_ref_page_params(SeedAdmitParams(no_ref_pages=[1], no_ref_params={"nope": 1}), 1)
     with pytest.raises(ValueError, match="不认的参数"):
