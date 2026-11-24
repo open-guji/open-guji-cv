@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.7.97] - 2026-11-24
+
+殿本 patch 线：v0.7.95 ＋ dev #1813（版面按套书规则识别框型：`frame_layers` 支持 1 层单线，新增 `side_frame` 左右外框按页码奇偶，borders 加可选 `v_outer_estimated`）＋ dev #1820（`border_detect.inner_pull` 与 `pull_inner_line`，内框线落在外板框粗条上时拉回内板框，缺省关）。没写 `side_frame`／`inner_pull` 的册逻辑不变；殿本中心库已写 `frame_layers: {top: 2, bottom: 2}` 与 `side_frame`，border_detect 起产物过期。code_equiv 按本线哈希重登记（border_detect、border、frame_types）。（ZM，CV1／CV2 提）
+
 ## [0.7.95] - 2026-11-23
 
 殿本 patch 线：v0.7.94 ＋ dev #1814（seed_admit 书级开关 `ref_lib_5b_veto`／`ref_lib_5b_veto_lead`，缺省关）。「整理本＝库首位」放行（`ref_lib`）的格，5-b 首位是别的汉字、分 ≥ 门槛、领先 ≥ 门槛（缺省 0.02）→ 退回人审（doubt `ref_lib_5b_veto`），只降级。供殿本带它重跑 5a A/B（CV3 11-23）。本线 seed_admit 还没拆出 `seed_admit_params`，按本线结构手工移植（去键照 `_drop_off_rare` 原写法）。**开关关着时产物不变**：seed_admit 代码哈希 d2026a75→340e78ad 已登 code_equiv，其余各步 code_hash 与 v0.7.94 相同，底库 b29 不变。
