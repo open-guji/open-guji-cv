@@ -4,6 +4,7 @@
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
 - **待合（草稿，L2：各书 seed_admit 起过期）**：缺省路径也记 `fold_ruling_vetoed`——fold 按裁定给的字被影子降审后，待审通道不按整理本字放回（cv#1838 只在宽松档记）。CV0 11-24 定搭下次 seed_admit 改指纹时一起合。
+- CI（不动代码、不进指纹，L0）：新工作流 `指纹变更检查`＋`scripts/check_fp_change.py`：推 tag、开／改 PR 时比基线与本版各步规范指纹（已按 code_equiv 换算），变了却没登记、说明里也没写明「指纹变更：…」就红。起因 v0.7.83、v0.7.99 两次 patch 线漏登（GM2 11-24）。
 
 - PATCH（缺省关，产物逐字节不变，code_equiv 登记）：seed_admit 书级开关 `ruling_anchor_loose`——格锚点后备键的宽松档（GM4 合并方案，GM3／CV0 确认 11-24，选 CV0 的 (b) 书级开关）：版本认本组 `rulings.validate` 认的任意版本、减 `ver_equiv.yaml` 新增的 `void`（O 组仍按目标版本，不收 L4 缓存）；同格多条取最新、字不一致记 `ruling_conflict` 不放行；只收 high（fold 遍也是）；窗口改为前后 2 字至少一侧相同（证据 `win_sides`）。缺省关、关时不进参数 dump；`load_ver_equiv` 返回多 `void`。宽松档下 fold 按裁定给的字被影子（shadow_veto）降审时另记 `fold_ruling_vetoed`，进 `_LANE_HARD`，待审通道不按整理本字放回（20 册回放 vol49:179:9:4）。
 
@@ -89,6 +90,10 @@
 - PATCH（语料表，Step 代码指纹不变；底库语料变，下次出底库时进）：异体人工表补 䕶→護、蹖→踳；字对关系表 `variants.pairkind.tsv` 记 䕶護、蹖踳 为 V，巿市 为 C（形近不同义）。起因 GM3 复核全唐文异体闸 18 格（CV4）。
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
+
+## [0.7.99] - 2026-11-24
+
+殿本 patch 线：v0.7.97 ＋ 裁定键三件＋#1838，内容已在 dev，本条仅记发版（ZM）。
 
 ## [0.7.97] - 2026-11-24
 
