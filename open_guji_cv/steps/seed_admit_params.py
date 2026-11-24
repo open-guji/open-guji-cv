@@ -130,7 +130,6 @@ _CONSTANTS: dict = {
     'rare_ref_sparse_max_n': 2,
     'rare_ref_sparse_lead': 0.02,
     'solo_5b_gap': 0.01,
-    'solo_5b_min_n': 3,
     'occluded_min_density': 4.0,
     'occluded_min_cells': 12,
     'occluded_min_cols': 3,
@@ -1051,7 +1050,8 @@ class SeedAdmitParams(BaseModel):
     只看 cov 错 36（丸 34＝刻「九」、库 丸 仅 2 例；主→王 1；古→右 1），加 5-b 作证后 0；
     0.98／0.01／3 档 001 放约 2,700 格。"""
     # ── `solo_5b_gap` = 0.01（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
-    # ── `solo_5b_min_n` = 3（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    solo_5b_min_n: int = 3
+    """库首位在本书库里刻例下限（`solo_5b_cov` 开时用）。PR4 收常量后 11-24 恢复成参数：脉经序页、牒文页经 `no_ref_params` 要设 1（刻例少）。"""
     solo_adapt_pct: str | None = None
     """无参照格「按字自适应门槛」放行（2026-11-08，Sheldon 定方向，全唐文 001–003 形近字线；书级，缺省关，
     `None`＝关、关时逐字节不变、`solo_adapt_*` 都不进 dump）。取值 "p10"／"p25"：用字自比分布的哪个百分位当 cov 门槛。
