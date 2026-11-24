@@ -74,6 +74,8 @@
 
 ## [未发版]
 
+- PATCH（新入口，不进任何 Step 指纹）：`feedback/pending_cells`——产物→待审格的纯函数（格号、图块指纹 fp、按内容寻址的单格字块图、digest），给 guji-manager `guji pipeline` 收尾对账待审条目用（GM4 换包按条目对账，sheldon 11-23 定 cv 只出产物）；只读产物与字块图缓存，不碰中心库／R2／网站／book-text，不要 rev。`manager_api` 登记 `pending_cells`、`machine_pending`；`scripts/zhengli/pending_list.py` 的取格口径改调它（输出不变）。
+
 - PATCH（缺省无表时产物逐字节不变，code_equiv 登记）：裁定版本等价登记表（GM4／CV4 11-24，裁定键长期方案②）。数据目录 `<feedback>/rulings/ver_equiv.yaml`（随中心库同步，缺文件＝空表）登记「旧提示词版本→新版本」，可开 `model_suffix`（只差 `#模型` 后缀即等价，各后缀须同字、conf 取最低）。`RulingStore.get_equiv` 精确键没中再按表查；`_vis_ruling_pass` 放行与 fold 遍用它，护栏照旧，白名单按目标版本判；非精确命中的 `evidence.vis_ruling`／`evidence.fold` 多带 `ruling_key=ver_equiv`、`ruling_ver`。在线问前查缓存仍按精确键（二审小组按「版本#模型:effort」分键）。
 - PATCH（语料表，Step 代码指纹不变）：异体人工表补 鿄→梁，字对关系表记 梁鿄 为 V（GM3 全唐文金标，CV4）。
 - PATCH（语料表，Step 代码指纹不变；底库语料变，下次出底库时进）：异体人工表补 䕶→護、蹖→踳；字对关系表 `variants.pairkind.tsv` 记 䕶護、蹖踳 为 V，巿市 为 C（形近不同义）。起因 GM3 复核全唐文异体闸 18 格（CV4）。
