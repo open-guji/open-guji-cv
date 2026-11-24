@@ -517,6 +517,12 @@ _OUTER_BAR_1124 = ("border_detect 加 outer_bar（左右外框线先找粗外框
                    "_bend_verticals／refit_bends／detect_borders 多一个缺省 False 的参数、关时那一支不进；其余是新函数定义）：殿本 vol01 8 页（9,40,45,132,161,1,50,79）、"
                    "脈經 01 3 页（3,4,47）、全唐文 120 2 页（8,118）、史記 05 3 页（3,8,58）border_detect 与 origin/dev 08b0d2c 产物逐字节相同；"
                    "column_warp、border_detect_gate 只把 impl/keben/border 列进 code_deps、不调改动的函数；scripts/code_equiv.py check，2026-11-24（CV1）")
+_VER_EQUIV_1124 = ("裁定版本等价登记表（RulingStore.get_equiv；_vis_ruling_pass 与 fold 遍改用它，没有 ver_equiv.yaml 时与 get 完全相同；"
+                   "非精确命中才写 ruling_key／ruling_ver；白名单按目标版本判，精确命中时与原判据同）：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，"
+                   "main 包 cv0.7.86-c36-g24-m3-r17notch86）、全唐文 020 16 页（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，"
+                   "main 包 cv0.7.93-c82-g-631101-k11-qtw020-vf1-a4）、史記 02 18 页（4,9,19,24,33,41,44,53,86,95,102,106,114,141,173,180,185,199，"
+                   "main 包 cv0.7.59-c10-g23-m2-k25-job5767），三书中心库现有裁定库（殿本 52,312 条、全唐文 6,229、史記 714）在场，"
+                   "seed_admit 与 origin/dev a941e67 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4，裁定键长期方案②）")
 
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
@@ -2423,6 +2429,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='b0c0fb8c4f891a718541855f3f604292da003e6315a268906121dd3bc9a60304',
           old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
           evidence=_OUTER_BAR_1124),
+    # 裁定版本等价登记表（CV4，裁定键长期方案②，GM4 11-24）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="df5ba5579860f18cf02afb968a88ce999ec0f89cf297eabcea8c1a4210514d08",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_VER_EQUIV_1124),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="0fd369d3398f0f49b5b70556e44af04253164676145ecb02c9ae30c0e63168d4",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_VER_EQUIV_1124),
 )
 
 
