@@ -18,6 +18,11 @@
 `get`／`RulingCache.lookup`（在线问之前查缓存）仍按精确键——二审小组按「版本#模型:effort」分键存，通配会把不同成员的答案串起来。
 格式见 `load_ver_equiv`。命中非精确键时，返回的 payload 是副本，多带 `ruling_key="ver_equiv"`、`ruling_ver`（实际命中的版本）。
 
+**格锚点后备键**（GM4／CV4 2026-11-24，裁定键长期方案③）：窗口键（含版本等价）都没中时，用「格号＋写裁定时这一页的 `cells_sha`
+（`page_cells_sha`，Step3 切分 sha＋字块 sha，同 `bindings.page_state`）＋整理本对位字 `ref`」三样全对的裁定（`get_anchor`）。
+只认 payload 里自带 `cells_sha` 的裁定：新裁定由写入方当场写；存量由 manager 回填，且只回填能证明是写裁定那一刻产物的。
+命中返回副本，带 `ruling_key="anchor"`、`ruling_ver`。调用方还要核「裁定字在候选或＝ref」，其余护栏照旧。
+
 事件 payload：`source="llm"`、`group`、`char`（组内字，或 None）、`other`（大模型认为组内字都不是）、`conf`(high/mid/low)、`why`（≤60 字）、
 `model`、`prompt_ver`、`ctx{left,right,hash}`、`cell`、`tok{in,out,cache_read}`、`pending_reason`（问时这格的待审原因，缺省 unknown）。弃权（低把握、其他）也记，免得反复问。
 """
@@ -98,6 +103,14 @@ def ctx_hash(left: str, right: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()[:24]
 
 
+def page_cells_sha(book: str, page: int, store) -> str | None:
+    """格锚点用的本页产物戳：`bindings.page_state` 的两份 sha（Step3 切分＋字块）用「+」连起来；切分 sha 取不到 → None。
+    写裁定的一方（manager 终审、看图审、书仓脚本）写 `payload.cells_sha` 时须用同一个函数，读写口径才一致。"""
+    from .bindings import page_state
+    cells, patch = page_state(book, page, store)
+    return f"{cells}+{patch or ''}" if cells else None
+
+
 def _book(cell: str | None) -> str | None:
     return cell.split(":", 1)[0] if cell and ":" in cell else None
 
@@ -115,12 +128,19 @@ class RulingStore:
     def _load(self) -> dict:
         if self._idx is None:
             idx: dict = {}
+            anc: dict = {}
             if self.log.events_dir.exists():
                 evs = [e for e in self.log.iter_all(raw=True) if e.kind == KIND]
                 for e in sorted(evs, key=replay_key):             # 后到覆盖
                     p = e.payload
                     idx[(p.get("group"), (p.get("ctx") or {}).get("hash"), p.get("prompt_ver"))] = p
+                    if p.get("cells_sha") and p.get("cell"):
+                        k = (p.get("group"), p["cell"], p["cells_sha"])
+                        rows = anc.setdefault(k, {})
+                        rows.pop(p.get("prompt_ver"), None)       # 同版本后到覆盖，且排到最后
+                        rows[p.get("prompt_ver")] = p
             self._idx = idx
+            self._anc = anc
         return self._idx
 
     def get(self, group: str, prompt_ver: str, left: str, right: str) -> dict | None:
@@ -177,6 +197,34 @@ class RulingStore:
                 x = self._suffix_hit(group, ver, h)
             if x is not None:
                 return {**x, "ruling_key": "ver_equiv", "ruling_ver": x.get("prompt_ver")}
+        return None
+
+    def has_anchors(self) -> bool:
+        """裁定库里有没有带 `cells_sha` 的裁定（没有就不必算本页 cells_sha）。"""
+        self._load()
+        return bool(self._anc)
+
+    def get_anchor(self, group: str, prompt_ver: str, cell: str, cells_sha: str | None, ref: str | None) -> dict | None:
+        """格锚点后备键：格号＋写裁定时的 `cells_sha`＋整理本对位字 `ref` 全对、版本是 `prompt_ver` 或其等价版本
+        （登记表与「只差模型后缀」同 `get_equiv`；多条时取先命中的版本，同一版本后到覆盖；只差后缀的各条按 `merge_suffix_rows` 合并）。
+        → payload 副本（`ruling_key="anchor"`、`ruling_ver`）｜None。"""
+        if not cell or not cells_sha:
+            return None
+        self._load()
+        rows = self._anc.get((group, cell, cells_sha))
+        if not rows:
+            return None
+        ref = ref or ""
+        rows = {v: p for v, p in rows.items() if (p.get("ref") or "") == ref}
+        if not rows:
+            return None
+        eq = self.ver_equiv()
+        for ver in [prompt_ver, *self.equiv_vers(group, prompt_ver)]:
+            x = rows.get(ver)
+            if x is None and eq["model_suffix"]:
+                x = merge_suffix_rows([p for v, p in rows.items() if v != ver and base_ver(v) == base_ver(ver)])
+            if x is not None:
+                return {**x, "ruling_key": "anchor", "ruling_ver": x.get("prompt_ver")}
         return None
 
     def cell_codes(self) -> dict[str, dict]:
