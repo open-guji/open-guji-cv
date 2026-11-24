@@ -110,3 +110,21 @@ def test_fold_pass_equiv_hit(tmp_path):
     assert n == 1 and r.char == "曰"
     f = r.evidence["fold"]
     assert (f["via"], f["ruling_key"], f["ruling_ver"]) == ("ruling", "ver_equiv", "v0"), f
+
+
+def test_model_suffix_admit_ok_and_subclass(tmp_path):
+    """GM4 审 #1830：各后缀 admit_ok 取「且」，子类不一致不算命中。"""
+    _table(tmp_path, "model_suffix: true\n")
+    st = RulingStore(tmp_path)
+    _put(st, "vis-o1#x:high", admit_ok=True, subclass="A68", ref="說")
+    _put(st, "vis-o1#y:high", admit_ok=False, subclass="A68", ref="說")
+    assert st.get_equiv("O", "vis-o1", "甲", "乙")["admit_ok"] is False
+    assert _run(st)[0] == 0                                          # admit_ok=False 的一条不能被当成可放
+    st2 = RulingStore(tmp_path / "b")
+    _table(tmp_path / "b", "model_suffix: true\n")
+    _put(st2, "vis-o1#x:high", admit_ok=True, subclass="A68", ref="說")
+    _put(st2, "vis-o1#y:high", admit_ok=True, subclass="B99", ref="說")
+    assert st2.get_equiv("O", "vis-o1", "甲", "乙") is None
+    _put(st2, "vis-o1#y:high", admit_ok=True, subclass="A68", ref="說")   # 同版本后到覆盖成一致
+    n, r = _run(st2)
+    assert n == 1 and r.evidence["vis_ruling"]["ruling_ver"] == "vis-o1#y:high"

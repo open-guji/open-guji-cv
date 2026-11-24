@@ -69,6 +69,18 @@ def load_ver_equiv(path: str | Path) -> dict:
     return {"pairs": pairs, "model_suffix": bool(d.get("model_suffix", False))}
 
 
+def merge_suffix_rows(rows: list[dict]) -> dict | None:
+    """只差 `#模型` 后缀的几条裁定合成一条（最保守）：字（或「其他」）、子类、ref 各条须一致，不一致 → None；
+    conf 取最低，`admit_ok` 取各条的「且」（GM4 审 #1830）。其余字段取最后一条。"""
+    if not rows or len({(x.get("char"), bool(x.get("other")), x.get("subclass"), x.get("ref") or "") for x in rows}) != 1:
+        return None
+    lo = min(rows, key=lambda x: _CONF_RANK.get(x.get("conf"), 0))
+    out = {**rows[-1], "conf": lo.get("conf")}
+    if any("admit_ok" in x for x in rows):
+        out["admit_ok"] = all(bool(x.get("admit_ok")) for x in rows)
+    return out
+
+
 class RulingLog(EventLog):
     """裁定日志：同 `EventLog` 的格式与追加纪律，落 `<feedback>/rulings/`。"""
 
@@ -145,12 +157,8 @@ class RulingStore:
         return self._bidx
 
     def _suffix_hit(self, group: str, ver: str, h: str) -> dict | None:
-        """只差 `#模型` 后缀的裁定：各后缀须同字（或同为「其他」），不同 → 不算；conf 取最低。"""
-        rows = [x for x in self._by_base().get((group, h, base_ver(ver)), ()) if x.get("prompt_ver") != ver]
-        if not rows or len({(x.get("char"), bool(x.get("other"))) for x in rows}) != 1:
-            return None
-        lo = min(rows, key=lambda x: _CONF_RANK.get(x.get("conf"), 0))
-        return {**rows[-1], "conf": lo.get("conf")}
+        """只差 `#模型` 后缀的裁定，按 `merge_suffix_rows` 合成一条。"""
+        return merge_suffix_rows([x for x in self._by_base().get((group, h, base_ver(ver)), ()) if x.get("prompt_ver") != ver])
 
     def get_equiv(self, group: str, prompt_ver: str, left: str, right: str) -> dict | None:
         """同 `get`，精确键没中再按版本等价表查（登记的旧版本，再「只差模型后缀」）。非精确命中 → payload 副本，
