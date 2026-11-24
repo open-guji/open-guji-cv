@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 import time
 from pathlib import Path
 
@@ -190,7 +191,6 @@ class RulingLog(EventLog):
             errs, warns = validate_payload(e.payload or {}, eq)
             bad += [f"{e.id}: {m}" for m in errs]
             for m in warns:
-                import sys
                 print(f"⚠️  裁定 {e.id}: {m}", file=sys.stderr)
         if bad:
             from ..errors import BadRequest
