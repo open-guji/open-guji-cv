@@ -74,6 +74,7 @@
 
 ## [未发版]
 
+- PATCH（产物逐字节不变，code_equiv 登记）：写裁定前校验（GM4／CV4 11-24，裁定键长期方案①）。`rulings.validate`（＝`validate_payload`）查版本 seed_admit 认不认：group=O 认 vis-o1／src-1／ctx-m1／src-2，其他字组认本组 `prompt.md` 的 `ver`，任何组认看图 L4 `vis1:<哈希>`，再加 `ver_equiv.yaml` 登记的版本；`#模型` 后缀去掉再比。`RulingLog.append` 对 `ctx_ruling` 事件调用，不认就整批拒写（`BadRequest`）；vis-o1／src-1 写了 admit_ok 却不是收的子类只提醒。管线自己写缓存（`RulingStore.put`／`put_cell_code`）不校验。看图判子类表挪到 `rulings.VIS_RULING_SPECS`，seed_admit 引用同一份。三书现有 59,255 条裁定试跑只拦 460 条本来就查不到的（串组版本、ctx-wenyi-1）。
 - PATCH（库里没有带 cells_sha 的裁定时产物逐字节不变，code_equiv 登记）：裁定格锚点后备键（GM4／CV4 11-24，裁定键长期方案③）。窗口键（含版本等价）都没中时，`RulingStore.get_anchor` 按「格号＋写裁定时本页 `cells_sha`（`rulings.page_cells_sha`＝`bindings.page_state` 两份 sha 用 + 连）＋整理本对位字 `ref`」三样全对取裁定，另要求裁定字在库候选或＝ref、裁定当时的窗口与现窗口编辑距离 ≤3（`window_diff` 记进证据），其余护栏照旧；`_vis_ruling_pass` 与 fold 遍用它，证据记 `ruling_key=anchor`。只认 payload 自带 `cells_sha` 的裁定（新裁定写入方当场写，存量由 manager 回填、只回填能证明是写裁定那一刻产物的）；库里一条都没有时不算 cells_sha。
 - PATCH（脚本，不进指纹）：`scripts/zhengli/auto_cycle.py` 判 fresh 也认 manager 收尾落定记录 `reports/<册>/_land/landed.json`（`{digest, pack}`，pack＝现 ★main 即不用重出）。待审没变时收尾不换 rev、不出 `rev-<rev>` 包，原判法会永远判过期（GM4 换包按条目对账）。
 

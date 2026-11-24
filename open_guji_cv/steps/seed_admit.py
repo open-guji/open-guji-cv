@@ -3370,11 +3370,12 @@ _RR = frozenset("人入八")
 
 
 #: 看图判裁定（`feedback/rulings`，group=O）：提示词版本、A24 名下的子类、不碰的疑问
-_VIS_RULING_GROUP, _VIS_RULING_VER = "O", "vis-o1"
-_VIS_RULING_SUBCLASSES = frozenset({"A68", "B99", "D130", "L04"})
+from ..feedback.rulings import VIS_RULING_GROUP as _VIS_RULING_GROUP, VIS_RULING_SPECS as _RULING_SPECS   # noqa: E402  写入校验同一份
+_VIS_RULING_VER = _RULING_SPECS[0][0]
+_VIS_RULING_SUBCLASSES = _RULING_SPECS[0][1]
 #: 整理本缺字（〓）按新图源文本层取字／私用码「一码一字」表（`research/a24/pua_src`，A24 2026-11-03），提示词版本 → 收的子类
 #: ctx-m1＝只读文意终审（A24 2026-11-04，两路独立会话双 high＋字形分或≥2 来源，按组定越不越过整理本；`admit_ok` 写入时已判），Z＝字组格、N＝形近护栏格
-_VIS_RULING_SPECS = ((_VIS_RULING_VER, _VIS_RULING_SUBCLASSES), ("src-1", frozenset({"PUA", "GB"})), ("ctx-m1", frozenset({"Z", "N"})))
+_VIS_RULING_SPECS = _RULING_SPECS
 _VIS_RULING_HARD = frozenset({"occluded", "excluded", "glyph_timeout"})
 _VIS_HALF_BAD = frozenset({"clipped", "frame_residue"})   # vis_ruling_half 下带这些切分疑点的半格不放
 
