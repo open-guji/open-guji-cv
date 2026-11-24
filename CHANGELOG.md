@@ -3,7 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
-- **待合（草稿，L2：各书 seed_admit 起过期）**：缺省路径也记 `fold_ruling_vetoed`——fold 按裁定给的字被影子降审后，待审通道不按整理本字放回（cv#1838 只在宽松档记）。CV0 11-24 定搭下次 seed_admit 改指纹时一起合。
+- PATCH（产物逐字节不变，code_equiv 登记；参数指纹 12,472 组全同）：seed_admit `solo_5b_min_n` 恢复成参数（脉经序页、牒文页经 `no_ref_params` 要设 1；缺省仍 3、缺省不进 dump）。
+
 - 重构（产物逐字节不变，code_equiv 登记；参数指纹 12,472 组全同）：seed_admit 69 个门槛收成常量（CV4 整理 PR4，Sheldon 11-24 定）——414 册无一册改过，从 `SeedAdmitParams` 字段改为 `seed_admit_params._CONSTANTS` 里的常量、类上只读属性（代码照旧读 `p.<名>`）。老配置写原值照读、写别的值报错；原先进参数指纹的照原值补回 dump。`no_ref_params` 不能再覆盖这些键。测试换值用 `tests.helpers.seed_admit_consts`。
 
 - CI（不动代码、不进指纹，L0）：新工作流 `指纹变更检查`＋`scripts/check_fp_change.py`：推 tag、开／改 PR 时比基线与本版各步规范指纹（已按 code_equiv 换算），变了却没登记、说明里也没写明「指纹变更：…」就红。起因 v0.7.83、v0.7.99 两次 patch 线漏登（GM2 11-24）。
