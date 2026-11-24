@@ -392,6 +392,9 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "RulingStore": ("feedback.rulings", "RulingStore"),
     "RULING_KIND": ("feedback.rulings", "KIND"),
     "ruling_ctx_hash": ("feedback.rulings", "ctx_hash"),
+    # 裁定键长期方案（GM4／CV4 2026-11-24）：版本等价表、格锚点 cells_sha 口径
+    "page_cells_sha": ("feedback.rulings", "page_cells_sha"),
+    "load_ver_equiv": ("feedback.rulings", "load_ver_equiv"),
     "llm_questions_of_page": ("feedback.llm_queue", "questions_of_page"),
     "FLOW_GROUPS": ("groups.registry", "FLOW_GROUPS"),
     "CTX_WIDTH": ("groups.context", "WIDTH"),

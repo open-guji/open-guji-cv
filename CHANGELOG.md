@@ -74,6 +74,7 @@
 
 ## [未发版]
 
+- PATCH（库里没有带 cells_sha 的裁定时产物逐字节不变，code_equiv 登记）：裁定格锚点后备键（GM4／CV4 11-24，裁定键长期方案③）。窗口键（含版本等价）都没中时，`RulingStore.get_anchor` 按「格号＋写裁定时本页 `cells_sha`（`rulings.page_cells_sha`＝`bindings.page_state` 两份 sha 用 + 连）＋整理本对位字 `ref`」三样全对取裁定，另要求裁定字在库候选或＝ref、裁定当时的窗口与现窗口编辑距离 ≤3（`window_diff` 记进证据），其余护栏照旧；`_vis_ruling_pass` 与 fold 遍用它，证据记 `ruling_key=anchor`。只认 payload 自带 `cells_sha` 的裁定（新裁定写入方当场写，存量由 manager 回填、只回填能证明是写裁定那一刻产物的）；库里一条都没有时不算 cells_sha。
 - PATCH（脚本，不进指纹）：`scripts/zhengli/auto_cycle.py` 判 fresh 也认 manager 收尾落定记录 `reports/<册>/_land/landed.json`（`{digest, pack}`，pack＝现 ★main 即不用重出）。待审没变时收尾不换 rev、不出 `rev-<rev>` 包，原判法会永远判过期（GM4 换包按条目对账）。
 
 - PATCH（新入口，不进任何 Step 指纹）：`feedback/pending_cells`——产物→待审格的纯函数（格号、图块指纹 fp、按内容寻址的单格字块图、digest），给 guji-manager `guji pipeline` 收尾对账待审条目用（GM4 换包按条目对账，sheldon 11-23 定 cv 只出产物）；只读产物与字块图缓存，不碰中心库／R2／网站／book-text，不要 rev。`manager_api` 登记 `pending_cells`、`machine_pending`；`scripts/zhengli/pending_list.py` 的取格口径改调它（输出不变）。
