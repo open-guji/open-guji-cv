@@ -530,6 +530,11 @@ _VALIDATE_1124 = ("写裁定前校验（rulings.validate／validate_payload、Ru
                   "三书中心库现有裁定库在场，seed_admit 与 origin/dev 939ec88 产物逐字节相同；scripts/code_equiv.py check，"
                   "GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4，裁定键长期方案①）")
 
+_LOOSE_1124 = ("格锚点宽松档 seed_admit.ruling_anchor_loose（书级，缺省关、关时不进参数 dump；GM4 合并方案，CV0 条件 (b)）："
+               "殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（页号与产物包同 _VER_EQUIV_1124），三书中心库现有裁定库在场"
+               "（未推任何锚点回填），seed_admit 与 origin/dev a68b379 产物逐字节相同；scripts/code_equiv.py check，"
+               "GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2453,6 +2458,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="b5e9cc4e459c1a0e3b05677069445080b32066073ccc31172e8e341ed6bddc01",
           old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
           evidence=_VALIDATE_1124),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="d3d48630f1216c4e3e08d413ddc5bc32900fdbdc97191e43ebf611a8ebf0505f",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_LOOSE_1124),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="0c2d5bf7c777901690fb36447e80a6b014eb199530ec29ca66ff456fa3a7e67e",
+          old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
+          evidence=_LOOSE_1124),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="48114ec6b04e2a85a6f3550c4ca98235058f5b61f45aacfa3db4aa2e35ea94d6",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_LOOSE_1124),
 )
 
 
