@@ -626,6 +626,54 @@
    "owner": "96mid1ogzk"
   },
   {
+   "kind": "glyph_sim_base",
+   "path": "models/glyph_sim_base_v1/calib.json",
+   "size": 3025,
+   "sha256": "48e918d717937e046eb66996d6363ba3d5ec33020eed2dade04ce2c4dff62c94",
+   "level": "global",
+   "owner": "global"
+  },
+  {
+   "kind": "glyph_sim_base",
+   "path": "models/glyph_sim_base_v1/model.pt",
+   "size": 3777797,
+   "sha256": "0383b09d3b71d7ed7140e5bbdf69cc9f5d6710223625e282a3f0d0a76615608d",
+   "level": "global",
+   "owner": "global"
+  },
+  {
+   "kind": "glyph_sim",
+   "path": "models/glyph_sim_qtw/calib.json",
+   "size": 607,
+   "sha256": "21e548c5ad6cc5ddd3e20301889bf5a7aa35d8e0d54e767e61d466bf07a4eb5f",
+   "level": "book",
+   "owner": "995ejelvk0"
+  },
+  {
+   "kind": "glyph_sim",
+   "path": "models/glyph_sim_qtw/model.pt",
+   "size": 3774933,
+   "sha256": "289fdf56aa646ae8ec4e19806706e5520f2a00a28db005d0ed63b4bc9b5f9319",
+   "level": "book",
+   "owner": "995ejelvk0"
+  },
+  {
+   "kind": "glyph_sim_shiji",
+   "path": "models/glyph_sim_shiji/calib.json",
+   "size": 610,
+   "sha256": "d4e930d089771290915a11ef7029e8e985f719c3d55bee1d2ad704519e4db3d4",
+   "level": "book",
+   "owner": "988g3f0wsu"
+  },
+  {
+   "kind": "glyph_sim_shiji",
+   "path": "models/glyph_sim_shiji/model.pt",
+   "size": 3778021,
+   "sha256": "cec39b1651e3fa4a31596c08e203a99b16e6fc16dc71d0f03bda01b0fd324a94",
+   "level": "book",
+   "owner": "988g3f0wsu"
+  },
+  {
    "kind": "pagetype",
    "path": "models/pagetype/pagetype_v1.joblib",
    "size": 57633,

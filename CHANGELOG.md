@@ -3,6 +3,14 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.96] - 2026-11-24
+
+史記 patch 线：v0.7.88 ＋ 5a 相似度模型（供史記切 `glyph_sim_shiji`，Sheldon 11-23 定直接切）。本线基于 v0.7.62，原本没有 `sim_model` 代码，光加模型表行用不上，所以一并移植：
+- dev #1394／#1466：`glyph_match.sim_model` 开关（缺省关）与 `clustering/sim_cnn.py`（照 v0.7.90／dev 原样，含 calib.json 与 `fuse: mean`）。glyph_match 代码哈希登 code_equiv（与 dev 同一条，本线旧哈希规范值也是 fe823292），**23 步 code_hash 与 v0.7.88 全同**；不开 `sim_model` 的册产物不变。
+- 模型表：#1823 `glyph_sim_shiji` 两行，并补 `glyph_sim_base_v1` 两行（#1631）与 `glyph_sim`（全唐文）两行，`model_pack.KINDS` 与 provenance 同步。
+- **不含** #1771（never_group 8 对）与新底库 b34：底库升版要用户点头，本版底库仍 b31。
+- 用法：史記册 yaml `params: {glyph_match: {sim_model: {path: models/glyph_sim_shiji/model.pt, fuse: mean}}}`，开了的册 glyph_match 起过期。
+
 ## [0.7.88] - 测试中
 
 史記 patch 线：v0.7.84 + #1763（cherry-pick 0eca6af）。SJ v0.2 整书重跑用，取代 0.7.84；配底库 b31 不变（A31 11-20 指定号从 0.7.88 起）。**不含** dev 线及殿本 patch 线其他改动。
