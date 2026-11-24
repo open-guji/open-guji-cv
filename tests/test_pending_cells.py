@@ -81,6 +81,14 @@ def test_extra_not_in_segmentation_goes_to_missing(tmp_path):
     assert r["no_image"] == ["1:1:2", "1:2:1a"] and r["fps"] == {} and "img" not in r["cells"][0]
 
 
+def test_extra_off_segmentation_with_patch_still_listed(tmp_path):
+    """seed_admit 里没有、但字块图在的复审点名格（夹注异体格等）照样上单，不悄悄漏掉。"""
+    prod = make_products(tmp_path)
+    read = patches(tmp_path, {"1:1:2": 10, "1:2:1a": 200, "9:9:9": 120})
+    r = PC.pending_cells(prod, "vol01", read_patch=read, extra=["9:9:9", "8:8:8"])
+    assert r["missing"] == ["8:8:8"] and "9:9:9" in {c["cell"] for c in r["cells"]}
+
+
 def test_no_images_only_fingerprints(tmp_path):
     prod = make_products(tmp_path)
     r = PC.pending_cells(prod, "vol01", read_patch=patches(tmp_path, {"1:1:2": 10, "1:2:1a": 200}), images=False)
