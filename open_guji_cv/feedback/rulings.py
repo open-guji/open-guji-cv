@@ -23,6 +23,11 @@
 只认 payload 里自带 `cells_sha` 的裁定：新裁定由写入方当场写；存量由 manager 回填，且只回填能证明是写裁定那一刻产物的。
 命中返回副本，带 `ruling_key="anchor"`、`ruling_ver`。调用方还要核「裁定字在候选或＝ref」，其余护栏照旧。
 
+**按字格永久编号 u 查**（CV0 T3 2026-11-24，书级 `ruling_by_u`，缺省关）：裁定 payload 带整数 `u`（册内唯一、发了不改，见 guji-format
+guji-char v0.6、manager `doc/参考/字格身份账.md`）时另建 (组, 册, u) 索引（`get_by_u`）。现格的 u 从本册「字格身份账」
+`<feedback>/uid/<册>.jsonl` 按本页当前 `page_cells_sha` 查（`UidLedger`，只读；账的数据不进指纹）。放行口径同格锚点宽松档：
+validate 认的版本减 void、多条取最新、字不一致记冲突、只收 high、前后 2 字至少一侧相同；调用方再核字在候选或＝ref。
+
 事件 payload：`source="llm"`、`group`、`char`（组内字，或 None）、`other`（大模型认为组内字都不是）、`conf`(high/mid/low)、`why`（≤60 字）、
 `model`、`prompt_ver`、`ctx{left,right,hash}`、`cell`、`tok{in,out,cache_read}`、`pending_reason`（问时这格的待审原因，缺省 unknown）。弃权（低把握、其他）也记，免得反复问。
 """
@@ -250,6 +255,7 @@ class RulingStore:
         if self._idx is None:
             idx: dict = {}
             anc: dict = {}
+            uix: dict = {}
             if self.log.events_dir.exists():
                 evs = [e for e in self.log.iter_all(raw=True) if e.kind == KIND]
                 for e in sorted(evs, key=replay_key):             # 后到覆盖
@@ -260,8 +266,16 @@ class RulingStore:
                         rows = anc.setdefault(k, {})
                         rows.pop(p.get("prompt_ver"), None)       # 同版本后到覆盖，且排到最后
                         rows[p.get("prompt_ver")] = p
+                    u = p.get("u")
+                    if isinstance(u, int) and not isinstance(u, bool) and u > 0:
+                        bk = _book(p.get("cell")) or p.get("book")
+                        if bk:
+                            rows = uix.setdefault((p.get("group"), bk, u), {})
+                            rows.pop(p.get("prompt_ver"), None)
+                            rows[p.get("prompt_ver")] = p
             self._idx = idx
             self._anc = anc
+            self._uix = uix
         return self._idx
 
     def get(self, group: str, prompt_ver: str, left: str, right: str) -> dict | None:
@@ -361,7 +375,32 @@ class RulingStore:
                 return {**x, "ruling_key": "anchor", "ruling_ver": x.get("prompt_ver"), "window_diff": d}
         return None
 
-    def _anchor_loose(self, group: str, prompt_ver: str, rows: dict, eq: dict, left: str | None, right: str | None) -> dict | None:
+    def has_u(self) -> bool:
+        """裁定库里有没有带 `u` 的裁定（没有就不必读身份账、算本页 cells_sha）。"""
+        self._load()
+        return bool(self._uix)
+
+    def get_by_u(self, group: str, prompt_ver: str, book: str | None, u: int | None,
+                 left: str | None = None, right: str | None = None) -> dict | None:
+        """按字格永久编号查（书级 `ruling_by_u`，CV0 T3 11-24）：同组同册同 u 的各版本裁定，按格锚点宽松档的口径取
+        （`_anchor_loose`：版本、冲突、只收 high、前后 2 字一侧相同）。不核 ref——调用方核「字在候选或＝ref」。
+        → payload 副本（`ruling_key="u"`、`ruling_ver`、`win_sides`）｜冲突 `{"ruling_conflict": True, …}`｜None。"""
+        if not book or not u:
+            return None
+        self._load()
+        rows = self._uix.get((group, book, u))
+        if not rows:
+            return None
+        return self._anchor_loose(group, prompt_ver, rows, self.ver_equiv(), left, right, key="u")
+
+    def uid_ledger(self) -> "UidLedger":
+        """本裁定库同一 feedback 根下的字格身份账（只读）。"""
+        if getattr(self, "_uled", None) is None:
+            self._uled = UidLedger(self.log.root)
+        return self._uled
+
+    def _anchor_loose(self, group: str, prompt_ver: str, rows: dict, eq: dict, left: str | None, right: str | None,
+                      key: str = "anchor") -> dict | None:
         """格锚点宽松档（GM4 合并方案，GM3／CV0 确认 11-24）。`rows`＝同组同格同 cells_sha、ref 已对上的各版本（旧→新）。
         - 版本：本组 `validate_payload` 认的任意版本（去后缀比），减去 `ver_equiv.yaml` 的 `void`；不收看图 L4 缓存（`vis1:`）；
           O 组各版本子类白名单不同，只收 `prompt_ver` 与其等价版本（含只差后缀的）；串组不认（行本就按组建）；
@@ -385,7 +424,7 @@ class RulingStore:
         if not cand:
             return None
         if len({(x.get("char"), bool(x.get("other"))) for x in cand}) > 1:
-            return {"ruling_conflict": True, "ruling_key": "anchor",
+            return {"ruling_conflict": True, "ruling_key": key,
                     "rows": [{"char": x.get("char"), "other": bool(x.get("other")), "prompt_ver": x.get("prompt_ver")} for x in cand]}
         x = cand[-1]
         if x.get("conf") != "high":
@@ -397,7 +436,7 @@ class RulingStore:
                                    ("right", c["right"][:ANCHOR_WIN], (right or "")[:ANCHOR_WIN])) if a == b]
         if not sides:
             return None
-        return {**x, "ruling_key": "anchor", "ruling_ver": x.get("prompt_ver"), "win_sides": sides}
+        return {**x, "ruling_key": key, "ruling_ver": x.get("prompt_ver"), "win_sides": sides}
 
     def cell_codes(self) -> dict[str, dict]:
         """格号 → 这一格在新图源文本层里的私用码记录（`prompt_ver="src-2"`，`put_cell_code` 写的）。
@@ -429,14 +468,21 @@ class RulingStore:
         return payload
 
     def put(self, group: str, prompt_ver: str, left: str, right: str, *, char, conf, why: str, model: str,
-            cell: str | None = None, tok: dict | None = None, pending_reason: str | None = None) -> dict:
+            cell: str | None = None, tok: dict | None = None, pending_reason: str | None = None, u: int | None = None) -> dict:
+        """写一条裁定。`u`（字格永久编号，manager 有身份账时给）有值才写进 payload；None 时 payload 与加这个参数前逐字节同。"""
         left, right = (left or "")[-WIDTH:], (right or "")[:WIDTH]
         other = char == OTHER                      # “组内字都不是”：char 留空、other=True（字形字段只收单字）
         payload = {"source": SOURCE, "group": group, "char": None if other else char, "other": other, "conf": conf, "why": (why or "")[:60],
                    "model": model, "prompt_ver": prompt_ver, "cell": cell, "tok": tok or {},
                    "ctx": {"left": left, "right": right, "hash": ctx_hash(left, right)},
                    "pending_reason": pending_reason or "unknown"}   # 问的时候这格的待审原因（doc/design/待审原因PendingReason.md），不知道记 unknown
+        if u is not None:
+            payload["u"] = int(u)
         self._load()[(group, payload["ctx"]["hash"], prompt_ver)] = payload
+        if u is not None and _book(cell):
+            rows = self._uix.setdefault((group, _book(cell), int(u)), {})
+            rows.pop(prompt_ver, None)
+            rows[prompt_ver] = payload
         self._bidx = None
         if self.persist:
             seq = max((e.seq for e in self.log.read(self._batch, raw=True)), default=0) + 1
@@ -463,3 +509,45 @@ class RulingCache:
     def store(self, group, prompt_ver, model, left, right, e: dict, cell=None) -> None:
         self.store_.put(group, prompt_ver, left, right, char=e.get("char"), conf=e.get("conf"), why=e.get("why") or "",
                         model=e.get("model") or model, cell=cell, tok=e.get("tok"), pending_reason=e.get("pending_reason"))
+
+
+class UidLedger:
+    """字格身份账只读读取器（CV0 T3 2026-11-24；写入、对照、发号都在 guji-manager `guji uid …`，格式见 manager
+    `doc/参考/字格身份账.md`）。文件 `<feedback>/uid/<册>.jsonl`，只追加，一行一页一次切分：
+    `{"v":1, "book", "page", "cells_sha", "map": {完整格号: u}, "boxes", "lineage", "src", "ts"}`；cv 只读 page、cells_sha、map。
+    同一 (page, cells_sha) 多行取最后一行；`cells_sha` 为空的行（纯从 book-text 建账）不用；文件不在＝整册没有 u。
+    账的内容不进产物指纹：开 `ruling_by_u` 的册账变了要显式 force 重放 seed_admit。"""
+
+    def __init__(self, root: str | Path | None):
+        self.root = Path(root) if root else None
+        self._books: dict[str, dict] = {}
+
+    def path(self, book: str) -> Path | None:
+        return self.root / "uid" / f"{book}.jsonl" if self.root else None
+
+    def _book_rows(self, book: str) -> dict:
+        if book not in self._books:
+            import json
+            d: dict = {}
+            p = self.path(book)
+            if p is not None and p.exists():
+                for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+                    if not line.strip():
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except ValueError as e:
+                        raise ValueError(f"{p}:{n}: 不是 JSON（{e}）") from None
+                    sha, pg, mp = row.get("cells_sha"), row.get("page"), row.get("map")
+                    if not sha or not isinstance(pg, int) or not isinstance(mp, dict):
+                        continue
+                    d[(pg, sha)] = {str(k): int(v) for k, v in mp.items()
+                                    if isinstance(v, int) and not isinstance(v, bool) and v > 0}
+            self._books[book] = d
+        return self._books[book]
+
+    def lookup(self, book: str, page: int, cells_sha: str | None) -> dict[str, int]:
+        """本页当前切分（`cells_sha`）的 {格号: u}；账里没有这一页这一切分 → {}。"""
+        if not book or not cells_sha:
+            return {}
+        return self._book_rows(book).get((int(page), cells_sha), {})
