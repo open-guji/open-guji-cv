@@ -148,13 +148,32 @@ def compute(book: str, sheet: dict | None, events, char_doc: dict | None, chapte
 
 # ─── 读真源 ───────────────────────────────────────────────────────────
 
+def _json_of_file(conn, row) -> dict | None:
+    """files 一行 (raw, body_r2, sha256) → 解析后的 JSON。不读 files.doc（它与 raw 同内容，要停写清空）；大文件原文在 R2。"""
+    if not row:
+        return None
+    raw, body_r2, sha = row
+    if body_r2 and not raw:
+        backend = getattr(conn, "backend", None)
+        if backend is None or not hasattr(backend, "get_body"):
+            return None
+        raw = backend.get_body(sha)
+    try:
+        return json.loads(raw) if raw else None
+    except ValueError:
+        return None
+
+
 def load_db(conn, ws: str, book: str, text_id: str, chapter: str) -> tuple[dict | None, list[dict], dict | None, dict]:
-    row = conn.execute("SELECT doc FROM files WHERE ws = %s AND src_path = %s",
+    row = conn.execute("SELECT raw, body_r2, sha256 FROM files WHERE ws = %s AND src_path = %s",
                        (ws, f"feedback/lists/proofing/{text_id}/{chapter}.pending.json")).fetchone()
-    sheet = row[0] if row else None
+    sheet = _json_of_file(conn, row)
+    # 两条分开查：book = ? 走 events_ws_book；book 为空的另查（OR 写法会退成整个 ws 扫，11-24 读量复查：每次 7.9 万行）
     evs = [{"kind": k, "target": t, "payload": p, "ts": ts} for k, t, p, ts in conn.execute(
-        "SELECT kind, target, payload, ts FROM events WHERE ws = %s AND kind = 'confirm' AND "
-        "(book = %s OR (book IS NULL AND target->>'key' LIKE %s))", (ws, book, f"{book}:%")).fetchall()]
+        "SELECT kind, target, payload, ts FROM events WHERE ws = %s AND book = %s AND kind = 'confirm' "
+        "UNION ALL "
+        "SELECT kind, target, payload, ts FROM events WHERE ws = %s AND book IS NULL AND kind = 'confirm' "
+        "AND target->>'key' LIKE %s", (ws, book, ws, f"{book}:%")).fetchall()]
     row = conn.execute("SELECT doc FROM books WHERE ws = %s AND book = %s", (ws, book)).fetchone()
     book_doc = row[0] if row else None
     row = conn.execute("SELECT extra FROM progress.volume WHERE book_id = %s AND vol = %s", (text_id, chapter)).fetchone()
