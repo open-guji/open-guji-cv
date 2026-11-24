@@ -5445,6 +5445,7 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
     specs = tuple((ver, subs | extra) if ver == "ctx-m1" else (ver, subs) for ver, subs in _VIS_RULING_SPECS) if extra else _VIS_RULING_SPECS
     skip_half = getattr(p, "group_flow_llm_skip_half", False) and not getattr(p, "vis_ruling_half", False)
     half_ok = getattr(p, "group_flow_llm_skip_half", False) and getattr(p, "vis_ruling_half", False)
+    rget = getattr(store, "get_equiv", store.get)
     for r, left, right in todo:
         # 当场记下本遍的窗口（裁定键）：产物是整遍跑完的状态，后面几遍放行／降审的邻格会让从产物重算的窗口与这里不同，
         # manager 写终审裁定键、rulings-hits 补键直接用这个（A33 11-20，全唐文 027:59:4:7）。
@@ -5456,10 +5457,12 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
             continue                                 # 半格本身带切分疑点：不放（A22 评估 11-12）
         if skip_half and (r.id or "")[-1:] in ("a", "b"):
             continue                                 # 夹注半格不靠终审裁定放行（等金标证据再开）
-        v = next((x for ver, subs in specs
-                  for x in [store.get(_VIS_RULING_GROUP, ver, left, right)]
-                  if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
-                  and _ruling_han(x["char"]) and x.get("subclass") in subs), None)
+        # 精确键没中再查版本等价表（`RulingStore.get_equiv`，GM4／CV4 11-24）；护栏照旧，白名单按目标版本 vt 判
+        hit = next(((ver, x) for ver, subs in specs
+                    for x in [rget(_VIS_RULING_GROUP, ver, left, right)]
+                    if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
+                    and _ruling_han(x["char"]) and x.get("subclass") in subs), None)
+        vt, v = hit if hit else (None, None)
         ref_ = (amap.get(r.id) or (None,))[0]
         if not v:
             f = store.get(_VIS_RULING_GROUP, "ctx-m1", left, right)
@@ -5470,11 +5473,11 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
             continue                                 # 整理本对位字变了：不是当初看的那一格
         if half_ok and is_half and (v.get("cell") != r.id or v["char"] != ref_):
             continue                                 # 半格：裁定的格号须＝当前格号（重切后不落到别的图），且字＝整理本字（不走白名单越过）
-        if ovr is not None and v.get("prompt_ver") == "ctx-m1" and ref_ and v["char"] != ref_ and not _override_ok(ovr, v["char"], ref_):
+        if ovr is not None and vt == "ctx-m1" and ref_ and v["char"] != ref_ and not _override_ok(ovr, v["char"], ref_):
             continue                                 # 越过整理本：字与整理本字不同属白名单字组 → 留审
         ds = list(r.doubts or [])
         vr = {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass", "route")}
-        vr.update({k: v[k] for k in ("via", "ref_lead") if v.get(k)})   # 终审 ref_lead 证人放行：via=ref_lead（层、领先量）
+        vr.update({k: v[k] for k in ("via", "ref_lead", "ruling_key", "ruling_ver") if v.get(k)})   # 非窗口精确命中才有 ruling_key   # 终审 ref_lead 证人放行：via=ref_lead（层、领先量）
         r.evidence = {**(r.evidence or {}), "vis_ruling": vr,
                       "lifted_from": {"char": r.char, "doubts": ds}}
         if half_ok and is_half:
@@ -5713,9 +5716,10 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, c
                                     **({"group_ctx": gt.get("via") or "ctx"} if g_other else {})}
                             ch, via, extra = None, None, {}
             if ch is None and (p.fold_ruling_first or no_ref or half) and r.id in wins and gid in l3:
-                v = store.get(gid, l3[gid]["ver"], *wins[r.id])
+                v = getattr(store, "get_equiv", store.get)(gid, l3[gid]["ver"], *wins[r.id])
                 if v and v.get("char") in mem and v.get("conf") in ("high", "mid") and not v.get("other"):
                     ch, via = v["char"], "ruling"
+                    extra = {k: v[k] for k in ("ruling_key", "ruling_ver") if v.get(k)}   # 版本等价命中（GM4／CV4 11-24）
             if ch is None and p.fold_ctx_vias:
                 g_ev = (r.evidence or {}).get("group") or {}
                 t = next((t for t in g_ev.get("solvers") or [] if t.get("solver") == "ctx"), None) if g_ev.get("id") == gid else None
