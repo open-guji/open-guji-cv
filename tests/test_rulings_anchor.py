@@ -107,3 +107,32 @@ def test_page_cells_sha(monkeypatch):
     assert R.page_cells_sha("tbook", 1, None) == "c+p"
     monkeypatch.setattr(bindings, "page_state", lambda b, pg, st: (None, "p"))
     assert R.page_cells_sha("tbook", 1, None) is None
+
+
+def test_anchor_window_guard(tmp_path):
+    """GM4 审 #1832：锚点命中时裁定窗口与现窗口编辑距离 ≤3，超了弃权；证据记 window_diff。"""
+    assert R.edit_distance("甲乙丙", "甲丁丙") == 1 and R.edit_distance("", "abc") == 3 and R.edit_distance("ab", "ab") == 0
+    st = _store_with_anchor(tmp_path)                                       # 裁定窗口「舊|窗」
+    assert st.get_anchor("O", "vis-o1", CELL, SHA, "說", "舊", "窗")["window_diff"] == 0
+    assert st.get_anchor("O", "vis-o1", CELL, SHA, "說", "某某舊", "窗某")["window_diff"] == 3
+    assert st.get_anchor("O", "vis-o1", CELL, SHA, "說", "某某某舊", "窗某") is None   # 距离 4
+    n, r = _run(st)                                                          # 现窗口「甲|乙」：距离 2
+    assert n == 1 and r.evidence["vis_ruling"]["window_diff"] == 2
+    assert _run(st, left="甲乙丙丁", right="戊")[0] == 0                      # 距离 4+1：弃权
+
+
+def test_anchor_requires_ctx_recorded(tmp_path):
+    st = _store_with_anchor(tmp_path, ctx={})
+    assert st.get_anchor("O", "vis-o1", CELL, SHA, "說", "舊", "窗") is None
+
+
+def test_anchor_suffix_rows_disagree(tmp_path):
+    d = tmp_path / "rulings"
+    d.mkdir(parents=True)
+    (d / EQUIV_FILE).write_text("model_suffix: true\n", encoding="utf-8")
+    _store_with_anchor(tmp_path, ver="vis-o1#a:high", char="說")
+    st = _store_with_anchor(tmp_path, ver="vis-o1#b:high", char="悅")
+    assert st.get_anchor("O", "vis-o1", CELL, SHA, "說", "舊", "窗") is None          # 各后缀不同字
+    st = _store_with_anchor(tmp_path, ver="vis-o1#b:high", char="說", admit_ok=False)  # 同版本后到覆盖成同字
+    a = st.get_anchor("O", "vis-o1", CELL, SHA, "說", "舊", "窗")
+    assert a["char"] == "說" and a["admit_ok"] is False                                 # admit_ok 取且

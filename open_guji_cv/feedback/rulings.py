@@ -45,6 +45,22 @@ EQUIV_FILE = "ver_equiv.yaml"
 _CONF_RANK = {"high": 3, "mid": 2, "low": 1}
 
 
+ANCHOR_MAX_WIN_DIFF = 3   # 格锚点命中时，裁定窗口与现窗口的编辑距离上限（GM4 审 #1832）
+
+
+def edit_distance(a: str, b: str) -> int:
+    """Levenshtein 距离（窗口 ≤20 字，直接 DP）。"""
+    if a == b:
+        return 0
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
 def base_ver(ver: str | None) -> str:
     """去掉 `#模型:effort` 后缀的提示词版本（`ctx-m1#claude-x:high` → `ctx-m1`）。"""
     return (ver or "").split("#", 1)[0]
@@ -204,10 +220,13 @@ class RulingStore:
         self._load()
         return bool(self._anc)
 
-    def get_anchor(self, group: str, prompt_ver: str, cell: str, cells_sha: str | None, ref: str | None) -> dict | None:
+    def get_anchor(self, group: str, prompt_ver: str, cell: str, cells_sha: str | None, ref: str | None,
+                   left: str | None = None, right: str | None = None) -> dict | None:
         """格锚点后备键：格号＋写裁定时的 `cells_sha`＋整理本对位字 `ref` 全对、版本是 `prompt_ver` 或其等价版本
         （登记表与「只差模型后缀」同 `get_equiv`；多条时取先命中的版本，同一版本后到覆盖；只差后缀的各条按 `merge_suffix_rows` 合并）。
-        → payload 副本（`ruling_key="anchor"`、`ruling_ver`）｜None。"""
+        窗口护栏（GM4 审 #1832）：大模型当时按裁定里的窗口判文意，现窗口（`left`／`right`）与它的编辑距离（前后两段相加）
+        须 ≤ `ANCHOR_MAX_WIN_DIFF`，超了或裁定没记窗口都弃权；`window_diff` 记进返回的副本。
+        → payload 副本（`ruling_key="anchor"`、`ruling_ver`、`window_diff`）｜None。"""
         if not cell or not cells_sha:
             return None
         self._load()
@@ -224,7 +243,13 @@ class RulingStore:
             if x is None and eq["model_suffix"]:
                 x = merge_suffix_rows([p for v, p in rows.items() if v != ver and base_ver(v) == base_ver(ver)])
             if x is not None:
-                return {**x, "ruling_key": "anchor", "ruling_ver": x.get("prompt_ver")}
+                c = x.get("ctx") or {}
+                if "left" not in c or "right" not in c:
+                    return None
+                d = edit_distance(c["left"][-WIDTH:], (left or "")[-WIDTH:]) + edit_distance(c["right"][:WIDTH], (right or "")[:WIDTH])
+                if d > ANCHOR_MAX_WIN_DIFF:
+                    return None
+                return {**x, "ruling_key": "anchor", "ruling_ver": x.get("prompt_ver"), "window_diff": d}
         return None
 
     def cell_codes(self) -> dict[str, dict]:
