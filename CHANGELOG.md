@@ -53,6 +53,10 @@
 
 ## [未发版]
 
+## [0.7.104] - 2026-11-25
+
+全唐文 patch 线：v0.7.101 ＋ 移植 dev #1848＋#1856（书级开关 `seed_admit.ruling_by_u`：窗口键没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，只收 high、前后 2 字至少一侧相同、裁定字在库候选或＝整理本字；字组在线问前查缓存也按 u 后备，版本须完全相同）。缺省关、关时不进参数 dump。本线没有格锚点／版本等价接入（seed_admit 只加 u 档）；`feedback/rulings.py` 取殿本线 v0.7.102 全文，`RulingLog.append` 写前校验在本线缺省不开。**23 步 code_hash 只有 seed_admit 变**，未登记 code_equiv：u 项目 11-25 起各书开 `ruling_by_u`，seed_admit 起重放。底库不变。（CV0，u 项目 T3；Sheldon 11-25「尽快完成转换」）
+
 ## [0.7.101] - 2026-11-25
 
 全唐文 patch 线：v0.7.100 ＋ dev #1852（CV3）。5a.3 形近字对分类器起跑前核对 `pair_clf.json` 记的 `sim_model`（权重 sha 前缀或模型目录名）与当前 `glyph_match.sim_model` 一致，对不上或没记就拒跑；`build_pair_clf.py --sim-model` 改必填。**23 步 code_hash 与 v0.7.100 全同**；`glyph_stages` 的代码哈希进 `stages_fingerprint` 参数，所以开了 `glyph_match.stages` 的册（全唐文）glyph_match 起过期，其他书不受影响。底库不变。**换 `glyph_sim_qtw_v2` 要等 pair_clf 在 v2 嵌入上重训后一起换**（旧 pair_clf 是 v1 嵌入训的，本版会拒跑）。
