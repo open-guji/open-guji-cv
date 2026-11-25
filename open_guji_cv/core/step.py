@@ -123,7 +123,8 @@ def _with_book_params(p: BaseModel, step: "Step", ctx: "RunContext") -> BaseMode
     书 yaml 里显式配的字段是用户的明确决定，应该压过那几个函数算的「按本书
     convenience 默认值」，不能反过来被它们先占了「仍是默认值」这个判据的位置。
     """
-    book_kv = (getattr(ctx.book, "params", None) or {}).get(step.spec.id)
+    from .pipeline import rehome_params
+    book_kv = rehome_params(getattr(ctx.book, "params", None) or {}).get(step.spec.id)
     if not book_kv:
         return p
     # 调用方（CLI `--params`／`--override`／管线 yaml／Engine 已叠好的册配置）显式传过的字段不碰——按「写没写」判，不按「等不等于默认值」判：

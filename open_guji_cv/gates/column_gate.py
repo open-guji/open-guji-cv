@@ -55,6 +55,7 @@ from ..core.spec import GateLevel, GateSpec, StepSpec, column_key
 from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.columns import PageWindows
+from ..steps._colview import merged_windows
 from ..products.kinds.gate import GateColumn, GateManifest
 from ..impl.keben import jiazhu_split
 from ..impl.keben.column_pair_merge import has_pair_merged
@@ -227,7 +228,7 @@ class ColumnGateStep(Step):
     spec = StepSpec(
         id="column_gate", title="Step2→3 交接闸", version="1.12", unit="column",   # 1.12：页级周期偏离书级先验超过 period_prior_tol 回落先验
         consumes=("column_windows", "column_image", "border_detect_gate_manifest"),
-        optional_consumes=("line_index",),
+        optional_consumes=("line_index", "column_bands", "column_ends"),
         produces=("gate_manifest",),
         params=ColumnGateParams,
         code_deps=("open_guji_cv.impl.keben.row_boundaries", "open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.impl.keben.column",
@@ -241,7 +242,7 @@ class ColumnGateStep(Step):
         p: ColumnGateParams = ctx.params_for(self)  # type: ignore[assignment]
         expected = p.expected_cols_pages.get(page) or p.expected_cols or ctx.book.expected_cols
         expected_slots = p.chars_per_line or ctx.book.chars_per_line
-        wins: PageWindows = ctx.product("column_windows", page)
+        wins: PageWindows = merged_windows(ctx, page)
         cols = wins.columns
         # **量文字带宽（`band`），不量整列图宽（`warped_size[0]`）**（2026-09-18 修）。
         # 后者含两侧 padding，一列紧贴一条界行时 padding 被撑大、总宽虚高，闸却拿这个
@@ -664,7 +665,7 @@ COLUMN_GATE_SPEC = GateSpec(
                   desc="人裁金标准入（P2 未接，tier=gate 时不生效）", name="human_verdict"),
     ),
 )
-attach_gate("column_warp", COLUMN_GATE_SPEC)
+attach_gate("column_end", COLUMN_GATE_SPEC)
 # 现代印刷链的 Step2（column_crop）出口挂同一道闸：产物种类相同，判据里列数比对由
 # `count_mode=detected`（modern_body.yaml 的 params）放开。
 attach_gate("column_crop", COLUMN_GATE_SPEC)

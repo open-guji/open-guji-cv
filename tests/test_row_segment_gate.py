@@ -45,7 +45,7 @@ def _chain(tmp_path, monkeypatch, *, gap: int = 14, through: str = "row_segment"
     ctx.store.write(ctx.book.id, "border_detect_gate", f"p{PAGE:04d}",
                     {"border_detect_gate_manifest": make_gate1(
                         PAGE, n_cols=NCOLS, expected_cols=NCOLS)})
-    steps = ["column_warp", "column_gate", "row_segment", "row_segment_gate"]
+    steps = ["column_warp", "column_band", "column_end", "column_gate", "row_segment", "row_segment_gate"]
     return ctx, run_steps(ctx, PAGE, steps[:steps.index(through) + 1])
 
 
