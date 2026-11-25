@@ -418,7 +418,7 @@ def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
     诊断字典里带 `band` / `top`/`bottom` 的削除行数与档位，方便评测和标注页复用。
     """
     # 写本书级（column_warp.tight_rule_band）：判带取界行后第一个谷、内侧孤立窄条要够浓才算第二道线
-    bar_kw = {k: kwargs.pop(k) for k in ("bar_after_min_peak", "first_valley") if k in kwargs}
+    bar_kw = {k: kwargs.pop(k) for k in ("bar_after_min_peak", "first_valley", "inner_bar_span") if k in kwargs}
     denoised = denoise_column(warped_gray, ink_threshold=ink_threshold)
     band = column_text_band(denoised, ink_threshold=ink_threshold, **bar_kw)
     no_rules = strip_column_rules(denoised, ink_threshold=ink_threshold, **bar_kw)

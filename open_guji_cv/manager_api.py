@@ -186,6 +186,8 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "core_cv_version": ("core.cv_version", None),
     "NearShapeConfig": ("clustering.near_shape", "NearShapeConfig"),
     "load_matcher_from_db": ("clustering.seeding", "load_matcher_from_db"),
+    # 回库前核验（lib_backfill，2026-11-18 A22）
+    "BackfillProbe": ("clustering.backfill_probe", "BackfillProbe"),
     "_keben_subset": ("steps.glyph_match", "_keben_subset"),
     "borrowed_ids": ("steps.glyph_match", "borrowed_ids"),
     "human_confirmed_counts": ("steps.glyph_match", "human_confirmed_counts"),
@@ -379,6 +381,9 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "gold_store_verdict_store": ("gold.store", "verdict_store"),
     "unmojibake": ("feedback.mojibake", "unmojibake"),
     "binarize_page": ("utils.binarized", "binarize_page"),
+    "binarized_or_none": ("utils.binarized", "binarized_or_none"),
+    "read_qc": ("utils.binqc", "read_qc"),                    # 二值体检（11-18）：控制台判字块是否落进可疑区
+    "canon_box_suspect": ("utils.binqc", "canon_box_suspect"),
     "page_occluded": ("steps.occlusion", "page_occluded"),
     "fold_compat": ("utils.cjk_compat", "fold_compat"),
     "_cells_versions": ("feedback.bindings", "_cells_versions"),
@@ -395,6 +400,16 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "_corpus_text": ("steps.align_ref", "_corpus_text"),
     "BookSpec": ("core.book", "BookSpec"),
     "FORBIDDEN_IN_OVERRIDE": ("core.book_config", "FORBIDDEN_IN_OVERRIDE"),
+    # guji-manager rulings-hits／collect 落 AI 裁定（2026-11-20）
+    "RulingLog": ("feedback.rulings", "RulingLog"),
+    "RulingStore": ("feedback.rulings", "RulingStore"),
+    "RULING_KIND": ("feedback.rulings", "KIND"),
+    "ruling_ctx_hash": ("feedback.rulings", "ctx_hash"),
+    "llm_questions_of_page": ("feedback.llm_queue", "questions_of_page"),
+    "FLOW_GROUPS": ("groups.registry", "FLOW_GROUPS"),
+    "CTX_WIDTH": ("groups.context", "WIDTH"),
+    "seed_admit_clf_ctx": ("steps.seed_admit", "_clf_ctx"),
+    "seed_admit_override_ok": ("steps.seed_admit", "_override_ok"),
 }
 
 __all__ = sorted(_EXPORTS)

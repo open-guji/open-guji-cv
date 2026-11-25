@@ -70,6 +70,11 @@ ADOPT_DIS, ADOPT_INK = 30, 20
 """扩池候选自动改选（`row_boundaries._adopt_expanded`，2026-10-22）：现选分歧 ≥ `ESCALATE_BLOB` 时，扩池候选
 分歧 ≤ ADOPT_DIS px、穿墨 ≤ ADOPT_INK px 就直接用；原本干净的格线只换成不穿墨的缝。"""
 
+ADOPT_REL_MIN, ADOPT_REL_CAP = 1500, 250
+"""`row_segment.adopt_rel` 开着时的相对改选（2026-11-18，脉经 2–6 册）：现选分歧 ≥ ADOPT_REL_MIN px 才考虑，扩池候选分歧
+≤ min(ADOPT_REL_CAP, adopt_rel×现选分歧) 就用。标定：2–6 册现选分歧 ≥1000 且有候选 ≤min(250, 0.15×) 的 92 条看图，
+≥1500 的 31 条约 26 条改对、2 条改坏（止/旨、冒/一）、3 条持平；1000–1500 那档改坏 4 条（十二、營、王土、判登），所以门槛取 1500。"""
+
 CLEAN_PROBE_DEV = 0.15
 """干净格线（直线不穿墨）也过 U-Net 探针的门槛：两侧格高有一格偏离 period 超过这个比例（2026-10-22）。
 vol02 人审截断里格线落在字内空隙的（「良」的点、「晉」的头、「其」的脚）两侧格高都偏 ≥0.19；全书 23313 条
@@ -202,10 +207,11 @@ def _build_model():
     return UNet()
 
 
-def _to_canvas(gray: np.ndarray, top: int = CANVAS_TOP):
+def _to_canvas(gray: np.ndarray, top: int = CANVAS_TOP, scale: float = 1.0):
+    """窗口灰度 → 判官画布。`scale`：缩放上限（`row_segment.cut_judge_scale`，缺省 1.0＝原样）。"""
     import cv2
     h, w = gray.shape
-    s = min(1.0, (CANVAS_H - top) / h, CANVAS_W / w)
+    s = min(scale, (CANVAS_H - top) / h, CANVAS_W / w)
     if s < 1.0:
         gray = cv2.resize(gray, (max(1, int(w * s)), max(1, int(h * s))), interpolation=cv2.INTER_AREA)
     img = np.full((CANVAS_H, CANVAS_W), 255, np.uint8)
@@ -316,7 +322,8 @@ def _disk_save(path: Path | None, out) -> None:
 class UNetJudge:
     """进程内持有一份网络。`owner()` 出归属图，`scores()` 给候选打分。任何异常都返回 None，不抛。"""
 
-    def __init__(self, ckpt: str | Path | None = None, device: str | None = None, f64: bool = False):
+    def __init__(self, ckpt: str | Path | None = None, device: str | None = None, f64: bool = False,
+                 scale: float = 1.0):
         import torch
         self.ckpt = Path(ckpt) if ckpt else DEFAULT_CKPT
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -326,7 +333,8 @@ class UNetJudge:
         if f64:
             self.net = self.net.double()
         self.net.eval()
-        self.fingerprint = ckpt_fingerprint(self.ckpt) + (":f64" if f64 else "")
+        self.scale = float(scale)
+        self.fingerprint = ckpt_fingerprint(self.ckpt) + (":f64" if f64 else "") + scale_suffix(scale)
 
     def owner(self, win_gray: np.ndarray, ink_threshold: int = INK_TH, cc_max: int | None = CC_MAX):
         """双格窗口灰度 → (墨掩膜 W, owner 1/2/0, 置信 |pA−pB|)。
@@ -354,7 +362,7 @@ class UNetJudge:
         import cv2
         import torch
         W = (win_gray < ink_threshold).astype(np.uint8)
-        cimg, s = _to_canvas(win_gray)
+        cimg, s = _to_canvas(win_gray, scale=self.scale)
         x = _make_input(cimg)[None].to(self.device)
         with torch.no_grad():
             if self.f64:
@@ -484,19 +492,35 @@ def move_keeps_glyphs(judge, col_gray: np.ndarray, x_lo: int, x_hi: int, y_from:
 _JUDGE: dict[str, "UNetJudge | None"] = {}
 
 
-def get_judge(ckpt: str | Path | None = None, f64: bool = False) -> "UNetJudge | None":
+JUDGE_GLYPH_PX = 110
+"""判官训练集的字高约这么多 px（A20）。以后可按本册字高／格高自动算缩放（≈ JUDGE_GLYPH_PX / 字高）；现在书配置手填。"""
+
+
+def scale_suffix(scale: float) -> str:
+    """判官画布缩放进指纹的后缀（接在权重指纹后）；1.0＝空串，旧指纹不变。
+
+    **判官画布缩放**（2026-11-18，《脉经》MJ，`row_segment.cut_judge_scale`）：判官在字较小的刻本上训练（字高≈110px），
+    窗口只在超出画布 288×192 时才缩。脉经字高≈156px，两格窗口 ≈310px 只缩到 0.9，判官对大字失灵：第 2 册 12 页
+    1040 个切点 789 个 escalate，所选切线 dis_unet 中位 310（标定里选对的中位≈25）。窗口白底二值后（cv #1650 ink 层）
+    再把缩放上限压到 0.7：中位 → 8–12、escalate 789→124（0.6–0.8 都行，0.4 字太小又崩）。只改判官看到的画布，
+    墨掩膜、归属回投、产物坐标照旧按原窗口。"""
+    s = float(scale)
+    return "" if s == 1.0 else f":s{s:g}"
+
+
+def get_judge(ckpt: str | Path | None = None, f64: bool = False, scale: float = 1.0) -> "UNetJudge | None":
     """进程内单例（按权重×精度）。没有 torch、权重缺失或加载失败 → None（只警告一次）。
 
     `f64`：双精度前向＋双精度缩放（S9，2026-11-05）。fp32 前向随 CPU 指令集（AMX/AVX512/AVX2）末位不同、
     OpenCV 浮点缩放随 SIMD 不同，执行机与本机切点分歧块差几个像素；双精度在本机四种指令集下逐位相同。慢约 4 倍。"""
     path = str(Path(ckpt) if ckpt else DEFAULT_CKPT)
-    key = path + ("#f64" if f64 else "")
+    key = path + ("#f64" if f64 else "") + scale_suffix(scale)
     if key in _JUDGE:
         return _JUDGE[key]
     judge = None
     try:
         if Path(path).exists():
-            judge = UNetJudge(path, f64=f64)
+            judge = UNetJudge(path, f64=f64, scale=scale)
         else:
             log.warning("cut judge 权重不存在：%s（Step3 按旧规则选切法）", key)
     except Exception as e:
