@@ -4,6 +4,7 @@
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
 - PATCH（脚本，不进指纹）：republish 读者侧冒烟查图改用 GET＋`Range: bytes=0-0`（200／206 都算到），不再用 HEAD——CDN 新对象 HEAD 常 403 好几分钟而 GET 已 200（史記 001-r2／013-r2 冒烟误报，11-25，CV0 u T1）。
+- PATCH（指纹补漏，随 #1869／#1872 同一轮重跑，不另加重跑）：`steps._colview`（2a–2c 合并视图）补进 `column_geometry`、`column_gate`、`cell_shrink`、`cut_gate` 的 code_deps，`impl.keben.jiazhu_split` 补进 `cut_gate`——原先改这两个模块产物照报新鲜（manager `test_code_deps_coverage` 11-25 报红）。四步 code_hash 变，这四步今天已因 #1869／#1872 过期。CV0。
 - MINOR（用户 2026-11-25 定；只动 `cut_gate`：从 cut_gate 起过期，切字各步产物逐字节不变）：出口闸加自检 L2c `cut_too_inward`：当前左/右切点比「框内缘之后最少墨处」（新 `seg/side_cut.side_cut_points`，算时忽略上下边框前后各 60 行）更靠里超过 `cut_inward_max_px`（缺省 10，0=关）→ 拒收。全唐文 053、殿本 vol01、脉经 共 1140 列实测偏差 99 分位 ≤0，命中只有全唐文 053 p148c9 左侧（30px）。
 
 - 文档（无代码变化，产物与指纹不变）：2 切字新增五小步 2a–2e（拉直、定字带左右边、列端字、字间切分、字框压缩）的输入输出与代码对应表 `doc/2-切字/五小步.md`；README、骨架注释同步。
