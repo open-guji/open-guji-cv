@@ -86,6 +86,7 @@
 
 ## [未发版]
 
+- PATCH（seed_admit 指纹变：groups/flow.py；现行三书 main 包输出不变）：字组复核 `review_fix_agree`（一二 yr）加例外——整理本（或坐标对位字）＝已放行字时，两路图像解法给了别的字也不改字、照常降审。起因殿本 replay-1125 二→一 37 格：框型配置改了冷缓存再生的列图、旧格坐标裁偏，ids 与 yr_bars 同错。殿本 99 册、史記 42 册、全唐文 28 册 main 包里该规则改字 0 格。CV4。
 - PATCH（新开关缺省关，产物不变；border_detect／impl.keben.border 指纹经 code_equiv 登记不变，CV1 11-25）：`border_detect.vline_track` 竖线逐条先直线、贴不住再自由折点三段折线（`impl/keben/border.refit_vlines_by_track`），不看页级 w80 门槛与书级 `vline_polyline`。79 页版面基准 >5px 线 88→19，与 `outer_bar` 合开 88→16、>20px 9→1。
 - PATCH（新开关缺省关，产物不变；border_detect／impl.keben.border 指纹经 code_equiv 登记不变，CV1 11-24）：`border_detect.outer_bar` 左右外框线先找粗外框条、再找内框细线（`impl/keben/border.refit_outer_by_bar`）。79 页版面基准 p95 合计 985→873、>20px 线 9→5。
 - PATCH（产物逐字节不变，code_equiv 登记）：写裁定前校验（GM4／CV4 11-24，裁定键长期方案①）。`rulings.validate`（＝`validate_payload`）查版本 seed_admit 认不认：group=O 认 vis-o1／src-1／ctx-m1／src-2，其他字组认本组 `prompt.md` 的 `ver`，任何组认看图 L4 `vis1:<哈希>`，再加 `ver_equiv.yaml` 登记的版本；`#模型` 后缀去掉再比。`RulingLog.append` 对 `ctx_ruling` 事件调用，不认就整批拒写（`BadRequest`）；vis-o1／src-1 写了 admit_ok 却不是收的子类只提醒。管线自己写缓存（`RulingStore.put`／`put_cell_code`）不校验。看图判子类表挪到 `rulings.VIS_RULING_SPECS`，seed_admit 引用同一份。三书现有 59,255 条裁定试跑只拦 460 条本来就查不到的（串组版本、ctx-wenyi-1）。

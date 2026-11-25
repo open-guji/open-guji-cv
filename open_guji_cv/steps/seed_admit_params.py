@@ -577,6 +577,7 @@ class SeedAdmitParams(BaseModel):
     # ── `group_flow_review_fix_agree` = ['yr']（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     #    书级（A24 Z03 深挖 2026-11-07，缺省 `[yr]`、缺省值不进参数 dump；写 `[]` 关）：这几组复核时 ≥2 路不同的图像解法（`yr_bars`＋`ids` 等）给了同一个别的组员字、
     #    没人（文意、码位）反对 → 改成那个字（`flow._agree_fix`，通道 `group_flow`）而不是降审。一二：殿本／史記 35 格，目视 24 格 yr_bars 数横画全对。
+    #    例外（CV4 2026-11-25）：整理本（或坐标对位字）＝已放行字时不改、照常降审（`flow._ref_backs`）——两路图像吃同一张字块，字块裁偏时一起错（殿本 replay-1125 二→一 37 格）。
     # ── `group_flow_dissent_keep_form`（护栏／通道，2026-11-23 CV4 起恒开、不再是参数）
     # 书级（A24 Z03 11-08，缺省开、缺省值不进参数 dump）：`group_flow_dissent_keep` 的「至少一路解法给了放行字」也认 ids 弃权票（margin < `group_flow_dissent_margin`）的刻形＝放行字
     # （`flow._dissent_keep(form_support)`）。r7 殿本一二 27 格里 19 格是这样：ids 低 margin 弃权、刻形＝放行字＝整理本，只有 yr_bars 数横反对（目视多为单横，横上方是邻字残笔）。
