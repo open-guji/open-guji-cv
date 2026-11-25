@@ -140,12 +140,19 @@ LAYER2_EXTENT_HINT = 0.35
 #: vol02 约 200 列），就在 Step1 给的位置 ±INNER_SEARCH 行里找覆盖最高的一行（≥ INNER_COV），
 #: 连同它上沿 ≥ INNER_EDGE 的几行一起、往下全抹。只在册配置声明下端有两层时做。
 INNER_SEARCH = 10
-#: 下端剥层的**止步线**（2026-11-25，ZM 报殿本列末「二/三」被判成「一」）：Step1 的下版框线就是内框线。
-#: 前面剥掉的一道线，其下沿若已落在这条线上（Step1 线在剥口里面 ≤ INNER_AT_EDGE 行、或剥口之外 ≤ INNER_SEARCH 行），
-#: 内框已经剥完，候选又落在内框线之外 INNER_SEARCH 行以远就不认——否则末字的下横（「二」「三」满宽粗横、前面隔着白）会被当成一道线剥掉
-#: （vol21 p130c2 实测剥了 82 行、vol03 p64c1 剥了 129 行）。Step1 线落在外框粗线正中的列（剥口比它深得多）不受影响，
-#: 内框照旧找得到。
-INNER_AT_EDGE = 8
+#: 下端候选线（第二、第三道）起点离 Step1 内框线再远过这么多行就不认（2026-11-25）：vol03 p64c1 只有一道内框，其下是「二」的两横，
+#: 横离内框线 34 行起，两道都过了跨度判据、边距带只有 8px（全是界行）也混过了边距判据。殿本真内框在 Step1 线里面 ≤25 行（CV0 评审实测）。
+FAR_FROM_INNER = 30
+#: 第三道的边距证据门槛（比 MARGIN_T=0.7 严）：殿本边距带只有两边各 5~8px、一半行是界行的墨（中位 0.5），字的横画两端
+#: 蹭进带里常有 0.8~0.88（vol04 p207c6、vol05 p23c7/p149c6 末字下横实测）；真框线满带是墨，1.0。
+THIRD_MARGIN_T = 0.95
+#: 第三道候选与上一道线之间空白不到这么多行的，只认边距证据；空白够的（vol02 夹具里隔着 8~15 行白的第三道虚线）仍按老判据认。
+#: 殿本 vol03 内框线之下紧跟的是末字（隔 2~6 行，字横画粘着字身一路连下去），vol02 的第三道虚线与前一道隔 8~15 行。
+THIRD_GAP_MIN = 8
+#: 下端**第三道**线（剥完内外两道之后第二次找）只认边距证据（2026-11-25，ZM 报殿本列末「二/三」被判成「一」）：
+#: 末字的下横（「二」「三」满宽粗横、前面隔白）跨度够 0.85，旧判据把它当第三道线剥掉（vol21 p130c2 剥 82 行、vol03 p64c1
+#: 剥 129 行，正常 43）。真框线横贯整列、在文字带外的边距里也有墨，字止于文字带；位置分不开（Step1 线常落在外框内沿，
+#: 深剥 59–85 行有对有错），所以第三道不看跨度／Step1 位置，只看边距。第二道（内框）判据不变。
 INNER_COV = 0.35
 INNER_EDGE = 0.15
 
@@ -256,7 +263,7 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
 
     def second_layer(p: np.ndarray, ink2: np.ndarray, cut: int, gap: float | None,
                      m: np.ndarray | None = None, hint: float | None = None,
-                     glued: bool = False) -> int | None:
+                     glued: bool = False, margin_only: bool = False) -> int | None:
         """`cut` 之后找第二道框线（见 LAYER2_* 注）；找到返回它的下沿，否则 None。
 
         `hint`：Step1 内框线离这一端的行数（位置证据，见 LAYER2_EXTENT_HINT 注）。
@@ -281,8 +288,11 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             if float(p[j:k].max()) >= inset_min_peak:
                 break
             j = k                                # 噪点段（vol02 p123c9：两道框之间 3 行麻点）：跳过接着找
-        if glued and hint is not None and cut - INNER_AT_EDGE <= hint <= cut + INNER_SEARCH and j > hint + INNER_SEARCH:
-            return None                          # 前一刀已剥到 Step1 内框线，候选又远在它之外：是字（见 INNER_AT_EDGE 注）
+        if glued and hint is not None and j > hint + INNER_SEARCH and not (
+                p[max(0, int(hint) - INNER_SEARCH):int(hint) + INNER_SEARCH + 1] > ink_eps).any():
+            return None                          # Step1 说内框在这儿、这儿却是白纸（内框磨没了），再往里的墨是字（vol05 p23c7）
+        if glued and hint is not None and j > hint + FAR_FROM_INNER:
+            return None                          # 候选起点远在 Step1 内框线之外 FAR_FROM_INNER 行以上：是字（见该常量注）
         if glued:
             k = line_end(p, j)
         else:                                    # 老口径：线之后必须归零，下沿就是归零处
@@ -307,6 +317,11 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             return None                          # 缓起：字的底边，不是线
         cols = np.where(ink2[j:k].any(axis=0))[0]
         extent = (cols[-1] - cols[0] + 1) / bw if len(cols) else 0.0
+        if margin_only and j - cut < THIRD_GAP_MIN:   # 第三道只认边距证据（见 THIRD_MARGIN_T 注）
+            if m is not None and float(m[j:k].max()) >= THIRD_MARGIN_T and \
+                    float(m[j:k].max()) - float(np.median(m)) >= LAYER2_MARGIN_RISE:
+                return k
+            return None
         if extent >= LAYER2_EXTENT:
             return k
         if hint is not None and j - INNER_SEARCH <= hint <= k + INNER_SEARCH \
@@ -327,8 +342,8 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             # 至多再剥两道：vol02 有的列尾除了内外两道框，最外还压着一截页边/上一道框的残墨
             # （第一刀削掉的是那截，外框粗线与内框虚线都还在，p17c4 实测）
             got = 0
-            for _ in range(2):
-                k = second_layer(p, ink2, px, gap, m, hint, glued)
+            for it in range(2):
+                k = second_layer(p, ink2, px, gap, m, hint, glued, margin_only=glued and it >= 1)
                 if k is None:
                     break
                 px, got = k, got + 1

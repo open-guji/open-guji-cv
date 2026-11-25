@@ -3,7 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
-- PATCH（ZM→CV1 殿本列末「二／三」被判成「一」，11-25；改 `impl/keben/column.py::column_border_trim` 下端剥层，影响 `column_end` 起的产物，只在册配置 `frame_layers` 下端≥2 时走到）：下端剥完 Step1 内框线（`inner_bottom`）那一道后，若下一个「第二／第三道线」的候选离内框线还远于 `INNER_SEARCH`（10 行）就不认——它是末字下横（「二」「三」满宽粗横、前面隔白），不是框线（殿本 vol21 p130c2 原剥 82 行、vol03 p64c1 原剥 129 行）。vol02 回归夹具 231 端里 11 端变（全是旧 deep_cut 预警里的深剥端，剥口回到内框线 ±10 行）。上端同类（vol16 p164c3「三」首横离顶 9 行被当第一道框）本 PR 不修（贴边判据会误放真框残线，vol16 p164c9）。
+- PATCH（ZM→CV1 殿本列末「二／三」被判成「一」，11-25；改 `impl/keben/column.py::column_border_trim` 下端剥层，影响 `column_end` 起的产物，只在册配置 `frame_layers` 下端≥2 时走到）：下端外框＋内框剥完后再找的**第三道**线，改为只认边距证据（边距带满墨 ≥0.95，且比列内中位高 ≥0.3），除非它与上一道线隔着 ≥8 行白（vol02 的第三道虚线）；另外 Step1 说内框在某处而该处 ±10 行是白纸时、或候选起点在内框线外 30 行以远时，里面的墨一律当字（vol03 p64c1、vol05 p23c7）。殿本 vol03 全册 108 页比 dev：23 列变，全是末字下横被削回来，无内框残线退步；vol02 夹具 231 端 5 端变（都是旧深剥预警端，1 端 px 不变只改档位名）。上端同类（vol16 p164c3「三」首横离顶 9 行被当第一道框）本 PR 不修。
 - PATCH（脚本，不进指纹）：republish 读者侧冒烟查图改用 GET＋`Range: bytes=0-0`（200／206 都算到），不再用 HEAD——CDN 新对象 HEAD 常 403 好几分钟而 GET 已 200（史記 001-r2／013-r2 冒烟误报，11-25，CV0 u T1）。
 - PATCH（指纹补漏，随 #1869／#1872 同一轮重跑，不另加重跑）：`steps._colview`（2a–2c 合并视图）补进 `column_geometry`、`column_gate`、`cell_shrink`、`cut_gate` 的 code_deps，`impl.keben.jiazhu_split` 补进 `cut_gate`——原先改这两个模块产物照报新鲜（manager `test_code_deps_coverage` 11-25 报红）。四步 code_hash 变，这四步今天已因 #1869／#1872 过期。CV0。
 - MINOR（用户 2026-11-25 定；只动 `cut_gate`：从 cut_gate 起过期，切字各步产物逐字节不变）：出口闸加自检 L2c `cut_too_inward`：当前左/右切点比「框内缘之后最少墨处」（新 `seg/side_cut.side_cut_points`，算时忽略上下边框前后各 60 行）更靠里超过 `cut_inward_max_px`（缺省 10，0=关）→ 拒收。全唐文 053、殿本 vol01、脉经 共 1140 列实测偏差 99 分位 ≤0，命中只有全唐文 053 p148c9 左侧（30px）。

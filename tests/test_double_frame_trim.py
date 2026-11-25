@@ -102,13 +102,13 @@ def test_inner_vertical_bar_next_to_edge_rule_is_outside_band():
 
 
 def test_wide_last_char_stroke_is_not_third_layer_after_inner_frame():
-    # 2026-11-25 殿本 vol21 p130c2：末字「二」下横满宽、前面隔白，外框+内框剥完后被当成第三道线剥掉（二→一）。
-    # Step1 内框线（inner_bottom）落在已剥的内框上，就不再往里找
+    # 2026-11-25 殿本 vol03 p64c1、vol21 p130c2：末字「二」下横满宽，紧跟内框线（隔 2~6 行）；外框+内框剥完后被当成第三道线
+    # 剥掉（二→一，字的下半被削）。第三道只认边距证据，字的横画止于文字带
     img = _col()
     img[230:236, 12:108] = 0               # 「二」上横
-    img[290:300, 12:108] = 0               # 「二」下横（满宽）
+    img[322:336, 12:108] = 0               # 「二」下横（满宽，14 行厚，离内框 4 行）
     img[340:346, 10:110] = 0               # 内框
     img[375:392, 8:112] = 0                # 外框
     _, d = clean_column(img, layers=(1, 2), layer_gap=(None, 40.0), inner_bottom=343.0)
-    assert img.shape[0] - d["bottom"]["px"] >= 300    # 「二」下横不碰
+    assert img.shape[0] - d["bottom"]["px"] >= 336    # 「二」下横不碰
     assert img.shape[0] - d["bottom"]["px"] <= 340    # 内框照剥
