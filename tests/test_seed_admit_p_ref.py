@@ -2,6 +2,7 @@
 """p_ref_admit：P 类（机器字≠整理本、都不在字组、非半格、同列无相邻同类格）取整理本字。数据自造。"""
 from types import SimpleNamespace
 
+from tests.helpers import seed_admit_consts, split_seed_admit_consts
 from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
 from open_guji_cv.steps.seed_admit import SeedAdmitParams, _p_ref_pass
 
@@ -12,7 +13,10 @@ def _run(cells, amap, on=True, mmap=None, **kw):
     recs = [AdmitRec(id=f"{B}:1:{s}", slot=int("".join(ch for ch in s if ch.isdigit())), admit=c.get("admit", False), char=c.get("char"),
                      doubts=list(c.get("doubts", [])), channel=c.get("channel"), provenance=c.get("provenance", ""), evidence=c.get("ev") or {})
             for s, c in cells.items()]
-    n = _p_ref_pass(SeedAdmitParams(db_path="x", p_ref_admit=on, **kw), [ColumnAdmit(col=1, chars=recs)], {f"{B}:1:{s}": (v, None) for s, v in amap.items()},
+    kw, consts = split_seed_admit_consts(kw)
+    with seed_admit_consts(**consts):
+        p = SeedAdmitParams(db_path="x", p_ref_admit=on, **kw)
+    n = _p_ref_pass(p, [ColumnAdmit(col=1, chars=recs)], {f"{B}:1:{s}": (v, None) for s, v in amap.items()},
                     {f"{B}:1:{s}": SimpleNamespace(candidates=v) for s, v in mmap.items()} if mmap is not None else None)
     return n, {r.id.split(":")[-1]: r for r in recs}
 
@@ -115,9 +119,12 @@ def test_min_cov_gate_blocks_unrecognized_cells_by_default():
     assert _run(cell({"cov": 0.79}), {"2": "整"})[0] == 0
     assert _run(cell({"cov": 0.8}), {"2": "整"})[0] == 1                                  # 严格小于才挡
     assert _run(cell({}, ["库里没有这个字"]), {"2": "整"})[0] == 0
-    assert _run(cell({"cov": 0.5}, ["库里没有这个字"]), {"2": "整"}, p_ref_min_cov=None)[0] == 1
-    assert _run(cell({"cov": 0.79}), {"2": "整"}, p_ref_min_cov=0.7)[0] == 1
+    with seed_admit_consts(p_ref_min_cov=None):
+        assert _run(cell({"cov": 0.5}, ["库里没有这个字"]), {"2": "整"})[0] == 1
+    with seed_admit_consts(p_ref_min_cov=0.7):
+        assert _run(cell({"cov": 0.79}), {"2": "整"})[0] == 1
     assert _run(cell({}), {"2": "整"})[0] == 1                                            # 没 cov 不当作认不出
     d = SeedAdmitParams(db_path="x", p_ref_admit=True).model_dump()
     assert "p_ref_min_cov" not in d                                                       # 缺省值不进 dump
-    assert SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_min_cov=0.7).model_dump()["p_ref_min_cov"] == 0.7
+    with seed_admit_consts(p_ref_min_cov=0.7):
+        assert SeedAdmitParams(db_path="x", p_ref_admit=True).model_dump()["p_ref_min_cov"] == 0.7

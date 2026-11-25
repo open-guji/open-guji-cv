@@ -800,8 +800,9 @@ def pack_rev(a, ws: Path, book: str, rev: str) -> str | None:
 
 def sync_and_publish(a, ws: Path) -> bool:
     """`guji db sync`，成功了再触发网站发布。返回是否已触发。"""
+    # 缺省不推字形库（GUJI_DB_NO_GLYPH）：出单／加格只改待审单与事件；带上字形库导出会撞「账本缩水」保护被拦（QTW 11-24）
     p = run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
-            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+            env={**os.environ, "GUJI_WORKSPACE": str(ws), "GUJI_DB_NO_GLYPH": "1"})
     if p.returncode:
         print("✗ guji db sync 失败，没触发网站发布")
         return False

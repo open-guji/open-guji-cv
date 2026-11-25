@@ -3,6 +3,18 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（只影响开了 `glyph_match.stages.pair` 的册，即全唐文：5a 起过期）：5a.3 形近字对分类器起跑前核对它训练时用的嵌入模型（`pair_clf.json` 的 `sim_model`，sha 前缀或模型目录名）与当前 `glyph_match.sim_model` 一致，对不上（或没记）就拒跑——换 sim_model 不重训 pair_clf 会按乱分改字。`build_pair_clf.py --sim-model` 改为必填。CV3。
+- PATCH（产物逐字节不变，code_equiv 登记，L0；开的册 L1）：`ruling_by_u` 扩到字组文意在线问前查缓存：开着时 seed_admit 跑字组流程期间设本页 {格号: u}（`rulings.UMAP_SCOPE`），`RulingCache.lookup` 窗口键没中再按 u 查**版本完全相同**的裁定（`get_by_u_ver`，二审小组各成员不串；前后 2 字一侧同），命中记 `ruling_key=u`。起因：殿本试点强制 u 回放里 7 格只靠字组缓存放行，重切后窗口一变就丢。三书 50 页逐字节同。
+- PATCH（产物逐字节不变，code_equiv 登记，L0；开的册 L1）：新书级开关 `seed_admit.ruling_by_u`（字格永久编号 u 执行方案 T3，CV0；缺省关、关时不进参数 dump）：窗口键、版本等价、格锚点都没中后，按本格的 u（从本册字格身份账 `<feedback>/uid/<册>.jsonl` 按本页 cells_sha 取，新只读类 `feedback.rulings.UidLedger`）查同册同 u 的裁定，口径同格锚点宽松档（只收 high、前后 2 字一侧相同、字不一致不放行）、字在候选或＝整理本字。`RulingStore` 加 `get_by_u`／`has_u`／`uid_ledger`，`put` 加 `u` 参数（manager 写裁定带 u 用；不给时 payload 不变）。殿本 vol28、全唐文 020、史記 02 共 50 页 seed_admit 逐字节同，各步 code_hash 与 dev 同。
+
+- PATCH（产物逐字节不变，code_equiv 登记；参数指纹 12,472 组全同）：seed_admit `solo_5b_min_n` 恢复成参数（脉经序页、牒文页经 `no_ref_params` 要设 1；缺省仍 3、缺省不进 dump）。
+
+- 重构（产物逐字节不变，code_equiv 登记；参数指纹 12,472 组全同）：seed_admit 69 个门槛收成常量（CV4 整理 PR4，Sheldon 11-24 定）——414 册无一册改过，从 `SeedAdmitParams` 字段改为 `seed_admit_params._CONSTANTS` 里的常量、类上只读属性（代码照旧读 `p.<名>`）。老配置写原值照读、写别的值报错；原先进参数指纹的照原值补回 dump。`no_ref_params` 不能再覆盖这些键。测试换值用 `tests.helpers.seed_admit_consts`。
+
+- CI（不动代码、不进指纹，L0）：新工作流 `指纹变更检查`＋`scripts/check_fp_change.py`：推 tag、开／改 PR 时比基线与本版各步规范指纹（已按 code_equiv 换算），变了却没登记、说明里也没写明「指纹变更：…」就红。起因 v0.7.83、v0.7.99 两次 patch 线漏登（GM2 11-24）。
+
+- PATCH（缺省关，产物逐字节不变，code_equiv 登记）：seed_admit 书级开关 `ruling_anchor_loose`——格锚点后备键的宽松档（GM4 合并方案，GM3／CV0 确认 11-24，选 CV0 的 (b) 书级开关）：版本认本组 `rulings.validate` 认的任意版本、减 `ver_equiv.yaml` 新增的 `void`（O 组仍按目标版本，不收 L4 缓存）；同格多条取最新、字不一致记 `ruling_conflict` 不放行；只收 high（fold 遍也是）；窗口改为前后 2 字至少一侧相同（证据 `win_sides`）。缺省关、关时不进参数 dump；`load_ver_equiv` 返回多 `void`。宽松档下 fold 按裁定给的字被影子（shadow_veto）降审时另记 `fold_ruling_vetoed`，进 `_LANE_HARD`，待审通道不按整理本字放回（20 册回放 vol49:179:9:4）。
+
 - **PATCH**（11-23，GUJI-776 SJ 验收）：`core/corpus_pin._check_pin_once` 的「语料库 vN 清单与当前文件不符」同一工作区、同一版本、同一批文件只警告一次（原先按册去重，一次 db sync 摸 42 册就打 42 遍）。只改提示，不进指纹（L0）。
 
 - PATCH（缺省关，产物逐字节不变，code_equiv 登记）：seed_admit 书级开关 `ref_lib_5b_veto`／`ref_lib_5b_veto_lead`——「整理本＝库首位」放行（`ref_lib`）的 5-b 否决：5-b 首位是别的汉字、分 ≥ 门槛、领先 ≥ 门槛 → 退回人审（doubt `ref_lib_5b_veto`）。起因殿本字书 靃 被整理本规范成 霍、库首位也落到 霍（A23 11-23）。
@@ -88,6 +100,30 @@
 - PATCH（语料表，Step 代码指纹不变；底库语料变，下次出底库时进）：异体人工表补 䕶→護、蹖→踳；字对关系表 `variants.pairkind.tsv` 记 䕶護、蹖踳 为 V，巿市 为 C（形近不同义）。起因 GM3 复核全唐文异体闸 18 格（CV4）。
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
+
+## [0.7.104] - 2026-11-25
+
+全唐文 patch 线：v0.7.101 ＋ 移植 dev #1848＋#1856（书级开关 `seed_admit.ruling_by_u`：窗口键没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，只收 high、前后 2 字至少一侧相同、裁定字在库候选或＝整理本字；字组在线问前查缓存也按 u 后备，版本须完全相同）。缺省关、关时不进参数 dump。本线没有格锚点／版本等价接入（seed_admit 只加 u 档）；`feedback/rulings.py` 取殿本线 v0.7.102 全文，`RulingLog.append` 写前校验在本线缺省不开。**23 步 code_hash 只有 seed_admit 变**，未登记 code_equiv：u 项目 11-25 起各书开 `ruling_by_u`，seed_admit 起重放。底库不变。（CV0，u 项目 T3；Sheldon 11-25「尽快完成转换」）
+
+## [0.7.103] - 2026-11-25
+
+史記 patch 线：v0.7.98 ＋ 移植 dev #1848＋#1856（书级开关 `seed_admit.ruling_by_u`：窗口键没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，只收 high、前后 2 字至少一侧相同、裁定字在库候选或＝整理本字；字组在线问前查缓存也按 u 后备，版本须完全相同）。缺省关、关时不进参数 dump。本线没有格锚点／版本等价接入（seed_admit 只加 u 档）；`feedback/rulings.py` 取殿本线 v0.7.102 全文，`RulingLog.append` 写前校验在本线缺省不开。**23 步 code_hash 只有 seed_admit 变**，未登记 code_equiv：u 项目 11-25 起各书开 `ruling_by_u`，seed_admit 起重放。底库不变。（CV0，u 项目 T3；Sheldon 11-25「尽快完成转换」）
+
+## [0.7.102] - 2026-11-25
+
+殿本 patch 线：v0.7.99 ＋ dev #1848（书级开关 `seed_admit.ruling_by_u`：窗口键、锚点都没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，护栏同宽松档；缺省关、关时不进参数 dump）＋ dev #1856（字组在线问前查缓存也按 u 后备，版本须完全相同）。本线没有 `seed_admit_params.py`，开关写在 `steps/seed_admit.py`。**23 步 code_hash 只有 seed_admit 变**，未登记 code_equiv：u 项目 11-25 起各书开 `ruling_by_u`，参数 dump 本来就变，seed_admit 起重放。（CV0，u 项目 T3；Sheldon 11-25「尽快完成转换」）
+
+## [0.7.101] - 2026-11-25
+
+全唐文 patch 线：v0.7.100 ＋ #1852（pair_clf 核对 sim_model），内容已在 dev，本条仅记发版（CV0）。23 步 code_hash 不变；全唐文（开 stages）glyph_match 起过期。换 glyph_sim_qtw_v2 要等 pair_clf 在 v2 嵌入上重训后一起换。
+
+## [0.7.100] - 2026-11-25
+
+全唐文 patch 线：v0.7.93 ＋ #1849（模型表 `glyph_sim_qtw_v2`），内容已在 dev，本条仅记发版（CV0）。23 步 code_hash 与 v0.7.93 全同；全唐文书配置改 `sim_model.path: models/glyph_sim_qtw_v2/model.pt` 后 glyph_match 起过期。
+
+## [0.7.99] - 2026-11-24
+
+殿本 patch 线：v0.7.97 ＋ 裁定键三件＋#1838，内容已在 dev，本条仅记发版（ZM）。
 
 ## [0.7.97] - 2026-11-24
 
