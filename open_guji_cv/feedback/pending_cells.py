@@ -145,17 +145,21 @@ def pending_cells(products: Path, book: str, *, extra: Iterable[str] = (), image
         raise ValueError(f"{book} 待审格数不符：产物未放行 {len(cells)}，seed_admit 页头 n_review 合计 {n_review}")
     have = {c["cell"] for c in cells}
     missing: list[str] = []
+    read = read_patch or patch_reader(book, products, render=render)
     for x in extra:
         cell = x.split(":", 1)[1] if x.startswith(f"{book}:") else x
         if cell in have:
             continue
         if cell not in every:
-            missing.append(cell)
-            continue
+            # seed_admit 里没有这一格（如夹注异体格），但字块图在、复审清单点名要它：照样上单，不能悄悄漏掉
+            # （GM4 11-24：008:59:6:19）。图也取不到才进 missing。
+            p = read(cell)
+            if p is None or not Path(p).exists():
+                missing.append(cell)
+                continue
         have.add(cell)
         cells.append({"cell": cell, "review": "pending"})
     cells.sort(key=lambda c: cell_sort_key(c["cell"]))
-    read = read_patch or patch_reader(book, products, render=render)
     fps: dict[str, str] = {}
     sprites: dict[str, dict] = {}
     no_image: list[str] = []
