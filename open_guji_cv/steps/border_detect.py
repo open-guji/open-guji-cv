@@ -158,6 +158,12 @@ class BorderDetectParams(BaseModel):
     时，找「主上框不横穿、下面先白后有框条」的缺口列，主上框挪到缺口列的框条内沿重探抬头，缺口以外的列全认成抬头才接受。
     殿本 vol05/24/28/60/95 共 796 页只动这 16 页、看图全对。缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
 
+    head_raise_fit: bool = False
+    """抬头列认下以后校内框高度（`impl/keben/border._fit_head_raise`，2026-11-25，A21 版面基准）：①相邻两列都抬头、本列内框
+    低出一截而邻列高度上有细线，改到那条线（原来认在抬头字顶笔上，殿本 vol01 p30、vol04 p6）；②只有粗外框的列内框按粗框外延
+    ＋本页内外间距推（原来落在粗外框上）；③量上外框时跳过抬头列（抬头列那一段主上框上方没有外框条，抬头列占多数的页原来量不出
+    外框）。缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
+
     top_weak_ratio: float = 0.3
     """上版框弱线护栏的门槛（1.20，`seg/lines._weak_top_guard`）：选中的上框线横向墨量不到带里最强横线的这个比例才动。
     缺省 0.3 是殿本定的（16516 页只动 15 页；再高会把抬头页主框换成抬头框顶线）。写本（史記文淵閣本）框条下有一道细虚线、
@@ -232,6 +238,8 @@ class BorderDetectParams(BaseModel):
             d.pop("head_raise_scale", None)
         if isinstance(d, dict) and not self.head_raise_notch:
             d.pop("head_raise_notch", None)
+        if isinstance(d, dict) and not self.head_raise_fit:
+            d.pop("head_raise_fit", None)
         if isinstance(d, dict) and self.top_weak_ratio == 0.3:
             d.pop("top_weak_ratio", None)
         if isinstance(d, dict) and self.top_weak_floor is None:
@@ -326,6 +334,7 @@ class BorderDetectStep(Step):
                                   **({"top_edge_reslope": True} if p.top_edge_reslope else {}),
                                   **({"inner_pull": True} if p.inner_pull else {}),
                                   **({"head_raise_notch": True} if p.head_raise_notch else {}),
+                                  **({"head_raise_fit": True} if p.head_raise_fit else {}),
                                   **hint_kw, **lattice_kw, **bend_kw)
 
         res = _detect(cols)
