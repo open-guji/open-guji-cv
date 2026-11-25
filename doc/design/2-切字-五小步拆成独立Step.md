@@ -1,6 +1,6 @@
 # 2 切字：五小步拆成独立 Step（设计，待评审）
 
-2026-11-25 用户定：2a–2e 直接拆成独立 Step，不怕指纹变；顺序为 2a 拉直、2b 定字带左右边、2c 列端字（先切收尾与版框连接处）、2d 字间切分、2e 字框压缩。分组与输入输出的说明见 [五小步.md](../2-切字/五小步.md)。本文是**拆代码的方案**，只覆盖刻本链 `keben_body_v2`；现代 `modern_body`、自由版式 `keben_free` 本轮不动（`column_crop` 与 `ColumnWindowRec` 共用，见第四节）。
+2026-11-25 用户定：2a–2e 直接拆成独立 Step，不怕指纹变；顺序为 2a 拉直、2b 定字带左右边、2c 列端字（先切收尾与版框连接处）、2d 字间切分、2e 字框压缩。分组与输入输出的说明见 [五小步.md](../2-切字/五小步.md)。本文是**拆代码的方案**，只覆盖刻本链 `keben_body_v2`。2026-11-25 用户补充三条：①**出口闸只在最后调用**，有自己的接口，不挂在任何中间 Step 上；②**现代印刷链逻辑完全不同，和刻本链彻底独立**（`column_crop` 与刻本不再共用 `ColumnWindowRec`、闸、产物类型）；③本方案由 CV2 自己实施，不请别的项目改（书级开关沿用旧名，见第三节）。
 
 ## 一、现状
 
@@ -25,21 +25,29 @@
 
 1. 新产物类型：`column_bands`、`column_ends`；`column_windows` 去掉 `band`、`trim_*`、`frame_residue_*`、`triage`（刻本链）。老产物不迁移，重算。
 2. 新 Step：`column_band.py`、`column_end.py`；`column_warp.py` 只留 2a；`render`（再生列图）三个 Step 各管各的缓存，`StaleRenderError` 的尺寸检查留在 2a。
-3. `column_gate`：现在挂 `column_warp`，读全部字段。拆后按字段归属拆成三段挂到 2a／2b／2c（L1 列数、列宽、L2b `stamp_noise` 在 2a；L2 `side_ink` 在 2b；L4e `frame_residue`、版框分诊在 2c），出口闸挂在 2c，`row_segment` 的 `gate_manifest` 取三处的合并结果。**这是本方案里改动最大的一块，要单独评审。**
+3. **闸与「交接清单」分家**（本方案的核心改动）。`column_gate` 现在是 Step，挂在 `column_warp` 后自动跑，产物 `gate_manifest` 里**混了两种东西**：
+   - 计算量：页级 `period`（纵向字距，含 `period_prior` 兜底）、`ref_w`、`median_width`、`column_widths`；列级 `content_x`、`border_top/bottom`、`top_slack`、`n_raised_hint`、`raised`、`head_raise_inner_y`、`band_width`。`row_segment` 读的正是这些（`period`、`ref_w`、`gc.content_x`、`gc.border_*`、`gc.col`）。
+   - 裁决：`admitted`、`reject`、`flags`、`tier`；`row_segment` 靠 `only_admitted` 拿它**挡列**。
+   拆法：
+   - 计算量搬出来，做成 2c 之后的纯计算 Step `column_geometry`（产物 `column_geometry`，无任何判定），归入 cut 大步；算法原样搬，不改。
+   - 「结构性不切」（`L0c` 非正文列位、`L0t` 表格列、页型 `skip`）不是质量问题，是版式事实，改为 `column_geometry` 里每列一个 `cuttable`＋原因；`row_segment` 只看它，不再看质量裁决。
+   - 质量判据（L1 列数、L1c／L1n 列宽、L2 `side_ink`、L2b `stamp_noise`、L4e `frame_residue` 等）全部移到**最后**的出口闸 `cut_gate`：它是独立接口，读 2a–2e 全部产物，只产出裁决（`admitted`／`reject`／`flags`）；不 block 任何中间步，只在 2e 之后调用一次。`row_segment_gate` 的判据（DP 有解、格数、碎格等）并入同一道闸。
+   - 行为变化（要评估）：原来被 `column_gate` 质量判据拦下的列（`block` 级）现在会照切，之后由出口闸标出；`flag` 级判据不受影响。下游（识字、定字）原本靠 `admitted` 跳过的列，改读 `cut_gate`。**要先量一下有多少列受影响**（拆前各册 `admitted=False` 且非结构性的列数）。
 4. 读 `column_windows.band`／`trim_*` 的下游改读新产物：`row_segment`、`cell_shrink`、`seg_screen_run`、`colgeom`、`manager_api`、`feedback/anchor`、`pins_check` 等（用 `grep` 列全，改完 `tests/test_architecture.py` 守着）。
 5. 骨架 `_skeleton.yaml`：`columns` 槽位里刻本链放三步；`stages.cut` 不变（槽位整体归 cut）；`bootstrap` 的 `BOOTSTRAP_STEPS` 补两步。
-6. `code_deps`／`book_deps`：`frame_layers`、`outer_gap` 现在挂在 `column_warp`，应归 2c；`tight_rule_band`、`inner_bar_span` 归 2b；`ruled_warp`、`det_warp` 留 2a。书级 `params` 里写在 `column_warp:` 下的这几个开关要迁到新 Step 名下（`book_defaults` 迁移脚本，GM2）。
+6. `code_deps`／`book_deps`：`frame_layers`、`outer_gap` 归 2c；`tight_rule_band`、`inner_bar_span` 归 2b；`ruled_warp`、`det_warp` 留 2a。**书级开关不请别的项目迁移**：册配置里写在 `column_warp:` 下的 `tight_rule_band`、`inner_bar_span` 由引擎按字段名自动分派给 2b（加载册配置时的一层别名，旧名继续有效），`params_hash` 不依赖旧名。
 7. 文档：`步骤与产物.md` 由 `gen_stage_docs.py` 重生成；README 改成五步表；Wiki 同步。
 
 ## 四、不动与风险
 
-- `column_crop`（现代）与 `ColumnWindowRec` 共用：本轮把 `band`／`trim_*` 等字段在模型里**保留为可选**，刻本链不再写，现代链照旧写，等现代链也拆时再删。
+- 现代链（`column_crop`、`row_segment_runs`）与刻本链彻底独立：把它们用到的 `ColumnWindowRec` 字段、`column_gate`、`gate_manifest` 复制成现代链自己的产物类型和闸（`modern_*`），刻本链改完不影响它；现代链自己的重构以后另开。
 - 所有刻本书（殿本、史記、全唐文、脉经）的列图类产物、`cells`、`char_index` 起全部过期，需要整册重跑；按「代码等价登记」办不到（产物目录和指纹都变），要走一次全量重算。**重算前先用 cut-bench 在拆分前后各跑一遍，`cells`、`char_index` 逐字节比，不等价就是拆错了。**
 - 人钉、人裁绑在 `cells`／格号上，不绑 `column_windows` 字段；`manual-cells` 的列图坐标换算用 `ColumnMapper`（读 `ruled`、窗口、`warped_size`），都留在 2a，不受影响。
 
 ## 五、顺序
 
-1. 2a/2b/2c 拆分（逐字节等价）→ cut-bench 对比 → 合 dev。
-2. 闸拆分（可与 1 同一个 PR，也可紧随其后）。
-3. 2b 新字段（字带左右端）单独做，评测后再决定是否让 2c、2d、2e 用。
-4. 骨架、文档、Wiki、`book_defaults` 迁移。
+1. 先量影响：拆前各册被 column_gate 质量判据拦下的非结构性列数。
+2. 2a/2b/2c 拆分（逐字节等价）→ cut-bench 对比 → 合 dev。
+3. `column_geometry` 与出口闸 `cut_gate` 拆出（行为有变，单独 PR、单独评审）。
+4. 2b 新字段（字带左右端）单独做，评测后再决定是否让 2c、2d、2e 用。
+5. 骨架、文档、Wiki。
