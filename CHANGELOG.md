@@ -101,6 +101,10 @@
 
 ## [未发版]
 
+## [0.9.2] - 测试中
+
+**CV 里程碑 W1**（Sheldon 11-25 定：发 PATCH＋新底库；计划 ai-team `domain/CV/里程碑/W1-计划.md`）。收 v0.9.0 之后 dev 上 CV1–CV4 的全部改动（含 v0.9.1 移植的 ruling_by_u）：切字五小步 #1869／#1872／#1881（原标 MINOR，用户定按 PATCH 发）、版面开关改缺省开 #1892、seed_admit 缺省与书级放行通道 #1889／#1867、裁定键三方案与 ruling_by_u、冷缓存护栏 #1864 等，条目见本节与文件开头散列的未发版条目。**指纹变更：border_detect 起过期（W1 各书统一重跑；版面开关缺省开＋切字五小步拆步）**。配套 guji-manager v0.6.22（读五小步产物 #1001、seg_pin 拼回列窗口 #1007）。
+
 - PATCH（seed_admit 指纹变：groups/flow.py；现行三书 main 包输出不变）：字组复核 `review_fix_agree`（一二 yr）加例外——整理本（或坐标对位字）＝已放行字时，两路图像解法给了别的字也不改字、照常降审。起因殿本 replay-1125 二→一 37 格：框型配置改了冷缓存再生的列图、旧格坐标裁偏，ids 与 yr_bars 同错。殿本 99 册、史記 42 册、全唐文 28 册 main 包里该规则改字 0 格。CV4。
 - PATCH（新开关缺省关，产物不变；border_detect／impl.keben.border 指纹经 code_equiv 登记不变，CV1 11-25）：`border_detect.vline_track` 竖线逐条先直线、贴不住再自由折点三段折线（`impl/keben/border.refit_vlines_by_track`），不看页级 w80 门槛与书级 `vline_polyline`。79 页版面基准 >5px 线 88→19，与 `outer_bar` 合开 88→16、>20px 9→1。
 - PATCH（新开关缺省关，产物不变；border_detect／impl.keben.border 指纹经 code_equiv 登记不变，CV1 11-24）：`border_detect.outer_bar` 左右外框线先找粗外框条、再找内框细线（`impl/keben/border.refit_outer_by_bar`）。79 页版面基准 p95 合计 985→873、>20px 线 9→5。
