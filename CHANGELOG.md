@@ -53,6 +53,10 @@
 
 ## [未发版]
 
+## [0.7.100] - 2026-11-25
+
+全唐文 patch 线：v0.7.93 ＋ #1849 模型表登记 `glyph_sim_qtw_v2`（全唐文 11-24 字形库重训的 5a 相似度 CNN；Sheldon 11-24 定全唐文换它，下一轮重跑生效）。`model_pack.KINDS` 加一行、模型表两行（model.pt、calib.json，R2 已传）、出处表一节，照 dev 原样；旧 `glyph_sim_qtw` 不动。`sim_cnn.py`、`glyph_match` 与 dev 相同，**23 步 code_hash 与 v0.7.93 全同**，底库不变。用法：全唐文书配置 `params: {glyph_match: {sim_model: {path: models/glyph_sim_qtw_v2/model.pt, fuse: mean}}}`，改后 glyph_match 起按参数指纹过期。**不含** v0.7.94–0.7.99、0.8.0、0.9.0 与 dev 其他改动。
+
 ## [0.7.93] - 2026-11-21
 
 - 发版说明（全唐文 patch 线，形近字线 11-21，PATCH）：v0.7.92 ＋ #1778。Step 指纹对 v0.7.92 不变（seed_admit 已登 code_equiv）；全唐文 book_defaults 开 `seed_admit.group_flow_hou_shape_late: true` 后 seed_admit 起过期。配底库照 b32。
