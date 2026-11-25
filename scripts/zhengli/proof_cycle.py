@@ -303,14 +303,10 @@ def cmd_apply(a) -> int:
     if not a.dry_run:
         old_char = rp.book_text_dir(Path(a.book_text), plan["text_id"]) / f"{plan['chapter']}.char.json"
         new_char = export / f"{plan['chapter']}.char.json"
-        sp = split_changes(old_char, new_char, human_chars_of(ws, book, sandbox), codepoint_map(ws, book))
-        vd = _verdicts(new_char)    # 退回之前取：机器判残／图片格等的 □ 写明是判定（「□（判残）」），出单门只拦「机器无字」的 □
+        sp = split_changes(old_char, new_char, human_chars_of(ws, book), codepoint_map(ws, book))
         if sp["norm"] and list(_cells(old_char)) == list(_cells(new_char)):
             revert_cells(new_char, {a_: o for a_, o, _ in sp["norm"]})   # 只差码位归一的格，文本留旧字
             log.note(f"只差码位归一（不算改字、不算推翻人裁）{len(sp['norm'])} 格，文本留旧字")
-        if sp["keep"] and list(_cells(old_char)) == list(_cells(new_char)):
-            revert_cells(new_char, {a_: o for a_, o, _ in sp["keep"]})   # 机器无字（遮挡）而旧字是人裁：留人裁字、不复审
-            log.note(f"机器无字（印章遮挡等）而旧字是人裁 {len(sp['keep'])} 格，文本留人裁的字、不进复审")
         if list(_cells(old_char)) != list(_cells(new_char)) and sp["overrule"]:
             # 格号变了（增删格、改号）：按格号比的「推翻人裁」会把别的块图的字当旧字退回；交 republish 按格级对照表处理（ZM 11-10）
             log.note(f"格号有变：按格号比出的「机器推翻人裁」{len(sp['overrule'])} 格不按格号退回，交格级对照表与新单复审")
@@ -322,8 +318,7 @@ def cmd_apply(a) -> int:
                  + (f"（{'、'.join(f'{x}:{o}→{n}' for x, o, n in sp['overrule'][:10])}）" if sp["overrule"] else ""))
         dr = Path(plan["draft_dir"]) / "recheck.tsv"
         rows = [ln for ln in dr.read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if dr.exists() else []
-        rows += [f"{x}\t机器改判「{o or '□'}」→「{(n or '□') + (f'（{vd[x]}）' if x in vd else '')}」，推翻人裁，请核\t\t{o}\t"
-                 for x, o, n in sp["overrule"]]   # 第 4 列旧人裁的字：出单门据此归一比对
+        rows += [f"{x}\t机器改判「{o or '□'}」→「{n or '□'}」，推翻人裁，请核\t\t\t" for x, o, n in sp["overrule"]]
         recheck.write_text("格位\t说明\t旧人裁\t旧人裁的字\t旧人裁时间\n" + "".join(r + "\n" for r in rows), encoding="utf-8")
 
     # 5. 一条命令出单：过出单门、换单门，传图、存包、升 book-text、推库、只发这一章、等发布、冒烟
@@ -377,77 +372,22 @@ def _cells(char_json: Path) -> dict[str, str]:
     return {c["a"]: c.get("c") or "" for p in d.get("pages") or [] for col in p.get("columns") or [] for c in col.get("cells") or []}
 
 
-PLACEHOLDERS = "□〓▣"     # 导出里「这格没有可用的字」的占位：□ 阙文／待审，〓 组字无近似字、私用码映不上，▣ 以图代字
-
-
-def _blank_verdict(cell: dict) -> str | None:
-    """占位格是不是一个**判定**（不是「没认出」）：是就返回说明（进复审行，出单门据此与「机器无字」分开），否则 None。"""
-    if "fig" in cell:
-        return "图片格"
-    if "unk" in cell:
-        return "无法识别字"
-    if cell.get("guess_c"):
-        return "原刻残"
-    if (cell.get("c") or "") == "□" and not cell.get("lacuna"):
-        return "判残"
-    return None
-
-
-def _machine_blank(char_json: Path) -> set[str]:
-    """新导出里「机器没认出字」的格：`c` 空，或是占位（□〓▣）而不是机器／排除名单的判定。
-
-    char-cord（guji-manager `formats/guji_char_cord.py`）里 □ 有几种来路，只看 `c` 分不开，要看标记：
-    - 没认出（Step7 `admit=False`、不在排除名单、没有字，slots `unreadable`）→ `{"c":"□","lacuna":true}`，不带 `guess_c`；
-    - 排除名单判残／切坏（damaged／seg_defect，Step7 给 □ 占位）→ `{"c":"□"}`，**不带** lacuna——这是阙字判定；
-    - 人裁原刻残带推测字 → `{"c":"□","lacuna":true,"guess_c":X}`；图片格 → 带 `fig`；无法识别字 → 带 `unk`。
-    只有第一种（以及 〓／▣ 占位、`c` 空）算「机器无字」；其余是判定，推翻人裁仍要复审。"""
-    d = json.loads(Path(char_json).read_text(encoding="utf-8"))
-    out = set()
-    for p in d.get("pages") or []:
-        for col in p.get("columns") or []:
-            for c in col.get("cells") or []:
-                ch = c.get("c") or ""
-                if not ch or (ch in PLACEHOLDERS and _blank_verdict(c) is None):
-                    out.add(c["a"])
-    return out
-
-
-def _verdicts(char_json: Path) -> dict[str, str]:
-    """{格位: 判定说明}：新导出里是占位、但属判定（判残／图片格／无法识别字／原刻残）的格。"""
-    d = json.loads(Path(char_json).read_text(encoding="utf-8"))
-    return {c["a"]: v for p in d.get("pages") or [] for col in p.get("columns") or [] for c in col.get("cells") or []
-            if (c.get("c") or "") in PLACEHOLDERS and c.get("c") and (v := _blank_verdict(c))}
-
-
-def human_chars_of(ws: Path, book: str, products: Path | None = None) -> dict[str, str]:
-    """每格**现在采信**的定字人裁（{格位（无册前缀）: 字}）。
-
-    口径只有一个：cv `feedback.lookup.human_chars`（过绑定表：valid／rebound 才认，换图源后 unanchored／review／void 的老裁决
-    不算；认字形库撤下标记、图片格作废）——seed_admit 的人裁通道用的就是它。11-13 之前这里自己读事件、只按格号取最后一条，
-    换图源后失效的老裁决也被当成「人裁」，机器一改字就写成「机器改判，推翻人裁」（殿本 vol03／05／08／09／18／20 的 14 条假复审）。
-    ``products``：绑定表对着哪份产物算（沙箱产物根，缺省工作区自己的）；出单是在重跑后的产物上，要传沙箱。"""
-    env = {"GUJI_WORKSPACE": str(ws), **({"GUJI_PRODUCTS_DIR": str(products)} if products else {})}
-    old = {k: os.environ.get(k) for k in env}
-    os.environ.update(env)
-    try:
-        if str(rp.CV) not in sys.path:
-            sys.path.insert(0, str(rp.CV))
-        from open_guji_cv.feedback.bindings import book_bindings
-        from open_guji_cv.feedback.lookup import human_chars
-        try:
-            book_bindings(book)          # human_chars 自己算绑定表出错时会悄悄退回「按格号」（旧口径）：这里先算一遍，出错就停
-        except Exception as e:           # noqa: BLE001 —— 常见：没 guji db pull（缺 glyph.db）、产物沙箱缺 Step3
-            raise RuntimeError(f"绑定表算不出来（{type(e).__name__}: {e}）：先 `guji db pull -w {ws}`（重建 glyph.db）并确认产物根 "
-                               f"{products or rp.products_root(ws)} 有 {book} 的 Step3，再重来；不能退回按格号认人裁（会把失效的老人裁当成被机器推翻）") from e
-        got = human_chars(book)
-    finally:
-        for k, v in old.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
-    pre = f"{book}:"
-    return {k[len(pre):] if k.startswith(pre) else k: v for k, v in got.items()}
+def human_chars_of(ws: Path, book: str) -> dict[str, str]:
+    """每格最新一条定字人裁的字（{格位: 字}；无字＝""）。读数据目录事件，口径同 pending_route.deciding。"""
+    from pending_route import cell_of, deciding
+    last: dict[str, tuple[str, str]] = {}
+    if str(rp.CV) not in sys.path:
+        sys.path.insert(0, str(rp.CV))
+    from open_guji_cv.core.event_files import RevGate, iter_event_dicts
+    gate = RevGate(books_dir=rp.data_dir(ws) / "books")   # 换图源：切过的册只认锚里页表 rev 相符的
+    for e in iter_event_dicts(rp.data_dir(ws) / "feedback" / "events", gate=gate):
+        k = deciding(e)
+        c = cell_of(e, book) if k else None
+        if c and str(e.get("ts", "")) >= last.get(c, ("", ""))[0]:
+            last[c] = (str(e.get("ts", "")), (e.get("payload") or {}).get("shape") or "")
+    if gate.note():
+        print(f"  ⓘ {gate.note()}", file=sys.stderr)
+    return {c: ch for c, (_, ch) in last.items()}
 
 
 def codepoint_map(ws: Path, book: str) -> dict[str, str]:
@@ -468,9 +408,7 @@ def codepoint_map(ws: Path, book: str) -> dict[str, str]:
 def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: dict[str, str] | None = None) -> dict:
     """新导出对 book-text 现文逐格比，变了的格分四种：最新人裁就是新字＝human（人裁改字）；
     旧字正是最新人裁、机器改成别的＝overrule（机器推翻人裁，留人裁的字、复审）；两边只差一个码位归一（`norm`，
-    如 别→別）＝norm（不算改字、不算推翻，文本留旧字、不上单）；旧字是最新人裁、新字是「机器无字」（空，或没认出的 □、
-    〓／▣ 占位，如印章遮挡 admit=false，见 `_machine_blank`）＝keep（不是机器改判，文本留人裁字、不进复审；
-    排除名单判残的 □、图片格、无法识别字是判定，照算 overrule）；其余＝machine（机器改字，按新结果）。
+    如 别→別）＝norm（不算改字、不算推翻，文本留旧字、不上单）；其余＝machine（机器改字，按新结果）。
     格号两边对不上的（重切）不在这里管，交 republish 的差异单。"""
     nm = norm or {}
 
@@ -478,8 +416,7 @@ def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: d
         return nm.get(c, c)
 
     o, n = _cells(old_char), _cells(new_char)
-    blank = _machine_blank(new_char)
-    out = {"human": [], "machine": [], "overrule": [], "norm": [], "keep": []}
+    out = {"human": [], "machine": [], "overrule": [], "norm": []}
     for a_ in sorted(set(o) & set(n), key=rp._key):
         if o[a_] == n[a_]:
             continue
@@ -487,9 +424,6 @@ def split_changes(old_char: Path, new_char: Path, human: dict[str, str], norm: d
             out["norm"].append((a_, o[a_], n[a_]))
             continue
         h = human.get(a_)
-        if h and a_ in blank and u(h) == u(o[a_]):
-            out["keep"].append((a_, o[a_], n[a_]))
-            continue
         k = "human" if h and u(h) == u(n[a_]) else ("overrule" if h and u(h) == u(o[a_]) else "machine")
         out[k].append((a_, o[a_], n[a_]))
     return out
@@ -504,9 +438,6 @@ def revert_cells(char_json: Path, old: dict[str, str]) -> None:
                 if c["a"] in old:
                     if old[c["a"]]:
                         c["c"] = old[c["a"]]
-                        if c["c"] not in PLACEHOLDERS:     # 退回成字：去掉新导出这格的阙文／组字等标记，免得字与标记打架
-                            for k in ("lacuna", "guess_c", "zi"):
-                                c.pop(k, None)
                     else:
                         c.pop("c", None)
     Path(char_json).write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

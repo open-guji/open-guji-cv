@@ -200,7 +200,7 @@ class RulingLog(EventLog):
     管线自己写的（`RulingStore.put`／`put_cell_code`：在线 L3／L4 缓存，版本取自当前提示词，按构造就认）传 `validate=False`，
     免得校验口径与运行时差一点就让整页失败。"""
 
-    def append(self, events, validate: bool = True) -> int:
+    def append(self, events, validate: bool = False) -> int:      # 史記／全唐文 patch 线：写前校验缺省不开（随 u 移植带进来，本线不改写入行为）
         events = list(events)
         if not validate:
             return super().append(events)

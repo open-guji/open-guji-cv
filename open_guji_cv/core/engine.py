@@ -325,10 +325,6 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     # 只在开启时写这个键：关着的册（四庫等）指纹逐位不变，不触发全量重跑。
     if getattr(book, "binarized_input", False):
         payload["bin_input"] = True
-    # 左右外框规则 `side_frame`（版面，2026-11-23）：只给 border_detect、且写了的册加键，没写的册指纹逐位不变
-    # （不进 `book_deps`，同 rare_charset，见 core/ref_profile.py 模块头）。
-    if step.spec.id == "border_detect" and getattr(book, "side_frame", None):
-        payload["side_frame"] = dict(sorted(book.side_frame.items()))
     # Step5-b 的字表语料由册配置 `rare_charset` 指定（参校本属性 C 块）：只在写了的册加键，没写的册指纹逐位不变
     # （不进 `book_deps`，那会让所有册指纹变，见 core/ref_profile.py 模块头）。
     if step.spec.id == "rare_candidates" and getattr(book, "rare_charset", None):
@@ -349,6 +345,10 @@ def ref_profile_token(step: Step, book: BookSpec, page: int) -> str | None:
         return None
     prof = getattr(book, "reference_profile", None)
     return prof.page_token(page) if prof is not None else None
+
+
+def _hash24(payload: dict) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
 
 
 def self_hash(step: Step, book: BookSpec, params: BaseModel) -> str:
@@ -534,6 +534,14 @@ class Engine:
     def self_hash(self, step: Step) -> str:
         return self_hash(step, self.book, self._params(step))
 
+    def _corpus_fields(self, step: Step) -> dict:
+        """写进条目的语料钉（只给 `stale_reason` 用，不进指纹）：读语料的步记总号与内容串，没钉记 0／空串；别的步不记。"""
+        from .corpus_pin import CORPUS_STEPS, step_pin_token
+        if step.spec.id not in CORPUS_STEPS:
+            return {}
+        return {"corpus_pin": int(getattr(self.book, "corpus", None) or 0),
+                "corpus": step_pin_token(step.spec.id, self.book) or ""}
+
     # ── 状态 ─────────────────────────────────────────────────────────
     def page_status(self, step: Step, page: int) -> tuple[str, ManifestEntry | None]:
         entry = self.store.manifest(self.book.id, step.spec.id).get(page_key(page))
@@ -574,9 +582,59 @@ class Engine:
             return "参数变了"
         if (entry.upstream or {}) != (ups or {}):
             return "上游产物变了"
+        cr = self._corpus_reason(step, entry, ph)
+        if cr:
+            return cr
         if now is not None and entry.book is None:
             return "代码或册配置变了（" + "/".join(sorted(now)) + "；旧条目没记册配置原值）"
         return "代码或版本变了"
+
+    def _corpus_reason(self, step: Step, entry: ManifestEntry, ph: str) -> str | None:
+        """读语料的步（`CORPUS_STEPS`）只因册的语料钉变了而过期 → 「语料钉变了：corpus 6→8（代码未变）」。
+
+        新条目记着 `corpus`／`corpus_pin`，直接比；老条目没记，就拿记下的 `self_hash` 试：把指纹里的语料串换成
+        钉子账里每个旧总号（以及「没钉」）的串重算，对上了＝代码、参数、册配置都没变，只是语料钉变了。
+        分不出（代码也变了，或旧总号的清单找不到）返回 None，照旧报「代码或版本变了」。只报原因，不改过期判定。"""
+        from .corpus_pin import CORPUS_STEPS, corpus_token, load_pins, step_pin_token
+        if step.spec.id not in CORPUS_STEPS:
+            return None
+        try:
+            tok_now = step_pin_token(step.spec.id, self.book) or ""
+        except Exception:  # noqa: BLE001 —— 钉子账读不到只是说不清原因，不拦状态
+            return None
+        pin_now = getattr(self.book, "corpus", None) or 0
+        name = lambda n: str(n) if n else "未钉"   # noqa: E731
+        base = {k: v for k, v in _self_payload(step, self.book, ph).items() if k != "corpus"}
+        same_self = lambda tok: bool(entry.self_hash) and _hash24({**base, "corpus": tok} if tok else base) == entry.self_hash  # noqa: E731
+        if entry.corpus is not None:
+            if entry.corpus == tok_now:
+                return None
+            old = name(entry.corpus_pin)
+            if same_self(entry.corpus):
+                return f"语料钉变了：corpus {old}→{name(pin_now)}（代码未变）"
+            return f"代码或版本变了；语料钉也变了：corpus {old}→{name(pin_now)}"
+        if not entry.self_hash:
+            return None
+        cands: list[tuple[int, str]] = [(0, "")]
+        try:
+            from .workspace import workspace_root
+            ws = workspace_root()
+            for r in load_pins(ws, getattr(self.book, "id", None) or ""):
+                n = int(r["n"])
+                if n == pin_now:
+                    continue
+                try:
+                    cands.append((n, corpus_token(ws, n, getattr(self.book, "id", None))))
+                except Exception:  # noqa: BLE001 —— 旧总号清单不在本机：这个候选跳过
+                    continue
+        except Exception:  # noqa: BLE001
+            pass
+        for n, tok in cands:
+            if tok == tok_now:
+                continue
+            if same_self(tok):
+                return f"语料钉变了：corpus {name(n)}→{name(pin_now)}（代码未变）"
+        return None
 
     def _page_status_row(self, step: Step, pages: list[int],
                           upstream_fresh: dict[int, bool],
@@ -805,7 +863,7 @@ class Engine:
                 manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                            params_hash=ph, upstream=ups or {},
                                            code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
-                                           self_hash=self.self_hash(step),
+                                           self_hash=self.self_hash(step), **self._corpus_fields(step),
                                            soft=soft_values(step, self.ctx.params_for(step)),
                                            param_parts=param_parts(self._params(step), step.spec.soft_params,
                                                                    step.spec.path_params),
@@ -939,7 +997,7 @@ class Engine:
                 manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                            params_hash=ph, upstream=ups or {},
                                            code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
-                                           self_hash=self.self_hash(step),
+                                           self_hash=self.self_hash(step), **self._corpus_fields(step),
                                            soft=soft_values(step, self.ctx.params_for(step)),
                                            param_parts=param_parts(self._params(step), step.spec.soft_params,
                                                                    step.spec.path_params),
