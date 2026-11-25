@@ -590,6 +590,12 @@ _HR_FIT_0106 = ("border_detect head_raise_fit（CV1 #1868，缺省关、关时�
                 "vol28 12 页（1-6,30-33,82,100）border_detect＋border_detect_gate 产物与 v0.7.105 逐字节相同；scripts/code_equiv.py check --gate border_detect_gate，2026-11-25（CV0）")
 
 
+_COLEND_1891 = ("impl/keben/column.py 双线版框下端剥层（cv #1891，CV1；第三道线只认边距证据＋Step1 内框线两条护栏）：新分支只在 two() 的 "
+                "n_layers>=2 且 glued（下端）时走到，即册配置 frame_layers.bottom>=2 且写了 outer_gap.bottom；中心库 11-25 只有 siku-zongmu 这样配"
+                "（全唐文、史記等 book_defaults 的 frame_layers 已于 11-24 撤），别的书按构造逐字节不变。殿本靠 engine.FRAME_LAYER_REV=1 进 column_end 指纹判过期。"
+                "殿本实测（不靠登记）：cv v0.7.99 ± 本改动跑 vol03 全册 108 页 2a–2c，23 列下端变、看图全是末字下横回来（报告 ai-team "
+                "domain/CV/质检/列末剥框-1891-CV0评审/）。2026-11-25 CV0")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2635,6 +2641,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new='63b9807b82801f71544d15ed548ca4cbfc356d4f6d4600bcc51e5717a5776ddb',
           old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
           evidence=_HR_FIT_0106),
+    Equiv(module="open_guji_cv.impl.keben.column",
+          new="94920dd2cee9eadd603976906505ea6efd04a61bc75be07d976c5b01b509fdee",
+          old="44575183941b9f59f2bde80a4ed4f57056962bf3661ba454ddc915988ba0e562",
+          evidence=_COLEND_1891),
 )
 
 
