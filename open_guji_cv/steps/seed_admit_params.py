@@ -59,6 +59,19 @@ _RETIRED: dict = {
     "reference_trust_skip": [], "lane_coord_few_stroke": [],
     "follow_ref_variants_gap": None, "follow_ref_variants_cov": 0.93,
 }
+#: 搬进书仓的通道参数（2026-11-24 CV4，Sheldon 定「搬进全唐文书仓」）：只有全唐文 001–003 用的四条无参照补放通道
+#: solo_adapt／num_run／solo_cal／lead_5b 搬进全唐文书仓 `code/admit_lanes.py`（k13），取值改写进 `book_lanes`。
+#: 值是搬家前的缺省值：书配置写的＝这里的值 → 忽略；写了别的值 → 报错，提示改写进 `book_lanes`。
+_MOVED_TO_BOOK: dict = {
+    "solo_adapt_pct": None, "solo_adapt_floor": 0.94, "solo_adapt_gap": 0.01, "solo_adapt_min_n": 5,
+    "solo_adapt_window": 0.05, "solo_adapt_profile": "", "solo_adapt_fingerprint": "", "solo_adapt_risk_gap": None,
+    "solo_adapt_abstain_ok": False, "solo_adapt_abstain_skip": "", "solo_adapt_near_slack": None,
+    "solo_adapt_near_gap": 0.03, "solo_adapt_nf_ok": False,
+    "num_run_cov": None, "num_run_gap": 0.01, "num_run_juan_cov": None, "num_run_cov_5b": None, "num_run_gap_5b": 0.02,
+    "solo_cal": False, "solo_cal_tiers": "0.98:0.03,0.95:0.05", "solo_cal_skip": "己已巳于干曰日代伐遣遺真",
+    "solo_cal_5b_cov": None, "solo_cal_allow": "", "solo_cal_5b_canon": False,
+    "lead_5b": False, "lead_5b_gap_out": 0.023, "lead_5b_gap_in": 0.015, "lead_5b_lib_min": 0.935,
+}
 #: 退役参数里原先**缺省就进 dump** 的几个：dump 里照旧补上退役前的值，`params_hash` 与退役前逐位相同、各书产物不过期。
 #: 补在 `_drop_off_rare` 最前面，后面按条件去掉的规则（group_flow 全关去 `group_flow_*`、三通道全关去 `lane_*`）照常生效。
 _RETIRED_IN_DUMP: dict = {k: _RETIRED[k] for k in
@@ -169,6 +182,7 @@ _RETIRED.update(_CONSTANTS)
 #: 缺省开的开关（symbol_review、rare_ref、shadow_veto、context_guard_*）关着时开关本身留在 dump 里（显式 False），
 #: 只去附属字段——否则 dump 再读回来会变回缺省的开。条件只看参数本身，行与行之间没有先后依赖。
 _DUMP_DROP: tuple = (
+    (lambda p: not p.book_lanes, ("book_lanes", "book_lanes_fingerprint")),
     (lambda p: not p.symbol_review, ("symbol_min_human",)),
     (lambda p: p.rare_ref_coord_min_cov == _RARE_REF_COORD_MIN_COV, ("rare_ref_coord_min_cov",)),
     (lambda p: not p.occluded_ref_empty_blank, ("occluded_ref_empty_blank",)),
@@ -227,22 +241,8 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.no_ref_pages, ("no_ref_pages",)),
     (lambda p: not p.no_ref_params, ("no_ref_params",)),
     (lambda p: p.consensus_lib_cov is None, ("consensus_lib_cov",)),
-    (lambda p: p.solo_adapt_pct is None,
-     ("solo_adapt_pct", "solo_adapt_floor", "solo_adapt_gap", "solo_adapt_min_n", "solo_adapt_window", "solo_adapt_profile", "solo_adapt_fingerprint")),
-    (lambda p: p.solo_adapt_risk_gap is None, ("solo_adapt_risk_gap",)),
-    (lambda p: not p.solo_adapt_abstain_ok, ("solo_adapt_abstain_ok", "solo_adapt_abstain_skip")),
-    (lambda p: p.solo_adapt_near_slack is None, ("solo_adapt_near_slack", "solo_adapt_near_gap")),
-    (lambda p: not p.solo_adapt_nf_ok, ("solo_adapt_nf_ok",)),
-    (lambda p: not p.solo_cal, ("solo_cal", "solo_cal_tiers", "solo_cal_skip", "solo_cal_5b_cov")),
-    (lambda p: p.solo_cal_5b_cov is None, ("solo_cal_5b_cov",)),
-    (lambda p: not p.solo_cal_allow, ("solo_cal_allow",)),
-    (lambda p: not p.solo_cal_5b_canon, ("solo_cal_5b_canon",)),
-    (lambda p: not p.lead_5b, ("lead_5b", "lead_5b_gap_out", "lead_5b_gap_in", "lead_5b_lib_min")),
     (lambda p: p.ref_lib_5b_veto is None, ("ref_lib_5b_veto", "ref_lib_5b_veto_lead")),
-    (lambda p: p.num_run_cov_5b is None, ("num_run_cov_5b", "num_run_gap_5b")),
     (lambda p: p.solo_5b_same_cov is None, ("solo_5b_same_cov",)),
-    (lambda p: p.num_run_cov is None, ("num_run_cov", "num_run_gap")),
-    (lambda p: p.num_run_juan_cov is None, ("num_run_juan_cov",)),
     (lambda p: not p.replace_form_edge_exclude, ("replace_form_edge_exclude",)),
     (lambda p: not p.ref_lib_coord_dissent, ("ref_lib_coord_dissent",)),
     (lambda p: not p.solo_coord_dissent, ("solo_coord_dissent",)),
@@ -1061,49 +1061,6 @@ class SeedAdmitParams(BaseModel):
     # ── `solo_5b_gap` = 0.01（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     solo_5b_min_n: int = 3
     """库首位在本书库里刻例下限（`solo_5b_cov` 开时用）。PR4 收常量后 11-24 恢复成参数：脉经序页、牒文页经 `no_ref_params` 要设 1（刻例少）。"""
-    solo_adapt_pct: str | None = None
-    """无参照格「按字自适应门槛」放行（2026-11-08，Sheldon 定方向，全唐文 001–003 形近字线；书级，缺省关，
-    `None`＝关、关时逐字节不变、`solo_adapt_*` 都不进 dump）。取值 "p10"／"p25"：用字自比分布的哪个百分位当 cov 门槛。
-
-    常用字 cov 停在 0.96–0.98 是笔画密度造成的（002 按墨量分四档，cov 中位 0.993／0.982／0.978／0.978），
-    一刀切的 0.98 线对繁字太严、对简字太松。改成按字定：字表 `solo_adapt_profile`（`scripts/char_cov_profile.py`
-    从本书字形库算：每条刻例留一法匹配，记同字最高 cov 的分布「自比」与别的字的 cov「互比」）里，
-    本格库首位 c 的 cov ≥ max(`solo_adapt_floor`, c 自比的该百分位)；c 自比样本 ≥ `solo_adapt_min_n`、
-    留一法里同字掉出候选的比例 ≤ 0.2；5-b 首位**就是** c（不认异体：are_variants 把 皓／浩 当异体，001:126:4:3
-    刻 皓 库认 浩 就是这么漏的）；领先每个语义不同的候选 ≥ `solo_adapt_gap`；离首位 `solo_adapt_window` 以内的对手 d：
-    (c, d) 是高危字对（字表 `risk`，库内互比上限 ≥ c 自比 p10，自动算出，不只形近表）或在形近表里 → 不放；
-    本格对 d 的 cov 高过 c 的刻例对 d 的互比上限 → 不放；本格对 c 的 cov 不超过 d 的刻例对 c 的互比上限 → 不放。
-    护栏须为空；疑问只认 上下文 margin 不足／库 unsure／库 same 但准入被拦／group_flow_ref_missing；
-    库首位在形近表、字组、己已巳 都不放。通道 `match_solo_adapt`，不入字形库（C4）。只升不降，人裁位不碰。
-    依据：front4 001、front5 002／003 待审，p10 档离线放 2,236 格、p25 档 1,257 格；p10 档按字排图全看，未见确定错放，
-    存疑 6 格（冾／洽 2、氾／汜 2、牟、費）。"""
-    solo_adapt_floor: float = 0.94
-    solo_adapt_gap: float = 0.01
-    solo_adapt_min_n: int = 5
-    solo_adapt_window: float = 0.05
-    solo_adapt_profile: str = ""
-    """字表路径（`scripts/char_cov_profile.py` 产出，schema `char_cov_profile/1`）；空＝找数据目录 `config/groups/char_cov_profile.json`。
-    路径不进参数哈希，内容哈希进 `solo_adapt_fingerprint`。找不到字表＝本支不放。"""
-    solo_adapt_fingerprint: str = ""          # 自动填：字表变了产物过期
-    solo_adapt_risk_gap: float | None = None
-    """`solo_adapt_pct` 开着时，窗口内的高危字对对手不再一律拦，改成本格领先它 ≥ 这个值就不拦这个对手（其余对手照查）
-    （2026-11-08，全唐文 front7 001–003，形近字线；缺省关，`None`＝关、不进 dump）。依据：cov 0.95–0.98 待审里只因高危对
-    被拦的 229 格（李/季 59、蘇/隷 19、輿/與 14、韋/章 10…），领先高危对手 ≥0.02 的 168 格逐格看图未见错放。"""
-    solo_adapt_abstain_ok: bool = False
-    """`solo_adapt_pct` 开着时，库首位不是任何字组成员、只因 `group_flow_abstain` 疑问（字组流程看了别的候选后弃权）被挡的格，
-    疑问照放行单处理，其余条件不变（2026-11-08，全唐文 front7，形近字线；缺省关、关时不进 dump）。依据：front7 001–003
-    64 格（贊 齊 楚 遵…）看图未见错放；真/眞 刻形难分，书级用 `solo_adapt_abstain_skip` 排除。"""
-    solo_adapt_abstain_skip: str = ""
-    solo_adapt_near_slack: float | None = None
-    """`solo_adapt_pct` 开着时，cov 差该字自比分位不到这个值的格也判，但领先须 ≥ `solo_adapt_near_gap`（其余条件照旧）
-    （2026-11-08，全唐文 front8 001–003「没过自比分位」1,599 格缺口中位 0.0066，形近字线；缺省关，`None`＝关、两个键不进 dump）。
-    依据：front8 待审里 0.02／0.03 档 862 格（盧 崔 劉 隱 齊 義…）逐格看图未见错放。"""
-    solo_adapt_near_gap: float = 0.03
-    solo_adapt_nf_ok: bool = False
-    """`solo_adapt_pct` 开着时，库首位既不在形近表也不在字组、只因 `near_form` 疑问（候选里有形近家族字）被挡的格照判；
-    窗口内的形近表对手照拦（2026-11-08，全唐文 front8，形近字线；缺省关、关时不进 dump）。依据：front8 105 格
-    （袁 林 不 六 文 友…）看图未见确定错放，存疑 1 格（001:104:9:3a 又，格内有墨点像 叉）。"""
-    """`solo_adapt_abstain_ok` 不碰的库首位字（一串字，如 "真"）；只在 `solo_adapt_abstain_ok` 开时进 dump。"""
     solo_5b_same_cov: float | None = None
     """`solo_5b_cov` 开着时，库匹配已判 same（`verdict="same"`、判的字就是库首位，多为 consensus 多刻例同意）的格，
     cov 门槛降到这个值（2026-11-08，全唐文 002／003 姓氏韻編，形近字线；书级，缺省关，`None`＝关、不进 dump）。
@@ -1116,70 +1073,12 @@ class SeedAdmitParams(BaseModel):
     no_ref_params: dict = {}
     """`no_ref_pages` 上换用的 seed_admit 参数（书级），如 `{solo_5b_cov: 0.95, solo_5b_min_n: 1}`：只在这些页
     叠在本步参数上，别的页不变。键须是本步参数名（不许再嵌 `no_ref_*`）。空＝不换（不进 dump）。"""
-    num_run_cov: float | None = None
-    """无参照格「数字串里的数字」放过 never_match 护栏（2026-11-08，全唐文 001–003 总目／姓氏韻編卷数小注，形近字线；
-    书级，缺省关，`None`＝关、关时逐字节不变、两个键都不进 dump）。
-
-    韻編里人名下的卷数小注（「八四百五四」）是纯数字串，库对 七／六／四／八 cov 0.996～0.999，但这几个字在形近护栏表里
-    有搭档（七/匕、六/大、四/因、八/人），匹配器一律判 `guard=never_match`，没有整理本的页就全进待审（front3 001 约 1,100 格）。
-    同样的卷数／页数小注里，库判 same 或 unsure、没判护栏的 十／六／七／四 也因 near_form（形近表）或字组弃权
-    （group_flow_ref_missing／group_flow_abstain，没有整理本可依）进待审（001 约 1,000 格）。
-    这一支只给**仍待审**、整格**没有任何整理本对位**、匹配器没判护栏或只判了 `never_match`（不碰 conflict／timeout）的格：
-    库首位是数字（`NUM_RUN_DIGITS`）、cov ≥ `num_run_cov`、领先「语义不同」的最好候选 ≥ `num_run_gap`；疑问只有
-    `_NUM_RUN_OK_DOUBTS` 那几类（护栏:never_match、库 unsure、库 same 但准入被拦、上下文 margin 不足、near_form、
-    group_flow_ref_missing、group_flow_abstain；context_page_end、group_flow_conflict 等照拦）；同列同半格紧挨着的前后格
-    至少一个也是数字（已放行的看放行字，否则看库首位且 cov ≥ 0.98）→ 放库首位，`channel`＝`match_num_run`，
-    evidence `num_run`（cov、gap、前后字），带 `no_glyph_lib`（不入字形库）。人裁位不碰。只升不降。
-    依据（front3 包 001–003 逐格看图）：never_match 待审 1,318 格里库首位是数字的 1,094 格（七 503、六 429、四 144、八 11）
-    全对；库 cov ≥ 0.98、无护栏、被 near_form／字组挡的数字 1,368 格（十 508、六 366、七 236、四 159、九 85）全对。
-    千 7 格多在人名「房千里」里，无数字邻格本来就不放；九／丸 领先不到 0.01（库 丸 刻例标错）也不放。
-    同批非数字的形近字（469 格：文丈、林株、延廷、宋末…）不在本支：有切坏格（001:107:4:1 半个「高」库认 古、领先 0.077），
-    也有异体／字组对（延廷、頴穎、己已巳）要码位或字组定，cov＋领先挡不住。"""
-    num_run_gap: float = 0.01
-    num_run_juan_cov: float | None = None
-    """`num_run_cov` 开着时，紧挨数字串**前面**的「卷」也放（2026-11-08，全唐文 002／003 姓氏韻編「卷一百六」，形近字线；
-    书级，缺省关，`None`＝关、不进 dump）。库首位是「卷」、cov ≥ 这个值（「卷」刻例取自正文，前四册小字 cov 多在 0.95–0.98）、
-    领先 ≥ `num_run_gap`、**后一格**是数字（前一格是数字不算），其余条件同 `num_run_cov`。依据：front4 002／003 待审「卷」
-    409 格（cov 0.952–0.979，对手 春／巷／眷／泰）后一格全是数字，逐格看图全对。"""
-    num_run_cov_5b: float | None = None
-    """`num_run_cov` 开着时，5-b 首位就是库首位的数字格，cov 门槛降到这个值、领先门槛升到 `num_run_gap_5b`
-    （2026-11-08，全唐文 front7 001–003 卷数小注，形近字线；缺省关，`None`＝关、两个键都不进 dump）。
-    `num_run_cov` 0.995 留下的 六／七／四／十（cov 0.97–0.995，对手 大／士／田 落后 0.03 上下）其余条件照 `num_run_cov`。
-    依据：front7 待审里邻格是数字、5-b 同意、cov ≥0.97、领先 ≥0.02 的 602 格（六 255、七 158、四 114、十 34…）逐格看图未见错放。"""
-    num_run_gap_5b: float = 0.02
-    solo_cal: bool = False
-    """无参照格「5a 校准直放」（2026-11-08 Sheldon 定「直接放」，总览按 004 校准；书级，缺省关、关时 `solo_cal*` 都不进 dump）。
-    仍待审、没有任何整理本对位、匹配器护栏为空或 never_match 的格，库首位 cov 与领先「第一个异字」的差 gap
-    （没有异字时 gap＝cov）落在 `solo_cal_tiers` 任一档（"cov:gap" 逗号分隔，缺省 cov≥0.98 且 gap≥0.03，或 cov≥0.95 且 gap≥0.05）
-    → 放库首位，通道 `match_solo_cal`，不入字形库（C4）。不放：首位或第一个异字在 `solo_cal_skip`（己已巳 于干 曰日 代伐 遣遺，另加 真：刻 眞 的格库多记 真，Sheldon 要照刻形分）；
-    首位在字组或形近表（Sheldon：形近字对留人审）；疑问只认 `_SOLO_CAL_OK_DOUBTS`（上下文 margin 不足、never_match 护栏、
-    库 unsure／same 但准入被拦、group_flow_ref_missing、group_flow_abstain），near_form、occluded、切分类等其余疑问一律拦。
-    排在各补放通道最后。另见 `solo_cal_5b_cov`。
-    依据：004 已放行格当真值，cov≥.98＋gap≥.03 库首位错率 <0.1%，cov .95–.98＋gap≥.05 为 0.6%（错多在 代伐、遣遺）。"""
-    solo_cal_tiers: str = "0.98:0.03,0.95:0.05"
-    solo_cal_skip: str = "己已巳于干曰日代伐遣遺真"
-    solo_cal_5b_cov: float | None = None
-    """`solo_cal` 开着时另一档：库首位＝5-b 首位、cov ≥ 这个值就放，不看 gap（其余排除照 `solo_cal`）。
-    依据：004 校准，库首位与 5-b 首位一致时 cov ≥0.98 错 0.06%、0.95–0.98 错 0.44%（多为 歳歲、場埸 异体）。
-    `None`＝不开这一档（不进 dump）；开时才读 rare_candidates。"""
-    solo_cal_allow: str = ""
-    """`solo_cal` 的字组／形近表白名单（2026-11-09 形近字线，全唐文 001–003 册级；空＝不开、不进 dump）。
-    列在这里的字即使在字组、形近表或 `solo_cal_skip` 里也可放，但只走 5-b 档（库首位＝5-b 首位、cov ≥ `solo_cal_5b_cov`），
-    并多认一条 near_form 疑问。依据：front9 待审里「字组成员」「形近字」两类库首位＝5-b 首位的 737 格逐格看图，
-    按字分组，整组 0 错的字才进白名单（一／入／木／王／匕／聞／又 有错不进；說 刻作説、交码位线）。"""
-    solo_cal_5b_canon: bool = False
-    """`solo_cal` 5-b 档比「库首位＝5-b 首位」时先按本书码位表归一（5-b 给 慎、库给 愼 算一致）。2026-11-10 形近字线，
-    全唐文 001–003 c38 第三层 愼 5、吕 2 格（看图全对）因此没放。缺省关、关时不进 dump；书没有码位表时不起作用。"""
-    lead_5b: bool = False
-    """无参照格「库与 5-b 不一致时听 5-b」（2026-11-09 形近字线，全唐文 001–003 册级；缺省关、关时 `lead_5b*` 都不进 dump）。
-    仍待审、没有整理本对位、匹配器护栏为空、疑问只有「库 unsure」「上下文 margin 不足」、不是拆分子格（格号不带字母）的格，
-    5-b 首位与库首位不同且不是异体、5-b 首位领先 5-b 其余候选（含库首位）≥ 门槛 → 放 5-b 首位，通道 `match_lead_5b`，不入字形库：
-    5-b 首位不在库候选里 → 门槛 `lead_5b_gap_out`；5-b 首位＝库第二名 → 门槛 `lead_5b_gap_in`，且库给它的分 ≥ `lead_5b_lib_min`。
-    5-b 首位或库首位在 `solo_cal_skip` 里的不放。依据：front9 待审「库与 5b 不一致」1,009 格，按领先量分段逐格看图
-    （库外 288 格领先 ≥0.023 除拆分碎块与异体外 0 错，<0.018 起错；库第二名 218 格见 PR）。"""
-    lead_5b_gap_out: float = 0.023
-    lead_5b_gap_in: float = 0.015
-    lead_5b_lib_min: float = 0.935
+    book_lanes: dict = {}
+    """书级无参照补放通道的取值（2026-11-24 CV4，Sheldon 定）：交给书仓 `code/` 覆盖的钩子 `impl/keben/admit_lanes.noref_lanes`，
+    cv 不解释其中的键，原样进参数指纹；`data`（路径表，相对数据目录）是通道要读的数据文件，内容哈希进 `book_lanes_fingerprint`。
+    全唐文 001–003 原来的 solo_adapt_*／num_run_*／solo_cal_*／lead_5b_* 28 个参数搬进全唐文书仓 k13 后写在这里。
+    空＝不调钩子（不进 dump）；写了而书仓没覆盖钩子 → 拒跑。"""
+    book_lanes_fingerprint: str = ""          # 自动填：book_lanes.data 的文件内容哈希
     ref_lib_5b_veto: float | None = None
     """「整理本＝库首位」放行（通道 `ref_lib`）的 5-b 否决（A23 2026-11-23，殿本 5a A/B；缺省 None＝关、关时不进 dump）。
     `ref_lib` 不看库分数：整理本字与 5a 库首位字面相同就放。整理本把生僻字规范成常用字（靃→霍）而库里没有这个生僻字时，
@@ -1612,6 +1511,11 @@ class SeedAdmitParams(BaseModel):
             same = (list(v) == list(want)) if isinstance(v, (list, tuple)) and isinstance(want, (list, tuple)) else v == want
             if not same:
                 bad.append(f"{k}={v!r}")
+        moved = [f"{k}={data[k]!r}" for k in data if k in _MOVED_TO_BOOK and data[k] != _MOVED_TO_BOOK[k]]
+        if moved:
+            raise ValueError(f"seed_admit 参数已搬进书仓（2026-11-24 CV4，全唐文书仓 code/admit_lanes.py，k13 起）：{', '.join(moved)}；"
+                             "改写进 book_lanes（见书仓 admit_lanes 模块头），并钉 code: 13 以上")
+        data = {k: v for k, v in data.items() if k not in _MOVED_TO_BOOK}
         if bad:
             raise ValueError(f"seed_admit 参数已退役（无书改过，2026-11-23／24 CV4 删、改恒开或收常量）：{', '.join(bad)}；"
                              "要用请找 CV4，说明哪本书、为什么")
@@ -1636,7 +1540,7 @@ class SeedAdmitParams(BaseModel):
                 or self.context_guard_ref_blank or self.context_guard_ref_prefer)
 
     def model_post_init(self, _ctx) -> None:
-        from .seed_admit import (_approx_fingerprint, _l3_fingerprint, _l3_groups, _resolve_adapt_profile,  # noqa: 循环引用，用时再取
+        from .seed_admit import (_approx_fingerprint, _l3_fingerprint, _l3_groups, _resolve_book_lanes_data,  # noqa: 循环引用，用时再取
                                  _resolve_data_path, _resolve_group_flow_paths, _shadow_model_path)
         if not self.db_path:
             from ..core.workspace import glyph_db_path
@@ -1683,13 +1587,14 @@ class SeedAdmitParams(BaseModel):
                                file_fingerprint(_shadow_model_path(self)) or "missing")
         if not self.approx_fingerprint:
             object.__setattr__(self, "approx_fingerprint", _approx_fingerprint(self.db_path))
-        if self.solo_adapt_pct is not None:
-            if self.solo_adapt_pct not in ("p10", "p25"):
-                raise ValueError(f"solo_adapt_pct 只认 p10／p25，收到 {self.solo_adapt_pct!r}")
-            object.__setattr__(self, "solo_adapt_profile", _resolve_adapt_profile(self.solo_adapt_profile))
-            if not self.solo_adapt_fingerprint:
-                object.__setattr__(self, "solo_adapt_fingerprint",
-                                   corpus_fingerprint([self.solo_adapt_profile]) if self.solo_adapt_profile else "missing")
+        if self.book_lanes and not self.book_lanes_fingerprint:
+            data = self.book_lanes.get("data") or []
+            if isinstance(data, str) or not all(isinstance(x, str) for x in data):
+                raise ValueError("seed_admit.book_lanes.data 须是路径表（相对数据目录）")
+            paths = [_resolve_book_lanes_data(x) for x in data]
+            object.__setattr__(self, "book_lanes_fingerprint",
+                               corpus_fingerprint([x for x in paths if x]) + ("" if all(paths) else ":missing")
+                               if data else "")
         if self.group_flow_exclude:
             from ..groups.registry import FLOW_GROUPS as _FG, flow_names as _fn
             _ex = _fn(self.group_flow_exclude)

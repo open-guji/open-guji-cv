@@ -565,6 +565,15 @@ _RENDER_GUARD_1125 = ("冷缓存再生护栏（CV4→CV0 11-25 殿本 frame_laye
                       "tests/test_render_stale_guard.py、test_cell_shrink_render_memo.py、test_column_warp_skip.py 过；2026-11-25（CV0）")
 
 
+_BOOK_LANES_1125 = ("seed_admit 加书级放行通道钩子 impl/keben/admit_lanes.noref_lanes（缺省 None，只在 book_lanes 非空时调）与参数 book_lanes／book_lanes_fingerprint"
+                    "（缺省空、不进参数 dump）；只有全唐文 001–003 用的 solo_adapt／num_run／solo_cal／lead_5b 四条通道与 28 个参数搬进全唐文书仓 code/admit_lanes.py（k13），"
+                    "cv 里写原缺省值照读、写别的值报错（CV4，Sheldon 11-25 定）：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190）、"
+                    "全唐文 020 16 页（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170）、史記 02 18 页（4,9,19,24,33,41,44,53,86,95,102,106,114,141,173,180,185,199）"
+                    "seed_admit 与 origin/dev 1397b781 产物逐字节相同；参数指纹 10,797 组（414 册＋两两翻转）除全唐文 001–003 三册（旧键报错、随 k13 换）外全同；"
+                    "全唐文 001／002／003 全册 193＋208＋186 页（vh3 包）：dev 1397b781＋旧键 对 本版＋书仓 admit_lanes（k13 候选）＋book_lanes 产物逐字节相同（四条通道放行 3,648 格）；"
+                    "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-25（CV4）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2574,6 +2583,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="139ae7bafc42ba76aebd0132799331227d26494c480c0b47bb78706706836294",
           old="54311ec727a64754a83015d384ae554080a65bbf46af05ee3653cbf3530e08fd",
           evidence=_RENDER_GUARD_1125),
+    # seed_admit 书级放行通道钩子、四条通道搬全唐文书仓（CV4 11-25）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="79aedc11cbff00e471c5f2e53080c2f11a9ae7534d02c0a1827069c22733ed2a",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_BOOK_LANES_1125),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="d0a1dafea84263f7caba32221213d445b39848493dc204bbbd41e1680ba15ccc",
+          old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
+          evidence=_BOOK_LANES_1125),
 )
 
 
@@ -2645,7 +2663,9 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     # 史記 02 18 页 seed_admit 产物与 dev b189b2e 逐字节相同）：两块都还是这一版时合回 seed_admit 一项，各书不过期。
     "open_guji_cv.steps.seed_admit": ("1f1f1fb43270438a7f7ae51c94fbf4f26b93ba7317a21bd05334211b1820663c", (
         ("open_guji_cv.steps.seed_admit", "110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6"),
-        ("open_guji_cv.steps.seed_admit_params", "e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091"))),
+        ("open_guji_cv.steps.seed_admit_params", "e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091"),
+        # 书级放行通道钩子（缺省 None，CV4 2026-11-25）：书仓没覆盖时合回，各书指纹不变；全唐文 k13 覆盖后照常过期
+        ("open_guji_cv.impl.keben.admit_lanes", "26976aeeb23db0ece76f341f7cefbc0c2a4e25fbed3faa4671bcace3f4672cac"))),
     # 不是拆分、是 seed_admit 新加了一个 code_dep（书级钩子 follow_ref_hooks，缺省 rival_skip=None；2026-11-13 A22）：
     # pua_v2_codes 与 follow_ref_hooks 都还是这一版时合回 pua_v2_codes 一项，指纹不变。书仓覆盖了钩子的书（史記）照常过期
     # 不是拆分、是 seed_admit 补列 code_dep groups.hou_shape（#1729 起 seed_admit 就 import 它，当时没列进 code_deps，
