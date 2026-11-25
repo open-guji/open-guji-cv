@@ -1,6 +1,6 @@
 # 日曰（ry）＋日目（rm）送审压缩（A24 2026-10-24）
 
-结论在 `doc/字组/ry.md`、`rm.md`；数据在 dataset `char-groups/variant/ry/`。
+结论在 `doc/4-定字/字组/ry.md`、`rm.md`；数据在 dataset `char-groups/variant/ry/`。
 
 | 脚本 | 作用 |
 |---|---|

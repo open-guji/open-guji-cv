@@ -12,6 +12,8 @@ def test_hand_overrides_auto(monkeypatch, tmp_path):
     hand.write_text("# hand\n卽\t卽\n㫖\t旨\n", encoding="utf-8")       # 手工把 卽 改回自身
     monkeypatch.setattr(vmod, "DEFAULT_AUTO_PATH", auto)
     monkeypatch.setattr(vmod, "DEFAULT_VARIANTS_PATH", hand)
+    from open_guji_cv import pair_kind
+    monkeypatch.setattr(pair_kind, "PAIR_KIND_PATH", tmp_path / "none.tsv")
     vm = vmod.VariantMap.load()
     assert vm.semantic("髪") == "髮"          # 来自自动表
     assert vm.semantic("卽") == "卽"          # 手工覆盖

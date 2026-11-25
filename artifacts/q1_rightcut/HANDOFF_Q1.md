@@ -108,7 +108,7 @@ frame_strip/side_rule 那条线应在后续收拾，我没动。
 ## 复现
 
 ```bash
-# 环境见 doc/cloud_eval.md；overlay 工作区 /tmp/ws_overlay，改前/改后产物目录不同
+# 环境见 doc/参考/cloud_eval.md；overlay 工作区 /tmp/ws_overlay，改前/改后产物目录不同
 export GUJI_WORKSPACE=/tmp/ws_overlay GUJI_PRODUCTS_DIR=/tmp/q1_products_after
 python -m open_guji_cv eval --from-raw --timeout 6000 run right_cut left_cut recrop frame_strip instance_quality
 python research/scripts_oneoff/eval_right_cut.py ../open-guji-dataset/char-segmentation        # 看逐条

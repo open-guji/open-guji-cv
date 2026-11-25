@@ -101,16 +101,16 @@ def _close_check(book, ws, export_dir, guji, notes=None, pending=None) -> tuple[
 
 
 def _export(book, ws, export_dir: Path, guji) -> str | None:
-    """export_dir 里已有 lines.md 就复用；否则跑 guji export format。返回错误或 None。"""
+    """export_dir 里已有 lines.md 就复用；否则跑 guji output export format。返回错误或 None。"""
     if list(export_dir.glob("*.lines.md")):
         return None
     export_dir.mkdir(parents=True, exist_ok=True)
     try:
-        rc, out, err = _run([guji, "export", "format", book, "-w", str(ws), "--out", str(export_dir)])
+        rc, out, err = _run([guji, "output", "export", "format", book, "-w", str(ws), "--out", str(export_dir)])
     except Exception as e:  # noqa: BLE001
         return f"{type(e).__name__}: {e}"
     if rc != 0:
-        return f"guji export format 退出码 {rc}：{(err or out)[-300:]}"
+        return f"guji output export format 退出码 {rc}：{(err or out)[-300:]}"
     return None
 
 
@@ -414,7 +414,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("book")
     ap.add_argument("-w", "--workspace", required=True)
-    ap.add_argument("--export-dir", help="导出目录；没有 lines.md 就现跑 guji export format")
+    ap.add_argument("--export-dir", help="导出目录；没有 lines.md 就现跑 guji output export format")
     ap.add_argument("--anomaly", help="R4 异常表：.json（推荐，格式错报行号）或 .md（| # | 现象 | 原因 | 结论 |）")
     ap.add_argument("--reason", help="R3 原因归并一句话（人写）")
     ap.add_argument("--pending", help="原样转给 close-check 第 2c 项（□去向，GUJI-624）；不给时 close-check 缺省读中心库"
