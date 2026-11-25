@@ -870,7 +870,12 @@ def st_export(ctx):
     ctx.st["text_version"] = tv
     num = chapter_no(ctx)
     out = ctx.reports / "_export"
-    cmd = [ctx.venv_py, "scripts/export_guji_format.py", "--products", products_dir(ctx), "--book", ctx.book, "--chapter", num,
+    # 装了 guji-manager 就走它的导出器（char 带 u，同 republish.export_entry）；没装才用 cv 自带脚本
+    has_mgr = subprocess.run([ctx.venv_py, "-c", "import importlib.util,sys;"
+                              "sys.exit(0 if importlib.util.find_spec('guji_manager.output.guji_format_export') else 1)"],
+                             capture_output=True).returncode == 0
+    entry = ["-m", "guji_manager.output.guji_format_export"] if has_mgr else ["scripts/export_guji_format.py"]
+    cmd = [ctx.venv_py, *entry, "--products", products_dir(ctx), "--book", ctx.book, "--chapter", num,
            "--out", out, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
     meta = CV / f"doc/formats/samples/guji_format_v0.1/meta_{ctx.book}.json"
     if meta.exists():
