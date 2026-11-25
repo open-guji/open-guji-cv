@@ -495,7 +495,7 @@ class Engine:
             return ups
         wants = set(step.spec.consumes) | (set(step.spec.optional_consumes) - off)
         needs = self.pipeline.needs.get(step.spec.id, [])
-        return [u for u in ups if (_produces(STEPS[u]) & wants) or u in needs]
+        return [u for u in ups if (_produces(STEPS[u], self.pipeline.steps) & wants) or u in needs]
 
     def _upstream_sha(self, kind: str, page: int) -> str | None:
         """一个上游种类这一页的 sha，拿不到返回 None（调用方决定算不算阻塞）。"""
@@ -764,7 +764,7 @@ class Engine:
                 if gaps:
                     row["optional_gaps"] = gaps
                 out[sid] = row
-            gate = step.spec.gate
+            gate = self.pipeline.gate_of(sid)
             if gate:
                 gate_step = STEPS[gate.id]
                 gate_upstream_fresh = {pg: page_state.get(pg) == FRESH for pg in pages}
@@ -1129,8 +1129,8 @@ class Engine:
     def _run(self, steps: list[str], pages: list[int], force: bool, stop_on_error: bool,
              jobs: int) -> RunReport:
         report = RunReport(self.book.id, self.pipeline.id, list(steps), list(pages))
-        gated_extra = [STEPS[s].spec.gate.id for s in steps
-                       if STEPS[s].spec.gate and STEPS[s].spec.gate.id not in steps]
+        gated_extra = [self.pipeline.gate_of(s).id for s in steps
+                       if self.pipeline.gate_of(s) and self.pipeline.gate_of(s).id not in steps]
         total = len(pages) * (len(steps) + len(gated_extra))
         done = 0
         for sid in steps:
@@ -1140,7 +1140,7 @@ class Engine:
             if stopped:
                 report.finished_at = time.time()
                 return report
-            gate = step.spec.gate
+            gate = self.pipeline.gate_of(sid)
             if gate and gate.id not in steps:
                 gate_step = STEPS[gate.id]
                 done, stopped = self._run_one_step(gate_step, pages, report, force,

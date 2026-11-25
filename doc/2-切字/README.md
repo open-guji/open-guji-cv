@@ -15,3 +15,6 @@
 - 相关设计：[row_boundaries_design](../design/row_boundaries_design.md)、[step3_touching_and_jiazhu](../design/step3_touching_and_jiazhu.md)、[peak_line_search](../design/peak_line_search.md)、[YOLO 列字数先验](../design/19-yolo-release列字数先验与全书评测-总设计.md)。
 - 研发过程与负结果：[../经验/切分四步-研发记录.md](../经验/切分四步-研发记录.md)。
 - **2026-11-25 起分析用五小步 2a–2e（拉直、定字带左右边、列端字、字间切分、字框压缩）**，每步的输入输出与现有代码的对应见 [五小步.md](五小步.md)；上表是步骤 id 的分组，不变。
+
+## 出口闸（2026-11-25）
+刻本链的出口闸只有一道 `cut_gate`，挂在 `cell_shrink` 出口、永远最后调用，读 2a–2e 全部产物，只出裁决（`gate_manifest`、`row_segment_gate_manifest`），不挡中间步。几何量与结构性不切（页型 skip、非正文列位、表格列、页周期估不出）由前面的 `column_geometry` 算；`row_segment` 读它。现代链仍用 `column_crop`＋`column_gate`，与此独立。

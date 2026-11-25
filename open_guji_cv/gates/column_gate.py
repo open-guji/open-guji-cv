@@ -665,7 +665,6 @@ COLUMN_GATE_SPEC = GateSpec(
                   desc="人裁金标准入（P2 未接，tier=gate 时不生效）", name="human_verdict"),
     ),
 )
-attach_gate("column_end", COLUMN_GATE_SPEC)
 # 现代印刷链的 Step2（column_crop）出口挂同一道闸：产物种类相同，判据里列数比对由
 # `count_mode=detected`（modern_body.yaml 的 params）放开。
 attach_gate("column_crop", COLUMN_GATE_SPEC)

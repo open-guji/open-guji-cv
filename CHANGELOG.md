@@ -4,6 +4,8 @@
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
 - 文档（无代码变化，产物与指纹不变）：2 切字新增五小步 2a–2e（拉直、定字带左右边、列端字、字间切分、字框压缩）的输入输出与代码对应表 `doc/2-切字/五小步.md`；README、骨架注释同步。
+- MINOR（用户 2026-11-25 定，不怕指纹变）：切字出口闸放到最后。新增 `column_geometry`（2 列几何：字带、格线范围、页级字距，只算量、只记结构性不切）与 `cut_gate`（挂 `cell_shrink` 出口，读 2a–2e 全部产物，列级与格级判据并在一起，判据一字未改，产物仍叫 `gate_manifest`／`row_segment_gate_manifest`）；`row_segment` 改读 `column_geometry`，`column_gate` 不再挡 2a–2c、`row_segment_gate` 不再挂在 `row_segment`；引擎按管线判断闸是否适用（现代链不受影响，仍用 `column_crop`＋`column_gate`）；旧 `column_gate:` 参数自动复制到 `column_geometry`／`cut_gate` 里同名字段。
+
 - MINOR（用户 2026-11-25 定，不怕指纹变）：切字五小步拆成独立 Step——`column_warp` 只留 2a 拉直去噪；新增 `column_band`（2b 定字带左右边、抹界行；产物 `column_bands`、`column_banded`）、`column_end`（2c 列端抹版框；产物 `column_ends`、`column_image`）。算法一字未改，殿本 bench 40 页 `cells`、`char_index` 与拆前逐字节相同。刻本链各书从 column_warp 起过期。册配置里 `column_warp:` 下的 `tight_rule_band`、`inner_bar_span` 自动搬到 `column_band`，不用改册配置。`column_gate` 暂挂 `column_end`，下一步移到最后一道出口闸。
 - **MINOR**（L0：各书产物逐字节不变、指纹不变，code_equiv 登记；全唐文 001–003 要随书仓 k13 一起换）：seed_admit 加书级放行通道钩子 `impl/keben/admit_lanes.noref_lanes`（缺省 None，在 solo_5b 之后、ref_lib_5b_veto 之前调）与参数 `book_lanes`（dict，原样进参数指纹；`data` 路径表的文件内容哈希进 `book_lanes_fingerprint`；空不进 dump；写了而书仓没覆盖钩子就拒跑）。只有全唐文 001–003 用的四条无参照补放通道 solo_adapt／num_run／solo_cal／lead_5b 连同 28 个参数（`solo_adapt_*`、`num_run_*`、`solo_cal*`、`lead_5b*`）搬进全唐文书仓 `code/admit_lanes.py`（Sheldon 11-25 定「搬进全唐文书仓」，CV4）：册配置写原缺省值照读、写别的值报错并提示改写进 `book_lanes`。`scripts/char_cov_profile.py` 留 cv。
 

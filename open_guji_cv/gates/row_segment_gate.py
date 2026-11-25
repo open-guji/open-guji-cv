@@ -232,7 +232,7 @@ class RowSegmentGateStep(Step):
 
 # 挂到 Step3（row_segment）出口——levels 的 desc 只描述层次，不重复具体阈值数字
 # （阈值在 RowSegmentGateParams 里，写两处会漂）。
-attach_gate("row_segment", GateSpec(
+ROW_SEGMENT_GATE_SPEC = GateSpec(
     id="row_segment_gate", unit="column", on_fail="block",
     levels=(
         GateLevel(id="L0", unit="page",
@@ -254,4 +254,5 @@ attach_gate("row_segment", GateSpec(
         GateLevel(id="L4", unit="cell",
                   desc="碎格：格高远小于一格——flag，不拦（列里多数字仍切得对）", name="sliver_cell"),
     ),
-))
+)
+# 2026-11-25：不再挂在 row_segment 出口，层次并进 `cut_gate`（出口闸永远最后调用）。
