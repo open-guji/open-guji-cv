@@ -565,6 +565,9 @@ _RENDER_GUARD_1125 = ("冷缓存再生护栏（CV4→CV0 11-25 殿本 frame_laye
                       "tests/test_render_stale_guard.py、test_cell_shrink_render_memo.py、test_column_warp_skip.py 过；2026-11-25（CV0）")
 
 
+_HR_FIT_1125 = ("border_detect head_raise_fit（抬头内框校高度、量上外框跳过抬头列，缺省关、关时不进参数 dump、新分支不走；CV1 11-25）："
+                "殿本 vol01 10 页（24,30,45,46,48,50,1,8,100,149）、vol04 10 页（1,2,4,6,9,82,63,10,50,100）的 border_detect＋border_detect_gate "
+                "产物与 origin/dev 8bc0cdc 逐字节相同；scripts/code_equiv.py check --gate border_detect_gate，2026-11-25")
 _BOOK_LANES_1125 = ("seed_admit 加书级放行通道钩子 impl/keben/admit_lanes.noref_lanes（缺省 None，只在 book_lanes 非空时调）与参数 book_lanes／book_lanes_fingerprint"
                     "（缺省空、不进参数 dump）；只有全唐文 001–003 用的 solo_adapt／num_run／solo_cal／lead_5b 四条通道与 28 个参数搬进全唐文书仓 code/admit_lanes.py（k13），"
                     "cv 里写原缺省值照读、写别的值报错（CV4，Sheldon 11-25 定）：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190）、"
@@ -572,6 +575,10 @@ _BOOK_LANES_1125 = ("seed_admit 加书级放行通道钩子 impl/keben/admit_lan
                     "seed_admit 与 origin/dev 1397b781 产物逐字节相同；参数指纹 10,797 组（414 册＋两两翻转）除全唐文 001–003 三册（旧键报错、随 k13 换）外全同；"
                     "全唐文 001／002／003 全册 193＋208＋186 页（vh3 包）：dev 1397b781＋旧键 对 本版＋书仓 admit_lanes（k13 候选）＋book_lanes 产物逐字节相同（四条通道放行 3,648 格）；"
                     "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-25（CV4）")
+
+
+_HR_FIT_0106 = ("border_detect head_raise_fit（CV1 #1868，缺省关、关时不进参数 dump、新分支不走）殿本 patch 线移植 v0.7.105→v0.7.106："
+                "vol28 12 页（1-6,30-33,82,100）border_detect＋border_detect_gate 产物与 v0.7.105 逐字节相同；scripts/code_equiv.py check --gate border_detect_gate，2026-11-25（CV0）")
 
 
 ENTRIES: tuple[Equiv, ...] = (
@@ -2479,6 +2486,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='b0c0fb8c4f891a718541855f3f604292da003e6315a268906121dd3bc9a60304',
           old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
           evidence=_OUTER_BAR_1124),
+    # head_raise_fit（CV1 11-25）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='56be06d98852f268d18a1fe810b391de919262e5eee9add236edbde538d6d000',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_HR_FIT_1125),
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='bea702c7f847338e107de2bf008dc77df3fb6cb86b9e808be0b1a4f3e582f69d',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_HR_FIT_1125),
     # vline_track（CV1 11-25）
     Equiv(module='open_guji_cv.steps.border_detect',
           new='077e87276f1290fee0c8e97e02a94a58b73fcd74d787e30836521e913856400c',
@@ -2592,6 +2608,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="d0a1dafea84263f7caba32221213d445b39848493dc204bbbd41e1680ba15ccc",
           old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
           evidence=_BOOK_LANES_1125),
+    # head_raise_fit 殿本 patch 线（v0.7.106）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='7e84df3dc42765bd70f72c6dc8ef19d472e015c47b993797f4be330ac9ff6765',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_HR_FIT_0106),
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='63b9807b82801f71544d15ed548ca4cbfc356d4f6d4600bcc51e5717a5776ddb',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_HR_FIT_0106),
 )
 
 

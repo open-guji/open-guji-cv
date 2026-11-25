@@ -249,7 +249,7 @@ def _dedup_peaks(peaks: list[tuple[float, float, float]],
 
 def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
                        width: int, extend: bool = True, text_rule: bool = True,
-                       scale: float = 1.0) -> list[HeadRaiseBorder]:
+                       scale: float = 1.0, fit: bool = False) -> list[HeadRaiseBorder]:
     """探测抬头框（某几列的版框整体向上抬起一截）。
 
     判据不是"边框上方有字凸出"——那条路走过，9/14/142 三页的"上諭"紧贴
@@ -278,6 +278,7 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
        这里去掉了墙线竖条、只数像字的行，而且要有墙。inner_y 取抬头字上沿往上 HR_TEXT_PAD，`estimated=True`。
 
     `scale`：本页图相对殿本旧图（上面那些像素常数的标定尺度）的缩放比，见 `HR_SCALE_LENGTHS`。缺省 1.0 = 原值。
+    `fit`（`border_detect.head_raise_fit`，2026-11-25，缺省关）：认下抬头列之后再校内框高度，见 `_fit_head_raise`。
     """
     g = _HRGeom(scale)
     h, w = mask.shape
@@ -360,7 +361,92 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
             if y is not None:
                 out.append(HeadRaiseBorder(col=i + 1, inner_y=y, outer_y=y - g.DEFAULT_PAIR_GAP, estimated=True))
         out.sort(key=lambda b: b.col)
+    if fit and out:
+        text_cols = set() if not text_rule else {b.col for b in out} - got
+        out = _fit_head_raise(out, curves, text_cols, g)
     return out
+
+
+#: 内框对齐（`_fit_head_raise`）：本列内框比相邻抬头列低出这么多以上，才去邻列高度找细线。
+HR_FIT_TOL = 8
+#: 邻列高度 ±这么多行里找细线。
+HR_FIT_SNAP = 5
+#: 细线认不出时，外框跟邻列差不超过这么多就算同一个抬头框（双抬挨单抬外框差一格，约 100px）。
+HR_FIT_OUTER_DY = 6
+#: 本页内外间距只认离先验这么近的观测（殿本实测 36–46）。
+HR_FIT_GAP_WIN = 10
+#: 只有粗外框的列：粗框条认墨占比 ≥ 此值的最上一个峰。
+HR_FIT_BAR_INK = 0.6
+
+
+def _top_bar_edge(curve: np.ndarray, lo: int) -> float | None:
+    """本列窗口里最上一道粗框条（墨 ≥ HR_FIT_BAR_INK 的最上一个峰）的外延，没有返回 None。"""
+    peaks = [ci for ci in local_maxima(curve, radius=3) if curve[ci] >= HR_FIT_BAR_INK]
+    return _outer_edge(curve, lo, float(lo + min(peaks))) if peaks else None
+
+
+def _fit_head_raise(out: list[HeadRaiseBorder], curves: list, text_cols: set[int],
+                    g: _HRGeom) -> list[HeadRaiseBorder]:
+    """抬头列认下以后校内框高度（`detect_head_raise(fit=True)`，2026-11-25，A21 版面基准）。
+
+    1. **同一抬头框内框齐平**：相邻两列都抬头、本列内框比邻列低出 HR_FIT_TOL 以上，且本列在邻列内框高度
+       ±HR_FIT_SNAP 有一条细线（墨 ≥ HR_EXTEND_INK_MIN，同 `_extend_head_raise` 的口径），本列内框就改到这条线——
+       原来认的是抬头字的顶笔（殿本 vol01 p30 c4/c6 认在「實」「天」字头上，低 12–24px；vol04 p6 c5 低 45px）。
+       双抬挨着单抬时，单抬列在双抬内框高度是框外白纸，没有细线，不动。
+       细线淡到认不出、但本列最上一道粗框条跟邻列同高（框条＋间距落在邻列内框 ±2×HR_FIT_OUTER_DY）时，内框按本页间距从框条推
+       （estimated）。本页间距取观测到、离先验不远的内外距中位。
+    2. **只有粗外框的列**（`text_rule` 认下的）：内框原取抬头字上沿往上一点，常落在粗外框上（vol04 p6 c1/c3 高 45px）。
+       改成本列最上一道粗框条的外延 + 本页实测内外间距（观测到的列的中位，没有就 HR_DEFAULT_PAIR_GAP）。
+    """
+    by_col = {b.col: b for b in out}
+    # 本页内外间距：观测到的列里落在先验 HR_DEFAULT_PAIR_GAP ± HR_FIT_GAP_WIN 内的取中位（内框认到字头上、或外框认到
+    # 字笔上的列间距会偏离先验，vol01 p46 c5 63、vol04 p6 c5 24），一个都没有就用先验
+    win = HR_FIT_GAP_WIN * g.scale
+    gaps = [b.inner_y - b.outer_y for b in out if not b.estimated and b.col not in text_cols
+            and abs(b.inner_y - b.outer_y - g.DEFAULT_PAIR_GAP) <= win]
+    gap = float(np.median(gaps)) if gaps else float(g.DEFAULT_PAIR_GAP)
+    for c in sorted(text_cols):
+        cv = curves[c - 1] if 0 < c <= len(curves) else None
+        if cv is None:
+            continue
+        curve, lo = cv[0], cv[1]
+        oy = _top_bar_edge(curve, lo)
+        if oy is None:
+            continue
+        by_col[c] = HeadRaiseBorder(col=c, inner_y=float(oy + gap), outer_y=float(oy), estimated=True)
+    changed = True
+    while changed:
+        changed = False
+        for c in sorted(by_col):
+            b = by_col[c]
+            cv = curves[c - 1] if 0 < c <= len(curves) else None
+            if cv is None:
+                continue
+            curve, lo = cv[0], cv[1]
+            refs = [by_col[j] for j in (c - 1, c + 1) if j in by_col
+                    and by_col[j].inner_y < b.inner_y - HR_FIT_TOL]
+            for r in sorted(refs, key=lambda r: r.inner_y):
+                best = None
+                for ci in local_maxima(curve, radius=2):
+                    y = float(lo + ci)
+                    if abs(y - r.inner_y) > HR_FIT_SNAP or curve[ci] < HR_EXTEND_INK_MIN:
+                        continue
+                    wd, _ = half_height_score_at(curve, ci)
+                    if wd <= g.THIN_WD_MAX and (best is None or curve[ci] > best[1]):
+                        best = (y, float(curve[ci]))
+                if best is not None:
+                    by_col[c] = HeadRaiseBorder(col=c, inner_y=best[0],
+                                                outer_y=best[0] - (r.inner_y - r.outer_y),
+                                                estimated=b.estimated or r.estimated)
+                    changed = True
+                    break
+                oy = _top_bar_edge(curve, lo)
+                if oy is not None and abs(oy + gap - r.inner_y) <= 2 * HR_FIT_OUTER_DY:
+                    # 细线淡到认不出，但本列最上一道粗框条跟邻列在同一高度（同一个抬头框）：内框按本页内外间距从框条推
+                    by_col[c] = HeadRaiseBorder(col=c, inner_y=float(oy + gap), outer_y=float(oy), estimated=True)
+                    changed = True
+                    break
+    return [by_col[c] for c in sorted(by_col)]
 
 
 #: 缺口列（`notch_top`，2026-11-20，A22）：一页上抬头列占多数时，`find_horizontal_border` 把抬头框的内框线当成主上版框，
@@ -410,7 +496,8 @@ def _notch_inner_y(binm: np.ndarray, btop: float, xl: int, xr: int, g: _HRGeom) 
 
 
 def notch_top(mask: np.ndarray, top: HLine, verticals: list[VLine], width: int,
-              extend: bool = True, scale: float = 1.0) -> tuple[HLine, list[HeadRaiseBorder]] | None:
+              extend: bool = True, scale: float = 1.0,
+              fit: bool = False) -> tuple[HLine, list[HeadRaiseBorder]] | None:
     """主上版框认在抬头框上的页（见 NOTCH_*）：把主上框挪到缺口列的真上框，重探抬头框；挪了以后**缺口以外的列全都认成抬头**
     才接受，返回 (新主上框, 抬头框)，否则 None。只在本页一个抬头框都没认出时由 `detect_borders(head_raise_notch=True)` 调。"""
     g = _HRGeom(scale)
@@ -435,7 +522,8 @@ def notch_top(mask: np.ndarray, top: HLine, verticals: list[VLine], width: int,
     if max(dys) - min(dys) > 2 * g.CLUSTER_DY:
         return None
     new_top = HLine(y_at_right=top.y_at_right + float(np.median(dys)), slope=top.slope, kind=top.kind)
-    hr = detect_head_raise(mask, new_top, verticals, width, extend=extend, scale=scale)
+    hr = detect_head_raise(mask, new_top, verticals, width, extend=extend, scale=scale,
+                           **({"fit": True} if fit else {}))
     if {b.col for b in hr} != set(range(1, n + 1)) - set(found):
         return None
     return new_top, hr
@@ -586,13 +674,21 @@ def _paper_beyond(binm: np.ndarray, base: np.ndarray, xs: np.ndarray,
     return float(np.median(vals)) if vals else 0.0
 
 
+#: `skip_top` 区间两侧再让出这么多 px（抬头框的墙）。
+OUTER_SKIP_PAD = 40
+
+
 def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                           verticals: list[VLine], width: int, height: int,
                           outer_shift: dict | None = None,
                           book_gap: dict | None = None,
                           frame_layers: dict | None = None,
-                          outer_side: str | None = None) -> dict:
+                          outer_side: str | None = None,
+                          skip_top: list[tuple[float, float]] | None = None) -> dict:
     """上下版框的外框偏移 + 纸边侧竖直外框偏移。
+
+    `skip_top`（旧坐标 x 区间，`head_raise_fit` 传抬头列）：量上外框时不看这些 x——抬头列那一段主上框上方是抬头框里的字，
+    没有外框条。抬头列占多数的页（殿本 vol04 p6，9 列抬 6 列）原来整条量不出外框。剩下不到 10 个采样点就照旧全宽量。
 
     坐标口径是**外延**（朝外那一侧的半高边缘），跟 `detect_head_raise()` 的
     `outer_y` 统一。外框是一条粗墨条，"位置"取决于量条的哪一侧，不定死口径
@@ -669,8 +765,17 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 out["v_outer_side"], out["v_outer_offset"] = outer_side, off * sgn
                 out["v_outer_estimated"] = True
     prior = None if out["v_outer_offset"] is None else abs(out["v_outer_offset"])
+    xs_all = xs
+    xs_top = xs
+    if skip_top:
+        keep = np.ones(len(xs), dtype=bool)
+        for a, b in skip_top:
+            keep &= ~((xs >= min(a, b) - OUTER_SKIP_PAD) & (xs <= max(a, b) + OUTER_SKIP_PAD))
+        if keep.sum() > 10:
+            xs_top = xs[keep]
     if len(xs) > 10:
         for kind, line, sign in (("top", top, -1.0), ("bottom", bottom, 1.0)):
+            xs = xs_top if kind == "top" else xs_all
             base = np.array([line.y_at((width - 1) - x) for x in xs])
             # 书级声明了这条边有 2 层，就不许判 single——版式是全书一致的，
             # 这一页看着像一根粗条，是内外框之间被污糊连成了片（见 BookSpec.frame_layers）。
@@ -743,6 +848,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
     # 书级先验兜底：该有外框却没探到的边，在册基准邻域找弱一档的墨（见 OUTER_INK_FALLBACK）
     if book_gap:
         for kind, line, sign in (("top", top, -1.0), ("bottom", bottom, 1.0)):
+            xs = xs_top if kind == "top" else xs_all
             declared = (frame_layers or {}).get(kind)
             if declared == 1 or out[f"{kind}_outer_offset"] is not None:
                 continue
@@ -1726,10 +1832,12 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     top_edge_reslope: bool = False,
                     top_hint: float | None = None,
                     bottom_hint: float | None = None,
-                    head_raise_notch: bool = False) -> BorderDetectionResult:
+                    head_raise_notch: bool = False,
+                    head_raise_fit: bool = False) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `head_raise_notch`：一个抬头框都没认出的页，查主上框是不是认在了抬头框上（`notch_top`）。缺省关。
+    `head_raise_fit`：抬头列认下以后校内框高度（`_fit_head_raise`），量上外框时跳过抬头列。缺省关。
 
     `top_hint` / `bottom_hint`：人给的上／下版框大致 y（页面横向中点处的行号），只在附近重找那条线，
     见 `seg/lines.find_horizontal_border` 的 `hint`。下游（折线、抬头框、外框）都在改后的线上算。缺省 None 不传。
@@ -1839,16 +1947,26 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
         mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline, bend_w80_med,
         **({"outer_bar": True, "outer_side": outer_side} if outer_bar else {}),
         **({"vline_track": True} if vline_track else {}))
+    fit_kw = {"fit": True} if head_raise_fit else {}
     head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend,
-                                   scale=head_raise_scale)
+                                   scale=head_raise_scale, **fit_kw)
     if head_raise_notch and not head_raise and top_hint is None:
         # 主上框认在抬头框上、没抬头的列反成缺口（见 NOTCH_*）：挪到缺口列的真上框重探抬头。缺省关不走
-        nt = notch_top(mask, top, verticals, w, extend=head_raise_extend, scale=head_raise_scale)
+        nt = notch_top(mask, top, verticals, w, extend=head_raise_extend, scale=head_raise_scale, **fit_kw)
         if nt is not None:
             top, head_raise = nt
+    skip_kw = {}
+    if head_raise_fit and head_raise:
+        spans = []
+        for b in head_raise:
+            if 1 <= b.col < len(verticals):
+                y = float(b.inner_y)
+                spans.append(((w - 1) - verticals[b.col - 1].x_at(y), (w - 1) - verticals[b.col].x_at(y)))
+        if spans:
+            skip_kw = {"skip_top": spans}
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
                                  outer_shift=outer_shift, book_gap=book_outer_gap,
-                                 frame_layers=frame_layers, outer_side=outer_side)
+                                 frame_layers=frame_layers, outer_side=outer_side, **skip_kw)
     return BorderDetectionResult(width=w, height=h, top=top, bottom=bottom,
                                   verticals=verticals, head_raise=head_raise,
                                   vline_segments=vseg, bend_w80_med=w80_med,

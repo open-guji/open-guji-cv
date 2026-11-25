@@ -1,8 +1,8 @@
-"""Step2 单列射影变换 + 去噪 + 界行 / 版框清除。
+"""2a 单列拉直：射影变换 + 去噪。
 
-包的是 `utils/column_projection` 的 page_column_windows → warp_column → denoise_column →
-clean_column。numeric 产物存复现所需的全部量；两种列图（矫正去噪 / 清理后）只进缓存，
-`render` 用同一条路径现算——射影与清理都是 (原图, Step1 线, 参数, 代码版本) 的确定性函数。
+五小步拆分（2026-11-25，`doc/2-切字/五小步.md`）：这里只留 2a——`page_column_windows` → `warp_column` →
+`denoise_column`。定字带左右边、抹界行归 2b `column_band`，列端抹版框归 2c `column_end`。numeric 产物
+`column_windows` 存窗口几何；列图 `column_raw`（矫正去噪）只进缓存，`render` 现算（确定性函数）。
 """
 
 from __future__ import annotations
@@ -14,15 +14,10 @@ from ..core.spec import StepSpec, column_key, parse_key
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.borders import Borders, VLineRec
-from ..products.kinds.columns import BorderTrim, ColumnTriage, ColumnWindowRec, PageWindows
-from ..impl.keben.column_triage import triage_column
-from ..impl.keben.column import clean_column, refine_top_by_frame
+from ..products.kinds.columns import ColumnWindowRec, PageWindows
+from ..impl.keben.column import refine_top_by_frame
 from ..seg.profile import column_profile, denoise_column, stamp_noise_density
 from ..seg.warp import ColumnWindow, page_column_windows, warp_column
-
-
-#: `tight_rule_band`：内侧孤立窄条峰到这么高才当第二道线（写本「以」的左竖一条 240 行里峰 0.16~0.33）
-TIGHT_INNER_BAR_PEAK = 0.5
 
 
 class ColumnWarpParams(BaseModel):
@@ -38,18 +33,6 @@ class ColumnWarpParams(BaseModel):
     下游切点跟着翻（012:99:1 dis_unet 151/154）。开了与 cv2 版也只在取整边上差 1 级，但仍改产物。
     2026-11-18 起缺省开（A22 切分开关收敛 11-13 定、A20 转缺省）：殿本、史記、全唐文早已写 true，`params_hash` 不变；
     没写的书（脉经、北行）column_warp 起过期。要旧行为写 `det_warp: false`（关时不进 dump，与转缺省前的缺省指纹相同）。"""
-    tight_rule_band: bool = False
-    """两侧界行判带收紧（写本开，史記）：贴边界行取衰减后的第一个谷（`column_text_band` first_valley），
-    内侧孤立窄条峰到 TIGHT_INNER_BAR_PEAK 才当第二道线抹（缺省 0.10，殿本页边列内框淡到 0.12）。缺省关＝殿本旧行为。
-    起因：写本字贴着界行写，「以」的左竖细高、跟右半「人」之间的缝比界行与字之间的缝还白，
-    判带取窗口最低点、或把它当内框，都连界行一起抹白，Step4 拿到的字就缺一笔（SJ r5，02:27:1:4b、02:112:2:2b）。"""
-
-    inner_bar_span: bool = False
-    """贴边界行内侧的「孤立窄条」要像线才抹（全唐文开）：离边超过 0.13 列宽、本横条里有墨的行不到一半的，
-    是字贴着界行的竖笔，不当第二道线（`column_text_band` inner_bar_span）。缺省关＝旧行为。
-    起因：全唐文「十」的竖、「恪」的忄贴着界行，`strip_column_rules` 按 240 行横条判带，把它们当内框连界行一起抹白，
-    Step4 拿到「亠」（001:121:1:6a、001:106:9:6a、014:108:3，台账 R033／R038）。"""
-
     ruled_warp: bool = False
     """列图不做射影，改「竖向线性、横向逐行按左右线插值」（`seg.warp.ruled_src_coords`，2026-11-08 A22）。缺省关＝射影。
     射影把左右线不平行（梯形）当透视，竖向按 1/(a+by) 伸缩。殿本 Commons 新图（第 7 轮换源）版面有真实弯曲，
@@ -63,10 +46,6 @@ class ColumnWarpParams(BaseModel):
         d = handler(self)
         if isinstance(d, dict) and not self.ruled_warp:
             d.pop("ruled_warp", None)
-        if isinstance(d, dict) and not self.tight_rule_band:
-            d.pop("tight_rule_band", None)
-        if isinstance(d, dict) and not self.inner_bar_span:
-            d.pop("inner_bar_span", None)
         if isinstance(d, dict) and not self.det_warp:
             d.pop("det_warp", None)
         return d
@@ -79,74 +58,18 @@ def side_floor(raw: np.ndarray, look: float = 0.25, ink_threshold: int = 128) ->
     return max(float(prof[:k].min()), float(prof[-k:].min()))
 
 
-#: `frame_residue` 判据的三个常数。量的是「清理**之后**上下两端还剩不剩版框墨」，
-#: 所以必须在 `cleaned` 上量、在**文字带宽度内**量（带外本来就是界行）。
-#:
-#: 判据选型是实测定的，另一个候选**被证伪**（bxgb 全书 2052 个端口）：
-#: 「端部最大行墨占比」分不开框墨与字墨——削干净的 d/e 档 p50 也有 0.43~0.47，
-#: 与漏判的 c 档（0.548）几乎重叠，因为削到框下沿之后紧邻的就是字，
-#: 字的横笔一行也能到 0.5~0.7。**别再往峰值这个方向调阈值**。
-#:
-#: 取的是「满宽连续段」——框线横贯整列宽且连续若干行，字的横笔不满宽也不连续：
-#:
-#:     档  个数  bar_run p50  p99  ≥3 占比
-#:     a   952   0            11   4.6%
-#:     b     9   6            10   88.9%
-#:     c    26   0             7   3.8%
-#:     d   895   0             0   0.0%      ← 正常削干净
-#:     e   170   0             0   0.0%      ← 正常削干净
-#:
-#: d/e 两档 1065 个端口**零误报**（最长段恒为 0），全书命中 53 个端口
-#: （a 44 / b 8 / c 1）。
-#:
-#: 余量只在 d/e 这一侧是干净的（恒 0，离门槛 3 还差 3）。**b 档这一侧没有余量**：
-#: 非零值是 [2,4,5,6,6,7,8,9,10]，门槛 3 正落在里面，那个 2 是漏的。
-#: 这可以接受——b 档本来就是已知的图像极限（框字粘连成一个连通体，不可剥），
-#: 标出来也只是交给人看；真要紧的是别把削干净的列误报成脏，那一侧是零误报。
-#: 想往下调到 2 之前先想清楚：a 档的 ≥2 会跟着涨，而 a 档是「贴着边缘削掉几行」，
-#: 多数本来就干净。
-FRAME_RESIDUE_PROBE = 45      # 端部探测深度（约 0.6 格）
-FRAME_RESIDUE_COV = 0.85      # 比 clean_column 内部的 0.65 更严：只认「几乎满宽」
-FRAME_RESIDUE_MIN_RUN = 3     # 连续多少行才算一条框线
-
-
-def frame_residue(cleaned: np.ndarray, band: tuple[int, int],
-                  probe: int = FRAME_RESIDUE_PROBE,
-                  cov: float = FRAME_RESIDUE_COV,
-                  ink_threshold: int = 128) -> tuple[int, int]:
-    """清理后上/下端各 probe 行内，最长的「满宽连续段」行数。
-
-    返回 `(top_run, bottom_run)`。0 表示这一端没有残留框墨。
-    """
-    b0, b1 = int(band[0]), int(band[1])
-    if b1 <= b0 or cleaned.size == 0:
-        return 0, 0
-    prof = (cleaned[:, b0:b1] < ink_threshold).mean(axis=1)
-
-    def longest(seg: np.ndarray) -> int:
-        best = run = 0
-        for v in seg >= cov:
-            run = run + 1 if v else 0
-            best = max(best, run)
-        return int(best)
-
-    return longest(prof[:probe]), longest(prof[-probe:])
-
-
 @register_step
 class ColumnWarpStep(Step):
     spec = StepSpec(
-        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.6", unit="column",   # 1.6：refine_top_by_frame 的「top_y 已在框上」否决加例外：上面另有满宽段、中间先白后连续 ≥20 行字墨（top_y 那道满宽段是首字顶横／夹注两字顶齐，SJ 查史記 02:5「姓」「岳時」），照常提到上面框下沿；殿本全 99 册只动 vol82 p147 c6
+        id="column_warp", title="2a 单列拉直（射影 + 去噪）", version="2.0", unit="column",   # 2.0：五小步拆分，只留拉直去噪；定字带归 column_band，列端抹框归 column_end
         consumes=("raw_page", "borders", "border_detect_gate_manifest"),
-        produces=("column_windows", "column_raw", "column_image"),
+        produces=("column_windows", "column_raw"),
         params=ColumnWarpParams,
-        code_deps=("open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.impl.keben.column", "open_guji_cv.impl.keben.border", "open_guji_cv.seg.polyline", "open_guji_cv.seg.frame_types",
-                   "open_guji_cv.impl.keben.column_triage"),
-        # 双线版框剥第二道读册配置（2026-09-26）——改 yaml 要让列图过期
-        book_deps=("frame_layers", "outer_gap"),
+        code_deps=("open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.impl.keben.column",
+                   "open_guji_cv.impl.keben.border", "open_guji_cv.seg.polyline", "open_guji_cv.seg.frame_types"),
     )
 
-    # ── 共用的一列计算 ─────────────────────────────────────────────────
+    # ── 共用的一列计算 ────────────────────────────────────────────────
     def _windows(self, ctx: RunContext, page: int) -> tuple[np.ndarray, Borders, list[ColumnWindow]]:
         p: ColumnWarpParams = ctx.params_for(self)  # type: ignore[assignment]
         gray = ctx.raw_page(page)
@@ -163,31 +86,20 @@ class ColumnWarpStep(Step):
                 refine_top_by_frame(gray, win, det=p.det_warp, **({"ruled": True} if p.ruled_warp else {}))
         return gray, borders, wins
 
-    def _images(self, ctx: RunContext, gray: np.ndarray, win: ColumnWindow
-                ) -> tuple[np.ndarray, np.ndarray, dict, np.ndarray]:
+    def _images(self, ctx: RunContext, gray: np.ndarray, win: ColumnWindow) -> tuple[np.ndarray, np.ndarray]:
+        """`(去噪后的列图 raw, 去噪前的矫正图 warped)`。"""
         p: ColumnWarpParams = ctx.params_for(self)  # type: ignore[assignment]
         warped = warp_column(gray, win.left, win.right, win.top_y, win.bottom_y, det=p.det_warp, ruled=p.ruled_warp)
         raw = denoise_column(warped, ink_threshold=p.ink_threshold, min_blob_area=p.min_blob_area)
-        # 双线版框剥第二道（column_projection.LAYER2_* 注）：层数与层距来自册配置
-        fl, og = ctx.book.frame_layers or {}, ctx.book.outer_gap or {}
-        cleaned, diag = clean_column(
-            raw, ink_threshold=p.ink_threshold,
-            layers=(int(fl.get("top", 1)), int(fl.get("bottom", 1))),
-            layer_gap=(og.get("top"), og.get("bottom")),
-            inner_bottom=win.border_bottom_in_column,
-            **({"bar_after_min_peak": TIGHT_INNER_BAR_PEAK, "first_valley": True} if p.tight_rule_band else {}),
-            **({"inner_bar_span": True} if p.inner_bar_span else {}))
-        return raw, cleaned, diag, warped
+        return raw, warped
 
-    # ── Step 接口 ─────────────────────────────────────────────────────
+    # ── Step 接口 ───────────────────────────────────────────────────
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: ColumnWarpParams = ctx.params_for(self)  # type: ignore[assignment]
         gate: BorderDetectGateManifest = ctx.product("border_detect_gate_manifest", page)
         if gate.page_type_policy == "skip":
-            # 闸1 判定这页没有正文栏格（封面/书签/牌记）——射影/去噪/清理
-            # 都是白费功夫（page_type.py 模块头实测：书签页照切会切出 126 个
-            # 无意义的块）。产出空列表，闸2 的 L1（探出列数!=版式列数）会自然
-            # 拒收，不用在这里重复判一次「该不该拦」。
+            # 闸1 判定这页没有正文栏格（封面/书签/牌记）——射影/去噪都是白费功夫（page_type.py 模块头实测：书签页照切
+            # 会切出 126 个无意义的块）。产出空列表。
             gray = ctx.raw_page(page)
             h, w = gray.shape[:2]
             borders: Borders = ctx.product("borders", page)
@@ -197,11 +109,9 @@ class ColumnWarpStep(Step):
         gray, borders, wins = self._windows(ctx, page)
         recs: list[ColumnWindowRec] = []
         for win in wins:
-            raw, cleaned, diag, warped = self._images(ctx, gray, win)
+            raw, warped = self._images(ctx, gray, win)
             key = column_key(page, win.col)
             ctx.cache.put(ctx.book.id, "column_raw", key, raw)
-            ctx.cache.put(ctx.book.id, "column_image", key, cleaned)
-            b0, b1 = diag["band"]
             recs.append(ColumnWindowRec(
                 col=win.col,
                 left_line=VLineRec.of(win.left), right_line=VLineRec.of(win.right),
@@ -211,20 +121,10 @@ class ColumnWarpStep(Step):
                 border_bottom_in_column=float(win.border_bottom_in_column),
                 raised=bool(win.raised),
                 head_raise_inner_y=None if win.head_raise_inner_y is None else float(win.head_raise_inner_y),
-                warped_size=(int(cleaned.shape[1]), int(cleaned.shape[0])),
-                band=(int(b0), int(b1)),
+                warped_size=(int(raw.shape[1]), int(raw.shape[0])),
                 **({"ruled": True} if p.ruled_warp else {}),
-                trim_top=BorderTrim(px=int(diag["top"]["px"]), case=str(diag["top"]["case"])),
-                trim_bottom=BorderTrim(px=int(diag["bottom"]["px"]), case=str(diag["bottom"]["case"])),
                 side_floor=round(side_floor(raw, p.side_floor_look, p.ink_threshold), 4),
                 stamp_noise=round(stamp_noise_density(warped, p.ink_threshold), 4),
-                # 在 `cleaned` 上量——判的是「削完之后还剩不剩框墨」，
-                # 拿 raw/warped 量就成了「削之前有没有框」，那是另一件事
-                **dict(zip(("frame_residue_top", "frame_residue_bottom"),
-                           frame_residue(cleaned, (b0, b1), ink_threshold=p.ink_threshold))),
-                # 分诊在**清理前**的 `raw` 上做：要判的正是「这一列清得拿不拿得准」，
-                # 清完再判就只能看到清理的结果，看不到它当初面对的形态。
-                triage=ColumnTriage(**{k: v for k, v in triage_column(raw).items() if k != "band"}),
             ))
         h, w = gray.shape[:2]
         return {"column_windows": PageWindows(
@@ -242,16 +142,16 @@ class ColumnWarpStep(Step):
         win = next((w for w in wins if w.col == col), None)
         if win is None:
             raise KeyError(f"第 {page} 页没有第 {col} 列")
-        raw, cleaned, _, _ = self._images(ctx, gray, win)
+        raw, _ = self._images(ctx, gray, win)
         # 再生的列图尺寸须与产物记的 warped_size 一致（2026-11-25，CV4→CV0）：不一致说明产物是另一份配置／代码出的，
         # 下游按产物里的格坐标裁这张图就裁偏。宁可报错，不悄悄出偏图。产物缺席（还没跑过）不验。
         if ctx.has_product("column_windows", page):
             rec = ctx.product("column_windows", page).column(col)
             want = tuple(int(v) for v in rec.warped_size) if rec is not None and rec.warped_size else None
-            got = (int(cleaned.shape[1]), int(cleaned.shape[0]))
+            got = (int(raw.shape[1]), int(raw.shape[0]))
             if want is not None and want != got:
                 from ..core.step import StaleRenderError
                 raise StaleRenderError(
                     f"{kind_id} {key} 再生尺寸 {got[0]}×{got[1]} 与产物 warped_size {want[0]}×{want[1]} 不符："
                     f"column_warp 产物不是按现在的代码／册配置出的，先从 column_warp 起重跑第 {page} 页。")
-        return raw if kind_id == "column_raw" else cleaned
+        return raw

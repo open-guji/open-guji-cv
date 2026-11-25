@@ -400,30 +400,27 @@ def strip_column_borders(warped_gray: np.ndarray, band: tuple[int, int] | None =
     return out
 
 
-def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
-                  **kwargs) -> tuple[np.ndarray, dict]:
-    """Step2 的收尾：去噪 + 清两侧界行 + 清上下版框，返回 `(清干净的图, 诊断)`。
+def band_strip(warped_gray: np.ndarray, ink_threshold: int = 128, **bar_kw
+               ) -> tuple[np.ndarray, tuple[int, int], np.ndarray]:
+    """2b 定字带左右边：返回 `(去噪图, band, 界行抹白后的图)`。
 
-    **顺序是有讲究的，这个函数存在的意义就是把它固化下来**：
-
-    1. `column_text_band` 在**原始矫正图**上定文字带 —— 这一步必须在抹白之前
-       做，抹白之后边缘变成纯白，`column_text_band` 会判成"这侧没界行"而返回
-       整幅宽度；
-    2. `strip_column_rules` 抹掉带外的界行；
-    3. `column_border_trim` 在**抹白之后的图上、且只在文字带宽度内**算水平
-       投影 —— 两侧界行贯穿整列，不排除掉的话每一行都带着底噪，"归不归零"
-       这个判据就废了；带外那片白也要排除，否则整条曲线被稀释约 9%，
-       `ink_eps` 这类阈值全部失准。
-
-    诊断字典里带 `band` / `top`/`bottom` 的削除行数与档位，方便评测和标注页复用。
+    `clean_column` 的前半（2026-11-25 五小步拆分，算法一字未改）：`column_text_band` 必须在抹白之前的图上定带，
+    `strip_column_rules` 再抹带外的界行。`bar_kw` 是写本／全唐文的书级开关（`first_valley`、`inner_bar_span`、
+    `bar_after_min_peak`）。
     """
-    # 写本书级（column_warp.tight_rule_band）：判带取界行后第一个谷、内侧孤立窄条要够浓才算第二道线
-    bar_kw = {k: kwargs.pop(k) for k in ("bar_after_min_peak", "first_valley", "inner_bar_span") if k in kwargs}
     denoised = denoise_column(warped_gray, ink_threshold=ink_threshold)
     band = column_text_band(denoised, ink_threshold=ink_threshold, **bar_kw)
     no_rules = strip_column_rules(denoised, ink_threshold=ink_threshold, **bar_kw)
-    # e 档的边距证据必须在**抹界行之前**的图上算——抹白之后带外全是白，
-    # 版框横贯整列这一特征就看不见了（见 column_border_trim 的 MARGIN_T 注）。
+    return denoised, band, no_rules
+
+
+def trim_ends(denoised: np.ndarray, band: tuple[int, int], no_rules: np.ndarray, ink_threshold: int = 128,
+              **kwargs) -> tuple[np.ndarray, dict]:
+    """2c 列端字：上下端抹版框，返回 `(清干净的图, {"top": …, "bottom": …})`。
+
+    `clean_column` 的后半（算法一字未改）。`denoised` 是抹界行**之前**的图——e 档的边距证据要在它上面算
+    （抹白之后带外全是白，版框横贯整列这一特征就看不见了，见 `column_border_trim` 的 `MARGIN_T` 注）。
+    """
     margin_profile = None
     lo, hi = band
     if lo + (denoised.shape[1] - hi) >= MARGIN_MIN_PX:
@@ -453,9 +450,20 @@ def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
         out[:top_px] = 255
     if bot_px:
         out[out.shape[0] - bot_px:] = 255
-    return out, {"band": band,
-                  "top": {"px": top_px, "case": top_case},
-                  "bottom": {"px": bot_px, "case": bot_case}}
+    return out, {"top": {"px": top_px, "case": top_case}, "bottom": {"px": bot_px, "case": bot_case}}
+
+
+def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
+                  **kwargs) -> tuple[np.ndarray, dict]:
+    """去噪 + 清两侧界行 + 清上下版框（= `band_strip` ＋ `trim_ends`），返回 `(清干净的图, 诊断)`。
+
+    五小步拆分（2026-11-25）后刻本链的 Step 分开调 `band_strip`（2b）与 `trim_ends`（2c）；这个合起来的入口
+    留给评测、脚本和测试。**顺序是有讲究的**：定带在抹白之前，削端在抹白之后只看文字带宽度内。
+    """
+    bar_kw = {k: kwargs.pop(k) for k in ("bar_after_min_peak", "first_valley", "inner_bar_span") if k in kwargs}
+    denoised, band, no_rules = band_strip(warped_gray, ink_threshold, **bar_kw)
+    out, diag = trim_ends(denoised, band, no_rules, ink_threshold, **kwargs)
+    return out, {"band": band, **diag}
 
 
 #: `refine_top_by_frame`（2026-09-20）：列窗上界之上再看这么多行找版框。

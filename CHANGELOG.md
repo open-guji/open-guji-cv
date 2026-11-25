@@ -4,6 +4,7 @@
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
 - 文档（无代码变化，产物与指纹不变）：2 切字新增五小步 2a–2e（拉直、定字带左右边、列端字、字间切分、字框压缩）的输入输出与代码对应表 `doc/2-切字/五小步.md`；README、骨架注释同步。
+- MINOR（用户 2026-11-25 定，不怕指纹变）：切字五小步拆成独立 Step——`column_warp` 只留 2a 拉直去噪；新增 `column_band`（2b 定字带左右边、抹界行；产物 `column_bands`、`column_banded`）、`column_end`（2c 列端抹版框；产物 `column_ends`、`column_image`）。算法一字未改，殿本 bench 40 页 `cells`、`char_index` 与拆前逐字节相同。刻本链各书从 column_warp 起过期。册配置里 `column_warp:` 下的 `tight_rule_band`、`inner_bar_span` 自动搬到 `column_band`，不用改册配置。`column_gate` 暂挂 `column_end`，下一步移到最后一道出口闸。
 - **MINOR**（L0：各书产物逐字节不变、指纹不变，code_equiv 登记；全唐文 001–003 要随书仓 k13 一起换）：seed_admit 加书级放行通道钩子 `impl/keben/admit_lanes.noref_lanes`（缺省 None，在 solo_5b 之后、ref_lib_5b_veto 之前调）与参数 `book_lanes`（dict，原样进参数指纹；`data` 路径表的文件内容哈希进 `book_lanes_fingerprint`；空不进 dump；写了而书仓没覆盖钩子就拒跑）。只有全唐文 001–003 用的四条无参照补放通道 solo_adapt／num_run／solo_cal／lead_5b 连同 28 个参数（`solo_adapt_*`、`num_run_*`、`solo_cal*`、`lead_5b*`）搬进全唐文书仓 `code/admit_lanes.py`（Sheldon 11-25 定「搬进全唐文书仓」，CV4）：册配置写原缺省值照读、写别的值报错并提示改写进 `book_lanes`。`scripts/char_cov_profile.py` 留 cv。
 
 - PATCH（产物逐字节不变，code_equiv 登记，L0）：冷缓存再生列图护栏（CV4→CV0 11-25，殿本 frame_layers／outer_gap）：`RunContext.materialize` 现算前比产物 manifest 记的 `book_deps` 与现册配置，不同就报 `StaleRenderError`、不出图；`column_warp.render` 再生尺寸与产物 `warped_size` 不符也报错；`cell_shrink` 整页内框线记忆 `_INNER_MEMO` 键加 cells／column_windows 产物 sha 与参数，同进程换配置不再串。起因：改了册配置没重跑 column_warp 时，下游按旧格坐标裁新列图（ZM replay-1125 二→一 37 格）。CV0。
@@ -105,6 +106,14 @@
 - PATCH（语料表，Step 代码指纹不变；底库语料变，下次出底库时进）：异体人工表补 䕶→護、蹖→踳；字对关系表 `variants.pairkind.tsv` 记 䕶護、蹖踳 为 V，巿市 为 C（形近不同义）。起因 GM3 复核全唐文异体闸 18 格（CV4）。
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
+
+## [0.7.106] - 2026-11-25
+
+殿本 patch 线：v0.7.105 ＋ dev #1868（CV1，border_detect 书级开关 `head_raise_fit`：抬头列认下后校内框高度、量上外框跳过抬头列；缺省关、关时不进参数 dump）。只带 border_detect／impl.keben.border 的改动，eval/ 与文档不带。**对 v0.7.105 实测（check_fp_change）23 步指纹全不变**：本线哈希已登 code_equiv（vol28 12 页 border_detect＋gate 逐字节同）。不开 `head_raise_fit` 的册不过期；开了的册按参数指纹从 border_detect 起过期。（CV0，ZM 11-25 定）
+
+## [0.9.1] - 2026-11-25
+
+0.9 patch 线（跟 v0.9.0 的书：脈經、北行）：v0.9.0 ＋ 移植 dev #1848＋#1856（书级开关 `seed_admit.ruling_by_u`：窗口键没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，只收 high、前后 2 字至少一侧相同、裁定字在库候选或＝整理本字；字组在线问前查缓存也按 u 后备，版本须完全相同）。缺省关、关时不进参数 dump。做法同 v0.7.103／v0.7.104：本线无格锚点接入，seed_admit 只加 u 档；`feedback/rulings.py` 取 v0.7.102 全文，`RulingLog.append` 写前校验缺省不开。**不含** v0.9.0 之后 dev 的其他改动（dev 上未登记的 seed_admit 指纹变更与底库 b35 都不带）。对 v0.9.0 实测（check_fp_change）23 步只有 seed_admit 变：指纹变更：seed_admit 起过期（开 ruling_by_u 的书从 seed_admit 重放）。底库不变。（CV0，u 项目 T3；Sheldon 11-25「彻底收尾」）
 
 ## [0.7.105] - 2026-11-25
 
