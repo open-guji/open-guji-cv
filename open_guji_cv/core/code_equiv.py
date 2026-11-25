@@ -2565,6 +2565,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="1acbfc9d2359c2074f41f4da4b558ed71dade3513540012596efa57fe05bc7bb",
           old="dca88bf9728446c7ea5ecf372f3fd05ea88470b0dcc98273a4251fc3b8f01980",
           evidence=_RENDER_GUARD_1125),
+    # 冷缓存再生护栏（CV0 11-25）——殿本 patch 线 v0.7.102 哈希（v0.7.105）
+    Equiv(module="open_guji_cv.steps.column_warp",
+          new="e3e00d4858dc3d23d56c88953f0d4a74b6025ca7ee07e9fcb9119cd7b89204fc",
+          old="d5c46a816760e0737924eb6fb0f11722b5a71b4d079dbf6e81e70ce4f89e772f",
+          evidence=_RENDER_GUARD_1125),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="139ae7bafc42ba76aebd0132799331227d26494c480c0b47bb78706706836294",
+          old="54311ec727a64754a83015d384ae554080a65bbf46af05ee3653cbf3530e08fd",
+          evidence=_RENDER_GUARD_1125),
 )
 
 
