@@ -240,8 +240,9 @@ _FORMAL_CV = re.compile(r"^\d+\.\d+\.\d+$")     # 正式版 cv_version（不带 
 def params_hash(params: BaseModel, soft: tuple[str, ...] = (),
                 path: tuple[str, ...] = ()) -> str:
     """参数指纹。`soft`（`StepSpec.soft_params`）、`path`（`StepSpec.path_params`）里的
-    字段剔掉不算；两者都空的步与 2026-09-25 之前逐位相同。"""
-    d = params.model_dump(mode="json")
+    字段剔掉不算；两者都空的步与 2026-09-25 之前逐位相同。`context={"hash": True}` 让参数类分清
+    「算指纹」与「重建参数用的 dump」（seed_admit 改过缺省的键只在算指纹时按旧缺省去，见 `_DUMP_DROP_HASH`）。"""
+    d = params.model_dump(mode="json", context={"hash": True})
     for k in (*soft, *path):
         d.pop(k, None)
     return hashlib.sha256(json.dumps(d, sort_keys=True,
@@ -250,7 +251,7 @@ def params_hash(params: BaseModel, soft: tuple[str, ...] = (),
 
 def param_parts(params: BaseModel, soft: tuple[str, ...] = (), path: tuple[str, ...] = ()) -> dict[str, str]:
     """参数逐字段的短哈希（剔除口径同 `params_hash`）。记进 manifest，不进指纹；`stale_reason` 用它点名变了的字段。"""
-    d = params.model_dump(mode="json")
+    d = params.model_dump(mode="json", context={"hash": True})
     return {k: hashlib.sha256(json.dumps(v, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
             for k, v in sorted(d.items()) if k not in soft and k not in path}
 

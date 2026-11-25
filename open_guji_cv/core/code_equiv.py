@@ -577,6 +577,12 @@ _BOOK_LANES_1125 = ("seed_admit 加书级放行通道钩子 impl/keben/admit_lan
                     "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-25（CV4）")
 
 
+_NEW_DEFAULTS_1125 = ("seed_admit 5 个参数缺省改成三本主力书都设的值（consensus_fallback、group_flow_ctx_agree、ref_lib_coord_dissent、"
+                      "edge_pair_group_seam、human_unbound_shift_ok；Sheldon 11-24 定）：参数指纹按旧缺省去键（_DUMP_DROP_HASH），"
+                      "代码路径不变、只是参数取值来源变了——取值变了的册（脉经、北行、幼學）参数指纹跟着变、照样过期。"
+                      "殿本 vol28、全唐文 020、史記 02（页同 _BOOK_LANES_1125）按写死旧值后的册配置 seed_admit 与 origin/dev 338caec6 产物逐字节相同"
+                      "（共 50 页；上游补跑 column_band／column_end 后两边同输入）；参数指纹 397 册除脉经 01–06、北行、幼學外全同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-25（CV4）")
+
 _HR_FIT_0106 = ("border_detect head_raise_fit（CV1 #1868，缺省关、关时不进参数 dump、新分支不走）殿本 patch 线移植 v0.7.105→v0.7.106："
                 "vol28 12 页（1-6,30-33,82,100）border_detect＋border_detect_gate 产物与 v0.7.105 逐字节相同；scripts/code_equiv.py check --gate border_detect_gate，2026-11-25（CV0）")
 
@@ -2608,6 +2614,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="d0a1dafea84263f7caba32221213d445b39848493dc204bbbd41e1680ba15ccc",
           old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
           evidence=_BOOK_LANES_1125),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="16d05f7061b67fb0ba76a8ae9dc2d656b679c8dc266790ab80fd4cfd76cc402f",
+          old="d0a1dafea84263f7caba32221213d445b39848493dc204bbbd41e1680ba15ccc",
+          evidence=_NEW_DEFAULTS_1125),
     # head_raise_fit 殿本 patch 线（v0.7.106）
     Equiv(module='open_guji_cv.steps.border_detect',
           new='7e84df3dc42765bd70f72c6dc8ef19d472e015c47b993797f4be330ac9ff6765',

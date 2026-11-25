@@ -181,6 +181,18 @@ _RETIRED.update(_CONSTANTS)
 #: 这样没开某开关的书 `params_hash` 与加字段前逐位相同、产物不过期。新加书级参数照这个口径加一行。
 #: 缺省开的开关（symbol_review、rare_ref、shadow_veto、context_guard_*）关着时开关本身留在 dump 里（显式 False），
 #: 只去附属字段——否则 dump 再读回来会变回缺省的开。条件只看参数本身，行与行之间没有先后依赖。
+#: 2026-11-25 CV4 改了缺省的 5 个参数（Sheldon 11-24 定：缺省改成三本主力书都设的值）：参数指纹仍按**旧缺省**去键，
+#: 写了旧缺省值的册（殿本、全唐文写死照旧）与没改缺省前逐位相同。只在算指纹时去（`params_hash`／`param_parts` 传
+#: `context={"hash": True}`）；普通 dump 保留这几个键——`step.py` 等处用 `type(p)(**p.model_dump(), …)` 重建参数，
+#: 去了键会落回新缺省，写死的旧值就丢了。
+_DUMP_DROP_HASH: tuple = (
+    (lambda p: not p.consensus_fallback, ("consensus_fallback",)),
+    (lambda p: not p.ref_lib_coord_dissent, ("ref_lib_coord_dissent",)),
+    (lambda p: not p.human_unbound_shift_ok, ("human_unbound_shift_ok",)),
+    (lambda p: not p.group_flow_ctx_agree, ("group_flow_ctx_agree",)),
+    (lambda p: p.edge_pair_group_seam, ("edge_pair_group_seam",)),
+)
+
 _DUMP_DROP: tuple = (
     (lambda p: not p.book_lanes, ("book_lanes", "book_lanes_fingerprint")),
     (lambda p: not p.symbol_review, ("symbol_min_human",)),
@@ -208,7 +220,6 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.alt_require_matched, ("alt_require_matched",)),
     (lambda p: not p.alt_note_region, ("alt_note_region",)),
     (lambda p: not p.alt_backed_gain, ("alt_backed_gain",)),
-    (lambda p: not p.consensus_fallback, ("consensus_fallback",)),
     (lambda p: not p.blank_ink_nonchar,
      ("blank_ink_nonchar", "blank_ink_max_cov", "blank_ink_col_min_agree", "blank_ink_col_min_frac")),
     (lambda p: not p.fold_groups,
@@ -244,7 +255,6 @@ _DUMP_DROP: tuple = (
     (lambda p: p.ref_lib_5b_veto is None, ("ref_lib_5b_veto", "ref_lib_5b_veto_lead")),
     (lambda p: p.solo_5b_same_cov is None, ("solo_5b_same_cov",)),
     (lambda p: not p.replace_form_edge_exclude, ("replace_form_edge_exclude",)),
-    (lambda p: not p.ref_lib_coord_dissent, ("ref_lib_coord_dissent",)),
     (lambda p: not p.solo_coord_dissent, ("solo_coord_dissent",)),
     (lambda p: not p.lane_coord_blind_guard,
      ("lane_coord_blind_guard", "lane_coord_blind_min_n", "lane_coord_blind_lib_cov", "lane_coord_blind_gap")),
@@ -257,7 +267,6 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.seal_blank_page, ("seal_blank_page", "seal_blank_thr", "seal_blank_overlap", "seal_blank_ink_out")),
     (lambda p: not p.lane_coord_codepoint_variant,
      ("lane_coord_codepoint_variant", "lane_coord_codepoint_gap", "lane_coord_codepoint_skip")),
-    (lambda p: not p.human_unbound_shift_ok, ("human_unbound_shift_ok",)),
     (lambda p: not p.group_flow_lift_ref_veto, ("group_flow_lift_ref_veto",)),
     (lambda p: not p.group_flow_lift_shape_ref, ("group_flow_lift_shape_ref",)),
     (lambda p: not p.group_flow_ref_alias, ("group_flow_ref_alias",)),
@@ -272,7 +281,6 @@ _DUMP_DROP: tuple = (
     (lambda p: p.group_flow_review_fix_agree == ['yr'], ("group_flow_review_fix_agree",)),
     (lambda p: not p.group_flow_dissent_keep, ("group_flow_dissent_keep", "group_flow_dissent_margin")),
     (lambda p: not (p.group_flow_dissent_keep and p.group_flow_dissent_l1), ("group_flow_dissent_l1",)),
-    (lambda p: not p.group_flow_ctx_agree, ("group_flow_ctx_agree",)),
     (lambda p: not p.group_flow_ref_pair, ("group_flow_ref_pair", "group_flow_ref_pair_margin")),
     (lambda p: not p.group_flow_ref_pair_coord, ("group_flow_ref_pair_coord",)),
     (lambda p: not p.group_flow_tolerate_extra, ("group_flow_tolerate_extra",)),
@@ -310,7 +318,6 @@ _DUMP_DROP: tuple = (
     (lambda p: p.edge_pair_to == "freq", ("edge_pair_to",)),
     (lambda p: p.edge_pair_cov == 0.92, ("edge_pair_cov",)),
     (lambda p: p.edge_pair_gap == 0.005, ("edge_pair_gap",)),
-    (lambda p: p.edge_pair_group_seam, ("edge_pair_group_seam",)),
     (lambda p: p.edge_pair_group_seam_nf_gap == 0.03 or not p.edge_pair_group_seam, ("edge_pair_group_seam_nf_gap",)),
 )
 
@@ -366,8 +373,8 @@ class SeedAdmitParams(BaseModel):
     # 见 `feedback/lookup.evict_review_cells`）的格，多半切坏、看不出是哪个字，**文本撤下来、重新人审**：
     # 这一格机器放行的一律退回待审（`doubts` 记 `evict_review`，待审原因归 seg_defect），之后人再裁的照常采信。
     # 只降级、不改字、不放行，放在所有遍之后。没有这类事件的书产物不变。
-    human_unbound_shift_ok: bool = False
-    """人裁绑丢闸的顺移豁免（缺省关；史記 2026-11-01 实测）。
+    human_unbound_shift_ok: bool = True
+    """人裁绑丢闸的顺移豁免（缺省开（2026-11-25 CV4 起缺省改成三本主力书都设的值，Sheldon 11-24 定；参数 dump 仍按旧缺省去键，设了旧值或没设而用新缺省的册指纹分别照旧／改变）；史記 2026-11-01 实测）。
 
     早期快审的人裁是在旧切分上做的，重切后同列多/少了一格，旧编号上现在是另一个字；补锚档
     （`feedback/anchor_backfill.py`）同列旁证不够时锚不上，人裁按原编号挂到现格上，现格机器放行的字
@@ -563,8 +570,8 @@ class SeedAdmitParams(BaseModel):
     给别字的解法**全是弱图像票**（`ids` 等记了 margin 的 < `group_flow_dissent_margin`；`yr_bars`、`bars` 这类量笔画的算弱票）→ 不降审（`flow._dissent_keep`，
     留痕 `dissent_keep`）。文意或码位给了别字照旧降审。殿本目视 36 格（遺還、圓圖、面而、傳傅、諭論、甲申、間問、曾會、一二）放行字全对。
     写法 `[em, fc, ly, wj, yh, yt, js, zh, yr]`；入人八 rr 与 日曰 ry 文意不独立，别开（见 doc/字组/判法打架.md）。"""
-    group_flow_ctx_agree: list[str] = Field(default_factory=list)
-    """书级（A24 Z02 11-07 sheldon 定，缺省空＝关、不进参数 dump）：`group_flow_dissent_keep`／`group_flow_ref_pair` 里再列入这里的组，
+    group_flow_ctx_agree: list[str] = Field(default_factory=lambda: ['rr'])
+    """书级（A24 Z02 11-07 sheldon 定；缺省 `[rr]`（2026-11-25 CV4 起缺省改成三本主力书都设的值，Sheldon 11-24 定；参数 dump 仍按旧缺省去键，设了旧值或没设而用新缺省的册指纹分别照旧／改变）；写 `[]`＝关、不进参数 dump）：`group_flow_dissent_keep`／`group_flow_ref_pair` 里再列入这里的组，
     放行字（复核）或整理本字（补放／联合判）还要**本组文意（ctx，不含共字组搭档）同意**才生效。入人八 rr：整理本 24 对 3 错、
     文意 10 对 10 错，「整理本＝文意」9 格 8 对 0 错。写法 `[rr]`。"""
     group_flow_dissent_l1: list[str] = Field(default_factory=list)
@@ -770,8 +777,8 @@ class SeedAdmitParams(BaseModel):
     小注范围外两遍比：待审不多、与坐标字冲突不多，就换。参照本没有小注，劈对了格多、待审反而多，按原规矩永远换不过来
     （01 29:10「得一／作」主切法并成一格、19:12、65:9 同）；主切法在小注范围里本来也放不出字，换了不丢东西。
     反方向也认：主切法把大字劈成 a/b 小注、备选同处是一个放行的大字格（`_big_region_ok`，01 41:1「脉」劈成「永」「月」照样放行）。"""
-    consensus_fallback: bool = False
-    """共识升档的 same 退回原档（A23，全唐文 r15 回退 46 格，QTW 看图 11-06；第 7 轮，缺省关、关时不进参数 dump）。
+    consensus_fallback: bool = True
+    """共识升档的 same 退回原档（A23，全唐文 r15 回退 46 格，QTW 看图 11-06；第 7 轮；缺省开（2026-11-25 CV4 起缺省改成三本主力书都设的值，Sheldon 11-24 定；参数 dump 仍按旧缺省去键，设了旧值或没设而用新缺省的册指纹分别照旧／改变），关时不进参数 dump）。
     5a 共识升档（`glyph_match.consensus_*`，`via="consensus:<n>"`）把 unsure 升成 same 后，准入对 same 档另有防线：
     库 same 字 ≠ 对位整理本字（含整理本缺字）时 rare_ref／rare_sparse／整理本诸通道都不放，doubt「库 same 但准入被拦」，
     而升档前它是 unsure、本来走 context／match_ref／coord_fallback 等通道放行。开了以后：来自共识升档的 same、
@@ -959,11 +966,11 @@ class SeedAdmitParams(BaseModel):
     """`replace_form: lib` 换库形时，若库首位与整理本字这一对在本书假边表 `config/variants/edge_pair_exclude.tsv`
     里（不是异体，只是语义表连上了），不换、照整理本字（全唐文码位线 11-05：r12 试 `lib` 估约 11 格把「往」记成
     「住」等，往/住 早已在假边表）。缺省关（关时逐字节不变，不进 dump）。"""
-    ref_lib_coord_dissent: bool = False
+    ref_lib_coord_dissent: bool = True
     """`ref_lib` 放行前看坐标对位：坐标对位给了实字、与现役对位字语义不同时，不放行，记 doubt
     `ref_lib_coord_dissent`（硬疑问，补放通道不再按现役字放回）、落人审（全唐文 r11 11-05：去借库后本书库缺
     麒／褚／俘 刻例，库首位落到 麟／諸／俾，现役对位跟着错位成 equal，ref_lib 照放；坐标对位是对的。r11 ref_lib
-    226 格里有坐标对位的 14 格、两边不一致 9 格，看图 7 格坐标对、2 格现役对）。缺省关（关时逐字节不变，不进 dump）。"""
+    226 格里有坐标对位的 14 格、两边不一致 9 格，看图 7 格坐标对、2 格现役对）。缺省开（2026-11-25 CV4 起缺省改成三本主力书都设的值，Sheldon 11-24 定；参数 dump 仍按旧缺省去键，设了旧值或没设而用新缺省的册指纹分别照旧／改变）；关时逐字节同旧行为、不进 dump。"""
     solo_coord_dissent: bool = False
     """match_solo 系放行前看坐标对位（同 `ref_lib_coord_dissent` 的判据，GUJI-750）：坐标对位给了实字、与放行字
     （库 same 取库字，否则库候选 top1）语义不同，不单独放行，记 doubt `solo_coord_dissent`（硬疑问，补放通道不再放回）、
@@ -1420,10 +1427,10 @@ class SeedAdmitParams(BaseModel):
     #    `edge_pair` 库首位 cov 下限（同 `follow_ref_cov`）。
     # ── `edge_pair_gap` = 0.005（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     #    `edge_pair` 库首位领先这一对以外最好候选的下限（同 `follow_ref_gap`）。
-    edge_pair_group_seam: bool = True
+    edge_pair_group_seam: bool = False
     """`edge_pair` 补字组缝（A24 V01 深挖 11-06，第 7 轮）：整理本字与库首位是纯异体强边、但有一字是字组成员（`is_auto_pair` 不认），
     且这一格字组没接（evidence 里没有 group）→ 也按 `edge_pair` 判；涉及形近组时领先要 ≥ `edge_pair_group_seam_nf_gap`。
-    殿本三书 ★main 包回看 9 格看图字都对（衞衛、隸隷、陰隂、尙尚、歲歳、𩀱雙、呂吕、嘗甞、廹迫）。"""
+    殿本三书 ★main 包回看 9 格看图字都对（衞衛、隸隷、陰隂、尙尚、歲歳、𩀱雙、呂吕、嘗甞、廹迫）。缺省关（2026-11-25 CV4 起缺省改成三本主力书都设的值，Sheldon 11-24 定；参数 dump 仍按旧缺省去键，设了旧值或没设而用新缺省的册指纹分别照旧／改变）。"""
     # ── `edge_pair_group_seam_nf_gap` = 0.03（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     #    字组缝涉及形近组时，库首位领先对外最好候选的下限（同字组入口的 delta）。
 
@@ -1477,15 +1484,17 @@ class SeedAdmitParams(BaseModel):
         return self.follow_ref_variants or self._rt_on("follow_ref_variants")
 
     @model_serializer(mode="wrap")
-    def _drop_off_rare(self, handler):
-        """参数 dump（进 `params_hash`）：补回退役／恒开参数的固定值，再按 `_DUMP_DROP` 去掉关着的、取缺省值的键。"""
+    def _drop_off_rare(self, handler, info):
+        """参数 dump（进 `params_hash`）：补回退役／恒开参数的固定值，再按 `_DUMP_DROP` 去掉关着的、取缺省值的键；
+        算指纹时（`context={"hash": True}`）再按 `_DUMP_DROP_HASH` 去改过缺省的键。"""
         d = handler(self)
         if not isinstance(d, dict):
             return d
         d.update(_RETIRED_IN_DUMP)
         d.update(_ALWAYS_ON_IN_DUMP)
         d.update({k: copy.deepcopy(v) for k, v in _CONSTANTS.items()})
-        for cond, keys in _DUMP_DROP:
+        rules = _DUMP_DROP + _DUMP_DROP_HASH if (info.context or {}).get("hash") else _DUMP_DROP
+        for cond, keys in rules:
             if cond(self):
                 for k in keys:
                     d.pop(k, None)
