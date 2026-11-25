@@ -182,6 +182,7 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.vis_ruling_half, ("vis_ruling_half",)),
     (lambda p: not p.vis_ruling_ctx_subclasses, ("vis_ruling_ctx_subclasses",)),
     (lambda p: not p.ruling_anchor_loose, ("ruling_anchor_loose",)),
+    (lambda p: not p.ruling_by_u, ("ruling_by_u",)),
     (lambda p: not p.group_flow_ruling_first, ("group_flow_ruling_first",)),
     (lambda p: not p.p_ref_admit, ("p_ref_admit",)),
     (lambda p: (not p.p_ref_admit or p.p_ref_max_cov is None), ("p_ref_max_cov",)),
@@ -519,6 +520,13 @@ class SeedAdmitParams(BaseModel):
     开（`RulingStore._anchor_loose`）：同格同 cells_sha 同 ref 下，本组 `validate` 认的任意版本（减 `ver_equiv.yaml` 的 `void`，O 组仍按目标版本）、
     多条取最新、字不一致记 `ruling_conflict` 不放行；只收 high（fold 遍也是）；窗口改为前后 2 字至少一侧相同。
     窗口键、版本等价表照旧先查；在线问前查缓存（`RulingCache`）仍按精确键。开之前须 20 册强制锚点回放人裁真错 0。"""
+    ruling_by_u: bool = False
+    """裁定按字格永久编号 u 查（CV0 T3 2026-11-24，执行方案 https://claude.ai/artifact/NksDge9ZxaEyebAgnS8s8Q；书级，缺省关、关时不进参数 dump、行为不变；
+    开的册 seed_admit 起往下过期，L1）。开：`_vis_ruling_pass` 与 fold 遍在窗口键、版本等价、格锚点都没中之后再查一档——
+    本格的 u 从本册字格身份账（`<feedback>/uid/<册>.jsonl`，`feedback.rulings.UidLedger`）按本页当前 cells_sha 取，
+    同组同册同 u 的裁定按格锚点宽松档口径取（`RulingStore.get_by_u`：validate 认的版本减 void、多条取最新、字不一致记 `ruling_conflict` 不放行、
+    只收 high、前后 2 字至少一侧相同），且裁定字在库候选或＝整理本对位字；看图判通道其余护栏（ref 一致、子类白名单、越过整理本白名单）照旧。
+    账里查不到本页这次切分就当没有 u（不回退格号）。账与裁定数据不进指纹，变了要 force 重放。开之前须试点册回放放行集合不变小、人裁真错 0。"""
     group_flow_ruling_first: list[str] = Field(default_factory=list)
     """这几组的文意解法先查裁定库（对话裁定，`feedback.rulings`），命中就照裁定给字，不再看 L1 规则、L2 表／小头（书级，缺省空、不进参数 dump、行为不变）。
     没命中照旧走 L1 → L2 → L3。复核时（`review_fix` 的组，如己已巳）已放行格的上下文有裁定、字不同 → 改成裁定字。

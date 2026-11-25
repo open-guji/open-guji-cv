@@ -535,6 +535,15 @@ _LOOSE_1124 = ("格锚点宽松档 seed_admit.ruling_anchor_loose（书级，缺
                "（未推任何锚点回填），seed_admit 与 origin/dev a68b379 产物逐字节相同；scripts/code_equiv.py check，"
                "GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4）")
 
+_BY_U_1124 = ("裁定按字格永久编号 u 查 seed_admit.ruling_by_u（书级，缺省关、关时不进参数 dump；RulingStore 加按 payload.u 的索引与 get_by_u、"
+              "_anchor_loose 加 key 参数缺省 anchor、put 加 u 参数缺省 None、新类 UidLedger；_vis_ruling_pass／_fold_pass 加 umap 参数缺省 None，"
+              "关时 _uid_map 返回 None 不读账；CV0 T3）：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，"
+              "main 包 cv0.7.86-c36-g24-m3-r17notch86）、全唐文 020 16 页（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，"
+              "main 包 cv0.7.93-c82-g-715f07-k11-qtw020-vh3-a5）、史記 02 18 页（4,9,19,24,33,41,44,53,86,95,102,106,114,141,173,180,185,199，"
+              "main 包 cv0.7.59-c10-g23-m2-k25-job5767），三书中心库现有裁定库在场，seed_admit 与 origin/dev 728e635 产物逐字节相同"
+              "（史記首轮 --jobs 4 p106 一页不同，同代码单跑两次、整 18 页复跑均相同，按并发偶发记）；"
+              "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-24（CV0）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2482,6 +2491,19 @@ ENTRIES: tuple[Equiv, ...] = (
           new="8bc6350ef775871af2dda3013f4dd207b8efebc1a871e863402dbdddea585f8e",
           old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
           evidence="seed_admit 与 bda9a06 产物逐字节相同：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（页同上条）"),
+    # 裁定按 u 查（CV0 T3，字格永久编号 u 执行方案 11-24）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="7cea519cb92fc41428dfc925453bd905596bd3ba89a62338fa647ebb05c3c2f6",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_BY_U_1124),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="5728bc579766f98a8aa7bea84769d9033d18f15601892e0221da6337dfb082e2",
+          old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
+          evidence=_BY_U_1124),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="4b82f4a44d45d4281fda170891124cde9a3c9c8edfdc572f251690defec41fed",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_BY_U_1124),
 )
 
 
