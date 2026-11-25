@@ -522,6 +522,9 @@ _VLINE_TRACK_1125 = ("border_detect 加 vline_track（竖线逐条先直线、�
                      "关时走原式；其余是新函数定义）：殿本 vol01 9 页（9,40,45,100,132,161,1,50,79，含 vline_overrides 页 100）、脈經 01 3 页（3,4,47）、"
                      "全唐文 120 2 页（8,118）、史記 05 3 页（3,8,58）border_detect 与 cv1-outer-bar c6c410d 产物逐字节相同；"
                      "scripts/code_equiv.py check，2026-11-25（CV1）")
+_VLINE_FAINT_1125 = ("vline_track 加淡线兜底（refit_vlines_by_track 多一个缺省 None 的 gray，_bend_verticals 也多一个；只在 vline_track 开时传；"
+                     "其余是新函数与新常数）：殿本 vol01 9 页（9,40,45,100,132,161,1,50,79）、脈經 01 3 页（3,4,47）、全唐文 120 2 页（8,118）、"
+                     "史記 05 3 页（3,8,58）border_detect 与 origin/dev d155019 产物逐字节相同；scripts/code_equiv.py check，2026-11-25（CV1）")
 _VER_EQUIV_1124 = ("裁定版本等价登记表（RulingStore.get_equiv；_vis_ruling_pass 与 fold 遍改用它，没有 ver_equiv.yaml 时与 get 完全相同；"
                    "非精确命中才写 ruling_key／ruling_ver；白名单按目标版本判，精确命中时与原判据同）：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，"
                    "main 包 cv0.7.86-c36-g24-m3-r17notch86）、全唐文 020 16 页（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，"
@@ -2504,6 +2507,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='00df255d51ef67106ea3fe04c32fb1e7efaa87de70ae61fbb8e6c71e08243567',
           old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
           evidence=_VLINE_TRACK_1125),
+    # vline_track 淡线兜底（CV1 11-25）
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='66aa6836358f908cac88d04afa23dd53cdb5cac29db487d593ba1d7d2034540e',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_VLINE_FAINT_1125),
     # 裁定版本等价登记表（CV4，裁定键长期方案②，GM4 11-24）——dev 哈希
     Equiv(module="open_guji_cv.steps.seed_admit",
           new="df5ba5579860f18cf02afb968a88ce999ec0f89cf297eabcea8c1a4210514d08",
