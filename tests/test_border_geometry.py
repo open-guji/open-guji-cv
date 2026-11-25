@@ -558,3 +558,40 @@ def test_row_windows_drops_rows_outside_image():
     assert rows.min() >= 0 and rows.max() < h
     assert win.shape == (len(rows), 2 * BEND_SEARCH + 1)
     assert (win.sum(axis=1) == 1).all()
+
+
+def _faint_inner_with_char_top(mask, xs, col, inner_y, char_y):
+    """本列抬头框内细线印淡（只留约 20% 墨），线下有一道像字头的横笔。"""
+    n = len(xs) - 1
+    x0, x1 = int(xs[n - col]) + 6, int(xs[n - col + 1]) - 6
+    mask[inner_y - 1:inner_y + 2, x0:x1] = 0.0
+    mask[inner_y - 1:inner_y + 2, x0:x1:5] = 1.0
+    mask[char_y - 1:char_y + 2, x0 + 20:x1 - 20] = 1.0
+
+
+def test_head_raise_fit_snaps_faint_inner_to_neighbour_line():
+    """同一抬头框里一列内细线印淡、认到字头上（殿本 vol01 p30 c6、vol04 p6 c5）：开 fit 后对齐邻列那条线；缺省不变。"""
+    border_top = 400
+    mask, top, verts, xs = _blank_head_raise_page(border_top=border_top)
+    _paint_raised_box(mask, xs, cols=[4, 5, 6], inner_y=285, outer_y=249,
+                      border_top=border_top, outer_thickness=16)
+    _faint_inner_with_char_top(mask, xs, 5, 285, 300)
+    plain = {r.col: r.inner_y for r in detect_head_raise(mask, top, verts, width=1000)}
+    assert abs(plain[5] - 300) <= 3                       # 缺省：认在字头上（现状）
+    got = {r.col: r for r in detect_head_raise(mask, top, verts, width=1000, fit=True)}
+    assert sorted(got) == [4, 5, 6]
+    assert abs(got[5].inner_y - 285) <= 3
+    assert abs(got[4].inner_y - 285) <= 3 and abs(got[6].inner_y - 285) <= 3
+
+
+def test_head_raise_fit_leaves_double_raise_alone():
+    """双抬挨着单抬：单抬列在双抬内框高度是框外白纸，fit 不能把它拉上去。"""
+    border_top = 400
+    mask, top, verts, xs = _blank_head_raise_page(border_top=border_top)
+    _paint_raised_box(mask, xs, cols=[4], inner_y=200, outer_y=164,
+                      border_top=border_top, outer_thickness=16)
+    _paint_raised_box(mask, xs, cols=[5], inner_y=300, outer_y=264,
+                      border_top=border_top, outer_thickness=16)
+    a = {r.col: r.inner_y for r in detect_head_raise(mask, top, verts, width=1000)}
+    b = {r.col: r.inner_y for r in detect_head_raise(mask, top, verts, width=1000, fit=True)}
+    assert a == b

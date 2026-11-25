@@ -565,6 +565,11 @@ _RENDER_GUARD_1125 = ("冷缓存再生护栏（CV4→CV0 11-25 殿本 frame_laye
                       "tests/test_render_stale_guard.py、test_cell_shrink_render_memo.py、test_column_warp_skip.py 过；2026-11-25（CV0）")
 
 
+_HR_FIT_1125 = ("border_detect head_raise_fit（抬头内框校高度、量上外框跳过抬头列，缺省关、关时不进参数 dump、新分支不走；CV1 11-25）："
+                "殿本 vol01 10 页（24,30,45,46,48,50,1,8,100,149）、vol04 10 页（1,2,4,6,9,82,63,10,50,100）的 border_detect＋border_detect_gate "
+                "产物与 origin/dev 8bc0cdc 逐字节相同；scripts/code_equiv.py check --gate border_detect_gate，2026-11-25")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2470,6 +2475,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='b0c0fb8c4f891a718541855f3f604292da003e6315a268906121dd3bc9a60304',
           old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
           evidence=_OUTER_BAR_1124),
+    # head_raise_fit（CV1 11-25）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='56be06d98852f268d18a1fe810b391de919262e5eee9add236edbde538d6d000',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_HR_FIT_1125),
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='bea702c7f847338e107de2bf008dc77df3fb6cb86b9e808be0b1a4f3e582f69d',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_HR_FIT_1125),
     # vline_track（CV1 11-25）
     Equiv(module='open_guji_cv.steps.border_detect',
           new='077e87276f1290fee0c8e97e02a94a58b73fcd74d787e30836521e913856400c',
