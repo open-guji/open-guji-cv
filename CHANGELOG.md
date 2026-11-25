@@ -53,6 +53,10 @@
 
 ## [未发版]
 
+## [0.7.101] - 2026-11-25
+
+全唐文 patch 线：v0.7.100 ＋ dev #1852（CV3）。5a.3 形近字对分类器起跑前核对 `pair_clf.json` 记的 `sim_model`（权重 sha 前缀或模型目录名）与当前 `glyph_match.sim_model` 一致，对不上或没记就拒跑；`build_pair_clf.py --sim-model` 改必填。**23 步 code_hash 与 v0.7.100 全同**；`glyph_stages` 的代码哈希进 `stages_fingerprint` 参数，所以开了 `glyph_match.stages` 的册（全唐文）glyph_match 起过期，其他书不受影响。底库不变。**换 `glyph_sim_qtw_v2` 要等 pair_clf 在 v2 嵌入上重训后一起换**（旧 pair_clf 是 v1 嵌入训的，本版会拒跑）。
+
 ## [0.7.100] - 2026-11-25
 
 全唐文 patch 线：v0.7.93 ＋ #1849 模型表登记 `glyph_sim_qtw_v2`（全唐文 11-24 字形库重训的 5a 相似度 CNN；Sheldon 11-24 定全唐文换它，下一轮重跑生效）。`model_pack.KINDS` 加一行、模型表两行（model.pt、calib.json，R2 已传）、出处表一节，照 dev 原样；旧 `glyph_sim_qtw` 不动。`sim_cnn.py`、`glyph_match` 与 dev 相同，**23 步 code_hash 与 v0.7.93 全同**，底库不变。用法：全唐文书配置 `params: {glyph_match: {sim_model: {path: models/glyph_sim_qtw_v2/model.pt, fuse: mean}}}`，改后 glyph_match 起按参数指纹过期。**不含** v0.7.94–0.7.99、0.8.0、0.9.0 与 dev 其他改动。
