@@ -1,4 +1,4 @@
-"""本书字形库的「字自比／互比」字表（`seed_admit.solo_adapt_pct` 用，schema `char_cov_profile/1`）。
+"""本书字形库的「字自比／互比」字表（全唐文书仓 `code/admit_lanes.py` 的 solo_adapt 用，原 cv `seed_admit.solo_adapt_pct`，schema `char_cov_profile/1`）。
 
 每个字至多抽 `--cap` 条刻例，逐条按线上口径匹配（kNN＋精验，排除自身）：
 - 自比：同字候选的 cov（同字掉出候选记 0，算进 `miss`，不进百分位）；

@@ -49,10 +49,6 @@ def _key(slot):
     return f"{BOOK}:{PAGE}:{COL}:{slot}"
 
 
-def test_default_on():
-    assert SeedAdmitParams().human_unbound_review is True
-
-
 def test_no_lost_changes_nothing(tmp_path, monkeypatch):
     r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(), {})
     assert all(x.admit for x in r.values())
@@ -77,16 +73,10 @@ def test_lost_ruling_agrees_keeps_admit(tmp_path, monkeypatch):
     assert r[2].admit and r[2].evidence["human_unbound"]["char"] == "水"
 
 
-def test_switch_off_ignores_lost(tmp_path, monkeypatch):
-    lost = {_key(2): {"char": "火", "status": "review", "event": "e1"}}
-    r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(human_unbound_review=False), lost)
-    assert r[2].admit and "human_unbound" not in (r[2].evidence or {})
-
-
-def test_shift_ok_off_by_default_demotes(tmp_path, monkeypatch):
-    # 旧人裁「山」＝整理本上一格的字，像是旧编号顺移；开关缺省关 → 照旧降级
+def test_shift_ok_off_demotes(tmp_path, monkeypatch):
+    # 旧人裁「山」＝整理本上一格的字，像是旧编号顺移；开关关（2026-11-25 起缺省开）→ 照旧降级
     lost = {_key(2): {"char": "山", "status": "unanchored", "event": "e1"}}
-    r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(), lost)
+    r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(human_unbound_shift_ok=False), lost)
     assert not r[2].admit and "human_unbound" in r[2].doubts
 
 
@@ -108,8 +98,9 @@ def test_shift_ok_needs_unanchored_and_neighbour(tmp_path, monkeypatch):
 
 
 def test_shift_ok_not_in_params_dump():
-    assert "human_unbound_shift_ok" not in SeedAdmitParams().model_dump()
-    assert SeedAdmitParams(human_unbound_shift_ok=True).model_dump()["human_unbound_shift_ok"] is True
+    # 缺省开（CV4 11-25）；dump 仍按旧缺省去键
+    assert "human_unbound_shift_ok" not in SeedAdmitParams(human_unbound_shift_ok=False).model_dump(mode="json", context={"hash": True})
+    assert SeedAdmitParams().model_dump()["human_unbound_shift_ok"] is True
 
 
 def test_human_chars_reports_lost(tmp_path, monkeypatch):
@@ -143,5 +134,5 @@ def test_shift_ok_uses_coord_ref_when_no_active_alignment(tmp_path, monkeypatch)
     r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(human_unbound_shift_ok=True), lost, coord_only=True)
     assert r[2].admit and r[2].char == "水"
     assert r[2].evidence["human_unbound"]["shift_ok"] == -1
-    r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(), lost, coord_only=True)        # 开关缺省关 → 照旧降级
+    r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(human_unbound_shift_ok=False), lost, coord_only=True)   # 开关关 → 照旧降级
     assert not r[2].admit and "human_unbound" in r[2].doubts

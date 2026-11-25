@@ -67,12 +67,8 @@ def test_relation_layer_facts():
     assert vm.semantic("𢑴") == vm.semantic("彞") == vm.semantic("彝")
     assert _direct_variant_edge("𢑴", "彝") and _direct_variant_edge("彞", "彝")
     assert not _direct_variant_edge("𢑴", "彞"), "有了直接边，本测试的前提就变了"
-    assert _direct_variant_edge("冶", "治")   # twedu 单向，但是直接边
+    assert not _direct_variant_edge("冶", "治")   # twedu 有边，但字对关系表判 C（纯形近），边被摘掉（2026-11-21）
     assert _direct_variant_edge("彝", "彞")
-
-
-def test_guard_default_on():
-    assert SeedAdmitParams().variant_indirect_guard is True
 
 
 # ── 𢑴/彞：间接路径被拦 ──────────────────────────────────────────
@@ -87,26 +83,17 @@ def test_ref_lib_indirect_margin_no_longer_passes(tmp_path, monkeypatch):
     """间接路径即便 Step6 margin 过线也不放（直接边的 margin 分支见下一条，不变）。"""
     r = _run(tmp_path, monkeypatch, candidates=_REF_LIB, align_char="彞", margin=0.80)
     assert r.admit is False and "variant_indirect" in r.doubts
-    old = _run(tmp_path / "old", monkeypatch, candidates=_REF_LIB, align_char="彞",
-               margin=0.80, params={"variant_indirect_guard": False})
-    assert old.admit is True and old.channel == "ref_lib" and old.char == "𢑴"
 
 
 def test_match_replace_indirect_blocked(tmp_path, monkeypatch):
     r = _run(tmp_path, monkeypatch, candidates=_REPLACE, align_char="彞")
     assert r.admit is False and "variant_indirect" in r.doubts, (r.channel, r.doubts)
-    old = _run(tmp_path / "old", monkeypatch, candidates=_REPLACE, align_char="彞",
-               params={"variant_indirect_guard": False})
-    assert old.admit is True and old.channel == "match_replace" and old.char == "彞"
 
 
 def test_match_margin_indirect_blocked(tmp_path, monkeypatch):
     r = _run(tmp_path, monkeypatch, candidates=[("𢑴", 0.93), ("弊", 0.80)],
              align_char="彞")
     assert r.admit is False and "variant_indirect" in r.doubts, (r.channel, r.doubts)
-    old = _run(tmp_path / "old", monkeypatch, candidates=[("𢑴", 0.93), ("弊", 0.80)],
-               align_char="彞", params={"variant_indirect_guard": False})
-    assert old.admit is True and old.channel == "match_margin"
 
 
 def test_trusted_indirect_pair_still_admitted(tmp_path, monkeypatch):

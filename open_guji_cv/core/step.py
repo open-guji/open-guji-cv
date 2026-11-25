@@ -123,7 +123,8 @@ def _with_book_params(p: BaseModel, step: "Step", ctx: "RunContext") -> BaseMode
     书 yaml 里显式配的字段是用户的明确决定，应该压过那几个函数算的「按本书
     convenience 默认值」，不能反过来被它们先占了「仍是默认值」这个判据的位置。
     """
-    book_kv = (getattr(ctx.book, "params", None) or {}).get(step.spec.id)
+    from .pipeline import rehome_params
+    book_kv = rehome_params(getattr(ctx.book, "params", None) or {}).get(step.spec.id)
     if not book_kv:
         return p
     # 调用方（CLI `--params`／`--override`／管线 yaml／Engine 已叠好的册配置）显式传过的字段不碰——按「写没写」判，不按「等不等于默认值」判：
@@ -202,6 +203,12 @@ def _with_book_real_proto(p: BaseModel, ctx: "RunContext") -> BaseModel:
     if fp == p.model_fingerprint:
         return p
     return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
+
+
+def _with_pua_table_pin(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """册 yaml `pua_table_pin: N` → 码表内容指纹进参数（见 `core/pua_table_pin.py`）。"""
+    from .pua_table_pin import with_pua_table_pin
+    return with_pua_table_pin(p, ctx.book)
 
 
 def _with_corpus_pin(p: BaseModel, ctx: "RunContext") -> BaseModel:
@@ -319,6 +326,11 @@ def _with_book_step6_ai(p: BaseModel, ctx: "RunContext") -> BaseModel:
 
 
 # ── 运行上下文 ───────────────────────────────────────────────────────
+class StaleRenderError(RuntimeError):
+    """缓存图要现算，但产出它的那一步这一页产物与现在的册配置／再生结果对不上（`RunContext.materialize`、
+    `column_warp.render`）。宁可报错，不悄悄出一张跟产物坐标不符的图（2026-11-25）。"""
+
+
 class RunContext:
     """一次运行里 Step 看到的全部环境。Step 通过它读上游产物、拿原图、走图像缓存。"""
 
@@ -421,6 +433,7 @@ class RunContext:
         p = _with_book_step6_ai(p, self)
         p = _with_book_ledger(p, self)  # 用字账按书选（缺省键是殿本的账）
         p = _with_glyph_pin(p, self)    # 册钉了字形库：人裁、近似字指纹换成钉号
+        p = _with_pua_table_pin(p, self)  # 册钉了 PUA 码表共享层版本：码表内容指纹进参数
         p = _with_corpus_pin(p, self)   # 必须最后：册钉了语料库版本，内容指纹整体换成版本号
         if memo is not None:
             memo[step.spec.id] = p
@@ -461,6 +474,18 @@ class RunContext:
         纯防御、行为不变；实测同样跑一遍 `border_detect` 全书，RSS 从
         72MB→1410MB（改前）变成 72MB→146MB 就不再涨（改后）。
         """
+        ink = getattr(self.book, "ink", None)
+        if ink is not None:
+            # 墨层与原样亮度两种图共用这个 LRU，键带上是哪种（同一 ctx 跨步复用，见 `LUMA_STEPS`）
+            key = (page, self.step_id in self.LUMA_STEPS)
+            if key in self._raw:
+                self._raw.move_to_end(key)
+                return self._raw[key]
+            img = self._ink_page(page, ink)
+            self._raw[key] = img
+            while len(self._raw) > self._RAW_MAX:
+                self._raw.popitem(last=False)
+            return img
         if page in self._raw:
             self._raw.move_to_end(page)
             return self._raw[page]
@@ -483,6 +508,30 @@ class RunContext:
         while len(self._raw) > self._RAW_MAX:
             self._raw.popitem(last=False)
         return self._raw[page]
+
+    #: 写了 `ink` 的册上，这几步读**原样亮度图**（不做墨层转换、不二值）：
+    #: 印章是朱色的，墨层 `max`／`red` 正好把它压没，认印就得看原样；反色带检测是 Step0 体检，也看原样。
+    #: 由引擎跑步时设的 `step_id` 判（`Engine._run_one_step`、并行 worker）；没设（控制台等）一律给墨层。
+    LUMA_STEPS = frozenset({"seal_detect", "invert_detect"})
+    #: 当前在跑哪一步（引擎设，见上）
+    step_id: str | None = None
+
+    def _ink_page(self, page: int, ink) -> np.ndarray:
+        """`book.ink` 写了时的 `raw_page`：彩色读入 → 墨层（＋二值）；`LUMA_STEPS` 给原样亮度。
+        与 `utils.binarized.build_binarized` 共用 `utils.ink.ink_page`，几何看的、二值副本、人审看的是同一张。"""
+        import cv2
+        from ..utils.ink import ink_page
+        path = self._page_path(page)
+        img = imread(str(path), cv2.IMREAD_COLOR) if path.exists() else None
+        if img is None:
+            raise FileNotFoundError(f"原图缺失或读不出来: {path}")
+        if self.step_id in self.LUMA_STEPS:
+            out = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            out = ink_page(img, ink)
+        if getattr(self.book, "writing_mode", "vertical-rl") == "horizontal-tb":
+            out = np.rot90(out, -1).copy()
+        return out
 
     def _page_path(self, page: int) -> "Path":
         """这一页从哪读：登记过预清理且产物已生成的，读修好的那张；否则读原图。
@@ -527,11 +576,47 @@ class RunContext:
             return None
         return ent.sha256 if ent is not None and ent.status == "ok" and ent.sha256 else None
 
+    def render_book_drift(self, step: "Step", key: str) -> dict | None:
+        """现算图之前的护栏（2026-11-25，CV4→CV0 殿本 frame_layers）：产出它的那一步这一页产物是按哪份
+        `book_deps` 跑的（manifest `book`），与现在册配置的取值比。不同 → {字段: (产物时, 现在)}；
+        相同、没 book_deps、没记录（老条目／还没产物）→ None（不验）。
+
+        `render` 读的是**现在**的册配置，产物（窗口、warped_size、格坐标）却是**当时**的配置出的：改了 yaml
+        而还没重跑这一步时冷缓存再生出的图跟产物对不上，下游按旧坐标裁新图就裁偏，而且一切状态都显示正常。
+        指纹里早有 book_deps（产物会报过期），但只跑下游、上游没重跑时没人拦——这里拦。"""
+        if not step.spec.book_deps:
+            return None
+        import json as _json
+        import re as _re
+        m = _re.match(r"^p\d{4}", key)
+        if not m:
+            return None
+        try:
+            ent = self.store.manifest(self.book.id, step.spec.id).get(m.group(0))
+        except Exception:                      # noqa: BLE001 —— 取不到记录不挡出图（同 cache_stamp）
+            return None
+        if ent is None or ent.status != "ok" or ent.book is None:
+            return None
+        from .engine import book_dep_values
+        now = _json.loads(_json.dumps(book_dep_values(step, self.book), sort_keys=True))
+        then = _json.loads(_json.dumps(ent.book, sort_keys=True))
+        diff = {k: (then.get(k), now.get(k)) for k in sorted(set(now) | set(then)) if then.get(k) != now.get(k)}
+        return diff or None
+
     def materialize(self, kind_id: str, key: str) -> Path:
         step = self.producer(kind_id)
+
+        def build() -> np.ndarray:
+            drift = self.render_book_drift(step, key)
+            if drift:
+                raise StaleRenderError(
+                    f"{kind_id} {key} 现算不了：{step.spec.id} 这一页的产物是按旧册配置跑的（"
+                    + "；".join(f"{k} {a!r}→{b!r}" for k, (a, b) in drift.items())
+                    + f"），按现配置再生的图会和产物坐标对不上。先从 {step.spec.id} 起重跑这一页（或撤回配置改动）。")
+            return step.render(self, kind_id, key)
+
         return self.cache.materialize(
-            self.book.id, kind_id, key,
-            lambda: step.render(self, kind_id, key),
+            self.book.id, kind_id, key, build,
             stamp=self.cache_stamp(kind_id, key))
 
     def image(self, kind_id: str, key: str) -> np.ndarray:

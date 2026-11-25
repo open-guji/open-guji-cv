@@ -9,6 +9,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 
+from tests.helpers import seed_admit_consts, split_seed_admit_consts
 from open_guji_cv.clustering.align_eval import build_ngram_index
 from open_guji_cv.clustering.variants import VariantMap
 from open_guji_cv.clustering.witness_cells import witness_readings
@@ -42,15 +43,17 @@ def _page(chars, pending: dict):
     return [ColumnAdmit(col=1, chars=recs)]
 
 
-def _mm(lib: dict, guard: dict | None = None):
+def _mm(lib: dict, guard: dict | None = None, stage: dict | None = None):
     return {f"{B}:1:{s}": NS(char=None, candidates=list(c) if isinstance(c, list) else [(c, 0.95)],
-                             guard=(guard or {}).get(s)) for s, c in lib.items()}
+                             guard=(guard or {}).get(s), stage=(stage or {}).get(s)) for s, c in lib.items()}
 
 
-def _run(out, *, lib=None, amap=None, coord=None, wits=(), guard=None, canon=None, lib_n=None, **params):
-    p = SeedAdmitParams(db_path="x", **params)
-    n = _review_lanes_pass(p, out, _mm(lib or {}, guard), amap or {}, coord or {}, _vm(),
-                           (lambda: list(wits)) if wits else None, canon=canon, lib_n=lib_n)
+def _run(out, *, lib=None, amap=None, coord=None, wits=(), guard=None, canon=None, lib_n=None, stage=None, **params):
+    params, consts = split_seed_admit_consts(params)
+    with seed_admit_consts(**consts):
+        p = SeedAdmitParams(db_path="x", **params)
+        n = _review_lanes_pass(p, out, _mm(lib or {}, guard, stage), amap or {}, coord or {}, _vm(),
+                               (lambda: list(wits)) if wits else None, canon=canon, lib_n=lib_n)
     return n, {r.slot: r for r in out[0].chars}
 
 
@@ -180,15 +183,11 @@ def test_r4_all_witnesses_and_coord_agree_without_lib():
 
 
 def test_r4_non_han_ref_and_few_stroke_not_taken():
-    """史記 r12：坐标对位字非汉字、库首位是别的字 → 不取参校字；少笔画名单（库首位／参校字在内且不同）→ 不取，留审。开关缺省关。"""
+    """史記 r12：坐标对位字非汉字、库首位是别的字 → 不取参校字（少笔画名单 lane_coord_few_stroke 无书用，2026-11-23 删）。"""
     n, rs = _r4("夫", "ခ", "ခခခ", lane_coord=True)
     assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "ref_non_han"
     n, rs = _r4("三", "一", "一一一", lane_coord=True)                       # 缺省：照旧取参校字
     assert n == 1 and rs[5].char == "一"
-    n, rs = _r4("三", "一", "一一一", lane_coord=True, lane_coord_few_stroke=("一", "二", "三"))
-    assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "few_stroke"
-    n, rs = _r4("夫", "天", "天天天", lane_coord=True, lane_coord_few_stroke=("一", "二", "三"))   # 不涉及少笔画字：照放
-    assert n == 1 and rs[5].char == "天"
 
 
 def _blind(cands, coord_char, lib_n, **params):
@@ -215,7 +214,7 @@ def test_r4_blind_guard_holds_ref_far_behind_lib():
 
 @pytest.mark.parametrize("doubt", ["ctx_guard_ref", "group_flow_ref_dissent", "group_flow_coord_dissent"])
 def test_r4_keeps_ref_review_cells(doubt):
-    """护栏拿整理本字拦下的格（vol20 45:5:18 諸→諧）不再按整理本字放回；开关可关。"""
+    """护栏拿整理本字拦下的格（vol20 45:5:18 諸→諧）不再按整理本字放回（`lane_keep_ref_review`，恒开）。"""
     chars = BODY[:30]
     def run(**params):
         out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.95)", doubt], char="夫")})
@@ -223,8 +222,6 @@ def test_r4_keeps_ref_review_cells(doubt):
         return _run(out, lib={5: "夫"}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, **params)
     n, rs = run()
     assert n == 0 and not rs[5].admit
-    n, rs = run(lane_keep_ref_review=False)
-    assert n == 1 and rs[5].char == "天"
 
 
 def test_r4_lib_guard_blocks_witness_branch():
@@ -346,12 +343,10 @@ def test_r5_lib_veto():
 
 
 def test_r5_lib_veto_spares_second_place():
-    """默认字正是库第二名 → 不否决（印泥下近形两字分不开）；开关关掉照旧否决。"""
+    """默认字正是库第二名 → 不否决（印泥下近形两字分不开）。"""
     lib = {3: [("木", 0.97), ("本", 0.968)]}
     n, rs = _seal({3: ("本", "coord")}, coord={3: "本"}, lane_seal=True, lib=lib)
     assert n == 1 and rs[3].char == "本"
-    n, rs = _seal({3: ("本", "coord")}, coord={3: "本"}, lane_seal=True, lib=lib, lane_seal_lib_veto_second=False)
-    assert n == 0 and rs[3].evidence["lane_skip"]["why"] == "lib_veto"
     n, rs = _seal({3: ("水", "coord")}, coord={3: "水"}, lane_seal=True, lib={3: [("本", 0.98), ("木", 0.97)]})
     assert n == 0                     # 默认字不在库前二：照旧否决
 
@@ -380,17 +375,12 @@ def test_r5_codepoint_variant_admits_canonical():
     assert rs[3].evidence["lane"]["variant_norm"] == "codepoint"
     n, rs = _seal({3: ("𩔖", "coord")}, coord={3: "𩔖"}, lane_seal=True, lib=lib)     # 本书没定码位：走暂归一组
     assert n == 1 and rs[3].char == "類" and rs[3].evidence["lane"]["variant_norm"] == "provisional"
-    n, rs = _seal({3: ("𩔖", "coord")}, coord={3: "𩔖"}, lane_seal=True, lib=lib, canon=canon,
-                  lane_seal_codepoint_variant=False)
-    assert n == 0
 
 
 def test_r5_provisional_variant_admits_group_form():
     """两形同在暂归一组（PROVISIONAL）→ 放组定的字，记 provisional。"""
     n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)])       # 旨㫖 暂归一到 㫖
     assert n == 1 and r.char == "㫖" and r.evidence["lane"]["variant_norm"] == "provisional"
-    n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)], lane_seal_codepoint_variant=False)
-    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
 
 
 def test_r5_page_shift_guard():
@@ -400,9 +390,6 @@ def test_r5_page_shift_guard():
     lib = {i: text[i] for i in range(1, len(text))}        # 第 i 格图上是第 i+1 个字
     n, rs = _seal(cells, coord={i: ch for i, ch in enumerate(text, 1)}, lane_seal=True, lib=lib)
     assert n == 0 and rs[1].evidence["lane_skip"]["why"] == "page_shift"
-    n, _ = _seal(cells, coord={i: ch for i, ch in enumerate(text, 1)}, lane_seal=True, lib=lib,
-                 lane_seal_shift_guard=False, lane_seal_lib_veto=0)
-    assert n == len(text)
     lib_ok = {i: ch for i, ch in enumerate(text, 1)}
     n, _ = _seal(cells, coord={i: ch for i, ch in enumerate(text, 1)}, lane_seal=True, lib=lib_ok)
     assert n == len(text)
@@ -412,48 +399,6 @@ def test_r5_title_column_blocked():
     """卷端／版心题列（坐标对位连起来含「總目」）整列不放。"""
     n, _ = _seal({1: ("書", "coord"), 2: ("總", "coord")}, coord={1: "書", 2: "總", 3: "目"}, lane_seal=True)
     assert n == 0
-
-
-# ── R5 补充：库首位同字当第二证据（seal_lib_agree，overview#471 去章）──────────
-
-def test_seal_lib_agree_off_by_default():
-    n, _ = _seal({1: ("書", "coord")}, coord={1: "書", 2: "總", 3: "目"}, lane_seal=True)
-    assert n == 0
-    n, _ = _seal({5: ("宇", "align")}, lane_seal=True, lane_seal_via="coord")
-    assert n == 0
-
-
-def test_seal_lib_agree_passes_title_column_and_align_via():
-    cells = {1: ("書", "coord"), 2: ("總", "coord"), 5: ("宇", "align")}
-    coord = {1: "書", 2: "總", 3: "目"}
-    chars = BODY[:20]
-    pend = {s: dict(doubts=["occluded"], char=c, evidence={"occluded": {"density": 9.0, "via": v}})
-            for s, (c, v) in cells.items()}
-    out = _page(chars, pend)
-    n, rs = _run(out, coord=_ids(coord), lane_seal=True, seal_lib_agree=True,
-                 lib={1: "書", 2: "他", 5: "宇"})
-    assert n == 2
-    assert rs[1].admit and rs[1].char == "書" and rs[1].channel == "seal"
-    assert rs[1].evidence["lane"]["lib_agree"] == 0.95
-    assert not rs[2].admit            # 库首位不同字：照旧送审（题列仍整列拦）
-    assert rs[5].admit and rs[5].char == "宇"
-
-
-def test_seal_lib_agree_needs_cov_and_keeps_guards():
-    pend = {1: dict(doubts=["occluded"], char="書", evidence={"occluded": {"density": 9.0, "via": "coord"}})}
-    n, _ = _run(_page(BODY[:20], pend), coord=_ids({1: "書", 2: "總", 3: "目"}), lane_seal=True,
-                seal_lib_agree=True, seal_lib_cov=0.99, lib={1: "書"})
-    assert n == 0                     # 库覆盖度 0.95 < 0.99
-    jys = {1: dict(doubts=["occluded"], char="己", evidence={"occluded": {"density": 9.0, "via": "coord"}})}
-    n, _ = _run(_page("己" + BODY[1:20], jys), coord=_ids({1: "己"}), lane_seal=True, seal_lib_agree=True, lib={1: "己"})
-    assert n == 0                     # 己已巳一族不走
-
-
-def test_seal_lib_agree_off_not_in_dump():
-    d = SeedAdmitParams(db_path="x", lane_seal=True).model_dump()
-    assert "seal_lib_agree" not in d and "seal_lib_cov" not in d
-    d = SeedAdmitParams(db_path="x", lane_seal=True, seal_lib_agree=True).model_dump()
-    assert d["seal_lib_agree"] is True and d["seal_lib_cov"] == 0.9
 
 
 def test_human_and_excluded_untouched():
@@ -536,23 +481,18 @@ def test_keep_rare_skips_group_members():
     assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
 
 
-def test_keep_rare_off_restores_guard():
-    n, r = _keep_rare("䘮", [("䘮", 0.989), ("喪", 0.955)], lane_variant_keep_rare=False)
-    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
-
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
 
 
 @pytest.mark.parametrize("doubt", ["group_flow_disagree", "group_flow_ctx_contra"])
 def test_r4_never_lifts_group_flow_contra(doubt):
     """字组流程里文意给了别的字而留审的格（vol11 18:5:11 顧炎武日知錄被 witness3 按整理本放成曰）：
-    补放通道不按整理本字放回，`lane_keep_ref_review` 关了也不放。"""
+    补放通道不按整理本字放回。"""
     chars = BODY[:30]
-    for keep in (True, False):
-        out = _page(chars, {5: dict(doubts=[doubt], char="夫")})
-        wits = [_wit(f"{k}.txt", "前" + chars[:4] + "天" + chars[5:] + "後") for k in "dwy"]
-        n, rs = _run(out, lib={5: "天"}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, lane_keep_ref_review=keep)
-        assert n == 0 and not rs[5].admit
+    out = _page(chars, {5: dict(doubts=[doubt], char="夫")})
+    wits = [_wit(f"{k}.txt", "前" + chars[:4] + "天" + chars[5:] + "後") for k in "dwy"]
+    n, rs = _run(out, lib={5: "天"}, coord=_ids({5: "天"}), wits=wits, lane_coord=True)
+    assert n == 0 and not rs[5].admit
 
 
 # ── 异体形近规则先于印章（occluded_variant_first，A31 10-28）──────────────────
@@ -575,22 +515,12 @@ def test_seal_variant_first_admits_when_lib_top_is_default():
     assert r.evidence["lane"]["variant_first"] == "㫖"
 
 
-def test_seal_variant_first_off_keeps_old_guard():
-    n, r = _seal_variant([("旨", 0.97), ("㫖", 0.96)], occluded_variant_first=False, lane_seal_codepoint_variant=False)
-    assert n == 0 and not r.admit and r.evidence["lane_skip"]["why"] == "cand_variant"
-
-
 def test_seal_variant_first_needs_lib_top_equal_and_cov():
-    kw = dict(lane_seal_codepoint_variant=False)             # 暂归一放宽另测（test_r5_provisional_variant_admits_group_form）
-    n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)], **kw)  # 库首位是异体：形说不准，照旧送审
-    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
-    n, r = _seal_variant([("旨", 0.85), ("㫖", 0.84)], **kw)  # 覆盖度 < seal_lib_cov
-    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
-
-
-def test_occluded_variant_first_default_not_in_dump():
-    assert "occluded_variant_first" not in SeedAdmitParams(db_path="x").model_dump()
-    assert SeedAdmitParams(db_path="x", occluded_variant_first=False).model_dump()["occluded_variant_first"] is False
+    # 库首位是异体（㫖）：本规则不放；旨㫖 同在暂归一组，由 `lane_seal_codepoint_variant` 放组定的字（另测）
+    n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)])
+    assert n == 1 and r.char == "㫖" and "variant_first" not in r.evidence["lane"]
+    n, r = _seal_variant([("旨", 0.85), ("㫖", 0.84)])  # 覆盖度 < seal_lib_cov：本规则不放（落到暂归一）
+    assert n == 1 and r.char == "㫖" and "variant_first" not in r.evidence["lane"]
 
 
 def test_follow_ref_decide_allows_occluded_only_when_variant_first():
@@ -610,7 +540,7 @@ def _flow_occluded(monkeypatch, lifted_char, **params):
 
     def fake(seq, amap, cands_of, blocked, cfg, **kw):
         rec = next(r for r in seq if r.slot == 3)
-        assert not blocked(rec) if params.get("occluded_variant_first", True) else blocked(rec)
+        assert not blocked(rec)
         rec.admit, rec.channel, rec.provenance, rec.char, rec.doubts = True, "group_flow", "context", lifted_char, []
         return _NS(lifted=1, demoted=0)
     monkeypatch.setattr(flow, "group_flow_pass", fake)
@@ -624,11 +554,6 @@ def test_group_flow_occluded_admits_only_when_char_is_default(monkeypatch):
     assert net == 1 and r.admit and r.char == "黃" and r.evidence["occluded_variant_first"] == "group_flow"
     net, r = _flow_occluded(monkeypatch, "黄")            # 给了别的字：退回待审，字和疑问原样
     assert net == 0 and not r.admit and r.char == "黃" and r.doubts == ["occluded"] and r.channel is None
-
-
-def test_group_flow_occluded_still_blocked_when_off(monkeypatch):
-    net, r = _flow_occluded(monkeypatch, "黃", occluded_variant_first=False)
-    assert r.admit      # 关着时 blocked() 为真（fake 里断言过），这里的放行是 fake 硬放的，不退回
 
 
 def _flow_form_open(monkeypatch, **params):
@@ -648,14 +573,7 @@ def _flow_form_open(monkeypatch, **params):
 
 
 def test_group_flow_form_open_default_on(monkeypatch):
-    assert _flow_form_open(monkeypatch, group_flow_form_open=False) is True
-    assert _flow_form_open(monkeypatch) is False       # 缺省开（sheldon 11-07）
-
-
-def test_group_flow_form_open_default_not_in_dump():
-    gf = {"group_flow": ("jys",)}            # group_flow 为空时整个 group_flow* 前缀都不进 dump
-    assert "group_flow_form_open" not in SeedAdmitParams(db_path="x", **gf).model_dump()
-    assert SeedAdmitParams(db_path="x", group_flow_form_open=False, **gf).model_dump()["group_flow_form_open"] is False
+    assert _flow_form_open(monkeypatch) is False       # 恒开（sheldon 11-07 定缺省开，11-23 起不再是参数）
 
 
 # ── R4 本书 codepoints 已归一的异体对（lane_coord_codepoint_variant）──────────────
@@ -682,12 +600,6 @@ def test_r4_codepoint_variant_admits_book_codepoint():
 
 def test_r4_codepoint_variant_needs_gap_over_other_chars():
     n, rs = _r4cp([("淸", 0.94), ("精", 0.938)], "清", lane_coord_codepoint_variant=True)
-    assert n == 0 and not rs[5].admit
-
-
-def test_r4_codepoint_variant_skip_list():
-    n, rs = _r4cp([("淸", 0.94), ("精", 0.80)], "清", lane_coord_codepoint_variant=True,
-                  lane_coord_codepoint_skip="淸")
     assert n == 0 and not rs[5].admit
 
 
@@ -841,3 +753,99 @@ def test_semantic_extra_map():
     assert vm.semantic("天") == "天"
     with pytest.raises(ValueError):
         _parse_semantic_extra("圗圖")
+
+
+# ── 库否决（witness3／coord_fallback，lane_lib_veto，全唐文 11-19）─────────────
+
+def test_lane_lib_veto_witness3_and_coord():
+    """库首位 cov ≥ 阈值、与要放的字不同（非异体）→ 不放、送审；缺省 0 照旧放；cov 不够照旧放。"""
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    n, rs = _run(out, lane_witness3=True, **kw)                       # 缺省关：照旧放整理本字
+    assert n == 1 and rs[5].char == "天"
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, **kw)
+    assert n == 0 and not rs[5].admit
+    assert rs[5].evidence["lane_skip"] == {"lane": "witness3", "why": "lib_veto", "lib": "大", "cov": 0.99}
+    assert "lane_lib_veto" in rs[5].doubts
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.97)]}
+    assert _run(out, lane_witness3=True, lane_lib_veto=0.98, **kw)[0] == 1    # cov 不够：照放
+    def r4(lib_char, wit_chars):
+        chars = BODY[:30]
+        out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.99)", "上下文 margin 不足(0.10)"], char=lib_char)})
+        wits = [_wit(f"{k}.txt", "前" + chars[:4] + c + chars[5:] + "後") for k, c in zip("dwy", wit_chars)]
+        return _run(out, lib={5: [(lib_char, 0.99)]}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, lane_lib_veto=0.98)
+    n, rs = r4("夫", "天天天")
+    assert n == 0 and rs[5].evidence["lane_skip"]["why"] == "lib_veto"
+    n, rs = r4("天", "天夫夫")                                         # 放的就是库首位：不受影响
+    assert n == 1 and rs[5].evidence["lane"]["via"] == "lib_coord_primary"
+
+
+def test_lane_lib_veto_off_not_in_dump():
+    assert "lane_lib_veto" not in SeedAdmitParams(db_path="x", lane_witness3=True).model_dump()
+    assert SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98).model_dump()["lane_lib_veto"] == 0.98
+
+
+def test_lane_lib_veto_pairs_follow_lib_form():
+    """名单里的异体对：库否决不否，改放库首位的形（照刻形）；名单外的对照旧否决；缺省空不进 dump。"""
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_lib_veto_pairs=["天大"], **kw)
+    assert n == 1 and rs[5].admit and rs[5].char == "大"
+    assert rs[5].evidence["lane"]["lib_form"] == {"from": "天", "cov": 0.99}
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_lib_veto_pairs=["天太", "大"], **kw)
+    assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "lib_veto"
+    d = SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98).model_dump()
+    assert "lane_lib_veto_pairs" not in d
+    assert SeedAdmitParams(db_path="x", lane_witness3=True, lane_lib_veto=0.98, lane_lib_veto_pairs=["天大"]).model_dump()["lane_lib_veto_pairs"] == ["天大"]
+
+
+def _shape_table(tmp_path, *pairs, variant=True):
+    f = tmp_path / "pa.yaml"
+    f.write_text("schema: pair_attribution/1\npairs:\n" + "".join(
+        f"  {p}: {{attr: shape{', variant: true' if variant else ''}}}\n" for p in pairs), encoding="utf-8")
+    return str(f)
+
+
+def test_lane_shape_first_lib_variant_releases_lib_form(tmp_path):
+    """lane_shape_first：库首位与整理本字是表里的刻形同字异形、库首位 cov ≥ lane_lib_veto → witness3 放库形；其余照旧送审。"""
+    vm = _vm()
+    a, b = next((x, y) for x, y in (("獘", "弊"), ("峯", "峰"), ("羣", "群")) if vm.semantic(x) == vm.semantic(y))
+    chars = BODY[:4] + b + BODY[5:30]
+    wits = [_wit(f"{k}.txt", "前" + chars + "後") for k in "dwy"]
+
+    def go(cov=0.99, tier=3, lean=a, **kw):
+        out = _page(chars, {5: dict(doubts=["replace_align"], char=b)})
+        st = {5: {"pair": [{"pair": a + b, "tier": tier, "p": 0.9, "lean": lean}]}}
+        return _run(out, lane_witness3=True, lane_lib_veto=0.98, lib={5: [(a, cov)]}, amap=_ids({5: (b, "replace")}),
+                    coord=_ids({5: b}), wits=wits, stage=st, **kw)
+    assert go()[0] == 0                                                         # 缺省关：送审
+    n, rs = go(lane_shape_first=_shape_table(tmp_path, a + b))
+    assert n == 1 and rs[5].admit and rs[5].char == a and rs[5].channel == "witness3"
+    assert rs[5].evidence["lane"]["lib_form"] == {"from": b, "cov": 0.99, "via": "shape_first"}
+    assert go(cov=0.9, lane_shape_first=_shape_table(tmp_path, a + b))[0] == 0   # 库首位把握不够
+    assert go(lane_shape_first=_shape_table(tmp_path, a + b, variant=False))[0] == 0   # 表里没标同字异形
+    assert go(lane_shape_first=_shape_table(tmp_path, "天地"))[0] == 0           # 表里没这一对
+    assert go(tier=2, lane_shape_first=_shape_table(tmp_path, a + b))[0] == 0   # 分类器没到终判档（奥奧）
+    assert go(lean=b, lane_shape_first=_shape_table(tmp_path, a + b))[0] == 0   # 分类器倾向整理本字
+
+
+def test_lane_shape_first_feeds_lib_veto_pairs(tmp_path):
+    """库否决要否的格，要放的字与库首位是表里的同字异形对 → 放库形（名单由表生成）；不是同字异形仍否决。"""
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    st = {5: {"pair": [{"pair": "天大", "tier": 3, "p": 0.9, "lean": "大"}]}}
+    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_shape_first=_shape_table(tmp_path, "天大"), stage=st, **kw)
+    assert n == 1 and rs[5].char == "大"
+    out, kw = _r1_setup()
+    kw["lib"] = {5: [("大", 0.99)]}
+    n, rs = _run(out, lane_witness3=True, lane_lib_veto=0.98, lane_shape_first=_shape_table(tmp_path, "天大", variant=False), stage=st, **kw)
+    assert n == 0 and rs[5].evidence["lane_skip"]["why"] == "lib_veto"
+
+
+def test_lane_shape_first_off_not_in_dump():
+    assert "lane_shape_first" not in SeedAdmitParams(db_path="x").model_dump()
