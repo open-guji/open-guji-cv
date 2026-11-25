@@ -626,6 +626,33 @@ def test_http_sends_referer(monkeypatch):
     assert seen.get("Referer") == "https://www.openguji.com/"
 
 
+def test_img_ok_uses_ranged_get_not_head(monkeypatch):
+    """冒烟查图用 GET＋Range: bytes=0-0（CDN 新对象 HEAD 403、GET 200），206 也算到。"""
+    seen = []
+
+    class R:
+        status = 206
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b"x"
+
+    import urllib.request
+
+    def fake(req, timeout=0):
+        seen.append((req.get_method(), req.headers.get("Range")))
+        return R()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    assert rp._img_ok("https://data.openguji.com/proof/x/001/a.webp") == 200
+    assert seen == [("GET", "bytes=0-0")]
+
+
 def test_old_rev_votes_reads_both_modes_and_refuses_when_nothing(tmp_path, monkeypatch):
     """11-13 第五册 005-r13 的 25 票漏落：只查一种记法、读不到又当 0 票。现在两种都读，读不到就停。"""
     monkeypatch.delenv("CELLREVIEW_TOKEN", raising=False)
