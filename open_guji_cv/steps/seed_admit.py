@@ -282,6 +282,9 @@ class SeedAdmitParams(BaseModel):
     没有裁定的半格照旧受保护（本就不放行）。书级，缺省关、关时不进参数 dump、行为不变（SJ 史記 11-12：必 04:26:1:13b、解 03:46:1:4a、遲 等半格裁定放不出，半格是形近待审大头）。
     放行条件（A22 评估 11-12）：裁定记的 cell＝当前格号、裁定字＝整理本字（不走白名单）、本格无 clipped／frame_residue／jiazhu_*／split_* 疑点；放行格 evidence.half=True。
     起因的错放（men 组 06:12:5:12a）是旧在线 L3，不是现在的对话双路裁定；放行前须金标验证 0 错。"""
+    ruling_by_u: bool = False
+    """裁定按字格永久编号 u 查（CV0 T3，cv#1848＋#1856 移植；书级，缺省关、关时不进参数 dump、行为不变）。
+    窗口键没中 → 按身份账 `<feedback>/uid/<册>.jsonl` 取本格 u，查同册同 u 的裁定（只收 high、前后 2 字至少一侧相同、裁定字在库候选或＝整理本字）。"""
     group_flow_llm_half_groups: list[str] = Field(default_factory=list)
     """`group_flow_llm_skip_half` 的例外（书级，缺省空、不进参数 dump；A24 11-08，SJ 史記 H01 89 格半格没有 L3 问、写不了裁定键）：
     这几组的夹注半格照样走 L3（答案表、裁定库、记 `llm_pending` 问），由 `feedback/llm_queue` 导出、对话判读后导入。
@@ -1412,6 +1415,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_llm_skip_half", None)
         if isinstance(d, dict) and not self.vis_ruling_half:
             d.pop("vis_ruling_half", None)
+        if isinstance(d, dict) and not self.ruling_by_u:
+            d.pop("ruling_by_u", None)
         if isinstance(d, dict) and not self.group_flow_llm_half_groups:
             d.pop("group_flow_llm_half_groups", None)
         if isinstance(d, dict) and self.group_flow_form_open:
@@ -2600,7 +2605,17 @@ class SeedAdmitStep(Step):
         # 字组统一流程（group_flow）紧接主循环：组内格先按组判，免得 rare_ref 等补放遍把整理本字
         # 放进来（vol04 A/B：rare_ref 把刻作 𫎇 的格放成整理本的 蒙）
         if p.group_flow:
-            d_gf = _group_flow_pass(p, out, amap, mmap, ctx, page, patch_missing)
+            # `ruling_by_u`：字组文意在线问前查缓存时，窗口键没中再按本格 u 查同版本裁定（CV0 T3 11-25）；关时不设、不读账
+            _um = _uid_map(p, ctx, page) if getattr(p, "ruling_by_u", False) else None
+            if _um:
+                from ..feedback.rulings import UMAP_SCOPE
+                _tok = UMAP_SCOPE.set(_um)
+                try:
+                    d_gf = _group_flow_pass(p, out, amap, mmap, ctx, page, patch_missing)
+                finally:
+                    UMAP_SCOPE.reset(_tok)
+            else:
+                d_gf = _group_flow_pass(p, out, amap, mmap, ctx, page, patch_missing)
             n_auto += d_gf
             n_review -= d_gf
             if p.group_flow_rr_shape:
@@ -2639,7 +2654,8 @@ class SeedAdmitStep(Step):
                                   coord=_coord_refs(ctx, page, coord_cache) if p.fold_coord_ref else None,
                                   wh={c.id: (c.width, c.height) for col in (_ci.columns if _ci else []) for c in col.chars}
                                   if _ci else None,
-                                  dmap=dmap if p.fold_aspect_ctx_veto is not None else None)
+                                  dmap=dmap if p.fold_aspect_ctx_veto is not None else None,
+                                  umap=_uid_map(p, ctx, page) if (p.fold_ruling_first or not p.fold_ref_char) else None)
                 n_auto += d_fd
                 n_review -= d_fd
         if p.rare_ref:
@@ -2770,7 +2786,7 @@ class SeedAdmitStep(Step):
                 n_review -= d_ca
         if p.vis_rulings:
             # 5c vis_ruling（升）：待审格的窗口命中看图判裁定 → 放行（无组入口，裁定库缓存；放在降审遍之前）
-            d_vr = _vis_ruling_pass(p, out, amap)
+            d_vr = _vis_ruling_pass(p, out, amap, mmap=mmap, umap=_uid_map(p, ctx, page))
             n_auto += d_vr
             n_review -= d_vr
         if p.symbol_review:
@@ -5333,7 +5349,33 @@ def _pua_code_admit_pass(out: list, amap: dict, mmap: dict, store=None, table=No
             n += 1
     return n
 
-def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
+def _cell_book(cid: str | None) -> str | None:
+    """格号的册前缀（`vol31:12:3:4a` → `vol31`）。"""
+    return cid.split(":", 1)[0] if cid and ":" in cid else None
+
+
+def _uid_map(p, ctx, page: int) -> dict | None:
+    """`ruling_by_u` 用的本页 {格号: u}（字格身份账按本页当前 cells_sha 查）。开关关、裁定库里没有带 u 的裁定、账里没这一页这次切分
+    → None（不读账、不算 sha，行为与开关关时完全一样）。"""
+    if not getattr(p, "ruling_by_u", False) or ctx is None:
+        return None
+    st = _vis_cache().store_
+    if not st.has_u():
+        return None
+    from ..feedback.rulings import page_cells_sha
+    sha = page_cells_sha(ctx.book.id, page, ctx.store)
+    return st.uid_ledger().lookup(ctx.book.id, page, sha) or None
+
+
+def _u_cand_ok(ch: str, cid: str, ref: str | None, mmap: dict | None) -> bool:
+    """按 u 命中的附加条件：裁定字＝整理本对位字，或在这格库候选里。"""
+    if ref and ch == ref:
+        return True
+    m = (mmap or {}).get(cid)
+    return bool(m and any(c[0] == ch for c in (m.candidates or [])))
+
+
+def _vis_ruling_pass(p, out: list, amap: dict, store=None, mmap: dict | None = None, umap: dict | None = None) -> int:
     """无组格的看图判裁定（`SeedAdmitParams.vis_rulings`）：待审格按前后文窗口（与 `ctx_hash` 同口径，宽 20）查裁定库，
     命中高把握可放的裁定 → 放行成裁定的字（通道 `vis_ruling`，provenance `match`，`evidence.vis_ruling` 留裁定摘要）。
     另：已放行格命中 `route=code_conflict` 的 src-1 裁定（同一私用码在源文本里是另一个字）→ 降回待审（见下）。
@@ -5383,6 +5425,17 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
                   if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
                   and _ruling_han(x["char"]) and x.get("subclass") in subs), None)
         ref_ = (amap.get(r.id) or (None,))[0]
+        if v is None and umap and umap.get(r.id):
+            # 按字格永久编号 u 查（书级 `ruling_by_u`，CV0 T3）：窗口键没中 → 同册同 u 的裁定（宽松档口径），
+            # 裁定字在库候选或＝整理本字；其余护栏同上，ref 一致等照旧在下面核
+            ubs = [(subs, store.get_by_u(_VIS_RULING_GROUP, ver, _cell_book(r.id), umap[r.id], left, right)) for ver, subs in _VIS_RULING_SPECS]
+            cf = [x for _, x in ubs if x and x.get("ruling_conflict")]
+            if cf:
+                r.evidence = {**(r.evidence or {}), "ruling_conflict": cf[0]["rows"]}   # 同 u 多条裁定字不同：不放行
+                continue
+            v = next((x for subs, x in ubs
+                      if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
+                      and _ruling_han(x["char"]) and x.get("subclass") in subs and _u_cand_ok(x["char"], r.id, ref_, mmap)), None)
         if not v:
             f = store.get(_VIS_RULING_GROUP, "ctx-m1", left, right)
             if f and f.get("gate") == "ref_lead_fail" and (f.get("ref") or "") == (ref_ or ""):
@@ -5397,6 +5450,8 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
         ds = list(r.doubts or [])
         vr = {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass", "route")}
         vr.update({k: v[k] for k in ("via", "ref_lead") if v.get(k)})   # 终审 ref_lead 证人放行：via=ref_lead（层、领先量）
+        if v.get("ruling_key") == "u":
+            vr.update({"ruling_key": "u", "ruling_ver": v.get("ruling_ver"), "u": v.get("u"), "win_sides": v.get("win_sides")})   # 按 u 命中
         r.evidence = {**(r.evidence or {}), "vis_ruling": vr,
                       "lifted_from": {"char": r.char, "doubts": ds}}
         if half_ok and is_half:
@@ -5545,7 +5600,7 @@ def _p_ref_pass(p, out: list, amap: dict, coord: dict | None = None, mmap: dict 
 
 
 def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, coord: dict | None = None,
-               wh: dict | None = None, dmap: dict | None = None) -> int:
+               wh: dict | None = None, dmap: dict | None = None, umap: dict | None = None) -> int:
     """折叠组（`SeedAdmitParams.fold_groups`）：待审格的字组在名单里、整理本字在组内 → 放整理本字。→ 放行数净增。
     护栏（缺省关）：`fold_ruling_first` 有本组裁定先用裁定字；`fold_lib_top_in_group` 库首位须在组内；
     扩展 `fold_coord_ref`（`coord` 由调用方给）：现役对位缺用坐标对位、未入组格按库首位入折叠组。
@@ -5636,8 +5691,19 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, c
                             ch, via, extra = None, None, {}
             if ch is None and (p.fold_ruling_first or no_ref or half) and r.id in wins and gid in l3:
                 v = store.get(gid, l3[gid]["ver"], *wins[r.id])
+                if v is None and umap and umap.get(r.id):
+                    # 按字格永久编号 u 查（书级 `ruling_by_u`，CV0 T3）：宽松档口径（只收 high），裁定字在库候选或＝对位字
+                    aref = (amap.get(r.id) or (None,))[0]
+                    a = store.get_by_u(gid, l3[gid]["ver"], _cell_book(r.id), umap[r.id], *wins[r.id])
+                    if a and a.get("ruling_conflict"):
+                        r.evidence = {**(r.evidence or {}), "ruling_conflict": a["rows"]}
+                        a = None
+                    if a and a.get("char") and _u_cand_ok(a["char"], r.id, aref, mmap):
+                        v = a
                 if v and v.get("char") in mem and v.get("conf") in ("high", "mid") and not v.get("other"):
                     ch, via = v["char"], "ruling"
+                    if v.get("ruling_key") == "u":
+                        extra = {**extra, "ruling_key": "u", "ruling_ver": v.get("ruling_ver"), "u": v.get("u"), "win_sides": v.get("win_sides")}
             if ch is None and p.fold_ctx_vias:
                 g_ev = (r.evidence or {}).get("group") or {}
                 t = next((t for t in g_ev.get("solvers") or [] if t.get("solver") == "ctx"), None) if g_ev.get("id") == gid else None
