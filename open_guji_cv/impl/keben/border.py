@@ -590,8 +590,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                           verticals: list[VLine], width: int, height: int,
                           outer_shift: dict | None = None,
                           book_gap: dict | None = None,
-                          frame_layers: dict | None = None,
-                          outer_side: str | None = None) -> dict:
+                          frame_layers: dict | None = None) -> dict:
     """上下版框的外框偏移 + 纸边侧竖直外框偏移。
 
     坐标口径是**外延**（朝外那一侧的半高边缘），跟 `detect_head_raise()` 的
@@ -614,20 +613,13 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
     内沿1，bottom 外延8/内沿3/中心1），所以剩下那点差**部分是标注口径的
     散布，不全是探测误差**，别照着它继续调参。竖直外框那一侧口径是干净的
     （外延 12/14，金标离真墨外延平均 4.1px）。
-
-    **按套书规则（2026-11-23，册配置 `frame_layers` / `side_frame`）**：框型是书的版式、不是逐页猜的。
-    - `frame_layers[边]==1`：这一边只有一条线（脈經上下），一律记 `single`，只量粗条宽度（`*_bar_extent`），
-      不找外框、不兜底；
-    - `frame_layers[边]==2`：外框一定存在，只量位置（量不到按册基准估，标 `*_outer_estimated`）；
-    - `outer_side`（由 `side_frame` 按页码奇偶定，"left"/"right"）：纸边侧有外框、靠版心一侧没有；
-      只在这一侧量竖直外框，不再两侧比强弱；量不到按 `book_gap["side"]`（缺则上下基准的均值）估。
     """
     binm = (mask > 0).astype(np.uint8)
     out: dict = dict(top_outer_offset=None, bottom_outer_offset=None,
                      top_frame_kind=None, bottom_frame_kind=None,
                      top_bar_extent=None, bottom_bar_extent=None,
                      top_outer_estimated=False, bottom_outer_estimated=False,
-                     v_outer_side=None, v_outer_offset=None, v_outer_estimated=False)
+                     v_outer_side=None, v_outer_offset=None)
     vx = sorted((width - 1) - v.x_at(height / 2.0) for v in verticals)
     xs = np.arange(int(vx[0] + 30), int(vx[-1] - 30), 2)
     # 界行探到图外（史記09 年表页）时 xs 会越过图宽、取墨 IndexError：去掉越界的列。只去 ≥ 图宽的，没越界的页逐字节不变
@@ -637,8 +629,6 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
     if len(ys) > 10 and len(verticals) >= 2:
         best = None
         for side, vi, sign in (("right", 0, -1.0), ("left", len(verticals) - 1, 1.0)):
-            if outer_side in ("left", "right") and side != outer_side:
-                continue        # 按套书规则：靠版心一侧没有外框，不量
             base = np.array([(width - 1) - verticals[vi].x_at(y) for y in ys])
             offs = np.arange(OUTER_GAP_MIN, OUTER_GAP_MAX + 1, 1.0) * sign
             prof = []
@@ -653,21 +643,6 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 best = (side, r[0], r[1])
         if best is not None:
             out["v_outer_side"], out["v_outer_offset"] = best[0], best[1]
-    if outer_side in ("left", "right") and out["v_outer_side"] is None and len(verticals) >= 2:
-        # 规则说这一侧有外框，但这页看不清（磨没/裁掉/糊了）：按册基准估位置，标 estimated
-        g = (book_gap or {}).get("side")
-        if g is None and book_gap and book_gap.get("top") is not None and book_gap.get("bottom") is not None:
-            g = (book_gap["top"] + book_gap["bottom"]) / 2.0
-        if g is not None:
-            vi = 0 if outer_side == "right" else len(verticals) - 1
-            edge = (width - 1) - verticals[vi].x_at(height / 2.0)   # 旧坐标（左上原点）里内框线的 x
-            sgn = -1.0 if outer_side == "right" else 1.0
-            off = min(float(g) + OUTER_ESTIMATE_SLACK, float(OUTER_GAP_MAX))
-            room = edge if sgn < 0 else (width - 1 - edge)
-            off = min(off, max(0.0, room - 1.0))
-            if off > 0:
-                out["v_outer_side"], out["v_outer_offset"] = outer_side, off * sgn
-                out["v_outer_estimated"] = True
     prior = None if out["v_outer_offset"] is None else abs(out["v_outer_offset"])
     if len(xs) > 10:
         for kind, line, sign in (("top", top, -1.0), ("bottom", bottom, 1.0)):
@@ -675,20 +650,6 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
             # 书级声明了这条边有 2 层，就不许判 single——版式是全书一致的，
             # 这一页看着像一根粗条，是内外框之间被污糊连成了片（见 BookSpec.frame_layers）。
             declared = (frame_layers or {}).get(kind)
-            if declared == 1:
-                # 版式就是单线：不找外框，只量这条粗条（从内框线起往外连续的粗墨）的宽度
-                ext = 0
-                for o in range(0, OUTER_GAP_MAX + 1):
-                    yy = (base + o * sign).astype(int)
-                    ok = (yy >= 0) & (yy < height)
-                    v = binm[yy[ok], xs[ok]].mean() if ok.any() else 0.0
-                    if v >= SINGLE_BAR_INK:
-                        ext = o + 1
-                    elif o >= SINGLE_BAR_LEAD:
-                        break
-                out[f"{kind}_frame_kind"] = "single"
-                out[f"{kind}_bar_extent"] = float(ext) if ext else None
-                continue
             # 先判單邊框：从内框线起往外连续的粗墨。是粗条就不找第二条了。
             run0, start0 = 0, None
             for o in range(0, OUTER_GAP_MAX + 1):
@@ -744,7 +705,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
     if book_gap:
         for kind, line, sign in (("top", top, -1.0), ("bottom", bottom, 1.0)):
             declared = (frame_layers or {}).get(kind)
-            if declared == 1 or out[f"{kind}_outer_offset"] is not None:
+            if out[f"{kind}_outer_offset"] is not None:
                 continue
             # 没声明层数时保持老行为：判了 single 就不再兜底。
             # 声明 2 层的边不会走到这里判 single（上面拦了），继续兜底。
@@ -854,99 +815,6 @@ def push_bottom_to_bar(binm: np.ndarray, bottom: HLine, verticals: list[VLine],
             return _replace(bottom, y_at_right=bottom.y_at_right + shift), shift
         i = j + 1
     return bottom, 0.0
-
-
-# ---------------------------------------------------------------- 内框线：线落在外板框上时拉回内板框
-
-#: `pull_inner_line`（2026-11-23，册配置声明 `frame_layers: 2`、参数 `inner_pull` 开时用）。双线版框的书，
-#: 内板框线磨淡或印不出时，探出的线会落在**外板框的粗条**上或紧贴它的内沿（殿本下框偏 8–33px、全唐文下框 31px、
-#: 史記上框 19px，layout-gold 已知问题 1/4）。金标口径是内板框线位置。
-#: 判据：线所在处（±INNER_ON_BAR 内）有一条粗条（≥INNER_THICK_MIN 行的连续墨带，行覆盖 ≥INNER_BAR_COV）——内框线只有
-#: 2~6px，粗条必是外框。是外框就往文字一侧找：粗条内沿之内 INNER_SEARCH_GAP~(册 outer_gap + INNER_SEARCH_EXTRA) px 里
-#: 的细条（≤INNER_THIN_MAX 行、覆盖 ≥INNER_THIN_COV）取最靠文字的那条当内框线；找不到按「外沿 − 册 outer_gap」估
-#: （不给 outer_gap 就不动）。线不在粗条上（含内框线清楚、粗条在 +18~+30 外面的页）原样不动。
-INNER_ON_BAR = 8
-INNER_BAR_COV = 0.5
-INNER_THICK_MIN = 10
-INNER_THIN_COV = 0.30
-INNER_THIN_MAX = 9
-INNER_SEARCH_GAP = 6
-INNER_SEARCH_EXTRA = 25
-INNER_GAP_TOL = (0.5, 1.7)  # 细条离粗条外沿的距离须在册 outer_gap 的这个比例内才信（内外框间距全书基本一致）
-INNER_OUT = 70           # 线外（朝外）看多远，找粗条外沿
-
-
-def pull_inner_line(binm: np.ndarray, line: HLine, kind: str, verticals: list[VLine],
-                    width: int, height: int, gap: float | None) -> tuple[HLine, float]:
-    """线落在外板框粗条上（或紧贴内沿）时，拉回内板框线。返回 (新线, 朝文字一侧拉了多少 px，没动＝0)。"""
-    from dataclasses import replace as _replace
-    if len(verticals) < 2:
-        return line, 0.0
-    vx = sorted((width - 1) - v.x_at(height * 0.5) for v in verticals)
-    x0, x1 = int(vx[0] + 15), min(int(vx[-1] - 15), binm.shape[1])
-    if x1 - x0 < 100:
-        return line, 0.0
-    xs = np.arange(x0, x1)
-    base = np.array([line.y_at((width - 1) - x) for x in xs])
-    out_sign = 1.0 if kind == "bottom" else -1.0       # 朝外（版框外沿）的 y 方向
-    lo_o, hi_o = -(INNER_SEARCH_EXTRA + int(gap or 30) + INNER_SEARCH_GAP + 20), INNER_OUT
-    offs = np.arange(lo_o, hi_o + 1)                   # 外向为正
-    cov = np.zeros(len(offs))
-    for i, o in enumerate(offs):
-        yy = (base + o * out_sign).astype(int)
-        ok = (yy >= 0) & (yy < height)
-        if ok.any():
-            cov[i] = float((binm[yy[ok], xs[ok]] > 0).mean())
-    bar = cov >= INNER_BAR_COV
-    # 离线（偏移 0）最近的粗条：连续（容 1 行缝）的 ≥INNER_BAR_COV 带
-    z = -lo_o
-    cand = None
-    i = 0
-    while i < len(bar):
-        if not bar[i]:
-            i += 1
-            continue
-        j = i
-        while j + 2 < len(bar) and (bar[j + 1] or bar[j + 2]):
-            j += 1 if bar[j + 1] else 2
-        if j - i + 1 >= INNER_THICK_MIN and offs[i] - INNER_ON_BAR <= 0 <= offs[j] + INNER_ON_BAR:
-            cand = (i, j)
-            break
-        i = j + 1
-    if cand is None:
-        return line, 0.0
-    i0, j0 = cand
-    inner_edge, outer_edge = int(offs[i0]), int(offs[j0])      # 外向为正：粗条内沿、外沿
-    inside = inner_edge < 0 <= outer_edge                      # 线压在粗条里（否则只是紧贴它的内沿）
-    # 粗条内沿之内找细条（朝文字 = 偏移更小）
-    best = None
-    k = i0 - INNER_SEARCH_GAP
-    lim = i0 - INNER_SEARCH_GAP - (int(gap or 30) + INNER_SEARCH_EXTRA)
-    while k > max(lim, 0):
-        if cov[k] >= INNER_THIN_COV:
-            e = k
-            while e - 1 > 0 and cov[e - 1] >= INNER_THIN_COV:
-                e -= 1
-            if k - e + 1 <= INNER_THIN_MAX:
-                best = (e + k) / 2.0              # 细条中心的下标
-            k = e - 1
-            continue
-        k -= 1
-    if best is not None and gap:
-        d = outer_edge - float(offs[0] + best)             # 细条离粗条外沿多远，该约等于册内外框间距
-        if not (INNER_GAP_TOL[0] * gap <= d <= INNER_GAP_TOL[1] * gap):
-            best = None
-    if best is not None:
-        new_off = float(offs[0] + best)
-    elif gap and inside:
-        new_off = float(outer_edge - gap)
-        new_off = min(new_off, float(inner_edge - 4))
-    else:
-        return line, 0.0
-    shift = new_off * out_sign                  # 线在 y 上要挪的量（朝外为正的偏移 → y）
-    if abs(new_off) < 4:
-        return line, 0.0
-    return _replace(line, y_at_right=line.y_at_right + shift), float(-new_off)
 
 
 # ---------------------------------------------------------------- 界行：按证据重定位
@@ -1360,8 +1228,6 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     outer_shift: dict | None = None,
                     book_outer_gap: dict | None = None,
                     frame_layers: dict | None = None,
-                    outer_side: str | None = None,
-                    inner_pull: bool = False,
                     head_raise_extend: bool = True,
                     head_raise_scale: float = 1.0,
                     grid_lattice_fallback: bool = False,
@@ -1477,10 +1343,6 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
         bottom, bottom_pushed = push_bottom_to_bar(binm_new, bottom, verticals, w, h)
     else:
         bottom_pushed = 0.0
-    if inner_pull and (frame_layers or {}).get("bottom") == 2 and bottom_hint is None:
-        bottom, _ = pull_inner_line(binm_new, bottom, "bottom", verticals, w, h, (book_outer_gap or {}).get("bottom"))
-    if inner_pull and (frame_layers or {}).get("top") == 2 and top_hint is None:
-        top, _ = pull_inner_line(binm_new, top, "top", verticals, w, h, (book_outer_gap or {}).get("top"))
     verticals_straight = list(verticals)
     verticals, vseg, w80_med, w80_max, vlines_snapped = _bend_verticals(
         mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline, bend_w80_med)
@@ -1493,7 +1355,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
             top, head_raise = nt
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
                                  outer_shift=outer_shift, book_gap=book_outer_gap,
-                                 frame_layers=frame_layers, outer_side=outer_side)
+                                 frame_layers=frame_layers)
     return BorderDetectionResult(width=w, height=h, top=top, bottom=bottom,
                                   verticals=verticals, head_raise=head_raise,
                                   vline_segments=vseg, bend_w80_med=w80_med,

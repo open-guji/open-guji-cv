@@ -216,6 +216,13 @@ class ContextDecideParams(BaseModel):
     一路同权（`OCR_WEIGHT`=1.5，库一路是 3.0×cov）：只扩池、不喧宾夺主。只在
     `rare_topk > 0` 时进参数哈希。"""
 
+    alt_columns: bool = False
+    """row_segment 备选切法的列（`glyph_match.alt_columns`）也做上下文裁决，记进产物 `alt_columns`（2026-11-20 脉经，GUJI-774；
+    缺省关、关时不进参数 dump，产物逐字节不变）。原先备选列只有库匹配、没有本步（`products/alt_view.DROP_KINDS`），
+    seed_admit 按列比两遍准入时备选那遍少了 context 通道，没有参照文字的页（脉经序页）备选格线明明切对了也比不过主切法
+    （01 7:7 备选 20 字全认对、待审 10，主切法切错、待审 8）。备选列的格 id 与主切法同号，所以 5-b 生僻字候选与词典+AI 证据
+    （按 id 取）不并进备选列。"""
+
     consensus_as_unsure: bool = False
     """5a 共识升档的 same（`via="consensus:<n>"`）按升档前的 unsure 裁决，不当 db_same 直接继承
     （A23，全唐文 r15 回退，第 7 轮；缺省关、关时不进参数 dump）。共识升档用的是同一份候选，
@@ -233,6 +240,8 @@ class ContextDecideParams(BaseModel):
             d.pop("ai_evidence_fingerprint", None)
         if isinstance(d, dict) and not self.consensus_as_unsure:
             d.pop("consensus_as_unsure", None)
+        if isinstance(d, dict) and not self.alt_columns:
+            d.pop("alt_columns", None)
         if isinstance(d, dict) and not self.rare_topk:
             d.pop("rare_topk", None)
             d.pop("rare_weight", None)
@@ -415,11 +424,9 @@ class ContextDecideStep(Step):
         if p.rare_topk:
             from .align_ref import _opt, rare_topk_map
             rmap = rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
-        out: list[ColumnDecision] = []
-        for cc in match.columns:
+        def _decide_column(cc, rmap, ai_map) -> ColumnDecision:
             if not cc.ok:
-                out.append(ColumnDecision(col=cc.col, ok=False, error=cc.error))
-                continue
+                return ColumnDecision(col=cc.col, ok=False, error=cc.error)
             recs: list[DecisionRec] = []
             decided: list[tuple[int, str]] = []      # (slot, 定字)，同列前文
             # ⚠️ **按阅读顺序**，不是 (slot, sub)（2026-09-06 修）。夹注一段里
@@ -486,7 +493,13 @@ class ContextDecideStep(Step):
                     ev = ai_map.get(rec.id)
                     if ev is not None:
                         rec.groups, rec.ai = list(ev[0]), ev[1]
-            out.append(ColumnDecision(col=cc.col, ok=True, chars=recs))
+            return ColumnDecision(col=cc.col, ok=True, chars=recs)
+
+        out = [_decide_column(cc, rmap, ai_map) for cc in match.columns]
+        # 备选切法的列（见 `alt_columns` 参数）：格 id 与主切法同号，按 id 取的 5-b 候选、AI 证据不并
+        alt_out = ([_decide_column(cc, {}, {}) for cc in match.alt_columns]
+                   if p.alt_columns and match.alt_columns else [])
         return {"context_decision": PageDecision(
             page=page, strategy=p.strategy,
-            corpus_fingerprint=p.corpus_fingerprint, columns=out)}
+            corpus_fingerprint=p.corpus_fingerprint, columns=out,
+            **({"alt_columns": alt_out} if alt_out else {}))}

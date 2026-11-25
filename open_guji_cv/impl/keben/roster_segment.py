@@ -866,11 +866,13 @@ def grid_slots(items: list[RosterItem], top: float, bottom: float, n: int) -> tu
 
 
 def segment_roster_page(cols: list[tuple[np.ndarray, tuple[float, float] | None]],
-                        ink_threshold: int = 128, scorer=None) -> list[RosterColumn]:
+                        ink_threshold: int = 128, scorer=None, chen_fallback: bool = False) -> list[RosterColumn]:
     """整页：先量全页 em，再逐列切。cols = [(列图灰度, content_x)]。
 
     给了 `scorer`（`roster_glyph.GlyphScorer`）就再把官衔区的连续密排段按本书字形库重切
-    （overview#450：p90 类压扁粘连字，几何数不准字数）。"""
+    （overview#450：p90 类压扁粘连字，几何数不准字数）。量不出全页「臣」行时缺省不重切；`chen_fallback`
+    （正文页里按列点名的一两列职名，`row_segment.roster_cols`）改把整列当官衔区重切——列少、「臣」又贴着邻字时
+    量不出臣行（《脉经》01 p11 c2）。"""
     prepared = [prepare(g, cx, ink_threshold) for g, cx in cols]
     em_page = page_em(prepared)
     ems = [em_page or 0.65 * width for _ink, width in prepared]
@@ -883,6 +885,8 @@ def segment_roster_page(cols: list[tuple[np.ndarray, tuple[float, float] | None]
         # 第二遍：写本的「臣」斜贴邻字、和官衔末字或人名首字粘成一带（史記文淵閣本职名页），
         # 第一遍从自成一带的「臣」量出全页臣行，再按它把贴着的拆出来
         out = [segment_roster_column(ink, em, chen) for (ink, _w), em in zip(prepared, ems)]
+    if chen is None and chen_fallback:
+        chen = float(max(ink.shape[0] for ink, _w in prepared)) + out[0].em
     if scorer is not None and chen is not None:
         for rc, (ink, _w) in zip(out, prepared):
             _glyph_refine(rc, ink, chen, scorer)

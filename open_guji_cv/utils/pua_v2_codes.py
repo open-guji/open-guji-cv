@@ -26,8 +26,11 @@ def norm_code(code: str) -> str:
     return c.upper()
 
 
-def load_table(config_dir: Path | None = None) -> tuple[dict[str, str], dict[str, frozenset[str]]]:
-    """→ (码→字, 码→族内字集合)。读不到的来源跳过；两处都没有 → 两个空表。"""
+def load_table(config_dir: Path | None = None, pin: int | None = None) -> tuple[dict[str, str], dict[str, frozenset[str]]]:
+    """→ (码→字, 码→族内字集合)。读不到的来源跳过；两处都没有 → 两个空表。
+
+    `pin`（册的 `pua_table_pin`）：给了就第 2 处改读共享层 `pua-wyg` 的 `v<pin>`（`core/pua_table_pin.py`；读不到报错，
+    不退回本书码表）；没给读 `config_dir/pua/pua_table.jsonl`（旧做法）。"""
     codes: dict[str, str] = {}
     fams: dict[str, frozenset[str]] = {}
     try:
@@ -37,8 +40,14 @@ def load_table(config_dir: Path | None = None) -> tuple[dict[str, str], dict[str
     except (OSError, ValueError):
         pass
     f = Path(config_dir) / "pua" / "pua_table.jsonl" if config_dir is not None else None
-    if f is not None and f.exists():
-        for line in f.read_text(encoding="utf-8").splitlines():
+    lines: list[str] = []
+    if pin:
+        from ..core.pua_table_pin import read_lines
+        lines = read_lines(int(pin))
+    elif f is not None and f.exists():
+        lines = f.read_text(encoding="utf-8").splitlines()
+    if lines:
+        for line in lines:
             try:
                 r = json.loads(line)
             except ValueError:

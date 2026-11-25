@@ -41,6 +41,30 @@ models/glyph_cnn_r4/best.pt   # 上一代，可切回
 是一个正常的 Git 提交，历史与版本管理都是免费的。旧版本留在 Git 历史里，
 不必像 GitHub Release 那样自己维护 tag。
 
+## `glyph_sim_qtw/`、`glyph_sim_base_v1/`（5a 相似度 CNN）
+
+`glyph_match.sim_model` 开关用的度量学习 CNN（`clustering/sim_cnn.py`），每个目录一份 `model.pt` 加同目录的分数校准表 `calib.json`。
+
+```
+models/glyph_sim_qtw/       # 全唐文字形库训的，只给全唐文用
+models/glyph_sim_base_v1/   # 通用底座 v1（2026-11-17）：殿本、史記、全唐文三书合训，新书开书直接用
+```
+
+底座的 `calib.json` 是通用保守包络表（对没见过的书取最不利的折算）。版本就是目录名的 `_v<N>`：并进新书重训时出 `glyph_sim_base_v2/`，
+旧目录不动，书配置里写的路径决定用哪一版。用法、门槛、重训与换版步骤见 guji-manager `doc/参考/5a相似度模型.md`。
+
+## `stroke_evidence_v1/`（5b 笔画证据，2026-11-18）
+
+册配置 `font.stroke_evidence` 开关用的三个文件（`clustering/stroke_evidence.py`，缺省关）：
+
+```
+models/stroke_evidence_v1/net.pt            # 笔段检测权重（合成数据训，不含任何书的刻例）
+models/stroke_evidence_v1/skel.npz          # GlyphWiki KAGE 骨架索引：97,681 字、149,881 个地区形
+models/stroke_evidence_v1/skel_forms.json   # 字 → 各地区形在索引里的位置
+```
+
+换权重或重建索引出 `stroke_evidence_v2/`，旧目录不动。原理、开关、证据见 `doc/design/5b-笔画证据.md`。
+
 ## `partition_unet_v2/model.pt`（11 MB，2026-09-14 起现役）
 
 Step3 候选池裁判：类别无关的逐像素归属 U-Net（`open_guji_cv/utils/cut_select.py`）。只用合成粘连对训练
