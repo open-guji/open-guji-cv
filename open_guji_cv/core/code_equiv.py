@@ -559,6 +559,12 @@ _BY_U_CACHE_1125 = ("ruling_by_u 扩到字组文意在线问前查缓存（rulin
                     "三书中心库 rev 1417300 在场（含殿本试点两册身份账与挂 u 的裁定），seed_admit 与 origin/dev 304bf9d4 产物逐字节相同；"
                     "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-25（CV0）")
 
+_RENDER_GUARD_1125 = ("冷缓存再生护栏（CV4→CV0 11-25 殿本 frame_layers／outer_gap）：column_warp.render 末尾加「再生尺寸≠产物 warped_size 就报 StaleRenderError」，"
+                      "cell_shrink.render 的 _INNER_MEMO 键加 cells／column_windows 产物 sha 与本步参数（新静态方法 _inner_memo_stamp）。两处都只在 render（缓存再生）路径，"
+                      "run_page 一字未改，产物逐字节不变按构造成立；再生图在一致时与改前同一函数同一输入（只多一次比对），不一致时改前出偏图、改后报错。"
+                      "tests/test_render_stale_guard.py、test_cell_shrink_render_memo.py、test_column_warp_skip.py 过；2026-11-25（CV0）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2550,6 +2556,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="515edb292d4fb83c5decdc0465df9a61489c5a6769936f62bdcf68e5b97bbf84",
           old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
           evidence=_BY_U_CACHE_1125),
+    # 冷缓存再生护栏（CV0 11-25）——dev 哈希
+    Equiv(module="open_guji_cv.steps.column_warp",
+          new="6b0b6c3c9e3a73899ebfc525dc14b321734194df0280e02d51a5018ce1ed8741",
+          old="7d315de47ad1f2ae258c2428f9e919f17fe5996a0469df85c1d711581aa8305e",
+          evidence=_RENDER_GUARD_1125),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="1acbfc9d2359c2074f41f4da4b558ed71dade3513540012596efa57fe05bc7bb",
+          old="dca88bf9728446c7ea5ecf372f3fd05ea88470b0dcc98273a4251fc3b8f01980",
+          evidence=_RENDER_GUARD_1125),
 )
 
 
