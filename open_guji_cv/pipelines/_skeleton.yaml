@@ -26,6 +26,7 @@ slots:
     - seed_admit         # 4b 放行（原 Step7）：十条通道 → 自动进库 / 落回人审（needs=db；进库本身走 Event）
 required: [layout, columns, cells]
 # 四大步（2026-11-22 用户定，原九步里的 Step0–7 并成四步；Step8 入库、Step9 排版输出移到 guji-manager）。
+# 切字内部分析用五小步 2a–2e（拉直、定字带左右边、列端字、字间切分、字框压缩），与 Step 的对应见 doc/2-切字/五小步.md。
 # 只是分组：步骤 id、产物目录、指纹都不变。`guji pipeline … --from/--to` 可写大步名。
 # 每个大步列它包含的步骤 id 或 `slot:<槽位>`（槽位里各链放的步骤都归这一大步）。
 stages:
