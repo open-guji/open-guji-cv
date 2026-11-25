@@ -1301,9 +1301,182 @@ def measure_book_bottom_gap(grays, ink_threshold: int = 128) -> float | None:
     return float(np.median(vals)) if vals else None
 
 
+# ── 外框线「先粗条、后细线」（`outer_bar`，2026-11-24，用户定）────────────────────────────
+#: 左右外框内侧的细线（最外两条竖线）会磨没，粗外框条不容易磨掉。先沿线找粗条内沿（要求连续），再在粗条内沿往里
+#: 找细线，量出「细线到粗条内沿」的间距；细线看得见的地方用细线，磨没的地方用「粗条内沿 − 局部间距」补，最后收成
+#: 三段折线（折角小，单行跳点拽不动）。现线本来就压在细线上的横带不动。没有粗条的一侧（版心侧、脈經单线边）不动。
+#: 79 页版面基准模拟（ai-team CV1 外框分析，2026-11-24）：146 条外框线 p95 合计 374→273、>5px 21→14
+#: （殿本 vol02 p150 25.9→2.2、vol01 p9 33.5→4.1、史記 sj40 p58 25.4→2.7）。缺省关。
+OBAR_STEP = 4             # 每隔这么多行取一个样本
+OBAR_MARGIN = 70          # 离上下版框这么多 px 内不取样（横框条会被当成粗条）
+OBAR_BAR_MIN = 8          # 粗条：≥这么宽的连续墨
+OBAR_REACH = (-12, 90)    # 粗条在线位朝外 -12..+90px 里找
+OBAR_THIN = (2, 9)        # 细线墨段宽
+OBAR_THIN_WIN = 45        # 细线候选在线位 ±这么多 px 里
+OBAR_GAP = (6, 60)        # 细线离粗条内沿的距离范围
+OBAR_COVER = 0.8          # 粗条覆盖样本的比例不到这个＝这一侧没有粗条
+OBAR_GAP_IQR = 6.0        # 间距四分位距超过这个＝量的不是同一对线，不动
+OBAR_GAP_TOL = 3.0        # 间距样本离全页中位超过这个丢掉（多半是字的笔画）
+OBAR_GAP_SMOOTH = 31      # 间距沿线滑动中位窗（样本数）
+OBAR_THIN_TOL = 5.0       # 细线离「粗条内沿 − 间距」超过这个不当细线
+OBAR_KEEP = 0.6           # 现线 ±2px 有窄墨（≤OBAR_THIN[1]）的样本比例（11 样本滑窗）≥ 这个就不动现线
+OBAR_MIN_SAMPLES = 20
+
+
+def _obar_runs(row: np.ndarray, lo: int) -> list[tuple[int, int]]:
+    d = np.diff(np.concatenate([[0], row.astype(np.int8), [0]]))
+    s, e = np.where(d == 1)[0], np.where(d == -1)[0]
+    return [(int(a) + lo, int(b) + lo) for a, b in zip(s, e)]      # [a, b)
+
+
+def _obar_track(cands: list[list[float]], miss: float, jump: float) -> np.ndarray:
+    """每个样本一串候选位置，挑一条连续的路径（动态规划）。代价＝相邻取值差/jump 的平方（封顶 25），
+    跳过一个样本罚 miss。返回每个样本选的值（nan＝这里不取）。"""
+    n = len(cands)
+    states = [list(c) + [None] for c in cands]
+    cost = np.array([0.0 if v is not None else miss for v in states[0]])
+    carry = list(states[0])
+    backs = []
+    for i in range(1, n):
+        st = states[i]
+        cs = np.full(len(st), np.inf)
+        bk = np.zeros(len(st), dtype=int)
+        cr: list = [None] * len(st)
+        for j, v in enumerate(st):
+            for k in range(len(states[i - 1])):
+                pv = carry[k]
+                if v is None:
+                    c, nv = cost[k] + miss, pv
+                else:
+                    c = cost[k] + (0.0 if pv is None else min((abs(v - pv) / jump) ** 2, 25.0))
+                    nv = v
+                if c < cs[j]:
+                    cs[j], bk[j], cr[j] = c, k, nv
+        cost, carry = cs, cr
+        backs.append(bk)
+    j = int(np.argmin(cost))
+    out = np.full(n, np.nan)
+    for i in range(n - 1, -1, -1):
+        v = states[i][j]
+        out[i] = np.nan if v is None else v
+        if i > 0:
+            j = int(backs[i - 1][j])
+    return out
+
+
+def _obar_median(x: np.ndarray, win: int) -> np.ndarray:
+    if len(x) < 2:
+        return x.copy()
+    h = win // 2
+    p = np.concatenate([np.full(h, x[0]), x, np.full(h, x[-1])])
+    return np.median(np.lib.stride_tricks.sliding_window_view(p, 2 * h + 1), axis=1)
+
+
+def _obar_line(mask01: np.ndarray, v: VLine, yt: float, yb: float, w: int, sgn: int) -> list[float] | None:
+    """一条外框线（新坐标 VLine）按粗条重定位，返回四个折点的旧坐标 x（在 yt、1/3、2/3、yb 处），不动返回 None。
+    sgn：旧坐标里朝外的方向（右框线 +1，左框线 -1）。"""
+    h = mask01.shape[0]
+    ys = np.arange(int(yt) + OBAR_MARGIN, int(yb) - OBAR_MARGIN, OBAR_STEP)
+    if len(ys) < 3 * OBAR_MIN_SAMPLES:
+        return None
+    px = (w - 1) - v.x_at(ys.astype(np.float64))               # 现线的旧坐标 x
+    ecand, tcand, narrow = [], [], np.zeros(len(ys))
+    for k, y in enumerate(ys):
+        row = mask01[max(0, y - 2):min(h, y + 3)].mean(axis=0) >= 0.5
+        c = int(round(px[k]))
+        lo, hi = (c + OBAR_REACH[0], c + OBAR_REACH[1]) if sgn > 0 else (c - OBAR_REACH[1], c - OBAR_REACH[0])
+        lo, hi = max(lo, 0), min(hi, w)
+        e = []
+        for a, b in (_obar_runs(row[lo:hi], lo) if hi > lo else []):
+            if b - a >= OBAR_BAR_MIN:
+                e.append(float(a if sgn > 0 else b - 1))         # 粗条朝页心那一边
+        ecand.append(e)
+        lo2, hi2 = max(0, c - OBAR_THIN_WIN), min(w, c + OBAR_THIN_WIN)
+        tcand.append([(a + b - 1) / 2.0 for a, b in _obar_runs(row[lo2:hi2], lo2)
+                      if OBAR_THIN[0] <= b - a <= OBAR_THIN[1]])
+        hit = [q for q in range(c - 2, c + 3) if 0 <= q < w and row[q]]
+        if hit:
+            a = b = hit[0]
+            while a > 0 and row[a - 1]:
+                a -= 1
+            while b < w - 1 and row[b + 1]:
+                b += 1
+            narrow[k] = 1.0 if b - a + 1 <= OBAR_THIN[1] else 0.0
+    edge = _obar_track(ecand, miss=3.0, jump=2.0)
+    fin = np.isfinite(edge)
+    if fin.mean() < OBAR_COVER:
+        return None
+    tc2 = []
+    for k in range(len(ys)):
+        if fin[k]:
+            tc2.append([x for x in tcand[k] if OBAR_GAP[0] <= (edge[k] - x) * sgn <= OBAR_GAP[1]])
+        else:
+            tc2.append(tcand[k])
+    thin = _obar_track(tc2, miss=1.5, jump=1.5)
+    gap = (edge - thin) * sgn
+    okg = np.isfinite(gap)
+    if okg.sum() < OBAR_MIN_SAMPLES:
+        return None
+    q1, q3 = np.percentile(gap[okg], [25, 75])
+    if q3 - q1 > OBAR_GAP_IQR:
+        return None
+    okg &= np.abs(np.where(okg, gap, 0.0) - float(np.median(gap[okg]))) <= OBAR_GAP_TOL
+    if okg.sum() < OBAR_MIN_SAMPLES:
+        return None
+    gloc = np.interp(ys, ys[okg], _obar_median(gap[okg], OBAR_GAP_SMOOTH))
+    bridge = np.interp(ys, ys[fin], edge[fin]) - sgn * gloc
+    thin_ok = np.isfinite(thin) & (np.abs(np.where(np.isfinite(thin), thin, 0.0) - bridge) <= OBAR_THIN_TOL)
+    pred = np.where(thin_ok, thin, bridge)
+    keep = np.convolve(narrow, np.ones(11) / 11.0, mode="same") >= OBAR_KEEP
+    pred = np.where(keep, px, pred)
+    # 收成三段折线：折点在 yt、1/3、2/3、yb，Huber 迭代重加权最小二乘
+    ky = np.array([yt, yt + (yb - yt) / 3.0, yt + 2.0 * (yb - yt) / 3.0, yb])
+    yy = ys.astype(np.float64)
+    i = np.clip(np.searchsorted(ky, yy) - 1, 0, 2)
+    t = (yy - ky[i]) / (ky[i + 1] - ky[i])
+    A = np.zeros((len(yy), 4))
+    A[np.arange(len(yy)), i] = 1 - t
+    A[np.arange(len(yy)), i + 1] = t
+    wts = np.ones(len(yy))
+    c4 = None
+    for _ in range(8):
+        M = A.T @ (A * wts[:, None]) + 1e-6 * np.eye(4)
+        c4 = np.linalg.solve(M, A.T @ (wts * pred))
+        r = np.abs(pred - A @ c4)
+        wts = np.where(r <= 2.0, 1.0, 2.0 / np.maximum(r, 1e-6))
+    return [float(x) for x in c4]
+
+
+def refit_outer_by_bar(mask: np.ndarray, top: HLine, bottom: HLine, verticals: list[VLine], w: int, h: int,
+                       outer_side: str | None = None) -> tuple[list[VLine], int]:
+    """最外两条竖线按「先粗条、后细线」重定位（见 OBAR_*）。返回 (新线表, 换了几条)。换了的线是三段格式；
+    调用方负责把整页统一成三段。`outer_side`（册配置 side_frame）给了就只做那一侧。"""
+    n = len(verticals)
+    if n < 4:
+        return verticals, 0
+    mask01 = (np.asarray(mask) > 0)
+    out, changed = list(verticals), 0
+    for vi, sgn, side in ((0, 1, "right"), (n - 1, -1, "left")):
+        if outer_side in ("left", "right") and side != outer_side:
+            continue
+        v = verticals[vi]
+        xc = v.x_at(h / 2.0)
+        yt, yb = float(top.y_at(xc)), float(bottom.y_at(xc))
+        if yb - yt < 600:
+            continue
+        kx_old = _obar_line(mask01, v, yt, yb, w, sgn)
+        if kx_old is None:
+            continue
+        ky = [yt, yt + (yb - yt) / 3.0, yt + 2.0 * (yb - yt) / 3.0, yb]
+        out[vi] = _from_knots([(w - 1) - x for x in kx_old], ky)
+        changed += 1
+    return out, changed
+
+
 def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLine,
                     straight: list[VLine], w: int, h: int, vline_polyline: bool,
-                    bend_w80_med: float | None = None):
+                    bend_w80_med: float | None = None, outer_bar: bool = False,
+                    outer_side: str | None = None):
     """直线竖线 → 本页最终竖线：弯页整页换三段折线（先量 w80 再决定，直线页原样通过），再按横带证据重定位
     （见 SNAP_*），换了线的页统一成三段格式。要在 top/bottom 之后，折点 y 取自这条线跟上下版框的交点。
     返回 (verticals, segments, w80_med, w80_max, snapped)。`detect_borders` 与列宽重拟合后的
@@ -1312,6 +1485,9 @@ def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLin
                                                             fit=vline_polyline, w80_med_min=bend_w80_med)
     verticals, snapped = snap_verticals_to_evidence(binm, top, bottom, verticals, w, h,
                                                     straight=list(straight))
+    if outer_bar:                  # 缺省关不走，与加参数前一模一样
+        verticals, n_bar = refit_outer_by_bar(mask, top, bottom, verticals, w, h, outer_side=outer_side)
+        snapped += n_bar
     if snapped and vseg == 1:
         conv = []
         for v in verticals:
@@ -1326,7 +1502,7 @@ def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLin
 
 
 def refit_bends(res, gray: np.ndarray, *, ink_threshold: int = 128, vline_polyline: bool = True,
-                bend_w80_med: float | None = None):
+                bend_w80_med: float | None = None, outer_bar: bool = False, outer_side: str | None = None):
     """列宽重拟合（`pitch_rescue`）换了线之后，按新的一串直线**重新拟合折线**。
 
     折线拟合的护栏（相邻对列宽沿高度的变化率、拟合失败的线借邻线位移）看的是相邻线；自由模式探出假线、
@@ -1342,7 +1518,8 @@ def refit_bends(res, gray: np.ndarray, *, ink_threshold: int = 128, vline_polyli
     binm = (mask > 0).astype(np.uint8)
     straight = list(res.verticals_straight) or list(res.verticals)
     verticals, vseg, w80_med, w80_max, snapped = _bend_verticals(
-        mask, binm, res.top, res.bottom, straight, w, h, vline_polyline, bend_w80_med)
+        mask, binm, res.top, res.bottom, straight, w, h, vline_polyline, bend_w80_med,
+        **({"outer_bar": True, "outer_side": outer_side} if outer_bar else {}))
     from dataclasses import replace
     return replace(res, verticals=verticals, vline_segments=vseg, bend_w80_med=w80_med,
                    bend_w80_max=w80_max, vlines_snapped=int(snapped))
@@ -1369,6 +1546,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     top_weak_floor: float | None = None,
                     bottom_weak_ratio: float = 0.0,
                     bend_w80_med: float | None = None,
+                    outer_bar: bool = False,
                     bottom_lock_reslope: bool = False,
                     top_edge_reslope: bool = False,
                     top_hint: float | None = None,
@@ -1483,7 +1661,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
         top, _ = pull_inner_line(binm_new, top, "top", verticals, w, h, (book_outer_gap or {}).get("top"))
     verticals_straight = list(verticals)
     verticals, vseg, w80_med, w80_max, vlines_snapped = _bend_verticals(
-        mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline, bend_w80_med)
+        mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline, bend_w80_med,
+        **({"outer_bar": True, "outer_side": outer_side} if outer_bar else {}))
     head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend,
                                    scale=head_raise_scale)
     if head_raise_notch and not head_raise and top_hint is None:

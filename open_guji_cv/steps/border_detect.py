@@ -481,6 +481,12 @@ class BorderDetectParams(BaseModel):
     （R02 碰裁边 17%→30%，ai-team domain/CV/质检/待审原因深挖/R02-第7轮列端切半-A20）。殿本在 book_defaults 写
     `params: {border_detect: {bend_w80_med: 0}}`。缺省 None 不进参数 dump，产物与加字段前逐字节相同。"""
 
+    outer_bar: bool = False
+    """左右外框线「先找粗外框条、再找内框细线」（`impl/keben/border.refit_outer_by_bar`，2026-11-24 用户定）：细线磨没的
+    地方按「粗条内沿 − 本页间距」补，收成三段折线；现线压在细线上的横带不动，没有粗条的一侧不动。殿本 vol02 p150、
+    vol01 p9 这类细线磨没、算法贴到粗条内沿或白纸上的页偏 25–33px → 2–4px。换了线的直线页整页转三段格式。
+    缺省关，关时不进参数 dump，产物与加字段前逐字节相同。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
         """缺省关时不进 dump：没开的书 `params_hash` 与加这个字段之前逐位相同。"""
@@ -522,6 +528,8 @@ class BorderDetectParams(BaseModel):
             d.pop("hline_hints", None)
         if isinstance(d, dict) and self.bend_w80_med is None:
             d.pop("bend_w80_med", None)
+        if isinstance(d, dict) and not self.outer_bar:
+            d.pop("outer_bar", None)
         return d
 
 
@@ -590,6 +598,8 @@ class BorderDetectStep(Step):
         lattice_kw = {"grid_lattice_fallback": True} if (grid_page and p.grid_lattice_fallback) else {}
         # 弯页门槛：给了才传（缺省＝代码常数，与加字段前的调用一模一样）
         bend_kw = {"bend_w80_med": p.bend_w80_med} if p.bend_w80_med is not None else {}
+        if p.outer_bar:            # 缺省关不传
+            bend_kw["outer_bar"] = True
         # 页级人给版框位置：本页写了才传
         hint = p.hline_hints.get(page) or {}
         bad = set(hint) - {"top", "bottom"}
@@ -642,7 +652,8 @@ class BorderDetectStep(Step):
             if how:
                 # 换了线就在新的一串直线上重拟合折线（旧形状是在错的线网上拟的，vol46 p78）
                 r = refit_bends(r, gray, ink_threshold=p.ink_threshold,
-                                vline_polyline=ctx.book.vline_polyline, **bend_kw)
+                                vline_polyline=ctx.book.vline_polyline, **bend_kw,
+                                **(side_kw if p.outer_bar else {}))
             return r, how
 
         if p.pitch_rescue and not grid:
