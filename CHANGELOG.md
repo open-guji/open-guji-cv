@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（产物逐字节不变，code_equiv 登记，L0）：冷缓存再生列图护栏（CV4→CV0 11-25，殿本 frame_layers／outer_gap）：`RunContext.materialize` 现算前比产物 manifest 记的 `book_deps` 与现册配置，不同就报 `StaleRenderError`、不出图；`column_warp.render` 再生尺寸与产物 `warped_size` 不符也报错；`cell_shrink` 整页内框线记忆 `_INNER_MEMO` 键加 cells／column_windows 产物 sha 与参数，同进程换配置不再串。起因：改了册配置没重跑 column_warp 时，下游按旧格坐标裁新列图（ZM replay-1125 二→一 37 格）。CV0。
 - PATCH（只影响开了 `glyph_match.stages.pair` 的册，即全唐文：5a 起过期）：5a.3 形近字对分类器起跑前核对它训练时用的嵌入模型（`pair_clf.json` 的 `sim_model`，sha 前缀或模型目录名）与当前 `glyph_match.sim_model` 一致，对不上（或没记）就拒跑——换 sim_model 不重训 pair_clf 会按乱分改字。`build_pair_clf.py --sim-model` 改为必填。CV3。
 - PATCH（产物逐字节不变，code_equiv 登记，L0；开的册 L1）：`ruling_by_u` 扩到字组文意在线问前查缓存：开着时 seed_admit 跑字组流程期间设本页 {格号: u}（`rulings.UMAP_SCOPE`），`RulingCache.lookup` 窗口键没中再按 u 查**版本完全相同**的裁定（`get_by_u_ver`，二审小组各成员不串；前后 2 字一侧同），命中记 `ruling_key=u`。起因：殿本试点强制 u 回放里 7 格只靠字组缓存放行，重切后窗口一变就丢。三书 50 页逐字节同。
 - PATCH（产物逐字节不变，code_equiv 登记，L0；开的册 L1）：新书级开关 `seed_admit.ruling_by_u`（字格永久编号 u 执行方案 T3，CV0；缺省关、关时不进参数 dump）：窗口键、版本等价、格锚点都没中后，按本格的 u（从本册字格身份账 `<feedback>/uid/<册>.jsonl` 按本页 cells_sha 取，新只读类 `feedback.rulings.UidLedger`）查同册同 u 的裁定，口径同格锚点宽松档（只收 high、前后 2 字一侧相同、字不一致不放行）、字在候选或＝整理本字。`RulingStore` 加 `get_by_u`／`has_u`／`uid_ledger`，`put` 加 `u` 参数（manager 写裁定带 u 用；不给时 payload 不变）。殿本 vol28、全唐文 020、史記 02 共 50 页 seed_admit 逐字节同，各步 code_hash 与 dev 同。
