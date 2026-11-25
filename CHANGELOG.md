@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- MINOR（用户 2026-11-25 定；只动 `cut_gate`：从 cut_gate 起过期，切字各步产物逐字节不变）：出口闸加自检 L2c `cut_too_inward`：当前左/右切点比「框内缘之后最少墨处」（新 `seg/side_cut.side_cut_points`，算时忽略上下边框前后各 60 行）更靠里超过 `cut_inward_max_px`（缺省 10，0=关）→ 拒收。全唐文 053、殿本 vol01、脉经 共 1140 列实测偏差 99 分位 ≤0，命中只有全唐文 053 p148c9 左侧（30px）。
+
 - 文档（无代码变化，产物与指纹不变）：2 切字新增五小步 2a–2e（拉直、定字带左右边、列端字、字间切分、字框压缩）的输入输出与代码对应表 `doc/2-切字/五小步.md`；README、骨架注释同步。
 - MINOR（用户 2026-11-25 定，不怕指纹变）：切字出口闸放到最后。新增 `column_geometry`（2 列几何：字带、格线范围、页级字距，只算量、只记结构性不切）与 `cut_gate`（挂 `cell_shrink` 出口，读 2a–2e 全部产物，列级与格级判据并在一起，判据一字未改，产物仍叫 `gate_manifest`／`row_segment_gate_manifest`）；`row_segment` 改读 `column_geometry`，`column_gate` 不再挡 2a–2c、`row_segment_gate` 不再挂在 `row_segment`；引擎按管线判断闸是否适用（现代链不受影响，仍用 `column_crop`＋`column_gate`）；旧 `column_gate:` 参数自动复制到 `column_geometry`／`cut_gate` 里同名字段。
 
