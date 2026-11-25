@@ -14,4 +14,4 @@
 - 切分代码分层（`seg/` 原语、`impl/` 版式、书仓 `code/`）：[../参考/切分代码结构.md](../参考/切分代码结构.md)。
 - 相关设计：[row_boundaries_design](../design/row_boundaries_design.md)、[step3_touching_and_jiazhu](../design/step3_touching_and_jiazhu.md)、[peak_line_search](../design/peak_line_search.md)、[YOLO 列字数先验](../design/19-yolo-release列字数先验与全书评测-总设计.md)。
 - 研发过程与负结果：[../经验/切分四步-研发记录.md](../经验/切分四步-研发记录.md)。
-- **2026-11-25 起分析用五小步 2a–2e（拉直、定字带左右边、字间切分、列端字、字框压缩）**，每步的输入输出与现有代码的对应见 [五小步.md](五小步.md)；上表是步骤 id 的分组，不变。
+- **2026-11-25 起分析用五小步 2a–2e（拉直、定字带左右边、列端字、字间切分、字框压缩）**，每步的输入输出与现有代码的对应见 [五小步.md](五小步.md)；上表是步骤 id 的分组，不变。

@@ -3,7 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
-- 文档（无代码变化，产物与指纹不变）：2 切字新增五小步 2a–2e（拉直、定字带左右边、字间切分、列端字、字框压缩）的输入输出与代码对应表 `doc/2-切字/五小步.md`；README、骨架注释同步。
+- 文档（无代码变化，产物与指纹不变）：2 切字新增五小步 2a–2e（拉直、定字带左右边、列端字、字间切分、字框压缩）的输入输出与代码对应表 `doc/2-切字/五小步.md`；README、骨架注释同步。
 - PATCH（产物逐字节不变，code_equiv 登记，L0）：冷缓存再生列图护栏（CV4→CV0 11-25，殿本 frame_layers／outer_gap）：`RunContext.materialize` 现算前比产物 manifest 记的 `book_deps` 与现册配置，不同就报 `StaleRenderError`、不出图；`column_warp.render` 再生尺寸与产物 `warped_size` 不符也报错；`cell_shrink` 整页内框线记忆 `_INNER_MEMO` 键加 cells／column_windows 产物 sha 与参数，同进程换配置不再串。起因：改了册配置没重跑 column_warp 时，下游按旧格坐标裁新列图（ZM replay-1125 二→一 37 格）。CV0。
 - PATCH（只影响开了 `glyph_match.stages.pair` 的册，即全唐文：5a 起过期）：5a.3 形近字对分类器起跑前核对它训练时用的嵌入模型（`pair_clf.json` 的 `sim_model`，sha 前缀或模型目录名）与当前 `glyph_match.sim_model` 一致，对不上（或没记）就拒跑——换 sim_model 不重训 pair_clf 会按乱分改字。`build_pair_clf.py --sim-model` 改为必填。CV3。
 - PATCH（产物逐字节不变，code_equiv 登记，L0；开的册 L1）：`ruling_by_u` 扩到字组文意在线问前查缓存：开着时 seed_admit 跑字组流程期间设本页 {格号: u}（`rulings.UMAP_SCOPE`），`RulingCache.lookup` 窗口键没中再按 u 查**版本完全相同**的裁定（`get_by_u_ver`，二审小组各成员不串；前后 2 字一侧同），命中记 `ruling_key=u`。起因：殿本试点强制 u 回放里 7 格只靠字组缓存放行，重切后窗口一变就丢。三书 50 页逐字节同。
