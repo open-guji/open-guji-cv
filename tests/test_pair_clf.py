@@ -162,3 +162,23 @@ def test_pair_unsure_gives_evidence_only_for_unsure_cells(tmp_path):
     class M2:
         candidates = [("丙", 0.9), ("丁", 0.8)]
     assert st.apply("unsure", M2(), np.zeros((2, 2)), None, "c1", None) == GS.StageOut()  # 前两名都没有对
+
+
+def test_check_sim_model_matches_sha_or_dir_and_rejects_others(tmp_path):
+    import hashlib
+    import pytest
+    from open_guji_cv.groups.pair_clf import check_sim_model
+    d = tmp_path / "glyph_sim_x"
+    d.mkdir()
+    m = d / "model.pt"
+    m.write_bytes(b"weights-v1")
+    sha = hashlib.sha256(b"weights-v1").hexdigest()
+    check_sim_model({"sim_model": sha[:12]}, str(m))           # sha 前缀
+    check_sim_model({"sim_model": sha[:12].upper()}, str(m))
+    check_sim_model({"sim_model": "glyph_sim_x"}, str(m))      # 旧文件记目录名
+    for bad in ("", None, "glyph_sim_y", "0" * 12, sha[:8]):     # 没记、别的模型、前缀太短
+        with pytest.raises(ValueError, match="对不上"):
+            check_sim_model({"sim_model": bad}, str(m))
+    m.write_bytes(b"weights-v2")                                  # 同目录换了权重：sha 对不上，但目录名仍对得上
+    with pytest.raises(ValueError):
+        check_sim_model({"sim_model": sha[:12]}, str(m))

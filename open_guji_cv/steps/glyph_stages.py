@@ -208,6 +208,9 @@ class Stages:
         if not hasattr(v, "net"):
             raise ValueError("glyph_match.stages 要先开 sim_model（5a.1 用整库 CNN 嵌入）")
         self.cfg, self._m, self._net, self._embed = cfg, matcher, v.net, embed
+        if cfg.pair:
+            from ..groups import pair_clf
+            pair_clf.check_sim_model(pair_clf.load(cfg.pair), v.cfg.path)
         self._rows = [j for j, iid in enumerate(matcher._ids) if not str(iid).startswith(FONT_PREFIX)]
         self._pos = {j: k for k, j in enumerate(self._rows)}
         # 整库嵌入用精验器已经算好（或它头一次用时也要算）的那份，不另算一遍
