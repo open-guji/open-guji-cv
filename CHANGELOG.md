@@ -103,6 +103,10 @@
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
 
+## [0.7.105] - 2026-11-25
+
+殿本 patch 线：v0.7.102 ＋ dev #1864（冷缓存再生列图护栏：column_warp.render 再生尺寸≠产物 warped_size 报错、cell_shrink 内框线记忆带产物戳、core/step 册配置漂移拒绝现算；只动 render 路径，按本线哈希登记 code_equiv）＋ dev #1863（group_flow：一二复核整理本＝放行字时不按两路图像改字）。含 #1848＋#1856（ruling_by_u，v0.7.102 已带）；#1813／#1820／#1838 在 v0.7.97–0.7.99 已有，#1862 已关（#1864 的子集）。**对 v0.7.99 实测（check_fp_change）23 步只有 seed_admit 指纹变**：border_detect 到 read 不变，指纹变更：seed_admit 起过期（殿本开 ruling_by_u 后统一重跑）。`ruling_anchor_loose` 参数名与去键规则同 v0.7.99，已开它的册参数 dump 不变。（CV0，ZM／CV1 11-25 定）
+
 ## [0.7.104] - 2026-11-25
 
 全唐文 patch 线：v0.7.101 ＋ 移植 dev #1848＋#1856（书级开关 `seed_admit.ruling_by_u`：窗口键没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，只收 high、前后 2 字至少一侧相同、裁定字在库候选或＝整理本字；字组在线问前查缓存也按 u 后备，版本须完全相同）。缺省关、关时不进参数 dump。本线没有格锚点／版本等价接入（seed_admit 只加 u 档）；`feedback/rulings.py` 取殿本线 v0.7.102 全文，`RulingLog.append` 写前校验在本线缺省不开。**23 步 code_hash 只有 seed_admit 变**，未登记 code_equiv：u 项目 11-25 起各书开 `ruling_by_u`，seed_admit 起重放。底库不变。（CV0，u 项目 T3；Sheldon 11-25「尽快完成转换」）
