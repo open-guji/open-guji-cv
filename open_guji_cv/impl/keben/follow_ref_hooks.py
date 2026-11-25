@@ -34,17 +34,6 @@
   - `canon`：本书 `codepoints:` 归一函数（字 → 码位字），本书没写 `codepoints:` 时 None；`lib`：库首位字（可能 None）。
 
   只在护栏本要拦的格上调；`witness3` 里「库首位与整理本是异体对」（`why=lib_variant`）那一支不经这里。
-
-- `variant_rank(*, lane, char, forms, cur, cands, lib) -> str | None`（2026-11-16 A22，SJ 请求、Sheldon 11-15 定史記
-  圗兾凢来 不并码位、保留异体刻形、改流水线放行）
-
-  同一护栏，`variant_norm` 也不放（或没写）、本要记 `cand_variant` 送审时再调一次，用来按异体**排第几**定放不放，
-  不靠码位归一。返回放行字 → 放行，证据记 `lane.variant_rank="hook"`、`lane.variant_from`、
-  `lane.variant_ranks=[[名次, 异体, cov|None], …]`；None／空 → 照旧送审。返回字须与 `char` 语义同，否则忽略。
-
-  - `lane`、`char`、`lib` 同 `variant_norm`；
-  - `forms`：`char` 的全部异体各在哪 `((名次, 异体, cov), …)`：名次 0＝本格现字 `cur`（cov None），1…＝库第几名；
-  - `cur`：本格现字（可能 None）；`cands`：库前 `lane_variant_topk` 名 `((字, cov), …)`。
 """
 from __future__ import annotations
 
@@ -53,6 +42,3 @@ rival_skip = None
 
 #: None＝不调（缺省）。
 variant_norm = None
-
-#: None＝不调（缺省）。
-variant_rank = None

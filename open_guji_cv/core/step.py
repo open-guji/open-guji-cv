@@ -319,6 +319,11 @@ def _with_book_step6_ai(p: BaseModel, ctx: "RunContext") -> BaseModel:
 
 
 # ── 运行上下文 ───────────────────────────────────────────────────────
+class StaleRenderError(RuntimeError):
+    """缓存图要现算，但产出它的那一步这一页产物与现在的册配置／再生结果对不上（`RunContext.materialize`、
+    `column_warp.render`）。宁可报错，不悄悄出一张跟产物坐标不符的图（2026-11-25）。"""
+
+
 class RunContext:
     """一次运行里 Step 看到的全部环境。Step 通过它读上游产物、拿原图、走图像缓存。"""
 
@@ -527,11 +532,47 @@ class RunContext:
             return None
         return ent.sha256 if ent is not None and ent.status == "ok" and ent.sha256 else None
 
+    def render_book_drift(self, step: "Step", key: str) -> dict | None:
+        """现算图之前的护栏（2026-11-25，CV4→CV0 殿本 frame_layers）：产出它的那一步这一页产物是按哪份
+        `book_deps` 跑的（manifest `book`），与现在册配置的取值比。不同 → {字段: (产物时, 现在)}；
+        相同、没 book_deps、没记录（老条目／还没产物）→ None（不验）。
+
+        `render` 读的是**现在**的册配置，产物（窗口、warped_size、格坐标）却是**当时**的配置出的：改了 yaml
+        而还没重跑这一步时冷缓存再生出的图跟产物对不上，下游按旧坐标裁新图就裁偏，而且一切状态都显示正常。
+        指纹里早有 book_deps（产物会报过期），但只跑下游、上游没重跑时没人拦——这里拦。"""
+        if not step.spec.book_deps:
+            return None
+        import json as _json
+        import re as _re
+        m = _re.match(r"^p\d{4}", key)
+        if not m:
+            return None
+        try:
+            ent = self.store.manifest(self.book.id, step.spec.id).get(m.group(0))
+        except Exception:                      # noqa: BLE001 —— 取不到记录不挡出图（同 cache_stamp）
+            return None
+        if ent is None or ent.status != "ok" or ent.book is None:
+            return None
+        from .engine import book_dep_values
+        now = _json.loads(_json.dumps(book_dep_values(step, self.book), sort_keys=True))
+        then = _json.loads(_json.dumps(ent.book, sort_keys=True))
+        diff = {k: (then.get(k), now.get(k)) for k in sorted(set(now) | set(then)) if then.get(k) != now.get(k)}
+        return diff or None
+
     def materialize(self, kind_id: str, key: str) -> Path:
         step = self.producer(kind_id)
+
+        def build() -> np.ndarray:
+            drift = self.render_book_drift(step, key)
+            if drift:
+                raise StaleRenderError(
+                    f"{kind_id} {key} 现算不了：{step.spec.id} 这一页的产物是按旧册配置跑的（"
+                    + "；".join(f"{k} {a!r}→{b!r}" for k, (a, b) in drift.items())
+                    + f"），按现配置再生的图会和产物坐标对不上。先从 {step.spec.id} 起重跑这一页（或撤回配置改动）。")
+            return step.render(self, kind_id, key)
+
         return self.cache.materialize(
-            self.book.id, kind_id, key,
-            lambda: step.render(self, kind_id, key),
+            self.book.id, kind_id, key, build,
             stamp=self.cache_stamp(kind_id, key))
 
     def image(self, kind_id: str, key: str) -> np.ndarray:

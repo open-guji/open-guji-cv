@@ -114,10 +114,7 @@ class RowSegmentGateStep(Step):
             reject: list[str] = []
             flags: list[str] = []
             roster = "roster" in cc.flags      # Step3 职名页分支切的列（overview#450）：字数本就不定
-            if not cc.ok and "table_column" in (cc.error or ""):
-                # 半文半表页册配置点名的表格列（column_gate.table_cols）：版式如此，不是 DP 无解
-                reject.append("table_column：册配置 page_kinds.table_cols 点名本列是表格，不切")
-            elif not cc.ok:
+            if not cc.ok:
                 reject.append(f"dp_no_solution：DP 无解（{cc.error or '未知原因'}）")
             elif roster:
                 if "roster_dense_guess" in cc.flags:

@@ -232,4 +232,15 @@ class ColumnWarpStep(Step):
         if win is None:
             raise KeyError(f"第 {page} 页没有第 {col} 列")
         raw, cleaned, _, _ = self._images(ctx, gray, win)
+        # 再生的列图尺寸须与产物记的 warped_size 一致（2026-11-25，CV4→CV0）：不一致说明产物是另一份配置／代码出的，
+        # 下游按产物里的格坐标裁这张图就裁偏。宁可报错，不悄悄出偏图。产物缺席（还没跑过）不验。
+        if ctx.has_product("column_windows", page):
+            rec = ctx.product("column_windows", page).column(col)
+            want = tuple(int(v) for v in rec.warped_size) if rec is not None and rec.warped_size else None
+            got = (int(cleaned.shape[1]), int(cleaned.shape[0]))
+            if want is not None and want != got:
+                from ..core.step import StaleRenderError
+                raise StaleRenderError(
+                    f"{kind_id} {key} 再生尺寸 {got[0]}×{got[1]} 与产物 warped_size {want[0]}×{want[1]} 不符："
+                    f"column_warp 产物不是按现在的代码／册配置出的，先从 column_warp 起重跑第 {page} 页。")
         return raw if kind_id == "column_raw" else cleaned
