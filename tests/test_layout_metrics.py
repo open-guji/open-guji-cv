@@ -210,7 +210,10 @@ def test_doc_from_borders_head_raise_polyline():
     assert lm.y_at(top, [a - 50.0])[0] == pytest.approx(300.0)
     outer = lm._pts(d["frame"]["top"]["outer"])
     assert lm.y_at(outer, [(a + c) / 2])[0] == pytest.approx(100.0)
-    assert lm.y_at(outer, [a - 50.0])[0] == pytest.approx(270.0)
+    # 外框台阶竖边在内框竖边外侧，让出内外间距 50 px
+    assert lm.y_at(outer, [a - 20.0])[0] == pytest.approx(100.0)
+    assert lm.y_at(outer, [c + 20.0])[0] == pytest.approx(100.0)
+    assert lm.y_at(outer, [a - 80.0])[0] == pytest.approx(270.0)
     assert lg.validate_doc(d) == []
 
 

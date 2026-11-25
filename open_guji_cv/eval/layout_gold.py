@@ -145,29 +145,43 @@ def head_raise_spans(r) -> list[tuple[float, float, float, float]]:
     return out
 
 
+#: 外框台阶竖边往外让出「内外框间距 × 此值」。产物的 outer_y 是粗框条**外延**，金标标在框条中间，间距多出约半条框宽；
+#: 殿本抬头页金标实测竖边外让 22–43 px（中位 30），产物间距 37–45 px。
+OUTER_STEP_K = 0.8
+
+
 def top_polyline_pts(base: list[list[float]], spans: list, W: int, which: str) -> list[list[float]]:
-    """把直线上框 base（左上原点点列）改成阶梯折线：每个抬头列在其左右边处各加两个同 x 的点，
-    中间取抬头框的 y（which=inner 取 inner_y，outer 取 outer_y；金标同一台阶用同 x 两点）。"""
+    """把直线上框 base（左上原点点列）改成阶梯折线：每段抬头在其左右边处各加两个同 x 的点（金标同一台阶用同 x 两点），
+    中间取抬头框的 y（which=inner 取 inner_y，outer 取 outer_y）。相邻抬头列连成一段，台阶直接接、不回落到主框。
+    外框（which=outer）的台阶竖边在内框竖边**外侧**，往外让出该列的内外框间距（inner_y − outer_y，乘 `OUTER_STEP_K`）：
+    抬头框是一圈双线，竖边的外框跟上边的外框离内框一样远（vol04:6 实测 31 px，2026-11-25 用户复核）。"""
     ys = np.array([p[1] for p in base]); xs = np.array([p[0] for p in base])
     o = np.argsort(xs, kind="stable"); xs, ys = xs[o], ys[o]
     k = 2 if which == "inner" else 3
-    spans_tl = sorted(((W - 1) - sp[1], (W - 1) - sp[0], sp[k]) for sp in spans)
-    pts: list[list[float]] = []
-    for x, y in zip(xs, ys):
-        if any(a <= x <= b for a, b, _ in spans_tl):
-            continue
-        pts.append([float(x), float(y)])
-    prev_b = prev_yy = None
-    for i, (a, b, yy) in enumerate(spans_tl):
-        yb_a, yb_b = float(np.interp(a, xs, ys)), float(np.interp(b, xs, ys))
-        if prev_b is not None and abs(a - prev_b) < 2.0:      # 相邻抬头列：台阶直接接，不回落到主框
-            pts.pop(); pts.pop()                              # 去掉上一列落回主框的点
-            pts += [[prev_b, prev_yy], [prev_b, yy], [b, yy], [b, yb_b]]
+    segs = sorted(((W - 1) - sp[1], (W - 1) - sp[0], sp[k], abs(sp[2] - sp[3])) for sp in spans)
+    groups: list[list[tuple]] = []
+    for sg in segs:
+        if groups and abs(sg[0] - groups[-1][-1][1]) < 2.0:
+            groups[-1].append(sg)
         else:
-            pts += [[a, yb_a], [a, yy], [b, yy], [b, yb_b]]
-        prev_b, prev_yy = b, yy
-    pts.sort(key=lambda p: p[0])
-    # 同 x 的点保持「先主框后台阶」的次序：排序稳定，上面加点时已按此序
+            groups.append([sg])
+    steps: list[tuple[float, float, list[list[float]]]] = []    # (x 起, x 止, 台阶点)
+    for grp in groups:
+        a, b = grp[0][0], grp[-1][1]
+        if which != "inner":
+            a, b = a - OUTER_STEP_K * grp[0][3], b + OUTER_STEP_K * grp[-1][3]
+        joints = [(grp[n][1] + grp[n + 1][0]) / 2.0 for n in range(len(grp) - 1)]   # 相邻列共用一个 x，免得排序颠倒
+        mid: list[list[float]] = []
+        for n, (_, _, yy, _) in enumerate(grp):
+            xa = a if n == 0 else joints[n - 1]
+            xb = b if n == len(grp) - 1 else joints[n]
+            mid += [[xa, yy], [xb, yy]]
+        steps.append((a, b, [[a, float(np.interp(a, xs, ys))]] + mid + [[b, float(np.interp(b, xs, ys))]]))
+    pts: list[list[float]] = [[float(x), float(y)] for x, y in zip(xs, ys)
+                              if not any(a <= x <= b for a, b, _ in steps)]
+    for _, _, sp in steps:
+        pts += sp
+    pts.sort(key=lambda p: p[0])          # 排序稳定：同 x 的点保持「主框→台阶→台阶→主框」的次序
     return pts
 
 
