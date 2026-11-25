@@ -372,6 +372,12 @@ _INNER_PULL_1123 = ("版面 border_detect 新参数 inner_pull（缺省关、不
                     "detect_borders 的 Borders 产物 JSON sha256 与 origin/dev 4a26d7c 逐一相同（158/158）；2026-11-23（CV1；cv #1813 之后）")
 
 
+_RENDER_GUARD_1125 = ("冷缓存再生护栏（CV4→CV0 11-25 殿本 frame_layers／outer_gap）：column_warp.render 末尾加「再生尺寸≠产物 warped_size 就报 StaleRenderError」，"
+                      "cell_shrink.render 的 _INNER_MEMO 键加 cells／column_windows 产物 sha 与本步参数（新静态方法 _inner_memo_stamp）。两处都只在 render（缓存再生）路径，"
+                      "run_page 一字未改，产物逐字节不变按构造成立；再生图在一致时与改前同一函数同一输入（只多一次比对），不一致时改前出偏图、改后报错。"
+                      "tests/test_render_stale_guard.py、test_cell_shrink_render_memo.py、test_column_warp_skip.py 过；2026-11-25（CV0）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1814,6 +1820,15 @@ ENTRIES: tuple[Equiv, ...] = (
     Equiv(module='open_guji_cv.steps.border_detect', new='48ea4cfd07629fe45e2cdf204eb119b575256a0c21e2765b45ae58ac341c11f3', old='d1e2b0bb6f9f2112b97982d5292b91a0e63fd3052958c1488453bee6cb019834', evidence=_FRAME_1123 + _INNER_PULL_1123),
     Equiv(module='open_guji_cv.impl.keben.border', new='f83cc97bd92b20b4e28664f04acdfc845819bbdc3240a8fd73fd6167d71c667e', old='dcc3f23d5ce58621db0a8bb9be9c6fc360cdbe86a2c5abacb42ba97fd4177352', evidence=_FRAME_1123 + _INNER_PULL_1123),
     Equiv(module='open_guji_cv.seg.frame_types', new='e7a452410888e9e1fe042432bcbfa62352ab6fd1910d22852bad34fe40195873', old='910317f58be2061fbe06468ba3abf2de685e6250440b1008b8308fd37561fa4b', evidence=_FRAME_1123),
+    # 冷缓存再生护栏（CV0 11-25）——殿本 patch 线 v0.7.102 哈希（v0.7.105）
+    Equiv(module="open_guji_cv.steps.column_warp",
+          new="e3e00d4858dc3d23d56c88953f0d4a74b6025ca7ee07e9fcb9119cd7b89204fc",
+          old="d5c46a816760e0737924eb6fb0f11722b5a71b4d079dbf6e81e70ce4f89e772f",
+          evidence=_RENDER_GUARD_1125),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="139ae7bafc42ba76aebd0132799331227d26494c480c0b47bb78706706836294",
+          old="54311ec727a64754a83015d384ae554080a65bbf46af05ee3653cbf3530e08fd",
+          evidence=_RENDER_GUARD_1125),
 )
 
 
