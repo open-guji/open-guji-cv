@@ -105,6 +105,10 @@
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
 
+## [0.7.106] - 2026-11-25
+
+殿本 patch 线：v0.7.105 ＋ dev #1868（CV1，border_detect 书级开关 `head_raise_fit`：抬头列认下后校内框高度、量上外框跳过抬头列；缺省关、关时不进参数 dump）。只带 border_detect／impl.keben.border 的改动，eval/ 与文档不带。**对 v0.7.105 实测（check_fp_change）23 步指纹全不变**：本线哈希已登 code_equiv（vol28 12 页 border_detect＋gate 逐字节同）。不开 `head_raise_fit` 的册不过期；开了的册按参数指纹从 border_detect 起过期。（CV0，ZM 11-25 定）
+
 ## [0.9.1] - 2026-11-25
 
 0.9 patch 线（跟 v0.9.0 的书：脈經、北行）：v0.9.0 ＋ 移植 dev #1848＋#1856（书级开关 `seed_admit.ruling_by_u`：窗口键没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，只收 high、前后 2 字至少一侧相同、裁定字在库候选或＝整理本字；字组在线问前查缓存也按 u 后备，版本须完全相同）。缺省关、关时不进参数 dump。做法同 v0.7.103／v0.7.104：本线无格锚点接入，seed_admit 只加 u 档；`feedback/rulings.py` 取 v0.7.102 全文，`RulingLog.append` 写前校验缺省不开。**不含** v0.9.0 之后 dev 的其他改动（dev 上未登记的 seed_admit 指纹变更与底库 b35 都不带）。对 v0.9.0 实测（check_fp_change）23 步只有 seed_admit 变：指纹变更：seed_admit 起过期（开 ruling_by_u 的书从 seed_admit 重放）。底库不变。（CV0，u 项目 T3；Sheldon 11-25「彻底收尾」）

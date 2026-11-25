@@ -577,6 +577,10 @@ _BOOK_LANES_1125 = ("seed_admit 加书级放行通道钩子 impl/keben/admit_lan
                     "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-25（CV4）")
 
 
+_HR_FIT_0106 = ("border_detect head_raise_fit（CV1 #1868，缺省关、关时不进参数 dump、新分支不走）殿本 patch 线移植 v0.7.105→v0.7.106："
+                "vol28 12 页（1-6,30-33,82,100）border_detect＋border_detect_gate 产物与 v0.7.105 逐字节相同；scripts/code_equiv.py check --gate border_detect_gate，2026-11-25（CV0）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2604,6 +2608,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="d0a1dafea84263f7caba32221213d445b39848493dc204bbbd41e1680ba15ccc",
           old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
           evidence=_BOOK_LANES_1125),
+    # head_raise_fit 殿本 patch 线（v0.7.106）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='7e84df3dc42765bd70f72c6dc8ef19d472e015c47b993797f4be330ac9ff6765',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_HR_FIT_0106),
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='63b9807b82801f71544d15ed548ca4cbfc356d4f6d4600bcc51e5717a5776ddb',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_HR_FIT_0106),
 )
 
 
