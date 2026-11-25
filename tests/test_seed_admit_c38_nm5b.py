@@ -1,5 +1,5 @@
-"""seed_admit `group_flow_pair_shape_nm_5b`（never_match 格 5-b 首位在这一对里也交两字刻形判）与
-`solo_cal_5b_canon`（solo_cal 5-b 档按码位归一后比），都缺省关。"""
+"""seed_admit `group_flow_pair_shape_nm_5b`（never_match 格 5-b 首位在这一对里也交两字刻形判），缺省关。
+（`solo_cal_5b_canon` 2026-11-24 随 solo_cal 搬进全唐文书仓 code/admit_lanes.py，测试在书仓。）"""
 from __future__ import annotations
 
 from types import SimpleNamespace as NS
@@ -11,9 +11,9 @@ from open_guji_cv.steps.seed_admit import SeedAdmitParams
 
 def test_dump_off_by_default():
     d = SeedAdmitParams().model_dump()
-    assert "group_flow_pair_shape_nm_5b" not in d and "solo_cal_5b_canon" not in d
-    d2 = SeedAdmitParams(group_flow_pair_shape_nm_5b=True, solo_cal_5b_canon=True).model_dump()
-    assert d2["group_flow_pair_shape_nm_5b"] is True and d2["solo_cal_5b_canon"] is True
+    assert "group_flow_pair_shape_nm_5b" not in d
+    d2 = SeedAdmitParams(group_flow_pair_shape_nm_5b=True).model_dump()
+    assert d2["group_flow_pair_shape_nm_5b"] is True
 
 
 def _rec(cid, ch, guard, doubts):
@@ -43,18 +43,3 @@ def test_pair_shape_nm_needs_5b_in_pair(monkeypatch):
     assert recs[0].admit and recs[0].channel == "pair_shape" and recs[0].evidence["pair_shape"]["nm_5b"] == "王"
     assert not recs[1].admit                      # 5-b 首位是组外的土：不判
 
-
-def _solo_run(canon):
-    p = SeedAdmitParams(solo_cal=True, solo_cal_5b_cov=0.95, solo_cal_allow="愼")
-    rec = NS(id="001:1:1:1", char="愼", admit=False, channel=None, provenance="", doubts=["库 unsure(cov=0.96)"],
-             evidence={})
-    rare = NS(columns=[NS(chars=[NS(id="001:1:1:1", candidates=[NS(char="慎")])])])
-    mmap = {"001:1:1:1": NS(candidates=[("愼", 0.96), ("真", 0.90)], guard=None)}
-    n = sa._solo_cal_pass(p, [NS(chars=[rec])], mmap, {}, rare, {}, canon=canon)
-    return n, rec
-
-
-def test_solo_cal_canon():
-    assert _solo_run(None)[0] == 0
-    n, rec = _solo_run(lambda c: {"慎": "愼"}.get(c, c))
-    assert n == 1 and rec.char == "愼" and rec.channel == "match_solo_cal"
