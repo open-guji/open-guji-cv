@@ -1,7 +1,11 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [0.7.112] - 2026-11-25
+
+史記 patch 线：v0.7.107 ＋ `scripts/zhengli/proof_cycle.py`、`scripts/zhengli/zl.py` 的 char 导出也改走 guji-manager 导出器（v0.7.107 只改了 republish；auto_cycle／proof_cycle 出的导出不带 u，book-text local_check 报「旧版已有 u，新版把 u 全丢了」，`guji swap book-text` 用同一份导出推标点也报 u 对不上——殿本 vol04，11-25）。只改脚本，23 步指纹与 v0.7.107 全同，钉旧版的册不用改钉。要 guji-manager ≥ 0.6.21。（CV0 u T1）
+
+## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
 ## [0.7.107] - 2026-11-25
 

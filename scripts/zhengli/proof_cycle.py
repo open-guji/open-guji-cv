@@ -288,7 +288,8 @@ def cmd_apply(a) -> int:
         rp.book_text_to_dev(Path(a.book_text))
     tv = rp.online_text_version(Path(a.book_text), plan["text_id"], plan["chapter"])
     export = out / "export"
-    cmd = [sys.executable, CV / "scripts/export_guji_format.py", "--products", sandbox, "--book", book,
+    # 走 guji-manager 导出器（rp.export_entry）：册有字格身份账时 char 带 u；cv 自带脚本不写 u，book-text 拦（殿本 vol04，11-25）
+    cmd = [sys.executable, *rp.export_entry(), "--products", sandbox, "--book", book,
            "--chapter", plan["chapter"], "--out", export, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
     for flag, f in (("--meta", rp.meta_file(book, out)),
                     ("--split-table", CV / "doc/formats/samples/guji_page_v0.2/split_table_siku.json")):
