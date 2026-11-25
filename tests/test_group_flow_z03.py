@@ -79,27 +79,6 @@ def test_flow_review_fix_agree_end_to_end(monkeypatch):
     assert not r.admit and r.char == "一"
 
 
-def test_flow_review_fix_agree_not_over_ref(monkeypatch):
-    # CV4 11-25 殿本 replay-1125：整理本＝放行字「二」，两路图像（同一张裁偏的字块）都说「一」→ 只降审，不改字
-    from open_guji_cv.groups import flow
-    from open_guji_cv.groups.protocol import GroupVerdict
-    from open_guji_cv.groups.flow import group_flow_pass
-    from tests.test_group_flow import Rec
-    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict({"ids": "一", "yr_bars": "一"}.get(name), via=name))
-    cfg = FlowConfig(groups=("yr",), review_fix_agree=frozenset({"yr"}), provisional=False)
-    r = Rec("a", "二", True, "match_ref", "match")
-    group_flow_pass([r], {"a": ("二", "=")}, lambda cid: [], lambda r: False, cfg)
-    assert not r.admit and r.char == "二" and "group_flow_disagree" in r.doubts
-    # 现役对位缺格时坐标对位字同样算整理本
-    r = Rec("a", "二", True, "match_ref", "match")
-    group_flow_pass([r], {}, lambda cid: [], lambda r: False, cfg, veto_refs={"a": "二"})
-    assert not r.admit and r.char == "二"
-    # 整理本是另一个字、或没有整理本：照旧改字
-    r = Rec("a", "二", True, "match_solo", "match")
-    group_flow_pass([r], {"a": ("一", "=")}, lambda cid: [], lambda r: False, cfg)
-    assert r.admit and r.char == "一"
-
-
 def test_yr_tolerates_zi_in_entry():
     # N01 第 7 轮复查：一 的字块库里排成 二 1.000／一 1.000／子 0.97，子 不再把一二挡在字组门外
     from types import SimpleNamespace

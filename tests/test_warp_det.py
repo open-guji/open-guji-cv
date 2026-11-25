@@ -25,3 +25,14 @@ def test_det_warp_identity_exact():
     img = (np.arange(60 * 40) % 251).astype(np.uint8).reshape(60, 40)
     got = _warp_perspective_det(img, np.eye(3), (40, 60))
     assert np.array_equal(got, img)
+
+
+def test_det_warp_default_on_keeps_explicit_hashes():
+    """2026-11-18 det_warp／cut_judge unet_f64 转缺省：显式写过的书 dump 不变，写 false 的等于转缺省前的缺省 dump。"""
+    from open_guji_cv.steps.column_warp import ColumnWarpParams
+    from open_guji_cv.steps.row_segment import RowSegmentParams
+    assert ColumnWarpParams().det_warp is True
+    assert ColumnWarpParams().model_dump() == ColumnWarpParams(det_warp=True).model_dump()
+    assert "det_warp" not in ColumnWarpParams(det_warp=False).model_dump()
+    assert RowSegmentParams().cut_judge == "unet_f64"
+    assert RowSegmentParams(cut_judge="rule").model_dump()["cut_judge"] == "rule"

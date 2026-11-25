@@ -57,7 +57,7 @@
 - `eval_zero_shot.py`：零样本识别评测：字形库 unseen 档上，比较「整字 HOG 检索」与「拆字重排」。
 - `eval_zero_shot_fusion.py`：零样本正面对比：HOG 字体检索 vs CNN 分类 vs 两者融合。同一批样本、同一字表。
 
-## 构建数据集、审查页、字表、对照表（38）
+## 构建数据集、审查页、字表、对照表（39）
 
 - `build_book_variants.py`：本书用字账：从产物 + 字形库 + 整理本语料派生 ``config/variants/books/<edition>.json``。
 - `build_border_bottom_review.py`：生成「下版框存墨判读」审查页：某页的下内框到底印上了没有 + 版框几何统计。
@@ -72,6 +72,7 @@
 - `build_confusable_families.py`：从**字体字形**建形近家族全对表（1214 字 × 全对 = 736k 对，4 分钟）。
 - `build_confusable_pairs.py`：从 IDS 拆分生成「形近对表」（overview#128，2026-09-28）。
 - `build_confusable_set.py`：形近对上下文消歧测试集：从已积累的裁决里抽出形近家族字位。
+- `build_near_groups.py`：形近字组表 `config/near_groups.json`：从各书字形库挖极近字对（`mine`），并上手工、人裁、字体表与库内异体对（`merge`）；读表与分流规则在 `clustering/near_route.py`。
 - `build_context_correction_dataset.py`：构建 context-correction 测试集：冻结候选 + 逐槽位金标，按页存、按列组织。
 - `build_context_correction_v2.py`：context-correction v2：在 v1 冻结候选上重标「金标可达性」，剔掉构造痕迹口径。
 - `build_exclusion_recheck_review.py`：排除名单复核页：名单上每个格，用**现在**的图块问人「还切坏吗」。

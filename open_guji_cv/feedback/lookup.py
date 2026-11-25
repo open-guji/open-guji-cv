@@ -443,24 +443,68 @@ def stale_human_marks(book: str) -> dict[str, str]:
     撤法见 `scripts/check_stale_human.py`（重字签名）与 2026-09-25 的漂移检查
     （`research/verdict_drift_check.py`：人裁时入库的图块 vs 同一编号现在的图块）。
     库读不到就当没有——事件侧的人裁照旧生效，不因为这张表缺席就全部作废。
+    同一位有几条标记时取最晚的；要分清每条只作废哪个字，用 `stale_human_rules`。
+    """
+    out: dict[str, str] = {}
+    for key, rules in stale_human_rules(book).items():
+        out[key] = max(c for c, _ in rules)
+    return out
+
+
+def stale_human_rules(book: str) -> dict[str, list[tuple[str, dict | None]]]:
+    """撤下标记逐条：`{裸 id: [(撤下时刻, 范围 或 None), …]}`。None＝该时刻及以前该位的人裁事件全部作废。
+
+    **库内审阅撤库／改标留的标记不再连现行人裁一起作废**（2026-11-18，ZM 殿本 vol01 21 格）：
+    `glyph_audit evict／relabel` 判的是库里那个刻例标错了；manager 往作废表记一行 `glyph_audit <裁决> <事件>`，
+    以前这里把该位此刻以前的人裁事件**全部**作废。库里刻例标的常是旧字（旧切分、或更早一次裁决留下的），
+    而这一格现行人裁早已是别的字（vol01 85:9:11 库里「曰」、人裁「淵」），现行人裁也跟着掉了，
+    第 7 步机器放行顶上，违反「机器结果不覆盖人审」。现在范围是：
+
+    - `relabel`：`{"event": 事件 id}`——由 `human_chars` 从事件日志取改标的新字，只作废字形不是新字的事件
+      （图就是新字，说成别的字的人裁才被推翻）；
+    - `evict`：`{"evicted": 撤掉的字}`——按字形库撤例审计（`evictions`，`clustering.audit.evict_instance`
+      记的 `char`）取撤下时刻前两分钟内撤掉的字，只作废字形是这些字的事件；
+    - 取不到（没有撤例审计、事件日志里没有那条改标）：退回全部作废，与以前一样。
+
+    别的来路的标记（人手写的作废、`human_stale_*`）照旧全部作废。
     """
     import sqlite3
+    from datetime import datetime, timedelta
 
     from ..core.workspace import glyph_db_path
-    out: dict[str, str] = {}
+    rules: dict[str, list[tuple[str, dict | None]]] = {}
+    evicted: dict[str, list[tuple[str, str]]] = {}
     try:
         con = sqlite3.connect(str(glyph_db_path()))
         rows = con.execute("SELECT instance_id, provenance FROM admissions "
                            "WHERE provenance LIKE 'human_stale_%'").fetchall()
+        try:
+            ev_rows = con.execute("SELECT instance_id, char, at FROM evictions "
+                                  "WHERE char IS NOT NULL").fetchall()
+        except sqlite3.Error:        # 老库没有撤例审计表
+            ev_rows = []
         con.close()
     except Exception:
         # 库读不到（云端任务机上字形库没建好等）只是缺了库里的标记，下面的作废表 tsv 照读；
         # 以前这里直接 return，tsv 里的作废被整张忽略（vol01 182:9 临时人裁 2026-11-13）
-        rows = []
+        rows, ev_rows = [], []
     for iid, prov in rows:
         key = iid[3:] if iid.startswith("v2:") else iid
         if key.startswith(book + ":"):
-            out[key] = prov.rsplit("_", 1)[-1]
+            rules.setdefault(key, []).append((prov.rsplit("_", 1)[-1], None))
+    for iid, ch, at in ev_rows:
+        key = iid[3:] if iid.startswith("v2:") else iid
+        if key.startswith(book + ":") and at:
+            evicted.setdefault(key, []).append((_minute(str(at)), str(ch)))
+
+    def _evicted_near(key: str, cut: str) -> set[str]:
+        try:
+            hi = datetime.strptime(cut[:13], "%Y%m%dT%H%M")
+        except ValueError:
+            return set()
+        lo = (hi - timedelta(minutes=2)).strftime("%Y%m%dT%H%M")
+        return {ch for at, ch in evicted.get(key, []) if lo <= at <= cut[:13]}
+
     # 没进字形库的人裁（勾了不入库、或 v1 编号）改不了 provenance，另记一张作废表：
     # `<feedback>/lists/stale_verdicts.tsv`，每行 `字位id<TAB>撤下时刻<TAB>原因`（2026-09-25 加）。
     from ..core.workspace import feedback_root
@@ -469,12 +513,56 @@ def stale_human_marks(book: str) -> dict[str, str]:
         for line in path.read_text(encoding="utf-8").splitlines():
             if not line.strip() or line.startswith("#"):
                 continue
-            key, cut = line.split("\t")[:2]
-            if key.startswith(book + ":"):
-                out[key] = max(out.get(key, ""), cut.strip())
-    except (FileNotFoundError, OSError, ValueError):
+            parts = line.split("\t")
+            key, cut = parts[0], parts[1].strip()
+            why = (parts[2] if len(parts) > 2 else "").split()
+            if not key.startswith(book + ":"):
+                continue
+            scope = None
+            if why[:1] == ["glyph_audit"] and len(why) >= 3:
+                if why[1] == "relabel":
+                    scope = {"event": why[2]}
+                elif why[1] == "evict":
+                    got = _evicted_near(key, cut)
+                    scope = {"evicted": got} if got else None
+            rules.setdefault(key, []).append((cut, scope))
+    except (FileNotFoundError, OSError, ValueError, IndexError):
         pass
-    return out
+    return rules
+
+
+def _minute(ts: str) -> str:
+    """ISO 时刻 → `YYYYMMDDTHHMM`（与作废表的撤下时刻同一口径）。"""
+    return "".join(c for c in ts[:16] if c not in "-:")
+
+
+def _voided(rules, ts: str, shapes: tuple[str, ...], relabel_to: dict[str, str]) -> bool:
+    """事件（时刻 `ts`、字形 `shapes`）是否被撤下标记作废，见 `stale_human_rules`。"""
+    if not rules:
+        return False
+    t = ts.replace("-", "").replace(":", "")
+    for cut, scope in rules:
+        if t[:len(cut)] > cut:
+            continue
+        if scope is None:
+            return True
+        if "evicted" in scope:
+            if scope["evicted"] & set(shapes):
+                return True
+            continue
+        new = relabel_to.get(scope.get("event") or "")
+        if not new or new not in shapes:
+            return True                  # 改标的新字取不到：照旧作废；人裁就是新字：不作废
+    return False
+
+
+def _shape_forms(shape) -> tuple[str, ...]:
+    s = str(shape)
+    try:
+        from ..utils.cjk_compat import fold_compat
+        return (s, fold_compat(s))
+    except Exception:
+        return (s,)
 
 
 def _superseded_events(evs: list, bound: dict[str, dict], pre: str) -> set[str]:
@@ -539,7 +627,9 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     让机器的新放行顶掉（册2 重跑实测 22:6:7 戕→成、64:9:21 止→什）。
     """
     if stale is None:
-        stale = stale_human_marks(book)
+        rules = stale_human_rules(book)
+    else:
+        rules = {k: [(c, None)] for k, c in stale.items()}
     if bind is None:
         bind = log is None
     bound: dict[str, dict] = {}
@@ -571,6 +661,9 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         _logger.warning("human_chars(%s)：%d 条事件锚里页表 rev 与册 yaml 的 source_rev 不符，不采信", book, gone)
     superseded: set[str] = set()
     no_patch: list[str] = []
+    # 库内审阅改标的新字（`stale_human_rules` 的 relabel 范围用）
+    relabel_to = {e.id: str((e.payload or {}).get("char") or "") for e in evs
+                  if e.kind == "glyph_audit" and (e.payload or {}).get("v") == "relabel"}
     if bind:
         from .bindings import strict_enabled
         if strict_enabled():
@@ -595,9 +688,9 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         # 没填字的 seg_defect 仍然只是缺陷，不在这里出现。
         if p.get("v") not in ("confirm", "seg_defect") or not p.get("shape"):
             continue
-        cut = stale.get(e.target.key)
-        # 撤下标记可以只到日（human_stale_20260917）或到分钟（human_stale_20260925T0712，同一天撤了又重裁时要用）
-        if cut and e.ts.replace("-", "").replace(":", "")[:len(cut)] <= cut:
+        # 撤下标记可以只到日（human_stale_20260917）或到分钟（human_stale_20260925T0712，同一天撤了又重裁时要用）；
+        # 库内审阅撤库／改标留的只作废被撤刻例原来那个字（2026-11-18，`stale_human_rules`）
+        if _voided(rules.get(e.target.key), e.ts, _shape_forms(p["shape"]), relabel_to):
             continue
         # 字形字段合法性校验（2026-09-27，H 道乱码普查）：老事件里可能混进乱码
         # （UTF-8 被按 cp1252 误解码再存盘，「内」存成「å†…」，P cross 1717）——
