@@ -29,8 +29,6 @@ workspace/                 一个最小的工作区（布局同 core/workspace.p
   corpus/reference.txt     17 KB 小语料，从 corpus/ 复制
 colend/                    列端(Step2 上/下端版框)回归 fixture:vol02 B 批 231 端的整列 1-bit 图 + 冻结档位 + 人判
                            (≈2.5 MB,2026-10-11,Esme;见 colend/README.md)。`test_colend_fixture.py` 钉行为
-inner_gap/R002_sj_r64.json  字内落缝（seg check inner_gap）回归：史記 r64 main 18 列的行墨（逐行墨宽，行程编码）、格、格态
-                           与该报的格线（240 KB，2026-11-14，A22；史記台账 R002）。`test_seg_screen.py` 钉行为
 yolo_tool/001_project_p0.json
                            yolo_tool 真实工程文件（open-guji/yolo_tool `15c5f88`
                            pdfs_demo/diff/001_project.json）的第 0 页，51 KB；

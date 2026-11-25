@@ -6,7 +6,6 @@ from open_guji_cv.impl.keben.border import (
     _vline_to_new,
     detect_borders,
     detect_head_raise,
-    notch_top,
     detect_outer_borders,
 )
 from open_guji_cv.seg.frame_types import HLine, VLine
@@ -317,54 +316,6 @@ def test_detect_head_raise_scale_keeps_plain_page_clean():
     top = HLine(y_at_right=402.0, slope=0.0, kind="top")
     verts = [VLine(x_at_top=float(999 - x), slope=0.0) for x in xs_old[::-1]]
     assert detect_head_raise(mask, top, verts, width=1000, scale=0.7) == []
-
-
-def _notch_page(w=1000, h=800, n_cols=9, border_top=400, notch=(3, 4), inner_y=280, outer_y=244):
-    """抬头列占多数的页：只有 `notch` 那几列在主版框（border_top）下，其余列都抬头到 inner_y。
-    主上框若被认在抬头框的内框线上（inner_y），没抬头的列就是框上的缺口。"""
-    mask = np.zeros((h, w), dtype=np.float64)
-    xs_old = np.linspace(80, w - 80, n_cols + 1)
-    n = n_cols
-    raised = [c for c in range(1, n + 1) if c not in notch]
-    for x_old in xs_old:
-        mask[inner_y:, int(x_old) - 2:int(x_old) + 3] = 1.0
-    nx0, nx1 = int(xs_old[n - max(notch)]), int(xs_old[n - min(notch) + 1])
-    mask[border_top:border_top + 5, nx0:nx1] = 1.0              # 缺口列的主上框（内）
-    mask[border_top - 34:border_top - 16, nx0:nx1] = 1.0        # 外框粗条
-    mask[inner_y:border_top + 3, nx0 + 3:nx0 + 3 + 5] = 0.0     # 缺口里没有界行：两侧是抬头框的墙
-    mask[inner_y:border_top + 3, nx1 - 8:nx1 - 3] = 0.0
-    for blk in ([c for c in raised if c < min(notch)], [c for c in raised if c > max(notch)]):
-        _paint_raised_box(mask, xs_old, cols=blk, inner_y=inner_y, outer_y=outer_y,
-                          border_top=border_top, outer_thickness=18)
-    wrong_top = HLine(y_at_right=float(inner_y), slope=0.0, kind="top")
-    verticals = [VLine(x_at_top=float((w - 1) - x), slope=0.0) for x in xs_old[::-1]]
-    return mask, wrong_top, verticals
-
-
-def test_notch_top_moves_main_top_down_to_notch_and_finds_raised_columns():
-    """vol24 p27、vol28 p9 型：主上框认在抬头框内框上 → 挪到缺口列的框条内沿，其余列全认成抬头。"""
-    mask, top, verts = _notch_page()
-    got = notch_top(mask, top, verts, width=1000)
-    assert got is not None
-    new_top, hr = got
-    assert abs(new_top.y_at(0.0) - 402) <= 3
-    assert sorted(b.col for b in hr) == [1, 2, 5, 6, 7, 8, 9]
-    assert all(abs(b.inner_y - 280) <= 4 for b in hr)
-
-
-def test_notch_top_leaves_plain_page_alone():
-    """普通页：主上框横穿每一列，没有缺口。"""
-    mask, top, verts, _ = _blank_head_raise_page()
-    assert notch_top(mask, top, verts, width=1000) is None
-
-
-def test_notch_top_ignores_blank_column_inside_frame():
-    """普通页的空列（框里白、下面才有字）：主上框横穿它，不是缺口（vol95 p199、vol60 p61 型）。"""
-    mask, top, verts, xs = _blank_head_raise_page()
-    n = len(xs) - 1
-    x0, x1 = int(xs[n - 9]), int(xs[n - 8])
-    mask[560:600, x0 + 10:x1 - 10] = 1.0          # 第 9 列离主框 160px 处才有一道粗墨
-    assert notch_top(mask, top, verts, width=1000) is None
 
 
 def test_hr_geom_scale_one_is_module_constants():

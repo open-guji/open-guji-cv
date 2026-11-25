@@ -68,7 +68,6 @@ from ..eval.rulers import _col_profile, classify_boundary
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.cells import PageCells
 from ..products.kinds.row_segment_gate import RowSegmentGateColumn, RowSegmentGateManifest
-from ..impl.keben.row_boundaries import row_split_extra
 
 
 class RowSegmentGateParams(BaseModel):
@@ -127,27 +126,17 @@ class RowSegmentGateStep(Step):
                     flags.append("roster_jiazhu：职名列有雙行小字，两行相位不齐，字数待人核")
                 if "roster_overlap" in cc.flags:
                     flags.append("roster_overlap：相邻两字 y 重叠（多是「臣」贴官衔末字），Step4 满宽裁会互相带墨")
-            elif expected is not None and abs(cc.n_body_slots - row_split_extra(cc.flags) - expected) > p.slot_tol:
+            elif expected is not None and abs(cc.n_body_slots - expected) > p.slot_tol:
                 reject.append(
-                    f"slot_count：格数 {cc.n_body_slots - row_split_extra(cc.flags)} 偏离版式格数 {expected} "
+                    f"slot_count：格数 {cc.n_body_slots} 偏离版式格数 {expected} "
                     f"超过容许的 {p.slot_tol} 格（非 effective_body_slots 的正当下调）")
 
             n_r2 = n_r2s = n_r2x = 0
             if not reject and cc.ok:
                 # 与 eval/rulers.py 用同一个函数取墨投影——两处必须是同一个量。
                 prof = _col_profile(ctx.store, ctx.book.id, page, cc.col)
-                # 书级 row_split 切过的列：夹注段里的逻辑格线是段高均分的，不是真切线，不量
-                inner = set()
-                if row_split_extra(cc.flags):
-                    subs_at: dict[int, list] = {}
-                    for c_ in cc.cells:
-                        subs_at.setdefault(c_.pos, []).append(c_.sub)
-                    inner = {k for k in range(1, len(cc.boundaries) - 1)
-                             if all(subs_at.get(k, [None])) and all(subs_at.get(k + 1, [None]))}
                 if prof is not None:
-                    for k_b, b in enumerate(cc.boundaries[1:-1], start=1):
-                        if k_b in inner:
-                            continue
+                    for b in cc.boundaries[1:-1]:
                         result = classify_boundary(prof, int(round(b)), cc.period or 40)
                         if result is None:
                             continue
@@ -170,10 +159,7 @@ class RowSegmentGateStep(Step):
             sliver: list[int] = []
             if not reject and cc.ok and not roster and (cc.period or 0) > 0:
                 lim = p.sliver_ratio * cc.period
-                split_col = bool(row_split_extra(cc.flags))
                 for k, cell in enumerate(cc.cells):
-                    if split_col and cell.sub:
-                        continue                 # 小字格本就矮
                     if (cell.y1 - cell.y0) < lim:
                         sliver.append(cell.slot)
             if sliver:

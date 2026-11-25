@@ -39,31 +39,3 @@ def test_tight_still_strips_rule():
     g[20:220, 30:170] = 0
     lo, hi = column_text_band(g, **TIGHT)
     assert 4 <= lo <= 30 and 170 <= hi <= 196
-
-
-def _shi_slab():
-    """全唐文「十」（001:121:1:6a，R033／R038）：右缘界行 x196–200；「十」的竖 x150–158 贴着右边，在 240 行横条里
-    只占上 90 行（字跨横条界），横画 x100–158 在竖的左边连着。"""
-    g = np.full((H, W), 255, np.uint8)
-    g[:, 0:4] = 0
-    g[:, 196:200] = 0
-    g[0:90, 150:158] = 0                   # 「十」的竖（下半截在下一横条）
-    g[40:48, 100:146] = 0                  # 横（跟竖之间留一道缝：投影上竖成了孤立窄条）
-    g[100:200, 40:120] = 0                 # 下一个字
-    return g
-
-
-def test_inner_bar_span_keeps_stroke_near_rule():
-    g = _shi_slab()
-    assert column_text_band(g)[1] <= 150                    # 缺省：竖当内框，连界行一起抹（剩「亠」）
-    assert column_text_band(g, inner_bar_span=True)[1] >= 158
-
-
-def test_inner_bar_span_still_strips_double_rule():
-    """页边列双线：外框贴边、内框离边 ~0.1 列宽，整条横条贯通——照抹。"""
-    g = np.full((H, W), 255, np.uint8)
-    g[:, 0:4] = 0
-    g[:, 196:200] = 0
-    g[:, 180:184] = 0
-    g[20:220, 30:160] = 0
-    assert column_text_band(g, inner_bar_span=True)[1] <= 180

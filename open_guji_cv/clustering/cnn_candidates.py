@@ -368,27 +368,6 @@ def real_proto_fingerprint(specs: tuple = REAL_PROTO_SPECS, enabled: bool | None
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:12]
 
 
-_REAL_CHARS_CACHE: dict[tuple, frozenset] = {}
-
-
-def real_chars(specs: tuple) -> frozenset:
-    """这些 `glyph_store` 里人裁过的字（单字、`label_status == human`，与真刻例原型同一份口径）。
-
-    给库字档（`rare_panel.lib_tier`）用：字不在基集里时，刻例原型没有落脚的行，所以要先知道库里有哪些字。
-    只读 `instances/*.jsonl`，不读图。按内容指纹记忆，库长了内容自动重读。"""
-    key = (tuple(specs or ()), real_proto_fingerprint(tuple(specs or ()), enabled=True))
-    got = _REAL_CHARS_CACHE.get(key)
-    if got is None:
-        chars: set[str] = set()
-        for spec in specs or ():
-            if spec.startswith("store:"):
-                chars.update(ch for ch, _iid, _p in _iter_real_exemplars(Path(spec.split(":", 1)[1])))
-        got = frozenset(chars)
-        _REAL_CHARS_CACHE.clear()          # 只留最近一份：一个进程通常只跑一本书
-        _REAL_CHARS_CACHE[key] = got
-    return got
-
-
 def _farthest_point_protos(vecs: np.ndarray, ids: list, k: int):
     """余弦空间最远点采样：从一个字的全部真刻例 embedding 里挑 <=k 个彼此最不像的做原型。
 

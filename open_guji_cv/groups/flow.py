@@ -81,7 +81,6 @@ class FlowConfig:
     l3_need_l2_agree: bool = False                     # L3 在线给的字须与 L2 模型弃权时的首选字相同
     l3_skip_half: bool = False                         # 夹注 a/b 半格不走 L3（答案表、在线、二审小组都不碰；SJ 史記 06:12:5:12a 错放，A31 11-04 定半格归 S）
     l3_half_groups: frozenset = frozenset()            # 书级：这几组不受 `l3_skip_half` 限制（seed_admit `group_flow_llm_half_groups`，A24 11-08）
-    ruling_first: frozenset = frozenset()              # 书级：这几组文意先查裁定库，命中就照裁定给字（L1 规则、L2 表／小头都让位；seed_admit `group_flow_ruling_first`，全唐文 11-13）
     l3_panel: tuple = ()                               # L3 二审小组 ("模型:effort", …)：首问不稳时全部同字才给字，记 strong（`ctx_llm.panel_verdict`）；空＝不开
     l3_panel_groups: tuple = ()                        # 哪些组用二审小组（其余组不问）
     canon: Callable[[str], str] | None = None          # 书级码位归一（L2 表键按它归一再比；None＝逐字比）
@@ -97,7 +96,6 @@ class FlowConfig:
     tolerate_extra: dict = field(default_factory=dict)  # 组 id → 书级追加的陪衬字（叠在 `FlowSpec.tolerate` 上；seed_admit `group_flow_tolerate_extra`）
     rr_model: str | None = None
     rr_p: float = 0.5
-    ref_alias: dict = field(default_factory=dict)      # 书级：整理本（及坐标对位）字进字组流程前先换成本书刻的字（{間: 閒}；本书无此字、整理本的字来自模板；seed_admit `group_flow_ref_alias`，全唐文 11-20）
     coord_outside_skip: bool = False                   # 现役对位缺这一格、坐标对位字是组外字（非组员、非陪衬、非〓）时不补放入组（A24 Z01 深挖 2026-11-06；seed_admit `group_flow_coord_outside_skip`）
     lift_ref_guard: bool = True                        # 补放与整理本互证（`group_flow_pass`，seed_admit `group_flow_lift_ref_guard`）
     codepoint_min_cov: float = 0.91                    # 码位法（`methods.Codepoint`）给字要库首位 cov 到这个数：更低的多是褪墨页（vol44:213:9:12 郞 0.90 看不清）
@@ -742,11 +740,6 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
     """`seq`：本页读序展平的放行记录；`amap`：{id: (整理本字, op)}；`cands_of(id)`：库候选 [(字, cov)]；
     `blocked(r)`：硬护栏（遮挡、超时、排除、非字…），True 的格不进流程。就地改 `seq` 里的记录。
     `veto_refs`：{id: 坐标对位字}，只在现役对位缺这一格时用来拦补放（`cfg.lift_ref_guard`），不参与判字。"""
-    if cfg.ref_alias:                        # 书级整理本字别名（全唐文 間→閒：本书只刻 閒，整理本 間 不算异议）
-        al = cfg.ref_alias
-        amap = {k: ((al.get(v[0], v[0]),) + tuple(v[1:])) if v and v[0] else v for k, v in amap.items()}
-        if veto_refs:
-            veto_refs = {k: al.get(v, v) if v else v for k, v in veto_refs.items()}
     entries = {}
     tol_hit = set()                          # 分差内（含 top1）有组外陪衬字的补放格（`FlowSpec.tolerate_ref_agree`）
     for i, r in enumerate(seq):
