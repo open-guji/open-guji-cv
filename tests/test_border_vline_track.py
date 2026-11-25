@@ -40,9 +40,9 @@ def _v(x_old: float) -> VLine:
     return VLine(x_at_top=(W - 1) - x_old, slope=0.0)
 
 
-def test_default_not_in_params_dump():
-    assert "vline_track" not in BorderDetectParams().model_dump()
-    assert BorderDetectParams(vline_track=True).model_dump()["vline_track"] is True
+def test_default_on_in_params_dump():
+    assert BorderDetectParams().model_dump()["vline_track"] is True          # 11-25 起缺省开
+    assert BorderDetectParams(vline_track=False).model_dump()["vline_track"] is False
 
 
 def test_straight_line_stays_straight():
