@@ -103,6 +103,10 @@
 
 ## [未发版]
 
+## [0.9.3] - 2026-11-25
+
+W1 补发（殿本）：v0.9.2 ＋ #1891 列端剥层第二版（下端第三道线只认边距证据，末字下横不再被当框剥掉；含 b0f76ea `column.py` 登 code_equiv）。**只有殿本（册配 frame_layers 下端 2）经 column_end 指纹里的 frame_layer_rev 从 column_end 起过期，其余书指纹与产物不变**（check_fp_change 对 v0.9.2：0 步变），钉 0.9.2 的书不用改钉。未修好：vol04 207:6、vol05 149:6 两格（已交 CV1）；vol17 14:9 空列底多留 1px 细线（可忽略）。全量测试 4386 过，1 条 dev 老红（test_seg_move）。底库仍 b35。
+
 ## [0.9.2] - 2026-11-25
 
 **CV 里程碑 W1**（Sheldon 11-25 定：发 PATCH＋新底库 **b35**；计划 ai-team `domain/CV/里程碑/W1-计划.md`）。收 v0.9.0 之后 dev 上 CV1–CV4 的全部改动（含 v0.9.1 移植的 ruling_by_u）：切字五小步 #1869／#1872／#1881（原标 MINOR，用户定按 PATCH 发）、版面开关改缺省开 #1892、seed_admit 缺省与书级放行通道 #1889／#1867、裁定键三方案与 ruling_by_u、冷缓存护栏 #1864 等，条目见本节与文件开头散列的未发版条目。**指纹变更：border_detect 起过期（W1 各书统一重跑；版面开关缺省开＋切字五小步拆步）**。配套 guji-manager v0.6.22（读五小步产物 #1001、seg_pin 拼回列窗口 #1007）。测试：全量 4371 过，唯一失败 `test_seg_move::test_split_parts_listed_together_in_every_step` 在 dev 上本就挂；护栏 `guji eval guard` 归各书 W1 验收时跑（本机无各书 glyph.db，记未验证）。底库：`check_base_corpus` 过（b35，65 文件）。
