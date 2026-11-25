@@ -97,6 +97,10 @@
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
 
+## [0.7.101] - 2026-11-25
+
+全唐文 patch 线：v0.7.100 ＋ #1852（pair_clf 核对 sim_model），内容已在 dev，本条仅记发版（CV0）。23 步 code_hash 不变；全唐文（开 stages）glyph_match 起过期。换 glyph_sim_qtw_v2 要等 pair_clf 在 v2 嵌入上重训后一起换。
+
 ## [0.7.100] - 2026-11-25
 
 全唐文 patch 线：v0.7.93 ＋ #1849（模型表 `glyph_sim_qtw_v2`），内容已在 dev，本条仅记发版（CV0）。23 步 code_hash 与 v0.7.93 全同；全唐文书配置改 `sim_model.path: models/glyph_sim_qtw_v2/model.pt` 后 glyph_match 起过期。
