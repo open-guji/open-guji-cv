@@ -67,6 +67,16 @@ AUDITED: dict[str, ParallelAudit] = {
         note="run_page 只读本页原图、borders、闸1 manifest 与册配置（frame_layers／outer_gap），"
              "写的只有本页键的列图（column_raw／column_image，`cache.put` 原子写；清缓存与记戳在主进程）；"
              "column_projection／column_triage 无模块级可变状态。vol06 150 页串行／4 进程产物 sha 逐页相同，1332 列的两种列图逐张相同（2026-10-21）。"),
+    "column_band": ParallelAudit(
+        mem_gb=0.5,
+        note="run_page 只读本页原图、borders、闸1 manifest 与册配置（frame_layers／outer_gap），"
+             "写的只有本页键的列图（column_banded，`cache.put` 原子写；清缓存与记戳在主进程）；"
+             "column_projection／column_triage 无模块级可变状态。vol06 150 页串行／4 进程产物 sha 逐页相同，1332 列的两种列图逐张相同（2026-10-21）。"),
+    "column_end": ParallelAudit(
+        mem_gb=0.5,
+        note="run_page 只读本页原图、borders、闸1 manifest 与册配置（frame_layers／outer_gap），"
+             "写的只有本页键的列图（column_image，`cache.put` 原子写；清缓存与记戳在主进程）；"
+             "column_projection／column_triage 无模块级可变状态。vol06 150 页串行／4 进程产物 sha 逐页相同，1332 列的两种列图逐张相同（2026-10-21）。"),
     "column_gate": ParallelAudit(
         mem_gb=0.5,
         note="闸2：run_page 只读本页 column_windows、闸1 manifest、line_index 与本页列图"

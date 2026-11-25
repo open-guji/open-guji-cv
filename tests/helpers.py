@@ -207,11 +207,11 @@ def run_border_to_column_gate(tmp_path, gray, borders, *, page: int = 1,
                     {"border_detect_gate_manifest": gate1 or make_gate1(
                         page, n_cols=borders.expected_cols,
                         expected_cols=book.expected_cols)})
-    return ctx, run_steps(ctx, page, ["column_warp", "column_gate"])
+    return ctx, run_steps(ctx, page, ["column_warp", "column_band", "column_end", "column_gate"])
 
 
 #: 刻本链 Step2→Step4 的步骤序（含挂在出口的两道闸）。跑合成页时按需截断。
-KEBEN_STEPS = ["column_warp", "column_gate", "row_segment", "row_segment_gate",
+KEBEN_STEPS = ["column_warp", "column_band", "column_end", "column_gate", "row_segment", "row_segment_gate",
                "cell_shrink"]
 
 

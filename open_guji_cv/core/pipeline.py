@@ -343,11 +343,32 @@ def base_param_layers(pipeline: Pipeline, book) -> list[tuple[str, dict[str, dic
     return [("管线 yaml", dict(pipeline.params or {})), (f"套书缺省（{ss}）", sp)]
 
 
+#: 五小步拆分（2026-11-25）前写在 `column_warp:` 下的参数，现在归新 Step：`{旧 Step: {字段: 新 Step}}`。
+#: 册配置、套书缺省、管线 yaml、CLI `--params` 里的旧写法继续有效，加载时自动搬到新 Step 名下（不需要改中心库里的册配置）。
+LEGACY_PARAM_HOMES: dict[str, dict[str, str]] = {
+    "column_warp": {"tight_rule_band": "column_band", "inner_bar_span": "column_band"},
+}
+
+
+def rehome_params(layer: dict[str, dict]) -> dict[str, dict]:
+    """把一层参数里的旧位置字段搬到新 Step 名下；新位置已写的字段优先。原字典不改。"""
+    out = {sid: dict(kv) for sid, kv in layer.items()}
+    for old, fields in LEGACY_PARAM_HOMES.items():
+        kv = out.get(old)
+        if not kv:
+            continue
+        for f, new in fields.items():
+            if f in kv:
+                v = kv.pop(f)
+                out.setdefault(new, {}).setdefault(f, v)
+    return out
+
+
 def base_params(pipeline: Pipeline, book) -> dict[str, dict]:
     """`base_param_layers` 按字段合并（上层优先；写 `null` = 去掉下层的值）。"""
     merged: dict[str, dict] = {}
     for _, layer in base_param_layers(pipeline, book):
-        for sid, kv in layer.items():
+        for sid, kv in rehome_params(layer).items():
             tgt = merged.setdefault(sid, {})
             for k, v in kv.items():
                 if v is None:
@@ -364,7 +385,7 @@ def resolve_params(pipeline: Pipeline, book, overrides: dict[str, dict] | None =
     （写 `null` = 去掉下层的值）< 调用方覆盖 `overrides`（CLI `--params`／控制台表单）。没在任何一层出现的 Step 不进表，
     `RunContext.params_for` 按 Step 默认＋册配置补。"""
     merged: dict[str, dict] = base_params(pipeline, book)
-    for sid, kv in (getattr(book, "params", None) or {}).items():
+    for sid, kv in rehome_params(getattr(book, "params", None) or {}).items():
         if sid not in STEPS:        # 册配置点名了没注册的 Step：同以前 `_with_book_params`，不报错、不生效
             continue
         tgt = merged.setdefault(sid, {})
@@ -373,6 +394,6 @@ def resolve_params(pipeline: Pipeline, book, overrides: dict[str, dict] | None =
                 tgt.pop(k, None)
             else:
                 tgt[k] = v
-    for sid, override in (overrides or {}).items():
+    for sid, override in rehome_params(overrides or {}).items():
         merged.setdefault(sid, {}).update(override)
     return {sid: STEPS[sid].spec.params(**kv) for sid, kv in merged.items()}

@@ -16,7 +16,7 @@ from open_guji_cv.products.store import ProductStore
 
 # Step1 边框 → Step2 列图 → Step3 现役 cells——本项目所有「需要产物」的台子与评测器
 # 都以这三步的产物齐不齐为准。
-BOOTSTRAP_STEPS = ("border_detect", "column_warp", "column_gate", "row_segment")
+BOOTSTRAP_STEPS = ("border_detect", "column_warp", "column_band", "column_end", "column_gate", "row_segment")
 
 
 def has_products(bk_id: str, page: int, *, store: ProductStore) -> bool:

@@ -16,7 +16,7 @@ selector:
 slots:
   layout: [border_detect]   # Step1 边框探测：原图 → 版框 + 界行（含折线）+ 外框 + 抬头框
   seals: [seal_detect]      # 印章定位：原图＋版框 → 每方印的类别（大印/小印）与外框，大印按版框定成正方形（2026-10-22）
-  columns: [column_warp]    # Step2 单列射影 + 去噪 + 界行/版框清除：→ warp 参数 / 文字带 / border_class；列图走缓存；出口闸见上
+  columns: [column_warp, column_band, column_end]   # 2a 拉直去噪 → 2b 定字带左右边、抹界行 → 2c 列端抹版框（五小步，2026-11-25）；出口闸见上，现挂 column_end
   cells: [row_segment]      # Step3 单列文字切分：→ 带类型字格 + 读序
   # recognition 用骨架缺省（Step4–7）。2026-09-10 align_ref 去掉对 context_decision 的依赖，四路互相独立
 notes: |

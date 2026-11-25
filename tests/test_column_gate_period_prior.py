@@ -49,8 +49,8 @@ def _body_page() -> np.ndarray:
 
 
 def _run(ctx) -> tuple:
-    warp = STEPS["column_warp"].run_page(ctx, PAGE)
-    ctx.store.write(ctx.book.id, "column_warp", f"p{PAGE:04d}", warp)
+    for sid in ("column_warp", "column_band", "column_end"):
+        ctx.store.write(ctx.book.id, sid, f"p{PAGE:04d}", STEPS[sid].run_page(ctx, PAGE))
     return STEPS["column_gate"].run_page(ctx, PAGE)["gate_manifest"]
 
 
