@@ -223,6 +223,13 @@ def merge(a) -> int:
             p = line.split("\t")
             if len(p) >= 2 and len(p[0]) == 1 and len(p[1]) == 1:
                 add(p[0], p[1], "variant")
+    # 人审定「永不并组」（never_group.json）的对：字典有异体边、实为不同字——不算 variant 来源，改记 human（仍是核心对，只是不再冒充异体）
+    never = {"".join(sorted(p)) for p in json.loads((ROOT / "config" / "variants" / "never_group.json").read_text(encoding="utf-8"))["pairs"]}
+    for k, e in tab.items():
+        if k in never and "variant" in e["src"]:
+            e["src"] = [x for x in e["src"] if x != "variant"]
+            if "human" not in e["src"]:
+                e["src"].append("human")
     dropped = sorted(k for k in tab if k in drop and not {"hand", "human"} & set(tab[k]["src"]))   # 人核过的对不受剔除名单管
     for k in dropped:
         del tab[k]

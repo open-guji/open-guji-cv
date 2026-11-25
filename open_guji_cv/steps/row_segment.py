@@ -754,6 +754,8 @@ ALT_CUT_REV = 2
 
 
 ALT_NOJZ_FLAG = "alt_nojz：不认雙行小注的备选（列里认出的小注段按大字格切），下游按列挑"
+ALT_CUTS_FLAG = "alt_cuts：按备选格线表切的备选（如 YOLO 字框定的格线），下游按列挑"
+ALT_CELLS_FLAG = "alt_cells：备选格线表里整列写定的格（YOLO 框字＋小注分类器），下游按列挑"
 
 
 def _alt_same_ink_cells(main_cells, alt_cells) -> bool:
@@ -984,6 +986,18 @@ class RowSegmentParams(BaseModel):
     #: 中间有白缝，被认成雙行小注劈成 a/b（第 1 册 4 段、2–6 册数十段）；几何量（墨高、缝宽、连通体）和真小注重叠分不开，
     #: 要靠库匹配与参照文字按列挑（align_ref `alt_select: admit`）。书级开关；False＝关（缺省，不进参数哈希）。
     alt_nojz: bool = False
+    #: **备选格线表**（2026-11-20 脉经，GUJI-774）：逐列格线表（jsonl，行 `{vol, page, col, cuts, col_h}`，格式同格位表的人定格线
+    #: `cuts`，见 `_layout_cuts`）的路径（相对工作区，或 `corpus/…`）。表里有的列另按表的格线切一份放进 `alt_columns`，下游照
+    #: `alt_cut` 的路按列挑（align_ref `alt_select: admit`）。起因：脉经序页、正文字有高有低，等距 20 格累积错位、把 4 个字切成 5 格
+    #: （01 7:7「景之書并」）；`scripts/yolo_alt_cuts.py` 用 yolo_tool 单字模型在列图上框字、格线放在相邻字框之间。直接替换主切法时
+    #: 上下结构高字常被劈成两框（聾→龍耳），所以只作备选。空＝关（缺省，不进参数 dump）；表内容 sha 自动填进 `alt_cuts_fingerprint`。
+    #: 行里带 `cells`（整列写定，`scripts/yolo_alt_cells.py`：YOLO 框字＋小注分类器，夹注分 a/b）时按格出备选（旗 `alt_cells`，
+    #: 裁图走职名列逐格裁法，配 `cell_shrink.manual_ink_fit`），列图高与表的 `col_h` 差过 `LAYOUT_CUTS_H_TOL` 不套。
+    alt_cuts: str = ""
+    alt_cuts_fingerprint: str = ""
+    #: 表里带 `cells`（整列写定，格式同 manual-cells 的 `expected.cells`）的行出的备选，**顶掉** `alt_nojz` 那份（一列只有一份备选）。
+    #: False（缺省，不进参数 dump）＝本列已有 alt_nojz 备选就不出。
+    alt_cells_first: bool = False
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -1023,6 +1037,19 @@ class RowSegmentParams(BaseModel):
                 import hashlib
                 _FP_CACHE[key] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
             object.__setattr__(self, "layout_fingerprint", _FP_CACHE[key])
+        return self
+
+    @model_validator(mode="after")
+    def _fill_alt_cuts_fingerprint(self):
+        if self.alt_cuts and not self.alt_cuts_fingerprint:
+            p = _layout_path(self.alt_cuts)
+            if not p.exists():
+                raise ValueError(f"alt_cuts 开着但表不存在：{p}（先跑 scripts/yolo_alt_cuts.py）")
+            key = ("alt_cuts",) + _sig(p)
+            if key not in _FP_CACHE:
+                import hashlib
+                _FP_CACHE[key] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
+            object.__setattr__(self, "alt_cuts_fingerprint", _FP_CACHE[key])
         return self
 
     @model_validator(mode="after")
@@ -1086,6 +1113,11 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_half_a", None)
             if not self.alt_nojz:
                 d.pop("alt_nojz", None)
+            if not self.alt_cuts:
+                d.pop("alt_cuts", None)
+                d.pop("alt_cuts_fingerprint", None)
+            if not self.alt_cells_first:
+                d.pop("alt_cells_first", None)
             if not self.alt_cut:
                 d.pop("alt_cut", None)
             else:
@@ -1155,7 +1187,7 @@ class RowSegmentParams(BaseModel):
 class RowSegmentStep(Step):
     spec = StepSpec(
         id="row_segment", title="Step3 单列文字切分", version="1.55", unit="column",   # 1.55：格位表说有字的格（slot_mask）判空收口（A22 U1 2026-11-18）——segment_column 的框线判空只认「去掉长竖后几乎没墨」，不认框角细横（1.51–1.54 四回把曰、二三、一判空少一格都栽在这条上）；墨不到 min_ink_ratio 的「一」不要求两邻有字，按列端口径（不满宽、居格中）救回；没有格位表的册不变；1.54：列端表空格里居中（纵向居格中、横向没满宽）的粗横（「一」）不当框线记空（_blank_frame_junk，殿本 vol21 186:7 列首「一」被记空，格数少一，用户 2026-11-18 格高异常）；1.53：列中间两个有字格夹着的空白格里有居中细横（「一」，墨比 0.004–0.011 不到 min_ink_ratio）救回成字格（殿本 vol45 46:8、vol46 76:8 等 10 列格数少一，用户 2026-11-18 格高异常根因）；1.52：框线判空认叠横画数字（「二」「三」去掉长竖后剩 ≥2 道薄而不满宽的横画，不当框角，殿本 vol68 230:9、vol63 116:9，用户 2026-11-17 格高异常根因）；1.51：框线判空认闭口方框字——格内左右两侧各有长竖、夹 ≥2 道横档的（曰日口目）不再当框角记空（殿本 vol14 32 葉 7 列「曰」被判空并进邻格，用户 2026-11-16）；1.50：表说整列空的列记空认大印印边墨——格与大印框重叠不到一半、但格里 ≥70% 的墨（按连通块）落在印框里也记空（印边压着相邻空列切出碎格，史記 r53，SJ 2026-11-13）；有字的列、丢字、挑格网仍按框重叠；1.49：卷端题列（_header_columns）起格把 1.48 记空的框线格（frame_line）照旧算上，格号回到 1.47（史記 01 p119 c2 1–6 被挪成 2–7，SJ r27）；1.48：列端格只有版框线记空（seg/profile.frame_only_edge_cells，各书一律，A22 P5 2026-11-10）：物理首／末格里的墨（宽 ≥8% 列宽）全贴着上／下版框线（≤0.2 格高）、且有一行 ≥ 半列宽 → 记空、打 edge_frame_only 旗（列级）、格上打 frame_line（「不是字」的标记，manager resolve 的 new_not_char 认它），表说有字也照记，人裁整列不走（史記 04 p125/p141、殿本 vol28 p102 卷末空列末格切出框线「字」）；加软参数 manual_cells_fingerprint（本册格级钉子内容指纹，推钉子只报漂移不判过期）；1.47：殿本职名页大字雙行整段分栏（相邻左右各一字的矮带连成一段整段分栏、分栏后按两侧墨心修正归边）＋偏右小字「臣」上限 0.8→0.9em（殿本 vol01 新图 001-r6 切坏格，一律生效；只有职名页分支走，史記写本用自己的实现不变）；参校本属性 reference_profile（B 块 2026-11-08，未声明的册逐字节不变、不升号）：写了 reference_profile 的册 layout_prior 缺表不拦（缺表的页纯几何切）；自动配页不配 none／text 页、整册没有逐列页就不配页；离线格位表有行照用（表是几何先验，与有无参校本无关，全唐文 001 姓氏韵编）；1.46：layout_raise_box 缺省开（闸认出真抬头框、表记不抬头时按闸级数重编表），重编的候选四项打分不比原表差就取（同分不再让给原表）；1.45：等距格网中选时，表挪一格也只比挪一格的等距格网（DP 挪一格会压空白、字整列错一格，vol64 p211 c1 等）；挪一格的等距格网改配挪过的表（夹注、半格按表认）；1.44：等距格网优先，别的格网坏格数严格更少才换；等距格线落缝改就近（挪远要付代价，不再挪进字内空当）——格高一致强制执行（用户 2026-11-01，vol21/64/98 格高偏差 >20% 的列 2054→219，劈字 314→278）；1.43：格高不匀把空白段也算上（一段空白切出的格数多过它总高合的 period 数，多出的算不匀；列首两格空白切成三个矮格、字整列挤错一格），无先验格网格高比现有候选更不匀时不取（vol98 p100 c3 等 4 列）；1.42：职名页分支认写本（史記文淵閣本）——斜贴邻字的偏右小「臣」按全页臣行拆出、列端扁框线残段不当字、落在印里的字丢掉（读 seals）；1.41：大印下的列等距格网在印外比按打分的格网多劈 ≥2 个字时按打分挑（挤格列，vol48 p34、vol46 p106）；1.40：layout_prior 候选格网加「表整列挪一格」（格号 ±1，违表严格更少才选；大印下只在等距格网间比违表），整理本起格差一格的列（vol68 p31 c7–c9）不再丢首字、列末多空字格；1.39：自动配页 page_map（off/loose/strict，书级；开着时 Step3 开跑前按全册列窗口与 daizhige 对齐、边跑边生成本册格位表，见 row_segment_pagemap.py），缺省 off 逐字节不变；1.38：候选格网打分加格高不匀（_uneven，排在劈字后、穿字前）；选中的格网有一格挤两字时在字缝补一条格线、按打分去掉一条（_merged_cuts，殿本个别列字排得比整页格网密）；1.37：layout_prior 开着而表里没有本册就报错（不再悄悄当关）；1.36：干净格线两侧格高偏 >15% 也过 U-Net 探针；扩池候选与 U-Net 几乎一致、穿墨少就自动改选（字内空隙里的格线把字头/点切给上一格）；1.35：layout_prior 缺省开（缺省表不在当关）；1.34：大印压着列首的列（_under_stain）直接取表的等距格网，不再按坏格挑（印泥斑点让闸抬头、DP 挤格，字整列错一格而格号集合不变）；1.33：列端表空格的印改读印章定位 `seals` 产物——大印按框、小印按笔画覆盖区量（_in_seal），去掉模板窗口找印与表空段墨团（_empty_zone_seal），并纠正印框与格坐标空间不一致（印框原是左上原点）；1.32：模板没认出的印（空心印）和模板框没盖住的印边：相邻列的表空段同高都有像字的墨，就当印框（_empty_zone_seal）；1.31：列端表空格里被切成雙行小注半格的印章墨也记空；1.30：表说半格、判据认成單行小注的格按半格发（jiazhu_a/b）；1.29：列端表空格里墨只是一两道竖线的格记空（印框边、界行残段）；1.28：印框记空挪进候选格网打分之前（同框线碎墨，先记空再打分），單行小注格也记；1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（impl/keben/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
-        consumes=("gate_manifest", "column_windows", "column_image"), optional_consumes=("seals",), produces=("cells",),
+        consumes=("column_geometry", "column_windows", "column_image"), optional_consumes=("seals",), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.impl.keben.row_boundaries", "open_guji_cv.impl.keben.row_grid", "open_guji_cv.impl.keben.jiazhu_split",
                    "open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.impl.keben.column", "open_guji_cv.seg.seam",
@@ -1255,7 +1287,7 @@ class RowSegmentStep(Step):
         for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
             if getattr(p, k_) and k_ not in inspect.signature(segment_column).parameters:
                 raise ValueError(f"row_segment.{k_}：本册套书的 {RB.__name__}.segment_column 没有这个参数")
-        gate: GateManifest = ctx.product("gate_manifest", page)
+        gate: GateManifest = ctx.product("column_geometry", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
         # 列级／格级人定切分一处读（feedback/seg_overrides.py；总表与优先级见 doc/切分覆盖.md）。按需读：职名页只读整列钉子。
@@ -1285,6 +1317,7 @@ class RowSegmentStep(Step):
             layout = layout_for(ctx, p.page_map, _pm_pins(p), _pm_ref(p))
         else:
             layout = load_layout(p.layout_prior, ctx.book.id) if p.layout_prior else {}
+        alt_cuts_tab = load_layout(p.alt_cuts, ctx.book.id) if p.alt_cuts else {}
         if p.layout_prior and not layout and not _ref_declared(ctx.book):
             # 表在、开关开着，表里却一行本册都没有：多半是新册没生成表（殿本 vol11–20 首跑就这样悄悄当关，
             # 逐格全对 94.7% vs 带表 100%）。宁可拦下，不悄悄退回无先验。
@@ -1781,6 +1814,26 @@ class RowSegmentStep(Step):
                     cn = _emit(rn, base, [*prior_flags, ALT_NOJZ_FLAG], lay, occ, n_raised_col)
                     if not _alt_same_ink_cells(out[-1].cells, cn.cells):
                         alt_out.append(cn)
+            row_ac = alt_cuts_tab.get((page, gc.col)) if alt_cuts_tab else None
+            if (row_ac is not None and row_ac.get("cells") and not human_col and r is not None and lay_cuts is None
+                    and abs(int(row_ac.get("col_h") or -99) - img.shape[0]) <= LAYOUT_CUTS_H_TOL
+                    and (p.alt_cells_first or all(a_.col != gc.col for a_ in alt_out))):
+                # 整列写定的备选格（`scripts/yolo_alt_cells.py`：YOLO 框字＋小注分类器，夹注分 a/b 逐字切）
+                one = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=[out[-1]])
+                cc_ = _apply_manual_cells(one, {gc.col: row_ac["cells"]}, gate, wins).columns[0]
+                if cc_ is not out[-1] and not _alt_same_ink_cells(out[-1].cells, cc_.cells):
+                    cc_ = cc_.model_copy(update={"flags": [*cc_.flags, ALT_CELLS_FLAG]})
+                    alt_out = [a_ for a_ in alt_out if a_.col != gc.col] + [cc_]
+            elif (row_ac is not None and not row_ac.get("cells") and not human_col and r is not None and lay_cuts is None
+                    and all(a_.col != gc.col for a_ in alt_out)):
+                ac = _layout_cuts(row_ac, img.shape[0], n_raised_col)
+                if ac is not None:
+                    n_ac = len(ac) - 1 - n_raised_col
+                    ry = _seg(n_ac, bounds=ac, final=True)
+                    if ry is not None:
+                        cy = _emit(ry, dict(base, n_body_slots=n_ac), [*prior_flags, ALT_CUTS_FLAG], lay, occ, n_raised_col)
+                        if not _alt_same_ink_cells(out[-1].cells, cy.cells):
+                            alt_out.append(cy)
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
         pc = self._header_ref_flags(ctx, p, page, pc)

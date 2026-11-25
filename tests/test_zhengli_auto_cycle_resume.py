@@ -104,6 +104,8 @@ def _main_env(tmp_path, monkeypatch, decide_map, run_map, published):
     bt = _git_repo(tmp_path / "bt")
     monkeypatch.setitem(sys.modules, "ensure_manager", types.SimpleNamespace(ensure=lambda: None))
     monkeypatch.setattr(ac.rp, "text_id_of", lambda ws: "96mid1ogzk")
+    # 盘余量门（MIN_FREE_GB，缺省 8GB）不能跟着跑测试那台机器的真实余量走：盘紧的机器上会停在第一册之前
+    monkeypatch.setattr(ac, "free_gb", lambda p: 1e6)
     monkeypatch.setattr(ac, "decide", lambda ws, b, lv=False: {"verdict": decide_map.get(b, "go"), "why": "", "main": "L",
                                                                "online_rev": "x", "status": {"voted": 0}})
     monkeypatch.setattr(ac, "run_book", lambda ws, b, *a, **k: dict(run_map[b]))
@@ -194,3 +196,13 @@ def test_unmapped_votes_go_into_report(tmp_path):
     rep = ac.write_guard_report(ws, {"books": {"vol43": {"verdict": "done", "unmapped": um}}}, "d", tmp_path, "x")
     t = rep.read_text(encoding="utf-8")
     assert "无法对位" in t and "vol43" in t and "守卫拦下的册" not in t
+
+
+def test_done_is_keyed_by_main(monkeypatch):
+    """状态文件的「已做」只对当时的主包有效：标了新 main 就重做（全唐文 11-20 d2）；没记 main 的旧状态照旧跳过。"""
+    monkeypatch.setattr(ac, "pack_rows", lambda ws, b: [{"label": "c1", "main": False}, {"label": "d2", "main": True}])
+    assert ac.main_changed(Path("."), "vol01", {"verdict": "done", "main": "c1"}) is True
+    assert ac.main_changed(Path("."), "vol01", {"verdict": "done", "main": "d2"}) is False
+    assert ac.main_changed(Path("."), "vol01", {"verdict": "done"}) is False
+    monkeypatch.setattr(ac, "pack_rows", lambda ws, b: [])
+    assert ac.main_changed(Path("."), "vol01", {"verdict": "done", "main": "c1"}) is False

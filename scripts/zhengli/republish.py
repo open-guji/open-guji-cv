@@ -440,6 +440,40 @@ def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]
             "counts": {k: len(x) for k, x in rows.items()}}
 
 
+def new_cells(out: Path | None) -> set[str] | None:
+    """新单那份导出（plan.json 的 export_dir）里的全部格号；读不到返回 None（不判）。"""
+    if out is None:
+        return None
+    try:
+        plan = json.loads((Path(out) / "plan.json").read_text(encoding="utf-8"))
+        char = json.loads((Path(plan["export_dir"]) / f"{plan['chapter']}.char.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, KeyError):
+        return None
+    return {x["a"] for pg in char.get("pages") or [] for col in pg.get("columns") or [] for x in col.get("cells") or [] if x.get("a")}
+
+
+def gone_cells(led: dict, cells: set[str] | None) -> int:
+    """未落的票里，格在新切分里已经没有了（如 #1747 把抬头极小框切没）→ 改记「无法对位」：不拦，照样列清单交复审
+    （用户 11-17：拦截一律放行；孤儿票不该永远挡出单）。返回挪了几条。"""
+    if not cells:
+        return 0
+    rows = led["rows"]
+    keep, moved = [], []
+    for v in rows.get("未落") or []:
+        c = v.get("new") or v["a"]
+        if c in cells:
+            keep.append(v)
+        else:
+            moved.append({**v, "why": v.get("why") or "新切分里没有这一格", "detail": v.get("detail") or "重切后格已不存在"})
+    if moved:
+        rows["未落"] = keep
+        rows.setdefault("无法对位", []).extend(moved)
+        if isinstance(led.get("counts"), dict):
+            led["counts"]["未落"] = len(keep)
+            led["counts"]["无法对位"] = len(rows["无法对位"])
+    return len(moved)
+
+
 def _vote_cell(v: dict) -> str:
     return f"{v['a']}→{v['new']}" if v.get("new") else v["a"]
 
@@ -488,8 +522,8 @@ def sheet_findings(doc: dict, ws: Path, book: str) -> list:
 
 def sheet_gate(doc: dict, ws: Path, book: str, a) -> None:
     """出单门（11-13 ZM）：体检有「拦」的类就不上线；要照上线加 --ack-sheet-audit "<原因>"。
-    这些类对应连着出过的错：机器无字（印章遮挡）被写成「机器改判为 □，推翻人裁」、换图源后失效的老人裁被当成「被机器推翻」、
-    只因标点专名要重挂的格混进判字单。"""
+    拦的类对应连着出过的错：换图源后失效的老人裁被当成「被机器推翻」、改判前后同字、只因标点专名要重挂的格混进判字单。
+    机器无字（□）推翻人裁 11-19 起只提示、照常上单（以 manager `review.sheet_audit` 的 ERROR／WARN 分类为准）。"""
     fs = sheet_findings(doc, ws, book)
     if fs is None:
         print("ⓘ guji-manager 没有 review.sheet_audit（<0.4.46）：跳过单子体检")
@@ -519,6 +553,7 @@ def votes_gate(ws: Path, book: str, text_id: str, old_rev: str | None, new_rev: 
     held = [ln.split("\t")[0] for ln in Path(hf).read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if hf else []
     pre = sheet_predates_source(ws, book, old_doc, getattr(a, "old_source_rev", None))
     led = ticket_ledger(ws, book, text_id, old_rev, votes, held, predates=pre, cells=getattr(a, "cells", None))
+    gone_cells(led, new_cells(out))
     left = led["rows"]["未落"]
     print(f"旧单 {old_rev} 的票（{src}）：{ledger_md(led)}")
     lost = led["rows"].get("无法对位") or []
@@ -765,8 +800,9 @@ def pack_rev(a, ws: Path, book: str, rev: str) -> str | None:
 
 def sync_and_publish(a, ws: Path) -> bool:
     """`guji db sync`，成功了再触发网站发布。返回是否已触发。"""
+    # 缺省不推字形库（GUJI_DB_NO_GLYPH）：出单／加格只改待审单与事件；带上字形库导出会撞「账本缩水」保护被拦（QTW 11-24）
     p = run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
-            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+            env={**os.environ, "GUJI_WORKSPACE": str(ws), "GUJI_DB_NO_GLYPH": "1"})
     if p.returncode:
         print("✗ guji db sync 失败，没触发网站发布")
         return False
@@ -856,7 +892,7 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     products, export = products_root(ws), Path(a.export_dir)
     cord = export / f"{chapter}.cord.json"
     if not cord.exists():
-        sys.exit(f"✗ {cord} 不存在：先用同一份产物导出 char／cord（zl.py export 或 export_guji_format.py）")
+        sys.exit(f"✗ {cord} 不存在：先用同一份产物导出 char／cord（zl.py export 或 python -m guji_manager.output.guji_format_export）")
     online = proofing_path(ws, text_id, chapter)
     old = json.loads(online.read_text(encoding="utf-8")) if online.exists() else None
     rev = a.rev or next_rev((old or {}).get("rev"), chapter)
@@ -932,7 +968,11 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     add_anchor_reasons(routed / f"{chapter}.team.pending.json", export, tvd, chapter)
     final = public
     rd = raw_dir(ws, book)
-    if rd and not a.no_sprite:
+    if (getattr(a, "no_cell_sprite", False) or os.environ.get("GUJI_NO_CELL_SPRITE") == "1") and not a.no_sprite:
+        # 不出格图雪碧图（用户 11-20 提议：审阅时本来就下书影，网站按 box 现场裁）：每格写网站页图坐标的 box，
+        # 相似字字形图（字体渲染，便宜）照出
+        final = no_cell_sprite(public, cord, out / "sprites", chapter, py)
+    elif rd and not a.no_sprite:
         sp = out / "sprites"
         if run([py, HERE / "sprite_build.py", "--cord", cord, "--pending", public, "--raw-dir", rd,
                 "--book", text_id, "--vol", chapter[-2:], "--out", sp]).returncode == 0:
@@ -1326,7 +1366,7 @@ def cmd_from_pack(a) -> int:
     if not tv:
         sys.exit("✗ 要 --book-text <book-text 仓>（读线上文本版本）或 --text-version")
     export = (Path(a.out_root) if a.out_root else ws / "reports" / book / "_publish") / f"export-{a.label}"
-    cmd = [py, CV / "scripts/export_guji_format.py", "--products", products, "--book", book, "--chapter", chapter,
+    cmd = [py, "-m", "guji_manager.output.guji_format_export", "--products", products, "--book", book, "--chapter", chapter,
            "--out", export, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
     for flag, f in (("--meta", meta_file(book, export.parent)),
                     ("--split-table", CV / "doc/formats/samples/guji_page_v0.2/split_table_siku.json")):
@@ -1566,7 +1606,11 @@ def cmd_add_alt(a) -> int:
 
     给出单时漏了相似字的单子补救用（10-21 殿本 vol04–10）。卡片取 `guji audit alt` 的输出，
     必须是出这张单的那个产物包算的（格号要对得上）；对不上的格不补，打出来。
-    相似字字形图（`alt[].g`）不补：网站没有字形图时直接显示文字。"""
+    相似字字形图（`alt[].g`）不补：网站没有字形图时直接显示文字。
+
+    **已被 `guji land` 取代（GM4 11-25）**：land 对账待审条目时自动补 alt（含手加格、带字形图、按 u 对条目），不换 rev、不冲掉旧 alt。
+    本命令只留作应急；卡片的键兼容 `cell`／`a`／`id`。"""
+    print("⚠ add-alt 已被 `guji land` 取代（手加格也会补 alt、带字形图）；仅应急使用", file=sys.stderr)
     sys.path.insert(0, str(CV))
     from guji_manager.review.proof_fields import pending_fields
     ws, book = Path(a.workspace).resolve(), a.book
@@ -1577,8 +1621,11 @@ def cmd_add_alt(a) -> int:
     raw = json.loads(src.read_text(encoding="utf-8"))
     alt = {}
     for c in (raw["cards"] if isinstance(raw, dict) else raw):
-        if c.get("alt") and ":" in str(c.get("id")):
-            alt[c["id"].split(":", 1)[1]] = pending_fields({"alt": c["alt"]})["alt"]
+        k = c.get("cell") or c.get("a")                      # 合成卡（手加格）带 cell（裸格号）
+        if not k and ":" in str(c.get("id") or ""):
+            k = str(c["id"]).split(":", 1)[1]                 # review 卡只有 id（册:格号）
+        if c.get("alt") and k:
+            alt[str(k)] = pending_fields({"alt": c["alt"]})["alt"]
     cells = doc.get("cells") or []
     todo = [c for c in cells if c.get("review") != "human" and (a.replace or not c.get("alt"))]
     miss = [c["cell"] for c in todo if c["cell"] not in alt]
@@ -1812,6 +1859,47 @@ def copy_figs(export_dir: Path, d: Path, ch: str) -> int:
         idx.write_text(s.replace(anchor, f"{anchor}, {decl}"), encoding="utf-8", newline="\n")
     print(f"图片格：拷 {ch}.fig.json 与 {n} 张裁图，index 声明 fig_file")
     return n
+
+
+def site_boxes(cord_path: Path) -> dict[str, list[int]]:
+    """导出 cord → {格: 网站页图坐标的框}（换坐标同 copy_cord_for_site；原文件不动）。"""
+    cord = json.loads(Path(cord_path).read_text(encoding="utf-8"))
+    table = site_page_table(cord["book_id"], cord["volume"])
+    rebase_cord(cord, table)
+    return {c["a"]: c["box"] for pg in cord.get("pages") or [] for c in pg.get("cells") or [] if c.get("a") and c.get("box")}
+
+
+def attach_boxes(doc: dict, boxes: dict) -> tuple[dict, int]:
+    """单子每格补 ``box``（已有的不动）；返回（新单，补了几格）。网页 resolveCrop 优先用单上的 box。"""
+    n, cells = 0, []
+    for c in doc.get("cells") or []:
+        b = boxes.get(c.get("cell"))
+        if b and not c.get("box"):
+            c = dict(c, box=list(b))
+            n += 1
+        cells.append(c)
+    return dict(doc, cells=cells), n
+
+
+def no_cell_sprite(public: Path, cord: Path, sp: Path, chapter: str, py: str) -> Path:
+    """``--no-cell-sprite``：不跑 sprite_build，单上每格带 box（网站页图坐标），有相似字照跑 alt_build。返回最终单子路径。"""
+    sp.mkdir(parents=True, exist_ok=True)
+    doc = json.loads(Path(public).read_text(encoding="utf-8"))
+    try:
+        doc, n = attach_boxes(doc, site_boxes(cord))
+    except (ValueError, KeyError, OSError) as e:
+        print(f"⚠ 换不到网站页图坐标（{e}）：单上不写 box，网站按 book-text cord 裁（book-text 不是这一版切分时会裁偏）")
+        n = 0
+    print(f"不出格图雪碧图：{n}/{len(doc.get('cells') or [])} 格写了网站坐标 box，网站按书影现场裁")
+    final = sp / "pending.with-box.json"
+    final.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
+    if any(c.get("alt") for c in doc.get("cells") or []):
+        (sp / "assets.json").write_text(json.dumps({"rev": doc.get("rev"), "files": []}, ensure_ascii=False) + "\n", encoding="utf-8")
+        if run([py, HERE / "alt_build.py", "--pending", final, "--chapter", chapter, "--out", sp]).returncode == 0:
+            final = sp / "pending.with-alt.json"
+        else:
+            (sp / "assets.json").unlink()
+    return final
 
 
 def copy_cord_for_site(src: Path, dst: Path) -> int:
@@ -2133,6 +2221,8 @@ def main(argv=None) -> int:
             p.add_argument("--no-alt", action="store_true", help="不跑 guji audit alt（单子上没有相似字）")
             p.add_argument("--fetch-zi", action="store_true", help="audit alt 去字统网补缓存（首次慢）")
             p.add_argument("--no-sprite", action="store_true")
+            p.add_argument("--no-cell-sprite", action="store_true",
+                           help="不出格图雪碧图：单上每格写网站页图坐标的 box，网站按书影现场裁；相似字字形图照出")
             p.add_argument("--no-seg-selfcheck", action="store_true",
                            help="不跑同字对照自检（guji-manager seg_defect --gate；书没在它的 SELFCHECK_BOOKS 里开也不跑）")
             p.add_argument("--recheck", help="复审清单（格号<TAB>说明<TAB>旧人裁 id<TAB>旧人裁的字）：这些格不论放没放行、"

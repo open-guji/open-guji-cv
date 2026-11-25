@@ -81,6 +81,31 @@ def pack_rows(ws: Path, book: str) -> list[dict]:
     return rows
 
 
+def main_changed(ws: Path, book: str, prev: dict) -> bool:
+    """状态文件按「册＋主包」算：上次 done 记的 main 与现在的 ★main 不同，就是新任务、要重做
+    （全唐文 11-20 d2：d1 做完的 29 册被判「已做」跳过，线上仍是旧单）。没记 main 的旧状态、读不到现行 main 的，照旧跳过。"""
+    was = prev.get("main")
+    if not was:
+        return False
+    now = next((r["label"] for r in pack_rows(ws, book) if r["main"]), None)
+    if now and now != was:
+        print(f"{book}\t主包 {was} → {now}：状态文件里的「已做」作废，重做", flush=True)
+        return True
+    return False
+
+
+#: manager `guji pipeline` 收尾（land --apply）落定时写：{digest, pack}（GM4 换包按条目对账，11-24）
+LANDED = "_land/landed.json"
+
+
+def landed_pack(ws: Path, book: str) -> str | None:
+    """收尾按哪个产物包落定了待审条目（`reports/<册>/_land/landed.json` 的 pack）；没有、读不了 → None。"""
+    try:
+        return json.loads((Path(ws) / "reports" / book / LANDED).read_text(encoding="utf-8")).get("pack") or None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def decide(ws: Path, book: str, land_votes: bool = False) -> dict:
     """返回 {verdict, why, main, online_rev, status}。只读。
     land_votes：线上单有票但没投完时不等，判 go，由 plan 把票落成人裁（落不了的由 apply 的票账门拦下，不丢票）。"""
@@ -95,6 +120,9 @@ def decide(ws: Path, book: str, land_votes: bool = False) -> dict:
         return {"verdict": "no-main", "why": "册没有 main 产物包", "online_rev": rev}
     rev_pack = next((r for r in rows if r["label"] == rp.pack_label(rev)), None)
     base = {"online_rev": rev, "main": main["label"], "main_time": main["time"]}
+    landed = landed_pack(ws, book)
+    if landed and landed == main["label"]:      # 收尾已按这个 main 包对账落定（待审没变就不换 rev、不出 rev-<rev> 包）
+        return {**base, "verdict": "fresh", "why": f"已按 main 包 {landed} 对账落定（{LANDED}），线上单 {rev}"}
     # 包的时间是它跑完存库的时间，不是标 main 的时间（r5 先存、后标 main 的情形会反过来），所以不比时间：
     # 出单版包的备注记了「基于 main 包 <标签>」，与现在的 ★main 标签相同才算新；备注里没有（旧单）一律当过期。
     m = re.search(r"基于 main 包 (\S+)", (rev_pack or {}).get("note", ""))
@@ -492,7 +520,7 @@ def main(argv=None) -> int:
             if a.resume_guard:
                 if prev.get("verdict") != "guard-stop":
                     continue
-            elif prev.get("verdict") in SKIP_DONE:
+            elif prev.get("verdict") in SKIP_DONE and not main_changed(ws, book, prev):
                 print(f"{book}\t→ done\t（状态文件：已做）{prev.get('why', '')}", flush=True)
                 continue
             elif prev.get("verdict") in SKIP_STOPPED and not a.retry_blocked:

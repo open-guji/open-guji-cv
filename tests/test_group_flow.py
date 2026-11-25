@@ -514,7 +514,6 @@ def test_joint_needs_partner_to_confirm_or_rule_out(monkeypatch):
     assert not r.admit and "group_flow_abstain" in r.doubts
 
 
-
 def test_joint_skips_partner_when_panel_confirmed(monkeypatch):
     """ry 的文意字经 L3 二审小组确认（strong＋panel char:…）且不是 rm 的成员（曰）：rm 弃权／说目也不拦（A24 11-01）；日仍须 rm 同意。"""
     from open_guji_cv.groups import flow
@@ -994,20 +993,6 @@ def test_lift_shape_ratio_gate(monkeypatch):
     assert run("x1a", half).admit and not run("x1", half).admit              # 半格用半格门
 
 
-def test_lift_shape_ratio_and_rt_skip_params():
-    from open_guji_cv.steps.seed_admit import SeedAdmitParams
-    d = SeedAdmitParams().model_dump()
-    assert not {"group_flow_lift_shape_ratio", "group_flow_lift_shape_ratio_jiazhu", "reference_trust_skip"} & set(d)
-    p = SeedAdmitParams(group_flow=("ry",), group_flow_lift_shape_ratio={"ry": {"曰": [1.15, 9]}}, reference_trust="high",
-                        reference_trust_skip=["lift_shape_ref"])
-    d = p.model_dump()
-    assert d["group_flow_lift_shape_ratio"] == {"ry": {"曰": (1.15, 9.0)}} and d["reference_trust_skip"] == ["lift_shape_ref"]
-    assert "ry" not in p._rt_lift_shape_ref() and p._rt_abstain_ref_ok() and p._follow_variants()   # 只关这一项
-    assert "ry" in SeedAdmitParams(reference_trust="high")._rt_lift_shape_ref()
-    assert "ry" in SeedAdmitParams(reference_trust="high", reference_trust_skip=["lift_shape_ref"],
-                                   group_flow_lift_shape_ref=["ry"])._rt_lift_shape_ref()          # 单独开关仍生效
-
-
 def test_lift_shape_ref_not_in_params_dump():
     assert "group_flow_lift_shape_ref" not in SeedAdmitParams().model_dump()
     assert SeedAdmitParams(group_flow=("ry",), group_flow_lift_shape_ref=["ry"]).model_dump()["group_flow_lift_shape_ref"] == ["ry"]
@@ -1298,3 +1283,15 @@ def test_group_flow_exclude_subtracts_from_default():
     assert SeedAdmitParams(**d).group_flow == p.group_flow          # 从 dump 重建：减法幂等
     with pytest.raises(ValueError):
         SeedAdmitParams(db_path="x", group_flow=allg, group_flow_exclude=["no_such_group"])
+
+
+def test_entry_ry_ref_top_extra_hui():
+    """日曰 ry：库补常用字后「回」新进 0.03 窗口（史記 v0.2 g27，44 格），库首位 日 与坐标对位 曰 同在组里仍进；其余组外字照挡。"""
+    r = Rec("a")
+    cfg = FlowConfig(groups=("ry", "rm"))
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9731)], None, cfg, coord_ref="曰") == ("ry", "lift")   # 回 0.9731 在 0.03 窗口内（g27 后新进），库首位 日×坐标对位 曰 同组
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9800)], None, cfg, coord_ref="曰") == ("ry", "lift")
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9800)], None, cfg) is None                  # 没有整理本／坐标对位字：不走
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9800)], None, cfg, coord_ref="指") is None   # 整理本是组外字：照挡
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("目", 0.9900)], None, cfg, coord_ref="曰") is None   # 目 留给 joint
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("百", 0.9900)], None, cfg, coord_ref="曰") is None

@@ -38,6 +38,7 @@ DRIFT_ENV = "GUJI_MODEL_DRIFT"
 #: 殿本（武英殿刻本四庫全書總目）的书 ID：在它上面训的模型归这本书（按从哪里来）。
 DIANBEN = "96mid1ogzk"
 QUANTANGWEN = "995ejelvk0"
+SHIJI = "988g3f0wsu"
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,10 @@ KINDS: tuple[Kind, ...] = (
     # 5a 精验的度量学习 CNN（`clustering/sim_cnn.py`，`glyph_match.sim_model` 开关）：每本书用本书库刻例各训一份
     Kind("glyph_sim", "repo", "models/glyph_sim_qtw/*", "book", QUANTANGWEN,
          ("glyph_match",), "全唐文字形库刻例训的 5a 相似度 CNN（model.pt）＋分数校准表（calib.json）；换权重要重拟校准表"),
+    Kind("glyph_sim_qtw_v2", "repo", "models/glyph_sim_qtw_v2/*", "book", QUANTANGWEN,
+         ("glyph_match",), "全唐文 11-24 字形库重训的 5a 相似度 CNN（model.pt）＋分数校准表（calib.json）；旧版 glyph_sim_qtw 不动"),
+    Kind("glyph_sim_shiji", "repo", "models/glyph_sim_shiji/*", "book", SHIJI,
+         ("glyph_match",), "史記字形库刻例训的 5a 相似度 CNN（model.pt）＋分数校准表（calib.json）；换权重要重拟校准表"),
     # 5a 相似度 CNN 的跨书通用底座：几本书的字形库合训一份（同码位跨书合一类），新书开书直接用。多书混合归 global。
     # 目录名带版本 `glyph_sim_base_v<N>`：重训（并进新书）出下一个目录，旧目录不动，钉着旧版的书不受影响
     Kind("glyph_sim_base", "repo", "models/glyph_sim_base_v*/*", "global", "global",

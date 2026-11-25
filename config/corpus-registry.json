@@ -42,9 +42,14 @@
    "sha256": "d2d76d23b0422f9b3ad6a2fe7b9daa6a304a6b890ac059cf83bf0cdca5302fae"
   },
   {
+   "path": "config/dicts/variants.pairkind.tsv",
+   "size": 5678,
+   "sha256": "51c9e38a4a82fbb50375d3549ec0be8aceebc3855ac1f0bda0a826b36d2100db"
+  },
+  {
    "path": "config/dicts/variants.tsv",
-   "size": 830,
-   "sha256": "ae4d66c0b762ffa2a05183dd139e0e6002f4cb47a44b7b9333660450e2c0b2b4"
+   "size": 1598,
+   "sha256": "1fae75a26e5cc88b2083407c10faa59f3374ca4d594cbea85e8d5e4b920203b1"
   },
   {
    "path": "config/groups/can/ids_override.tsv",
@@ -298,8 +303,8 @@
   },
   {
    "path": "config/variants/never_group.json",
-   "size": 8197,
-   "sha256": "518c2b2b4789d4052688f2e197692b20106490551e08c92bef4dec16c77fc387"
+   "size": 10335,
+   "sha256": "75e0610faff791c8ef20022c6232d3d8f35da71a6f4fb2cefe3365cd9b384fd2"
   },
   {
    "path": "config/variants/report.json",

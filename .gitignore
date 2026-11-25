@@ -73,7 +73,7 @@ output/*/step3_input/*/
 output/_grid_test/
 output/tmp*/
 
-# 对勘报告（scripts/build_collation_report.py 产物，可再生；分享件在 overview）
+# 对勘报告（guji output collation-report 产物，可再生；分享件在 overview）
 output/collation_*
 
 # 字形库 SQLite：83MB 二进制，每次提交近乎多存一份完整副本（历史里 63 版 = 3.19 GiB）。

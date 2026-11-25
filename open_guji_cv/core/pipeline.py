@@ -16,7 +16,28 @@ from .step import STEPS, Step
 PIPELINES_DIR = Path(__file__).resolve().parent.parent / "pipelines"
 
 
-def _produces(step: Step) -> set[str]:
+def active_gate(steps: list[str], step: Step):
+    """`step` 出口挂的闸在**这条管线**里是否生效，生效则返回 GateSpec。
+
+    同一个 Step 在两条链里复用（如 `cell_shrink` 刻本/现代两链共用），挂的闸只适用于其中一条：
+    闸的硬上游（`consumes`）在本管线里没有任何 Step 产出，就判不适用（现代链没有 `column_geometry`，
+    不跑 `cut_gate`；它走 `column_crop` 的 `column_gate`）。"""
+    g = step.spec.gate
+    if not g:
+        return None
+    gstep = STEPS[g.id]
+    pool: set[str] = set()
+    for sid in steps:
+        s = STEPS[sid]
+        pool |= set(s.spec.produces)
+        sg = s.spec.gate
+        if sg and sg.id != g.id:
+            pool |= set(STEPS[sg.id].spec.produces)
+    own = set(gstep.spec.produces)
+    return g if all(k in pool or k in own or k in _EXTERNAL_KINDS for k in gstep.spec.consumes) else None
+
+
+def _produces(step: Step, steps: list[str] | None = None) -> set[str]:
     """一个 Step 实际能产出的种类集合，含它出口挂的闸产出的种类。
 
     闸自己是正常注册进 `STEPS` 的 Step（有自己的 `produces`），这里只是在算拓扑时
@@ -24,8 +45,9 @@ def _produces(step: Step) -> set[str]:
     （如 `gate_manifest`）下游 Step 仍然要能在 `Pipeline.validate()`/`upstream()`
     里查到是谁「提供」的，否则移走闸这一个节点会让下游看起来断了链。"""
     out = set(step.spec.produces)
-    if step.spec.gate:
-        out |= set(STEPS[step.spec.gate.id].spec.produces)
+    g = active_gate(steps, step) if steps is not None else step.spec.gate
+    if g:
+        out |= set(STEPS[g.id].spec.produces)
     return out
 
 
@@ -42,8 +64,15 @@ class Pipeline:
     #: 刻本链与现代链里默认参数不同，差异写在这里而不是分叉代码；CLI `--params` /
     #: 控制台的覆盖仍然优先于它（见 `Engine.__init__`）。
     params: dict[str, dict] = field(default_factory=dict)
+    #: 四大步（2026-11-22）：大步名 → 本管线里属于它的步骤 id（按管线顺序）。只是分组，不进指纹；
+    #: `slice()` 的起止可以写大步名。由骨架 `stages:` 展开（`expand_stages`）。
+    stages: dict[str, list[str]] = field(default_factory=dict)
 
     # ── 图 ───────────────────────────────────────────────────────────
+    def gate_of(self, sid: str):
+        """本管线里 `sid` 出口生效的闸（GateSpec）或 None。"""
+        return active_gate(self.steps, STEPS[sid])
+
     def step(self, sid: str) -> Step:
         return STEPS[sid]
 
@@ -59,8 +88,9 @@ class Pipeline:
             s = STEPS[sid]
             if kind_id in s.spec.produces:
                 return s
-            if s.spec.gate and kind_id in STEPS[s.spec.gate.id].spec.produces:
-                return STEPS[s.spec.gate.id]
+            g = active_gate(self.steps, s)
+            if g and kind_id in STEPS[g.id].spec.produces:
+                return STEPS[g.id]
         from .step import producer_of as _global
         return _global(kind_id)
 
@@ -79,7 +109,7 @@ class Pipeline:
             if other == sid:
                 break
             o = STEPS[other]
-            if any(k in _produces(o) for k in wants) or other in self.needs.get(sid, []):
+            if any(k in _produces(o, self.steps) for k in wants) or other in self.needs.get(sid, []):
                 ups.append(other)
         return ups
 
@@ -104,7 +134,7 @@ class Pipeline:
         `self.steps` 中——它跟着被挂的那个 Step 自动跑（见 `Engine.run`）。
         """
         for sid in self.steps:
-            g = STEPS[sid].spec.gate
+            g = active_gate(self.steps, STEPS[sid])
             if g and g.id == gate_id:
                 return sid
         return None
@@ -126,7 +156,16 @@ class Pipeline:
             )
         raise ValueError(f"pipeline {self.id} 没有步骤 {sid!r}")
 
+    def stage_of(self, sid: str) -> str | None:
+        """步骤 `sid` 属于哪个大步（layout／cut／read／decide）；不属于任何大步给 None。"""
+        return next((k for k, v in self.stages.items() if sid in v), None)
+
     def slice(self, from_step: str | None = None, to_step: str | None = None) -> list[str]:
+        """`from_step`／`to_step` 可写步骤 id，也可写大步名（取该大步的第一步／最后一步）。"""
+        if from_step and from_step in self.stages and from_step not in self.steps:
+            from_step = self._stage_end(from_step, first=True)
+        if to_step and to_step in self.stages and to_step not in self.steps:
+            to_step = self._stage_end(to_step, first=False)
         i = self._index(from_step)
         i = i if i is not None else 0
         j = self._index(to_step)
@@ -135,6 +174,12 @@ class Pipeline:
             raise ValueError(f"步骤范围为空: {from_step} → {to_step}")
         return self.steps[i:j]
 
+    def _stage_end(self, stage: str, first: bool) -> str:
+        members = self.stages[stage]
+        if not members:
+            raise ValueError(f"pipeline {self.id} 的大步 {stage!r} 里没有步骤")
+        return members[0] if first else members[-1]
+
     def edges(self) -> list[tuple[str, str, str]]:
         """(上游, 下游, 产物种类) 三元组，给控制台画图。"""
         out = []
@@ -142,7 +187,7 @@ class Pipeline:
             me = STEPS[sid]
             wants = (*me.spec.consumes, *me.spec.optional_consumes)
             for up in self.upstream(sid):
-                kinds = [k for k in wants if k in _produces(STEPS[up])] or ["needs"]
+                kinds = [k for k in wants if k in _produces(STEPS[up], self.steps)] or ["needs"]
                 for k in kinds:
                     out.append((up, sid, k))
         return out
@@ -153,7 +198,7 @@ class Pipeline:
             if sid not in STEPS:
                 raise ValueError(f"pipeline {self.id}: 未注册的 Step {sid!r}")
             s = STEPS[sid]
-            provided = {k for p in seen for k in _produces(STEPS[p])}
+            provided = {k for p in seen for k in _produces(STEPS[p], self.steps)}
             wants = (*s.spec.consumes, *s.spec.optional_consumes)
             missing = [k for k in wants if k not in provided and k not in _EXTERNAL_KINDS]
             # 可选上游的生产者**在这条管线里**就必须排在前面（写反了顺序要报）；整条管线都没有它的生产者，
@@ -167,7 +212,7 @@ class Pipeline:
 
     def provides(self, kind_id: str) -> bool:
         """这条管线里有没有步骤（含出口挂的闸）产出 `kind_id`；`raw_page` 等外部种类算有。"""
-        return kind_id in _EXTERNAL_KINDS or any(kind_id in _produces(STEPS[s]) for s in self.steps)
+        return kind_id in _EXTERNAL_KINDS or any(kind_id in _produces(STEPS[s], self.steps) for s in self.steps)
 
     def to_dict(self) -> dict:
         return {
@@ -211,6 +256,30 @@ def expand_slots(chain: dict, skeleton: dict, pid: str = "?") -> list[str]:
     return out
 
 
+def expand_stages(chain: dict, skeleton: dict, steps: list[str]) -> dict[str, list[str]]:
+    """骨架 `stages:` + 链 yaml 的 `slots:` → {大步名: 本管线里属于它的步骤 id}（按 `steps` 顺序）。
+
+    骨架里大步成员写步骤 id，或写 `slot:<槽位>`（这个槽位里链放的步骤都归这一大步）。
+    槽位 `recognition` 不点名，里面的步骤按 id 归。一步只能归一个大步。"""
+    given = chain.get("slots") or {}
+    defaults = skeleton.get("slots") or {}
+    owner: dict[str, str] = {}
+    for stage, members in (skeleton.get("stages") or {}).items():
+        for m in members or []:
+            m = str(m)
+            ids = ([str(i) for i in given.get(m[5:], defaults.get(m[5:], []))]
+                   if m.startswith("slot:") else [m])
+            for sid in ids:
+                if sid in owner and owner[sid] != stage:
+                    raise ValueError(f"步骤 {sid} 同时归大步 {owner[sid]} 和 {stage}")
+                owner[sid] = stage
+    out: dict[str, list[str]] = {k: [] for k in (skeleton.get("stages") or {})}
+    for sid in steps:
+        if sid in owner:
+            out[owner[sid]].append(sid)
+    return out
+
+
 def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
     import open_guji_cv.steps  # noqa: F401  —— 触发 Step 注册
 
@@ -220,13 +289,16 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
         raise FileNotFoundError(f"没有这条 pipeline: {path}")
     from .yaml_cache import load_yaml_cached
     d = load_yaml_cached(path)
+    stages: dict[str, list[str]] = {}
     if "slots" in d:                  # 链 yaml 只写槽位，步骤顺序由骨架展开
         if "steps" in d:
             raise ValueError(f"pipeline {pid}: slots: 和 steps: 不能同时写")
         sk_path = pdir / f"{SKELETON_ID}.yaml"
         if not sk_path.exists():
             raise FileNotFoundError(f"pipeline {pid} 用了 slots:，但没有骨架 {sk_path}")
-        d["steps"] = expand_slots(d, load_yaml_cached(sk_path), pid)
+        skeleton = load_yaml_cached(sk_path)
+        d = {**d, "steps": expand_slots(d, skeleton, pid)}
+        stages = expand_stages(d, skeleton, d["steps"])
     params_raw = d.get("params") or {}
     if not isinstance(params_raw, dict) or any(not isinstance(v, dict) for v in params_raw.values()):
         raise ValueError(f"pipeline {pid} 的 params: 必须是 {{step_id: {{字段: 值}}}}")
@@ -236,6 +308,7 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
         selector=d.get("selector") or {}, needs=d.get("needs") or {},
         notes=d.get("notes", ""),
         params={str(k): dict(v) for k, v in params_raw.items()},
+        stages=stages,
     )
     p.validate()
     for sid in p.params:
@@ -297,11 +370,50 @@ def base_param_layers(pipeline: Pipeline, book) -> list[tuple[str, dict[str, dic
     return [("管线 yaml", dict(pipeline.params or {})), (f"套书缺省（{ss}）", sp)]
 
 
+#: 五小步拆分（2026-11-25）前写在 `column_warp:` 下的参数，现在归新 Step：`{旧 Step: {字段: 新 Step}}`。
+#: 册配置、套书缺省、管线 yaml、CLI `--params` 里的旧写法继续有效，加载时自动搬到新 Step 名下（不需要改中心库里的册配置）。
+LEGACY_PARAM_HOMES: dict[str, dict[str, str]] = {
+    "column_warp": {"tight_rule_band": "column_band", "inner_bar_span": "column_band"},
+}
+
+
+#: 出口闸改造（2026-11-25）：刻本链的 `column_gate` 拆成 `column_geometry`（算几何）与 `cut_gate`（判质量），
+#: 但现代链仍用 `column_gate`，所以旧 `column_gate:` 的字段**复制**（不搬走）到新 Step 里它们自己有的字段上。
+LEGACY_PARAM_COPIES: dict[str, tuple[str, ...]] = {
+    "column_gate": ("column_geometry", "cut_gate"),
+}
+
+
+def rehome_params(layer: dict[str, dict]) -> dict[str, dict]:
+    """把一层参数里的旧位置字段搬到新 Step 名下；新位置已写的字段优先。原字典不改。"""
+    out = {sid: dict(kv) for sid, kv in layer.items()}
+    for old, news in LEGACY_PARAM_COPIES.items():
+        kv = layer.get(old)
+        if not kv:
+            continue
+        for new in news:
+            if new not in STEPS:
+                continue
+            fields = STEPS[new].spec.params.model_fields if STEPS[new].spec.params else {}
+            for f, v in kv.items():
+                if f in fields:
+                    out.setdefault(new, {}).setdefault(f, v)
+    for old, fields in LEGACY_PARAM_HOMES.items():
+        kv = out.get(old)
+        if not kv:
+            continue
+        for f, new in fields.items():
+            if f in kv:
+                v = kv.pop(f)
+                out.setdefault(new, {}).setdefault(f, v)
+    return out
+
+
 def base_params(pipeline: Pipeline, book) -> dict[str, dict]:
     """`base_param_layers` 按字段合并（上层优先；写 `null` = 去掉下层的值）。"""
     merged: dict[str, dict] = {}
     for _, layer in base_param_layers(pipeline, book):
-        for sid, kv in layer.items():
+        for sid, kv in rehome_params(layer).items():
             tgt = merged.setdefault(sid, {})
             for k, v in kv.items():
                 if v is None:
@@ -318,7 +430,7 @@ def resolve_params(pipeline: Pipeline, book, overrides: dict[str, dict] | None =
     （写 `null` = 去掉下层的值）< 调用方覆盖 `overrides`（CLI `--params`／控制台表单）。没在任何一层出现的 Step 不进表，
     `RunContext.params_for` 按 Step 默认＋册配置补。"""
     merged: dict[str, dict] = base_params(pipeline, book)
-    for sid, kv in (getattr(book, "params", None) or {}).items():
+    for sid, kv in rehome_params(getattr(book, "params", None) or {}).items():
         if sid not in STEPS:        # 册配置点名了没注册的 Step：同以前 `_with_book_params`，不报错、不生效
             continue
         tgt = merged.setdefault(sid, {})
@@ -327,6 +439,6 @@ def resolve_params(pipeline: Pipeline, book, overrides: dict[str, dict] | None =
                 tgt.pop(k, None)
             else:
                 tgt[k] = v
-    for sid, override in (overrides or {}).items():
+    for sid, override in rehome_params(overrides or {}).items():
         merged.setdefault(sid, {}).update(override)
     return {sid: STEPS[sid].spec.params(**kv) for sid, kv in merged.items()}

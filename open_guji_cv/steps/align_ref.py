@@ -554,6 +554,11 @@ class AlignRefParams(BaseModel):
     "align"＝本步按坐标对位吻合数挑（现行，缺省，不进参数哈希）；"admit"＝本步只出候选列（`alt_cand`）与
     备选那份坐标对位（`alt_draft`），seed_admit 两套都准入后按列定（见 `products.alt_view`）。"""
 
+    alt_text_count_slack: int = -1
+    """不分行参照页挑备选候选列的门槛补一条（2026-11-20，脉经 01）：备选那份库匹配高分格（cov≥`ALT_TEXT_COV`）的**个数**
+    不比主切法少 slack 个以上，也进候选。按占比算时，漏认的雙行小注拆对后格多了、小字库匹配分又偏低，占比反而降
+    （01 30:7 主 12/23、备选 12/29），正确的备选进不了候选。-1＝关（缺省，不进参数哈希）。"""
+
     coord_title_trust: bool = False
     """题列信坐标对位（2026-11-03，史記文淵閣本第 2 页）：本列坐标字整串合 `coord_title_formula`，且坐标对位几何上一格对一字
     （格数相等才会到这里）→ 不因「与现役对位冲突」退回整列，强冲突也不退（仍拦「空格位上库认出了字」）。
@@ -659,6 +664,8 @@ class AlignRefParams(BaseModel):
             d.pop("coord_legacy_line_guard", None)
         if isinstance(d, dict) and self.alt_select == "align":
             d.pop("alt_select", None)
+        if isinstance(d, dict) and self.alt_text_count_slack < 0:
+            d.pop("alt_text_count_slack", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -834,7 +841,8 @@ class AlignRefStep(Step):
         # 不分行参照是整页 8-gram 对位，几列一起换会互相带坏，所以每列单换一遍、只取这一列的对位字。
         main_of = {c.col: c for c in match.columns}
         alt_of = {c.col: c for c in match.alt_columns}
-        cols = [c for c in cols if c in main_of and _alt_text_ok(main_of[c].chars, alt_of[c].chars)]
+        cols = [c for c in cols if c in main_of and _alt_text_ok(main_of[c].chars, alt_of[c].chars,
+                                                                       getattr(p, "alt_text_count_slack", -1))]
         if not cols:
             return
         chars = []
@@ -1636,7 +1644,7 @@ ALT_TEXT_COV = 0.97      # 不分行参照页挑备选候选列：库匹配高�
 ALT_TEXT_SLACK = 0.05    # 备选那份高分格占比比主切法低这么多以内才进候选
 
 
-def _alt_text_ok(main_chars, alt_chars) -> bool:
+def _alt_text_ok(main_chars, alt_chars, count_slack: int = -1) -> bool:
     """备选那份这一列的字块像不像字（不分行参照页 `_text_alt_draft` 的候选门槛）：库匹配高分格占比不比主切法低出
     `ALT_TEXT_SLACK`。只筛掉明显不像的；真换不换交 seed_admit 两遍准入定（大字被劈成小注的列，半字常常也是字，
     如「肺」劈成「月」「巿」，库匹配分不出，要看参照文字）。"""
@@ -1648,7 +1656,10 @@ def _alt_text_ok(main_chars, alt_chars) -> bool:
         return out
     if not main_chars or not alt_chars:
         return False
-    return hi(alt_chars) / len(alt_chars) >= hi(main_chars) / len(main_chars) - ALT_TEXT_SLACK
+    ha, hm = hi(alt_chars), hi(main_chars)
+    if count_slack >= 0 and ha >= hm - count_slack:
+        return True
+    return ha / len(alt_chars) >= hm / len(main_chars) - ALT_TEXT_SLACK
 
 
 def _id_col(rid: str) -> int | None:

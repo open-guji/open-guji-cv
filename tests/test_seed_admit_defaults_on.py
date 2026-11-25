@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """2026-10-23 sheldon 定：20 册都开、没问题的放行开关一律缺省开（开关只为方便 A/B）。"""
 from open_guji_cv.core.book import BookSpec
-from open_guji_cv.groups.registry import FLOW_GROUPS, generic_flow_names
+from open_guji_cv.groups.registry import FLOW_GROUPS, OPT_IN_GROUPS, generic_flow_names
 from open_guji_cv.steps.border_detect import BorderDetectParams
 from open_guji_cv.steps.seed_admit import SeedAdmitParams
 
@@ -22,7 +22,9 @@ def test_default_group_flow_has_no_codepoint_groups():
     """多书设计 A3（sheldon 11-04）：缺省只跑通用字组，不含殿本的码位组 cp_*；要用显式写进 group_flow。"""
     d = tuple(SeedAdmitParams().group_flow)
     assert d and not any(g.startswith("cp_") for g in d)
-    assert set(d) == {g for g in FLOW_GROUPS if not g.startswith("cp_")}
+    # 需点名才开的组（OPT_IN_GROUPS：zw 丈文、wu 嗚鳴…）缺省也不跑，要用写进册配置 group_flow
+    assert set(d) == {g for g in FLOW_GROUPS if not g.startswith("cp_") and g not in OPT_IN_GROUPS}
+    assert not set(d) & set(OPT_IN_GROUPS)
     assert any(g.startswith("cp_") for g in FLOW_GROUPS)            # 注册表里的码位组还在
 
 

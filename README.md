@@ -109,7 +109,7 @@ guji status <册> -w <工作区>                                # 看各步进�
 | Step0 `page_survey` / `invert_detect` | 页面尺寸预检；反色带候选（只送审，不自动修） |
 | Step1 `border_detect` | 版框、界行、抬头框与列类型；出口闸判页型（`page_type` / 网格策略） |
 
-页型判别的口径、评测与局限见 `doc/pipeline_handbook.md`（§「怎么筛正文页」与 P0/P2 段）；整册操作流程见 `doc/runbook/整理一册书.md`。
+页型判别的口径、评测与局限见 `doc/经验/管线手册-踩坑与负结果.md`（§「怎么筛正文页」与 P0/P2 段）；整册操作流程见 `doc/archive/runbook/整理一册书.md`。
 
 ---
 

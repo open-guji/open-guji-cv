@@ -561,14 +561,19 @@ def test_add_del_chars_route_to_cellmap(tmp_path, monkeypatch):
 
 
 def test_sheet_gate_blocks_false_overturn(capsys):
-    """出单门（11-13）：机器无字当「推翻人裁」、失效老人裁当「被推翻」、锚点格混进判字单，都不让上线。"""
+    """出单门（11-13）：失效老人裁当「被推翻」、改判前后同字、锚点格混进判字单，都不让上线。
+    机器无字（□）推翻人裁 11-19 起只提示、照常上单（sheldon：以新包为准，manager sheet_audit WARN）。"""
     pytest.importorskip("guji_manager.review.sheet_audit")
     ws = Path("/nonexistent-ws")
     good = {"cells": [{"cell": "1:1:1", "pending_reason": "hard_pair"}], "anchor_cells": [{"cell": "9:1:1", "src": "closeout_anchor"}]}
     a = type("A", (), {})()
     rp.sheet_gate(good, ws, "vol06", a)                       # 通过，不退出
+    empty = {"cells": [{"cell": "1:4:7", "recheck": True, "pending_reason": "machine_changed",
+                        "note": "机器改判「卷」→「□」，推翻人裁，请核"}]}
+    rp.sheet_gate(empty, ws, "vol06", a)                      # 只提示，不退出
+    assert "overturn_empty" in capsys.readouterr().out
     bad = {"cells": [{"cell": "1:4:7", "recheck": True, "pending_reason": "machine_changed",
-                      "note": "机器改判「卷」→「□」，推翻人裁，请核"}]}
+                      "note": "机器改判「卷」→「卷」，推翻人裁，请核"}]}
     with pytest.raises(SystemExit) as e:
         rp.sheet_gate(bad, ws, "vol06", a)
     assert "单子体检不过" in str(e.value)
@@ -708,3 +713,33 @@ def test_figure_ruling_counts_as_landed():
     assert rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "unk": "无法识别"}})
     assert not rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "source": "vision"}})
     assert not rp.figure_ruling({"kind": "confirm", "payload": {"v": "confirm", "shape": "甲"}})
+
+
+def test_no_cell_sprite_writes_site_boxes(tmp_path, monkeypatch):
+    """--no-cell-sprite（11-20）：不出格图，单上每格补网站坐标 box（已有的不动），没相似字不出 assets。"""
+    doc = {"rev": "r9", "cells": [{"cell": "1:1:1", "c": "日"}, {"cell": "1:1:2", "c": "曰", "box": [1, 2, 3, 4]},
+                                  {"cell": "1:1:3", "c": "人"}]}
+    pub = tmp_path / "001.pending.json"
+    pub.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(rp, "site_boxes", lambda cord: {"1:1:1": [10, 20, 30, 40], "1:1:2": [9, 9, 9, 9]})
+    final = rp.no_cell_sprite(pub, tmp_path / "x.cord.json", tmp_path / "sp", "001", "python")
+    out = json.loads(final.read_text(encoding="utf-8"))
+    assert [c.get("box") for c in out["cells"]] == [[10, 20, 30, 40], [1, 2, 3, 4], None]
+    assert not (tmp_path / "sp" / "assets.json").exists()
+
+
+def test_gone_cells_not_blocking(tmp_path):
+    """重切后票投的格没了（vol24 27:7:-1 抬头极小框被 #1747 切没）：改记无法对位，不拦；还在的格照旧未落。"""
+    exp = tmp_path / "export"
+    exp.mkdir()
+    (exp / "024.char.json").write_text(json.dumps({"pages": [{"page": 11, "columns": [{"col": 6, "cells": [
+        {"a": "11:6:4", "c": "之"}]}]}]}), encoding="utf-8")
+    out = tmp_path / "pub"
+    out.mkdir()
+    (out / "plan.json").write_text(json.dumps({"export_dir": str(exp), "chapter": "024"}), encoding="utf-8")
+    led = {"rows": {"未落": [{"a": "11:6:4", "choice": "char"}, {"a": "27:7:-1", "choice": "none"}]},
+           "counts": {"未落": 2}}
+    assert rp.gone_cells(led, rp.new_cells(out)) == 1
+    assert [v["a"] for v in led["rows"]["未落"]] == ["11:6:4"]
+    assert led["rows"]["无法对位"][0]["a"] == "27:7:-1" and led["counts"] == {"未落": 1, "无法对位": 1}
+    assert rp.new_cells(tmp_path / "nope") is None

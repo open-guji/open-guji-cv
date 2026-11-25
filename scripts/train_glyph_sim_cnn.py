@@ -73,11 +73,31 @@ def augment(b: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     return out
 
 
+def _exclude_ids(p: Path) -> list[str]:
+    """评测分片里的格号：expected.json 的 instances、jsonl 每行的 query_id／id（连同候选）、或 .txt 每行一个。"""
+    t = p.read_text(encoding="utf-8")
+    if p.suffix == ".txt":
+        return [x.strip() for x in t.splitlines() if x.strip()]
+    if p.suffix == ".jsonl":
+        out = []
+        for ln in t.splitlines():
+            if ln.strip():
+                x = json.loads(ln)
+                out += [x[k] for k in ("query_id", "id", "instance_id") if k in x]
+        return out
+    return [x["instance_id"] for x in json.loads(t)["instances"]]
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", required=True, action="append", help="书的 glyph.db；给多次＝几本书合训")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--exclude", action="append", default=[], help="评测分片 expected.json（其中的格不进训练），可重复")
+    ap.add_argument("--exclude", action="append", default=[],
+                    help="评测格不进训练，可重复：分片 expected.json、items.jsonl／rare.jsonl（取 query_id／id）、"
+                         "或每行一个格号的 .txt（dataset glyph-match/train_exclude/<书>.cells.txt）")
+    ap.add_argument("--exclude-chars", action="append", default=[],
+                    help="整字类不进训练的字表（空白分隔），如对抗集的留出字 dataset glyph-match/train_exclude/<书>.held_chars.txt；"
+                         "对所有 --db 生效，只在训那本书时给")
     ap.add_argument("--epochs", type=int, default=15)
     ap.add_argument("--batch", type=int, default=128)
     ap.add_argument("--seed", type=int, default=0)
@@ -101,11 +121,15 @@ def main(argv: list[str] | None = None) -> int:
         torch.set_num_threads(a.threads)
     held: set[str] = set()
     for f in a.exclude:
-        held |= {_cell(x["instance_id"]) for x in json.loads(Path(f).read_text(encoding="utf-8"))["instances"]}
+        held |= {_cell(i) for i in _exclude_ids(Path(f))}
+    held_chars: set[str] = set()
+    for f in a.exclude_chars:
+        held_chars |= {x.strip() for x in Path(f).read_text(encoding="utf-8").split() if x.strip()}
     xs, keys = [], []
     for bi, db in enumerate(a.db):
         m, _ = load_matcher_from_db(GlyphDB(db))
-        keep = [j for j, iid in enumerate(m._ids) if _cell(str(iid)) not in held and not str(iid).startswith("font:")]
+        keep = [j for j, iid in enumerate(m._ids) if _cell(str(iid)) not in held and not str(iid).startswith("font:")
+                and m._chars[j] not in held_chars]
         if a.limit:
             keep = sorted(np.random.default_rng(1).permutation(keep)[:a.limit].tolist())
         xs.append(np.stack([m._patches[j] for j in keep]).astype(np.float32))
