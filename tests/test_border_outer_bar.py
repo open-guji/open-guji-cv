@@ -43,9 +43,9 @@ def _lines():
     return top, bottom
 
 
-def test_default_not_in_params_dump():
-    assert "outer_bar" not in BorderDetectParams().model_dump()
-    assert BorderDetectParams(outer_bar=True).model_dump()["outer_bar"] is True
+def test_default_on_in_params_dump():
+    assert BorderDetectParams().model_dump()["outer_bar"] is True            # 11-25 起缺省开
+    assert BorderDetectParams(outer_bar=False).model_dump()["outer_bar"] is False
 
 
 def test_worn_thin_line_follows_bar():

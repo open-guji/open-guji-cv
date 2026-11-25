@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（W1 v0.9.2，Sheldon 11-25 定；指纹变更：border_detect 起过期（W1 统一重跑））：版面 5 个开关改缺省开——`border_detect.outer_bar`、`vline_track`（含淡线兜底 #1890）、`inner_pull`（只对册配 `frame_layers: 2` 的边起作用）、`head_raise_fit`，`border_detect_gate.no_frame_skip`；都进参数 dump（border_detect 1.21、闸 1.4），不要的书在册配置写 false。79 页版面金标：界行 >5px 17→17、非正文放行 3→0；殿本 vol01–20 样页 200 页 A/B 看图 46 处开对 46（ai-team domain/CV/里程碑/W1-殿本版面开关AB.md）。CV1。
+
 - 文档（无代码变化，产物与指纹不变，CV0）：`doc/参考/性能统计.md` 按四大步重整：任务库已在 D1、`top --remote` 先列任务阶段（含 prep 分段）再按版面／切字／识字／定字分组、第三轮分段名单（row_segment、column_band、cell_shrink、rare_candidates、读缓存图）与冷缓存再生小计；配 manager 同日 PR。
 - PATCH（脚本，不进指纹）：republish 读者侧冒烟查图改用 GET＋`Range: bytes=0-0`（200／206 都算到），不再用 HEAD——CDN 新对象 HEAD 常 403 好几分钟而 GET 已 200（史記 001-r2／013-r2 冒烟误报，11-25，CV0 u T1）。
 - PATCH（指纹补漏，随 #1869／#1872 同一轮重跑，不另加重跑）：`steps._colview`（2a–2c 合并视图）补进 `column_geometry`、`column_gate`、`cell_shrink`、`cut_gate` 的 code_deps，`impl.keben.jiazhu_split` 补进 `cut_gate`——原先改这两个模块产物照报新鲜（manager `test_code_deps_coverage` 11-25 报红）。四步 code_hash 变，这四步今天已因 #1869／#1872 过期。CV0。

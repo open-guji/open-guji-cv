@@ -277,10 +277,10 @@ def test_no_frame_skip_flat_page_becomes_cover(tmp_path, monkeypatch):
     assert any(f.startswith("page_type_no_frame") for f in m.flags)
 
 
-def test_no_frame_skip_default_off_unchanged(tmp_path, monkeypatch):
+def test_no_frame_skip_off_unchanged(tmp_path, monkeypatch):
     import numpy as np
     flat = np.full((1200, 900), 60, np.uint8)
-    m = _run_gate_flat(tmp_path, monkeypatch, {}, flat)
+    m = _run_gate_flat(tmp_path, monkeypatch, {"border_detect_gate": {"no_frame_skip": False}}, flat)
     assert (m.page_type, m.page_type_policy) == ("body", "standard")
 
 
@@ -301,5 +301,5 @@ def test_no_frame_skip_body_pages_wins(tmp_path, monkeypatch):
 
 def test_no_frame_skip_off_not_in_params_dump():
     from open_guji_cv.gates.border_detect_gate import BorderDetectGateParams
-    assert "no_frame_skip" not in BorderDetectGateParams().model_dump()
-    assert BorderDetectGateParams(no_frame_skip=True).model_dump()["no_frame_skip"] is True
+    assert BorderDetectGateParams().model_dump()["no_frame_skip"] is True   # 11-25 起缺省开
+    assert BorderDetectGateParams(no_frame_skip=False).model_dump()["no_frame_skip"] is False
