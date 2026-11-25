@@ -610,6 +610,13 @@ def _agree_fix(trail: list, ch: str | None, members) -> bool:
     return len({_sname(t) for t in trail if t.get("char") == ch and _sname(t) in IMG_SOLVERS}) >= 2
 
 
+def _ref_backs(char: str | None, ref: str | None, norm: Callable[[str], str]) -> bool:
+    """`review_fix_agree` 的例外：整理本（现役对位缺格时用坐标对位字）与已放行字同字 → 不按图像两路改字，照常降审。
+    两路图像解法吃的是同一张字块，字块裁偏（换了框型配置、冷缓存再生列图，格坐标还是旧列图的）时会一起错：
+    殿本 replay-1125 二→一 37 格全是整理本＝库首位＝二、ids 与 yr_bars 看的是只剩下一横的偏块（CV4 2026-11-25）。"""
+    return bool(char and ref and ref not in GAPS and norm(ref) == norm(char))
+
+
 def _sname(t: dict) -> str:
     return t["solver"].split(":")[-1]
 
@@ -953,7 +960,8 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 and any(t["solver"] == "ctx" and t["char"] == ch and t.get("via") == "ctx:ctx_l1" for t in trail)) or (
                 f.review_fix_margin > 0 and why == "agree" and any(
                     t["char"] == ch and (_margin(t) or 0) >= f.review_fix_margin for t in trail)) or (
-                g in cfg.review_fix_agree and why == "agree" and _agree_fix(trail, ch, GROUPS[g].members))
+                g in cfg.review_fix_agree and why == "agree" and _agree_fix(trail, ch, GROUPS[g].members)
+                and not _ref_backs(r.char, ref or (veto_refs or {}).get(r.id), norm))
             other = ch is not None and not _same(g, ch, r.char, norm)
             code = ("group_flow_disagree" if (other and not fix) or why == "conflict"
                     else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)
