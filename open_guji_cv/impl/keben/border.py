@@ -1473,10 +1473,177 @@ def refit_outer_by_bar(mask: np.ndarray, top: HLine, bottom: HLine, verticals: l
     return out, changed
 
 
+# ---------------------------------------------------------------- 逐线追细墨重拟（vline_track）
+# 用户 2026-11-23 定的 B：「先找直线，不够好就找折线，不是按开关来」。每条竖线单独：沿现线追细墨，
+# 先拟直线，贴不住（残差 80 分位 > TRK_STRAIGHT）再试折点位置自由的三段折线；三段折线要过护栏：
+# 折角小（相邻段斜率差 ≤ TRK_DSLOPE，用户：折线之间角度不应很大）、每段都有细墨支撑（磨没处不许瞎折）。
+# 整条线细墨支撑不足（磨没、只剩字的笔画）就不动现线。线旁宽墨（鱼尾、粗框条）边上的碎墨不当细线。
+# 79 页版面金标（精修 r1/r2 后）上模拟：偏 >5px 的线 81→29。
+
+TRK_STEP = 2              # 取样行距
+TRK_WINS = (20, 8, 4)     # 逐轮收窄的追踪窗口半宽（px）
+TRK_THIN = (2, 10)        # 细线墨段宽
+TRK_WIDE = 12             # 宽于这个的墨段算宽墨（鱼尾、粗框条、字块）
+TRK_WIDE_GAP = 8          # 离宽墨不足这么多 px 的细墨段丢掉
+TRK_MIN_OBS = 60          # 观测行少于这个不动
+TRK_STRAIGHT = 1.0        # 直线残差 80 分位 ≤ 这个就用直线
+TRK_GAIN = 0.3            # 折线残差要比直线（或上一个候选）小这么多才换
+TRK_KNOT_N = 13           # 折点候选个数（在线长 8%–92% 间均分）
+TRK_DSLOPE = 0.03         # 相邻段斜率差上限（≈1.7°）
+TRK_SUPPORT = 0.35        # 每段（及整条线）里残差 ≤ TRK_INLIER 的行占比下限
+TRK_INLIER = 2.0
+TRK_HUBER = 1.5
+TRK_LW_K = (1.6, 2.0)     # 本线墨宽中位 lw：细线上限 max(TRK_THIN[1], 1.6·lw)，宽墨下限 max(TRK_WIDE, 2·lw)
+                          # （殿本有的页界行粗到 12px，按死门槛 10 整条线都被当成宽墨，只剩毛边可追，vol01 p100）
+TRK_HIT_DROP = 0.05       # 新线「线心 ±1px 压着墨」的行占比比现线低这么多 ⇒ 新线跑到白纸上了，不换
+
+
+def _trk_hit(mask01: np.ndarray, ys: np.ndarray, xs: np.ndarray, w: int) -> float:
+    """沿线逐行，线心 ±1px 内有墨的行占比。"""
+    h = mask01.shape[0]
+    n = hit = 0
+    for y, x in zip(ys, xs):
+        yi, xi = int(y), int(round(float(x)))
+        if not (0 <= yi < h and 1 <= xi < w - 1):
+            continue
+        n += 1
+        hit += bool(mask01[yi, xi - 1:xi + 2].any())
+    return hit / n if n else 0.0
+
+
+def _trk_linewidth(mask01: np.ndarray, ys: np.ndarray, xs: np.ndarray, w: int) -> float | None:
+    """现线压着的墨段宽的中位（只算 ≤40px 的段，压在字块上的行不算）。"""
+    h = mask01.shape[0]
+    ws = []
+    for y, x in zip(ys[::4], xs[::4]):
+        yi, xi = int(y), int(round(float(x)))
+        if not (0 <= yi < h and 0 <= xi < w) or not mask01[yi, xi]:
+            continue
+        a = b = xi
+        while a > 0 and mask01[yi, a - 1] and xi - a < 40:
+            a -= 1
+        while b < w - 1 and mask01[yi, b + 1] and b - xi < 40:
+            b += 1
+        if b - a + 1 <= 40:
+            ws.append(b - a + 1)
+    return float(np.median(ws)) if len(ws) >= 20 else None
+
+
+def _trk_cands(mask01: np.ndarray, y: int, x: float, win: int, w: int,
+               thin_max: float = TRK_THIN[1], wide_min: float = TRK_WIDE) -> list[float]:
+    lo, hi = max(0, int(x) - win - 20), min(w, int(x) + win + 21)
+    row = mask01[y, lo:hi]
+    runs = _obar_runs(row, lo)
+    wide = [(a, b) for a, b in runs if b - a > wide_min or a == lo or b == hi]
+    out = []
+    for a, b in runs:
+        c = (a + b - 1) / 2.0
+        if TRK_THIN[0] <= b - a <= thin_max and abs(c - x) <= win \
+                and all(b <= wa - TRK_WIDE_GAP or a >= wb + TRK_WIDE_GAP for wa, wb in wide):
+            out.append(c)
+    return out
+
+
+def _trk_basis(ys: np.ndarray, knots) -> np.ndarray:
+    return np.stack([np.ones_like(ys), ys] + [np.maximum(ys - k, 0.0) for k in knots], 1)
+
+
+def _trk_fit(ys: np.ndarray, xs: np.ndarray, knots):
+    a = _trk_basis(ys, knots)
+    wt = np.ones(len(xs))
+    co = np.zeros(a.shape[1])
+    for _ in range(8):
+        sw = np.sqrt(wt)
+        co = np.linalg.lstsq(a * sw[:, None], xs * sw, rcond=None)[0]
+        r = np.abs(a @ co - xs)
+        wt = np.where(r <= TRK_HUBER, 1.0, TRK_HUBER / np.maximum(r, 1e-9))
+    return co, float(np.percentile(r, 80))
+
+
+def _trk_line(mask01: np.ndarray, v: VLine, yt: float, yb: float, w: int) -> VLine | None:
+    """一条竖线（新坐标）按细墨重拟，返回新 VLine（直线或自由折点三段），不动返回 None。"""
+    ys = np.arange(yt + 4, yb - 4, TRK_STEP, dtype=np.float64)
+    if len(ys) < TRK_MIN_OBS:
+        return None
+    h = mask01.shape[0]
+    cur = (w - 1) - v.x_at(ys)
+    x_old = cur.copy()
+    lw = _trk_linewidth(mask01, ys, cur, w)
+    thin_max = max(float(TRK_THIN[1]), TRK_LW_K[0] * lw) if lw else float(TRK_THIN[1])
+    wide_min = max(float(TRK_WIDE), TRK_LW_K[1] * lw) if lw else float(TRK_WIDE)
+    span = yb - yt
+    best_k: list[float] = []
+    best_c = None
+    for win in TRK_WINS:
+        obs = np.full(len(ys), np.nan)
+        for k, y in enumerate(ys):
+            yi = int(y)
+            if not 0 <= yi < h:
+                continue
+            c = _trk_cands(mask01, yi, float(cur[k]), win, w, thin_max, wide_min)
+            if c:
+                obs[k] = min(c, key=lambda t: abs(t - cur[k]))
+        ok = np.isfinite(obs)
+        if ok.sum() < TRK_MIN_OBS:
+            return None
+        yo, xo = ys[ok], obs[ok]
+        co, s80 = _trk_fit(yo, xo, [])
+        best = (s80, [], co)
+        if s80 > TRK_STRAIGHT:
+            g = np.linspace(yt + 0.08 * span, yb - 0.08 * span, TRK_KNOT_N)
+            dist = np.where(ok, obs, 1e9)
+            segs_cache = {}
+            for i in range(len(g)):
+                for j in range(i + 1, len(g)):
+                    p, q = float(g[i]), float(g[j])
+                    co2, s2 = _trk_fit(yo, xo, [p, q])
+                    if s2 >= best[0] - TRK_GAIN or abs(co2[2]) > TRK_DSLOPE or abs(co2[3]) > TRK_DSLOPE:
+                        continue
+                    hit = np.abs(_trk_basis(ys, [p, q]) @ co2 - dist) <= TRK_INLIER
+                    segs = (ys < p, (ys >= p) & (ys < q), ys >= q)
+                    if min(float(hit[m].mean()) for m in segs) < TRK_SUPPORT:
+                        continue
+                    best = (s2, [p, q], co2)
+        new = _trk_basis(ys, best[1]) @ best[2]
+        if float((np.abs(new - np.where(ok, obs, 1e9)) <= TRK_INLIER).mean()) < TRK_SUPPORT:
+            return None
+        cur, best_k, best_c = new, best[1], best[2]
+    if _trk_hit(mask01, ys, cur, w) < _trk_hit(mask01, ys, x_old, w) - TRK_HIT_DROP:
+        return None
+    c = [float(t) for t in best_c]
+    if not best_k:
+        return VLine((w - 1) - c[0], -c[1])
+    k1, k2, k3 = -c[1], -(c[1] + c[2]), -(c[1] + c[2] + c[3])
+    return VLine((w - 1) - c[0], k1, k2, k3, float(best_k[0]), float(best_k[1]))
+
+
+def _trk_as_three(v: VLine, top: HLine, bottom: HLine, h: int) -> VLine:
+    """直线写成三段格式（三段同斜率，折点在版框内三等分处）。"""
+    xc = v.x_at(h / 2.0)
+    yt, yb = float(top.y_at(xc)), float(bottom.y_at(xc))
+    return VLine(v.x_at_top, v.slope, v.slope, v.slope, yt + (yb - yt) / 3.0, yt + 2.0 * (yb - yt) / 3.0)
+
+
+def refit_vlines_by_track(mask: np.ndarray, top: HLine, bottom: HLine, verticals: list[VLine],
+                          w: int, h: int) -> tuple[list[VLine], int]:
+    """每条竖线按 `_trk_line` 重拟（见 TRK_*）。返回 (新线表, 换了几条)；调用方负责把整页统一成三段。"""
+    mask01 = (np.asarray(mask) > 0)
+    out, changed = list(verticals), 0
+    for vi, v in enumerate(verticals):
+        xc = v.x_at(h / 2.0)
+        yt, yb = float(top.y_at(xc)), float(bottom.y_at(xc))
+        nv = _trk_line(mask01, v, yt, yb, w)
+        if nv is None:
+            continue
+        out[vi] = nv
+        changed += 1
+    return out, changed
+
+
 def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLine,
                     straight: list[VLine], w: int, h: int, vline_polyline: bool,
                     bend_w80_med: float | None = None, outer_bar: bool = False,
-                    outer_side: str | None = None):
+                    outer_side: str | None = None, vline_track: bool = False):
     """直线竖线 → 本页最终竖线：弯页整页换三段折线（先量 w80 再决定，直线页原样通过），再按横带证据重定位
     （见 SNAP_*），换了线的页统一成三段格式。要在 top/bottom 之后，折点 y 取自这条线跟上下版框的交点。
     返回 (verticals, segments, w80_med, w80_max, snapped)。`detect_borders` 与列宽重拟合后的
@@ -1488,6 +1655,11 @@ def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLin
     if outer_bar:                  # 缺省关不走，与加参数前一模一样
         verticals, n_bar = refit_outer_by_bar(mask, top, bottom, verticals, w, h, outer_side=outer_side)
         snapped += n_bar
+    if vline_track:                # 缺省关不走
+        verticals, n_trk = refit_vlines_by_track(mask, top, bottom, verticals, w, h)
+        snapped += n_trk
+        if n_trk and vseg == 3:    # 本来就是三段页：换成直线的线也写成三段格式（整页统一，下游按 vline_segments 读）
+            verticals = [v if v.segments == 3 else _trk_as_three(v, top, bottom, h) for v in verticals]
     if snapped and vseg == 1:
         conv = []
         for v in verticals:
@@ -1502,7 +1674,8 @@ def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLin
 
 
 def refit_bends(res, gray: np.ndarray, *, ink_threshold: int = 128, vline_polyline: bool = True,
-                bend_w80_med: float | None = None, outer_bar: bool = False, outer_side: str | None = None):
+                bend_w80_med: float | None = None, outer_bar: bool = False, outer_side: str | None = None,
+                vline_track: bool = False):
     """列宽重拟合（`pitch_rescue`）换了线之后，按新的一串直线**重新拟合折线**。
 
     折线拟合的护栏（相邻对列宽沿高度的变化率、拟合失败的线借邻线位移）看的是相邻线；自由模式探出假线、
@@ -1519,7 +1692,8 @@ def refit_bends(res, gray: np.ndarray, *, ink_threshold: int = 128, vline_polyli
     straight = list(res.verticals_straight) or list(res.verticals)
     verticals, vseg, w80_med, w80_max, snapped = _bend_verticals(
         mask, binm, res.top, res.bottom, straight, w, h, vline_polyline, bend_w80_med,
-        **({"outer_bar": True, "outer_side": outer_side} if outer_bar else {}))
+        **({"outer_bar": True, "outer_side": outer_side} if outer_bar else {}),
+        **({"vline_track": True} if vline_track else {}))
     from dataclasses import replace
     return replace(res, verticals=verticals, vline_segments=vseg, bend_w80_med=w80_med,
                    bend_w80_max=w80_max, vlines_snapped=int(snapped))
@@ -1547,6 +1721,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     bottom_weak_ratio: float = 0.0,
                     bend_w80_med: float | None = None,
                     outer_bar: bool = False,
+                    vline_track: bool = False,
                     bottom_lock_reslope: bool = False,
                     top_edge_reslope: bool = False,
                     top_hint: float | None = None,
@@ -1662,7 +1837,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     verticals_straight = list(verticals)
     verticals, vseg, w80_med, w80_max, vlines_snapped = _bend_verticals(
         mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline, bend_w80_med,
-        **({"outer_bar": True, "outer_side": outer_side} if outer_bar else {}))
+        **({"outer_bar": True, "outer_side": outer_side} if outer_bar else {}),
+        **({"vline_track": True} if vline_track else {}))
     head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend,
                                    scale=head_raise_scale)
     if head_raise_notch and not head_raise and top_hint is None:

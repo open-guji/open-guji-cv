@@ -345,14 +345,19 @@ def apply_head_raise_verdicts(res, verdicts: dict[int, int], n_rows: int, scale:
     return done
 
 
-def _apply_vline_override(res, xs: list[float]) -> None:
-    """`vline_overrides`：用人核界行替换探到的竖线（按直线），`vline_filled` 全记人核（False）。"""
+def _apply_vline_override(res, xs: list[float], chord_slope: bool = False) -> None:
+    """`vline_overrides`：用人核界行替换探到的竖线（按直线），`vline_filled` 全记人核（False）。
+    斜率借最近的探测线。`chord_slope`（`vline_track` 开时传）：借弦斜率（版框上下两端连线），不借第一段斜率——
+    折线的第一段斜率套成整条直线会斜出去十几 px（殿本 vol01 p100）。"""
     import dataclasses
     from ..seg.frame_types import VLine
     top_y = float(res.top.y_at(0.0)) if res.top is not None else 0.0
     bot_y = float(res.bottom.y_at(0.0)) if res.bottom is not None else float(res.height - 1)
     y_mid = (top_y + bot_y) / 2.0
-    old = [(float(v.x_at(y_mid)), float(v.slope)) for v in res.verticals]
+    if chord_slope and bot_y > top_y:
+        old = [(float(v.x_at(y_mid)), float((v.x_at(bot_y) - v.x_at(top_y)) / (bot_y - top_y))) for v in res.verticals]
+    else:
+        old = [(float(v.x_at(y_mid)), float(v.slope)) for v in res.verticals]
     new = []
     for x in sorted(float(x) for x in xs):
         sl = min(old, key=lambda t: abs(t[0] - x))[1] if old else 0.0
@@ -487,6 +492,12 @@ class BorderDetectParams(BaseModel):
     vol01 p9 这类细线磨没、算法贴到粗条内沿或白纸上的页偏 25–33px → 2–4px。换了线的直线页整页转三段格式。
     缺省关，关时不进参数 dump，产物与加字段前逐字节相同。"""
 
+    vline_track: bool = False
+    """竖线逐条「先直线、贴不住再折线」（`impl/keben/border.refit_vlines_by_track`，2026-11-23 用户定 B）：每条线沿现线
+    追细墨（线旁鱼尾、粗框条边上的碎墨不算），直线残差够小就用直线，否则试折点位置自由的三段折线，折角小、每段有细墨
+    支撑才收；磨没的线不动。不看页级 w80 门槛、也不看书级 `vline_polyline`。79 页版面金标上偏 >5px 的线 88→19。
+    换了线的直线页整页转三段格式。缺省关，关时不进参数 dump，产物与加字段前逐字节相同。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
         """缺省关时不进 dump：没开的书 `params_hash` 与加这个字段之前逐位相同。"""
@@ -530,6 +541,8 @@ class BorderDetectParams(BaseModel):
             d.pop("bend_w80_med", None)
         if isinstance(d, dict) and not self.outer_bar:
             d.pop("outer_bar", None)
+        if isinstance(d, dict) and not self.vline_track:
+            d.pop("vline_track", None)
         return d
 
 
@@ -600,6 +613,8 @@ class BorderDetectStep(Step):
         bend_kw = {"bend_w80_med": p.bend_w80_med} if p.bend_w80_med is not None else {}
         if p.outer_bar:            # 缺省关不传
             bend_kw["outer_bar"] = True
+        if p.vline_track:          # 缺省关不传
+            bend_kw["vline_track"] = True
         # 页级人给版框位置：本页写了才传
         hint = p.hline_hints.get(page) or {}
         bad = set(hint) - {"top", "bottom"}
@@ -706,7 +721,7 @@ class BorderDetectStep(Step):
             if n_sliver or n_trim:
                 outer_fixed = f"去窄条补对侧版框 {n_sliver} 处、收外框线 {n_trim} 条"
         if page in p.vline_overrides:
-            _apply_vline_override(res, p.vline_overrides[page])
+            _apply_vline_override(res, p.vline_overrides[page], **({"chord_slope": True} if p.vline_track else {}))
         # 人裁逐列抬头（`lookup.resolved_head_raise`）：补 Step1 漏认的抬头框／去掉认错的。本页没有裁决时不动
         from ..feedback.lookup import resolved_head_raise
         hr_verdicts = {c: n for (pg, c), n in resolved_head_raise(ctx.book.id).items() if pg == page}
