@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-guji-cv"
-version = "0.9.1"
+version = "0.7.106"
 description = "古籍图像 OCR 分析工具包：逐字识别、版面检测、字符网格"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -32,7 +32,7 @@ dependencies = [
     "PyYAML>=6.0",
     # char_patch 现算字块、多处插值要用；缺了不报错，截条图静默出空白（overview#274），所以进核心依赖
     "scipy>=1.10",
-    # 候选生成的繁简转换（对勘 collate 已搬 guji-manager）；纯 Python 小包（overview#413 R6）
+    # 对勘（report/collate）与候选生成的繁简转换；纯 Python 小包。以前没声明，缺了对勘直接报错（overview#413 R6）
     "opencc-python-reimplemented>=0.1.7",
     # guji-page 导出自检（formats/guji_page.check）
     "jsonschema>=4.0",
@@ -91,13 +91,13 @@ datastore = [
 llm = [
     "anthropic>=2.3",
 ]
-# PDF 抽页（原 guji import-pdf 已删，PDF 由 manager `source commons` 收；留着给零散脚本）
+# PDF 抽页（guji import-pdf）
 pdf = [
     "pymupdf>=1.23",
 ]
 # 影子放行闸（steps/seed_admit 的 shadow_veto，缺省关）、页型模型闸（border_detect_gate 的 pagetype_model，缺省关）
 # 与其训练/评估脚本要 scikit-learn（joblib 随它装）；
-# 不开 shadow_veto 就不需要。模型文件口径闸要求 major.minor 与训练一致（见 doc/4-定字/shadow_gate.md）。
+# 不开 shadow_veto 就不需要。模型文件口径闸要求 major.minor 与训练一致（见 doc/shadow_gate.md）。
 shadow = [
     "scikit-learn>=1.5",
     "pandas>=2.0",
@@ -122,9 +122,9 @@ dev = [
 ]
 
 [project.scripts]
-# cv 自己的入口 guji-cv（只有 cv 的命令，大步工具可写前缀：guji-cv layout preclean …）。
-guji-cv = "open_guji_cv.cli_v2:cv_main"
-# 总入口 guji：guji-manager、guji-console 经插件并进来；manager 文档写 guji pipeline …（route 钩子改写到 cv 命令）。
+# python -m open_guji_cv 的 CLI 包装
+guji-cv = "open_guji_cv.__main__:main"
+# 四个抽象的 CLI（pipeline / step / status / cache …；console 由 guji-console 插件提供），同样的子命令也挂在 guji-cv 下
 guji = "open_guji_cv.cli_v2:main"
 
 [project.urls]

@@ -34,5 +34,4 @@ def test_doc_group_table_pair_needs_human():
     """字组总表里「不同义」组（含数据驱动的 feng 逄逢）：同属一组不自动收，要人对照组 md（混合组族内异体可进）。"""
     vg, ng = VariantGraph.load(), never_group_pairs()
     ver, _, why = ca.audit_one("逄", "逢", vg, ng, {})
-    # 2026-11-21 起 逄逢 在字对关系表里判 C（纯形近），关系图无边：直接拒，不再进「字组对照」人审
-    assert ver == "REJECT"
+    assert ver == "REVIEW" and "feng" in why
