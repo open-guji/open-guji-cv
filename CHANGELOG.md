@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（ZM→CV1 殿本列末「二／三」被判成「一」，11-25；改 `impl/keben/column.py::column_border_trim` 下端剥层，影响 `column_end` 起的产物，只在册配置 `frame_layers` 下端≥2 时走到）：下端外框＋内框剥完后再找的**第三道**线，改为只认边距证据（边距带满墨 ≥0.95，且比列内中位高 ≥0.3），除非它与上一道线隔着 ≥8 行白（vol02 的第三道虚线）；另外 Step1 说内框在某处而该处 ±10 行是白纸时、或候选起点在内框线外 30 行以远时，里面的墨一律当字（vol03 p64c1、vol05 p23c7）。殿本 vol03 全册 108 页比 dev：23 列变，全是末字下横被削回来，无内框残线退步；vol02 夹具 231 端 5 端变（都是旧深剥预警端，1 端 px 不变只改档位名）。上端同类（vol16 p164c3「三」首横离顶 9 行被当第一道框）本 PR 不修。
+- PATCH（随上条，CV0）：`impl/keben/column.py` 登 code_equiv（上条新分支只在 `frame_layers.bottom>=2` 时走到，中心库只有殿本这样配，别的书按构造逐字节不变），另在 `core/engine._self_payload` 给 `column_end` 加 `frame_layer_rev`（`engine.FRAME_LAYER_REV=1`）：只有下端两层的册写这个键、从 column_end 起判过期（殿本 L3），别的册指纹逐位不变。以后改这段剥层判据：登 code_equiv＋把 `FRAME_LAYER_REV` 加一。
 - PATCH（W1 v0.9.2，Sheldon 11-25 定；指纹变更：border_detect 起过期（W1 统一重跑））：版面 5 个开关改缺省开——`border_detect.outer_bar`、`vline_track`（含淡线兜底 #1890）、`inner_pull`（只对册配 `frame_layers: 2` 的边起作用）、`head_raise_fit`，`border_detect_gate.no_frame_skip`；都进参数 dump（border_detect 1.21、闸 1.4），不要的书在册配置写 false。79 页版面金标：界行 >5px 17→17、非正文放行 3→0；殿本 vol01–20 样页 200 页 A/B 看图 46 处开对 46（ai-team domain/CV/里程碑/W1-殿本版面开关AB.md）。CV1。
 
 - 文档（无代码变化，产物与指纹不变，CV0）：`doc/参考/性能统计.md` 按四大步重整：任务库已在 D1、`top --remote` 先列任务阶段（含 prep 分段）再按版面／切字／识字／定字分组、第三轮分段名单（row_segment、column_band、cell_shrink、rare_candidates、读缓存图）与冷缓存再生小计；配 manager 同日 PR。
@@ -100,6 +102,10 @@
 - 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时殿本 vol30、全唐文 020、史記 42 逐字节同，登 code_equiv `_FREE_SEAM_1117`。建议值 0.35。
 
 ## [未发版]
+
+## [0.9.3] - 2026-11-25
+
+W1 补发（殿本）：v0.9.2 ＋ #1891 列端剥层第二版（下端第三道线只认边距证据，末字下横不再被当框剥掉；含 b0f76ea `column.py` 登 code_equiv）。**只有殿本（册配 frame_layers 下端 2）经 column_end 指纹里的 frame_layer_rev 从 column_end 起过期，其余书指纹与产物不变**（check_fp_change 对 v0.9.2：0 步变），钉 0.9.2 的书不用改钉。未修好：vol04 207:6、vol05 149:6 两格（已交 CV1）；vol17 14:9 空列底多留 1px 细线（可忽略）。全量测试 4386 过，1 条 dev 老红（test_seg_move）。底库仍 b35。
 
 ## [0.9.2] - 2026-11-25
 

@@ -335,6 +335,12 @@ def _lib_store_token(font: dict) -> str:
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:12] if parts else "none"
 
 
+#: 双线版框下端剥层修订号（见 `_self_payload` 里 `frame_layer_rev` 一段）。改 `impl/keben/column.py` 里
+#: `frame_layers` 下端 ≥2 才走到的剥层判据、又登了 code_equiv 时 +1。
+#: 1：cv #1891，下端第三道线只认边距证据，末字「二／三」下横不再被当框剥掉（殿本 ZM 报，2026-11-25）。
+FRAME_LAYER_REV = 1
+
+
 def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False) -> dict:
     """指纹里**不含上游**的那部分：步 id、版本、参数、代码、册配置。
     `fingerprint` = 它 + 上游 sha；`self_hash` = 只有它（格级复用的判据，见 core/reuse.py）。
@@ -360,6 +366,11 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     # （不进 `book_deps`，同 rare_charset，见 core/ref_profile.py 模块头）。
     if step.spec.id == "border_detect" and getattr(book, "side_frame", None):
         payload["side_frame"] = dict(sorted(book.side_frame.items()))
+    # 双线版框下端剥层修订号（2c column_end，2026-11-25 CV0 定，cv #1891）：`impl/keben/column.py` 里只有册配置
+    # `frame_layers.bottom >= 2` 才走到的剥层逻辑一改，模块哈希登 code_equiv（别的书逐字节不变、不白过期），
+    # 再把这个修订号 +1，只让下端两层的册（现在只有殿本）从 column_end 起判过期。没声明两层的册不写这个键，指纹逐位不变。
+    if step.spec.id == "column_end" and int((getattr(book, "frame_layers", None) or {}).get("bottom", 1) or 1) >= 2:
+        payload["frame_layer_rev"] = FRAME_LAYER_REV
     # Step5-b 的字表语料由册配置 `rare_charset` 指定（参校本属性 C 块）：只在写了的册加键，没写的册指纹逐位不变
     # （不进 `book_deps`，那会让所有册指纹变，见 core/ref_profile.py 模块头）。
     if step.spec.id == "rare_candidates" and getattr(book, "rare_charset", None):
