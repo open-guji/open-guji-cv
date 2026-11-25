@@ -140,6 +140,12 @@ LAYER2_EXTENT_HINT = 0.35
 #: vol02 约 200 列），就在 Step1 给的位置 ±INNER_SEARCH 行里找覆盖最高的一行（≥ INNER_COV），
 #: 连同它上沿 ≥ INNER_EDGE 的几行一起、往下全抹。只在册配置声明下端有两层时做。
 INNER_SEARCH = 10
+#: 下端剥层的**止步线**（2026-11-25，ZM 报殿本列末「二/三」被判成「一」）：Step1 的下版框线就是内框线。
+#: 前面剥掉的一道线，其下沿若已落在这条线上（Step1 线在剥口里面 ≤ INNER_AT_EDGE 行、或剥口之外 ≤ INNER_SEARCH 行），
+#: 内框已经剥完，候选又落在内框线之外 INNER_SEARCH 行以远就不认——否则末字的下横（「二」「三」满宽粗横、前面隔着白）会被当成一道线剥掉
+#: （vol21 p130c2 实测剥了 82 行、vol03 p64c1 剥了 129 行）。Step1 线落在外框粗线正中的列（剥口比它深得多）不受影响，
+#: 内框照旧找得到。
+INNER_AT_EDGE = 8
 INNER_COV = 0.35
 INNER_EDGE = 0.15
 
@@ -275,6 +281,8 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             if float(p[j:k].max()) >= inset_min_peak:
                 break
             j = k                                # 噪点段（vol02 p123c9：两道框之间 3 行麻点）：跳过接着找
+        if glued and hint is not None and cut - INNER_AT_EDGE <= hint <= cut + INNER_SEARCH and j > hint + INNER_SEARCH:
+            return None                          # 前一刀已剥到 Step1 内框线，候选又远在它之外：是字（见 INNER_AT_EDGE 注）
         if glued:
             k = line_end(p, j)
         else:                                    # 老口径：线之后必须归零，下沿就是归零处
