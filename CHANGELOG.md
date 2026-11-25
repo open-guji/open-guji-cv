@@ -1,7 +1,11 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [0.7.109] - 2026-11-25
+
+全唐文 patch 线：v0.7.104 ＋ 只改 `scripts/zhengli/republish.py`（同史記线 v0.7.107；不进任何 Step 的 code_hash，23 步指纹与 v0.7.104 全同，不用登 code_equiv，册 yaml 钉 v0.7.104 的不用改钉）。① 出单导出改走 guji-manager 的 `guji_manager.output.guji_format_export`（同 dev），册有字格身份账时 char 每格带 `u`（v0.6），推 book-text 时 local_check 不再报标点／专名 u 对不上；没装 manager 才退回本线 `scripts/export_guji_format.py`。要 guji-manager ≥ 0.6.20。② 移植 dev 067f2229：出单后 `db sync` 缺省不推字形库（GUJI_DB_NO_GLYPH）。（CV0 u T1，11-25）
+
+## [未发版]
 - PATCH：新开关 `border_detect.head_raise_notch`（A22，ZM 报殿本 vol24 27:7:-1 等小抬头格、27:8:1 缺口假格；缺省关）：抬头列占多数的页，主上版框被认在抬头框内框线上、没抬头的列成了「缺口」，整页抬头认不出（抬头格 20 多 px、缺口里切出假字格、抬头列末字没格）。开了以后，本页没认出抬头框、又没写 `hline_hints.top` 时，找「主上框不横穿、下面先白后有框条」的缺口列，主上框挪到缺口列框条内沿重探抬头，缺口以外的列全认成抬头才接受。殿本 vol05/24/28/60/95 共 796 页只动 vol24 p27、vol28 p4–24 共 16 页，看图全对。缺省不进参数 dump；border_detect、impl/keben/border 登记 code_equiv（vol24 16 页、vol28 13 页逐字节同）。
 - 新书级开关 `seed_admit.lane_shape_first`（归属表路径，缺省空＝关、关时不进参数 dump；OCR 研究方向 2，设计稿「第 7 步 witness3 与整理本通道按刻形」）：witness3／coord_fallback 对表里 `attr: shape` 且 `variant: true` 的同字异形对，库首位与整理本字是这一对、库首位覆盖度够（≥`lane_lib_veto`）、且第 5 步 5a.3 对这一对有终判档（tier≥3）证据倾向库形时，改放库形（刻本原字，`evidence.lane.lib_form`），不再一律送审（lib_variant）或否决（lib_veto）；库否决的异体名单也由表生成（与手写 `lane_lib_veto_pairs` 取并集）；放库形时跳过 `lane_variant_guard`。只有库首位覆盖度不够用：020 册第一版（只看 cov）奥奧 6 格错 2，所以必须有分类器终判证据。020 册整册回放（d2 包，归属表 v2）：开 `pair_form`＋本开关比关着放行字只变 1 格（寇→𡨥，对），新增错 0（关 983 对 6 错、开 984 对 5 错），见 ai-team／项目文件夹 `020整册回放-1119/`。**`seed_admit.py` 改了，各书第 7 步代码哈希变、产物判过期**；没有书打开本开关，关着时输出不变。
 - PATCH：`row_segment.roster_grid_slots` 跟进（A22，回 ZM／A20）：开着时人裁整列格的 `n_body_slots` 也取格数与最大号的大者、超格数打 `roster_slot_overflow`；雙行段内两行同号都空的号收掉（读序 `order_keys` 在两行同空处断段，vol01 87:9 整理本是一段）；Step3 分成两段的密雙行，第二段起号按段字距从上一段末顺延（88:2）。vol01 87–130 与 #1726 对照表比只 87:9 一列变（13a 起各号减 1）。缺省关不变，登记 code_equiv。

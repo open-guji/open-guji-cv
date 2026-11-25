@@ -800,8 +800,9 @@ def pack_rev(a, ws: Path, book: str, rev: str) -> str | None:
 
 def sync_and_publish(a, ws: Path) -> bool:
     """`guji db sync`，成功了再触发网站发布。返回是否已触发。"""
+    # 缺省不推字形库（GUJI_DB_NO_GLYPH）：出单／加格只改待审单与事件；带上字形库导出会撞「账本缩水」保护被拦（dev 067f2229 移植）
     p = run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
-            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+            env={**os.environ, "GUJI_WORKSPACE": str(ws), "GUJI_DB_NO_GLYPH": "1"})
     if p.returncode:
         print("✗ guji db sync 失败，没触发网站发布")
         return False
@@ -1343,6 +1344,20 @@ def pack_manifest(products: Path, book: str) -> dict:
     return json.loads(lines[-1]) if lines else {}
 
 
+def export_entry() -> list:
+    """导出 char／cord 的入口：装了 guji-manager（≥ 0.6.20）就用它的 `guji_manager.output.guji_format_export`
+    ——册有字格身份账时每格写 `u`、`u_max`（char v0.6），与 book-text 现行 char 同口径；本线 cv 自带的
+    `scripts/export_guji_format.py` 不写 u，推 book-text 时 local_check 报标点／专名 u 对不上（史記 012，11-25）。
+    没装 manager 才退回 cv 脚本（只适合还没上 u 的书）。dev 上 republish 已改用 manager 导出，本线照搬。"""
+    import importlib.util
+    try:
+        if importlib.util.find_spec("guji_manager.output.guji_format_export"):
+            return ["-m", "guji_manager.output.guji_format_export"]
+    except ImportError:
+        pass
+    return [CV / "scripts/export_guji_format.py"]
+
+
 def cmd_from_pack(a) -> int:
     """取别人跑好的产物包直接出单：拉库 → 取包 → 核人裁绑定 → 导出 → prep。不重跑任何 Step。"""
     ws, book = Path(a.workspace).resolve(), a.book
@@ -1365,7 +1380,7 @@ def cmd_from_pack(a) -> int:
     if not tv:
         sys.exit("✗ 要 --book-text <book-text 仓>（读线上文本版本）或 --text-version")
     export = (Path(a.out_root) if a.out_root else ws / "reports" / book / "_publish") / f"export-{a.label}"
-    cmd = [py, CV / "scripts/export_guji_format.py", "--products", products, "--book", book, "--chapter", chapter,
+    cmd = [py, *export_entry(), "--products", products, "--book", book, "--chapter", chapter,
            "--out", export, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
     for flag, f in (("--meta", meta_file(book, export.parent)),
                     ("--split-table", CV / "doc/formats/samples/guji_page_v0.2/split_table_siku.json")):
