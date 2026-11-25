@@ -1,7 +1,11 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [0.7.108] - 2026-11-25
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [0.7.110] - 2026-11-25
+
+殿本 patch 线：v0.7.108 ＋ `scripts/zhengli/proof_cycle.py`、`scripts/zhengli/zl.py` 的 char 导出也改走 guji-manager 导出器（v0.7.108 只改了 republish；auto_cycle／proof_cycle 出的导出不带 u，book-text local_check 报「旧版已有 u，新版把 u 全丢了」，`guji swap book-text` 用同一份导出推标点也报 u 对不上——殿本 vol04，11-25）。只改脚本，23 步指纹与 v0.7.108 全同，钉旧版的册不用改钉。要 guji-manager ≥ 0.6.21。（CV0 u T1）
+
+## [0.7.108] - 2026-11-25
 
 殿本 patch 线：v0.7.106 ＋ 只改 `scripts/zhengli/republish.py`（同史記线 v0.7.107；不进任何 Step 的 code_hash，23 步指纹与 v0.7.106 全同，不用登 code_equiv，册 yaml 钉 v0.7.106 的不用改钉）。① 出单导出改走 guji-manager 的 `guji_manager.output.guji_format_export`（同 dev），册有字格身份账时 char 每格带 `u`（v0.6），推 book-text 时 local_check 不再报标点／专名 u 对不上；没装 manager 才退回本线 `scripts/export_guji_format.py`。要 guji-manager ≥ 0.6.20。② 移植 dev 067f2229：出单后 `db sync` 缺省不推字形库（GUJI_DB_NO_GLYPH）。（CV0 u T1，11-25）
 
