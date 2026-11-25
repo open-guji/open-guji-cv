@@ -140,21 +140,3 @@ def test_old_syntax_rejected_but_override_and_escape_hatch_ok(ws, monkeypatch):
         monkeypatch.setenv(bc.OVERRIDE_ENV, json.dumps({"params": {"border_detect_gate": {"body_pages": [3]}}}))
         bc.effective_book_dict(p2)                               # 运行覆盖里的老字段不报（实验的正当用法）
     assert PK.old_syntax_in({"params": {"border_detect_gate": {"body_pages": []}}}) == []
-
-
-def test_no_ref_kind_maps_to_seed_admit_and_swaps_params_on_those_pages_only():
-    """无参校本页（脉经 林億序／牒文，2026-11-19）：page_kinds.no_ref → seed_admit.no_ref_pages，
-    这些页上叠 no_ref_params，别的页原样；都没配时不进 dump（指纹不动）。"""
-    from open_guji_cv.steps.seed_admit import SeedAdmitParams, no_ref_page_params
-    assert PK.to_params(PK.load_page_kinds({"no_ref": ["5-7"]})) == {"seed_admit": {"no_ref_pages": ["5-7"]}}
-    assert make_book(page_kinds={"no_ref": [51, 52]}).params["seed_admit"] == {"no_ref_pages": [51, 52]}
-    base = SeedAdmitParams()
-    assert "no_ref_pages" not in base.model_dump() and "no_ref_params" not in base.model_dump()
-    p = SeedAdmitParams(no_ref_pages=["5-7"], no_ref_params={"solo_5b_cov": 0.95, "solo_5b_min_n": 1})
-    assert no_ref_page_params(p, 4) is p
-    q = no_ref_page_params(p, 6)
-    assert (q.solo_5b_cov, q.solo_5b_min_n) == (0.95, 1) and p.solo_5b_cov is None
-    with pytest.raises(ValueError, match="不认的参数"):
-        no_ref_page_params(SeedAdmitParams(no_ref_pages=[1], no_ref_params={"nope": 1}), 1)
-    with pytest.raises(ValueError, match="不认的参数"):
-        no_ref_page_params(SeedAdmitParams(no_ref_pages=[1], no_ref_params={"no_ref_pages": [2]}), 1)

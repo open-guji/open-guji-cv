@@ -63,11 +63,6 @@ class CellShrinkParams(BaseModel):
     `grow`）。缺省关＝旧行为。开（全唐文嘉慶本）：版框粗到 20 行，只有中间几行跨度满宽，毛边当「线外有墨」，
     第 1 列、列首、列尾格的字块整条带着框线，库首选认歪（功→可、明→所；Sheldon 11-03 标 9 格）。"""
 
-    long_rule_outer_only: bool = False
-    """剥界行／版框竖线（extractor.strip_long_rule）只认贴着图块外沿 LONG_RULE_OUTER 宽以内的一段。缺省关＝旧行为。
-    开（全唐文）：单字成列（「制」「敕」）时字缘就是这个字自己，刂 落在字缘外、列首又是列尾，长竖钩连到格底，
-    被当拐角框线整条抹掉（009:33:7:5、009:40:4:5，台账 R038）。"""
-
     inner_frame_cut: bool = True
     """整页拟合双边版框的内框细线，线上和线外的像素在列图上统一抹白，再切字块（seg.frame_line；Sheldon 11-04 定）。
     **2026-11-06 起缺省开**（三套书盘点，Sheldon 定：殿本新图源 vol20–99、史記、全唐文全都开着）；没有双边版框的书写 false
@@ -134,8 +129,6 @@ class CellShrinkParams(BaseModel):
             d.pop("frame_line_max_off", None)
         if isinstance(d, dict) and not self.frame_line_grow:
             d.pop("frame_line_grow", None)
-        if isinstance(d, dict) and not self.long_rule_outer_only:
-            d.pop("long_rule_outer_only", None)
         if isinstance(d, dict) and not self.jiazhu_end_halves:
             d.pop("jiazhu_end_halves", None)
         if isinstance(d, dict) and not self.jiazhu_strip_rules:
@@ -602,7 +595,6 @@ class CellShrinkStep(Step):
                      **({"jiazhu_rules": True} if p.jiazhu_strip_rules else {}),
                      **({"frame_line_reach": p.frame_line_max_off} if p.frame_line_max_off else {}),
                      **({"frame_line_grow": True} if p.frame_line_grow else {}),
-                     **({"long_rule_outer": True} if p.long_rule_outer_only else {}),
                      **({"tail_one_abs": True} if p.tail_one_abs else {}),
                      **({"ink_blob_empty": True} if p.ink_blob_empty else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
@@ -784,6 +776,19 @@ class CellShrinkStep(Step):
         return ColumnChars(col=cc.col, ok=True, n_instances=len(recs), chars=recs)
 
 
+    @staticmethod
+    def _inner_memo_stamp(ctx: RunContext, page: int) -> tuple:
+        """`_INNER_MEMO` 的产物戳（2026-11-25，CV4 报同进程换配置会串）：整页内框线读 cells、column_windows
+        两份产物和原图，按这两份产物这一页的 sha 记；取不到的记 None（与老行为同，只按书页）。"""
+        out = []
+        for kind in ("cells", "column_windows"):
+            try:
+                ent = ctx.store.manifest(ctx.book.id, ctx.producer(kind).spec.id).get(f"p{page:04d}")
+                out.append(ent.sha256 if ent is not None and ent.status == "ok" else None)
+            except Exception:  # noqa: BLE001 —— 取不到戳就按 None 记
+                out.append(None)
+        return tuple(out)
+
     def _page_memo(self, ctx: RunContext, page: int, col: int) -> dict | None:
         """`render` 的按页记忆（键：cells 产物 sha、列图页戳、本步参数）；戳取不到返回 None（不记）。"""
         stamp_img = ctx.cache_stamp("column_image", column_key(page, col))
@@ -846,7 +851,7 @@ class CellShrinkStep(Step):
         if ctx.params_for(self).inner_frame_cut:  # type: ignore[attr-defined]
             wins: PageWindows = ctx.product("column_windows", page)
             wrec = wins.column(col)
-            mkey = (ctx.book.id, page)
+            mkey = (ctx.book.id, page, self._inner_memo_stamp(ctx, page), repr(ctx.params_for(self)))
             if mkey not in _INNER_MEMO:
                 while len(_INNER_MEMO) >= _RENDER_MEMO_MAX:
                     _INNER_MEMO.pop(next(iter(_INNER_MEMO)))
