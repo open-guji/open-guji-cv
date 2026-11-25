@@ -43,8 +43,8 @@
   },
   {
    "path": "config/dicts/variants.tsv",
-   "size": 821,
-   "sha256": "ac7beae02bfee91d505b10636b07ea877a6a5d83e750d27bcf90a618ae7e1c7d"
+   "size": 830,
+   "sha256": "ae4d66c0b762ffa2a05183dd139e0e6002f4cb47a44b7b9333660450e2c0b2b4"
   },
   {
    "path": "config/groups/can/ids_override.tsv",
@@ -182,6 +182,11 @@
    "sha256": "110ec360a0184559fa326cf234880cdb9d033beb48ac7cf2a22f37d90c29acfe"
   },
   {
+   "path": "config/groups/wu/rules.yaml",
+   "size": 1683,
+   "sha256": "a811de939f12902b54fc7436dadf5644adfd1ff11bc3fcb3412517d0f0723e41"
+  },
+  {
    "path": "config/groups/wxs/rules.yaml",
    "size": 900,
    "sha256": "7e8426351ef91c2dd20bd9cfd9933fe5e1b120b09ff45b888353c9fd0f95d735"
@@ -293,8 +298,8 @@
   },
   {
    "path": "config/variants/never_group.json",
-   "size": 9288,
-   "sha256": "6b3add2dbce67321d77cb24c6f15ae985135de487c784c0ec7f9400fcc6597da"
+   "size": 10335,
+   "sha256": "75e0610faff791c8ef20022c6232d3d8f35da71a6f4fb2cefe3365cd9b384fd2"
   },
   {
    "path": "config/variants/report.json",

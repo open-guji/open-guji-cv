@@ -8,9 +8,9 @@
   "glyph_sim": {"script": "scripts/train_glyph_sim_cnn.py", "trained_on": "全唐文字形库刻例 29,702 例、3,762 类（中心库 11-12 版；排除评测分片 006-qtw-human 的 3,001 格），CosFace 15 轮 seed 0",
                 "coupled": ["calib.json：换权重要用 scripts/fit_glyph_sim_calib.py 重拟（同等误配率映射到 cov 尺度）", "books/<id>.yaml params.glyph_match.sim_model（推荐 fuse: mean）"],
                 "note": "每本书各训一份（Sheldon 11-10），只给 owner 那本书开；数字见 ai-team domain/CV/字形领域/5a相似度算法-2026-11-09.md"},
-  "glyph_sim_shiji": {"script": "scripts/train_glyph_sim_cnn.py", "trained_on": "史記字形库刻例 54,641 例、6,096 类（中心库 11-23 版 59,833 例；按 open-guji-dataset glyph-match/train_exclude/shiji.cells.txt 排除评测格 3,696、shiji.held_chars.txt 排除对抗集留出字 331），从零 CosFace 15 轮 seed 0",
-                "coupled": ["calib.json：scripts/fit_glyph_sim_calib.py 在 005-shiji-human sim_bench 池上拟", "books/<id>.yaml params.glyph_match.sim_model（path: models/glyph_sim_shiji/model.pt, fuse: mean）"],
-                "note": "Sheldon 11-23 定史記单独一份、直接切换。单项基准 A1 首位 97.8%／auroc 0.958、A2 库外误认（平均）1/919、A5 误放 0；见 ai-team domain/CV/字形领域/5a相似度算法-2026-11-09/史記单独模型-单项基准-2026-11-23.md"},
+  "glyph_sim_qtw_v2": {"script": "scripts/train_glyph_sim_cnn.py", "trained_on": "全唐文字形库刻例 66,602 例、7,600 类（中心库 11-24 版；排除 006-qtw-human 分片、open-guji-dataset glyph-match/train_exclude/qtw.cells.txt 4,881 格、qtw.held_chars.txt 292 字），从零 CosFace 25 轮 seed 0",
+                "coupled": ["calib.json：scripts/fit_glyph_sim_calib.py 在 006-qtw-human sim_bench 池上拟", "books/<id>.yaml params.glyph_match.sim_model（path: models/glyph_sim_qtw_v2/model.pt, fuse: mean）"],
+                "note": "Sheldon 11-24 定换。单项基准 A1 首位 99.57%（闸错 4 个中 3 个是库标签／切字／同形异码）、A6 文意三对误认 13.9%→6.5%、A2 库外误认（平均）3/1691；见 ai-team domain/CV/字形领域/5a相似度算法-2026-11-09/全唐文重训-单项基准-2026-11-24.md"},
   "glyph_sim_base": {"script": "scripts/train_glyph_sim_cnn.py（多次 --db 合训）", "trained_on": "v1：殿本 siku-zongmu 19,204 例＋史記 4,499 例＋全唐文 35,413 例，共 59,116 例、5,224 类（中心库 11-16 版；排除评测分片 004-siku-v2-human／005-shiji-human／006-qtw-human 的物理格；同码位跨书合一类），CosFace 8 轮",
                      "coupled": ["calib.json：通用保守包络表（scripts/fit_glyph_sim_calib.py 多次 --work/--cnn；合训权重在三书上的曲线＋三套留一本书底座在被留出那本书上的曲线，逐点取 cov 最小）", "books/<id>.yaml params.glyph_match.sim_model（path: models/glyph_sim_base_v1/model.pt, fuse: mean）"],
                      "note": "新书开书直接用；首位可信、全局门槛端偏弱，自动放行要保守。目录名带版本，重训出 v2 不动 v1。数字见 ai-team domain/CV/字形领域/5a相似度CNN深化-2026-11-15/跨书通用底座-2026-11-16.md，用法见 guji-manager doc/参考/5a相似度模型.md"},
@@ -30,6 +30,8 @@
   "ids_model": {"script": "research/m7/train_split.py", "trained_on": "本书在线 IDS 模板库与判法（如史記 ids/rr.json）"},
   "l2_head": {"script": "research/m7/ctx/l2model_train.py", "trained_on": "殿本 L3 答案（l2m-2）；史記等书现为复制件", "base": "sikuroberta"},
   "rr_shape": {"script": "research/char_groups/rr/qtw_shape_train.py", "trained_on": "本书入人八格"},
+  "wu_shape": {"script": "research/char_groups/wu/qtw_wu_shape_train.py", "trained_on": "本书嗚鳴格（文意放行＋Sheldon 刻形点选）"},
+  "part_shape": {"script": "research/char_groups/part_shape/train.py", "trained_on": "本书剌刺／疎踈 等部件刻形对（Sheldon 按字形标注）"},
   "pair_shape": {"script": "research/char_groups/pair_shape/train.py", "trained_on": "本书两字刻形对"},
   "book_knn": {"script": "research/char_groups/book_knn_train.py", "trained_on": "本书人裁刻形"}
  }
