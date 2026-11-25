@@ -32,23 +32,15 @@ class ColumnWarpParams(BaseModel):
     ink_threshold: int = 128
     min_blob_area: int = 6            # denoise_column
     side_floor_look: float = 0.25     # 交接闸 L2 用：两侧各看进去多少比例的宽度
-    det_warp: bool = True
+    det_warp: bool = False
     """列射影改用跨 CPU 逐位确定的 numpy 双精度实现（`seg.warp._warp_perspective_det`，S9 2026-11-05）。
     cv2.warpPerspective 在 OpenCV 5 走浮点 SIMD，执行机与本机列图差 1 级灰度（册12 p99 每列 100+ 像素），
-    下游切点跟着翻（012:99:1 dis_unet 151/154）。开了与 cv2 版也只在取整边上差 1 级，但仍改产物。
-    2026-11-18 起缺省开（A22 切分开关收敛 11-13 定、A20 转缺省）：殿本、史記、全唐文早已写 true，`params_hash` 不变；
-    没写的书（脉经、北行）column_warp 起过期。要旧行为写 `det_warp: false`（关时不进 dump，与转缺省前的缺省指纹相同）。"""
+    下游切点跟着翻（012:99:1 dis_unet 151/154）。开了与 cv2 版也只在取整边上差 1 级，但仍改产物。缺省关。"""
     tight_rule_band: bool = False
     """两侧界行判带收紧（写本开，史記）：贴边界行取衰减后的第一个谷（`column_text_band` first_valley），
     内侧孤立窄条峰到 TIGHT_INNER_BAR_PEAK 才当第二道线抹（缺省 0.10，殿本页边列内框淡到 0.12）。缺省关＝殿本旧行为。
     起因：写本字贴着界行写，「以」的左竖细高、跟右半「人」之间的缝比界行与字之间的缝还白，
     判带取窗口最低点、或把它当内框，都连界行一起抹白，Step4 拿到的字就缺一笔（SJ r5，02:27:1:4b、02:112:2:2b）。"""
-
-    inner_bar_span: bool = False
-    """贴边界行内侧的「孤立窄条」要像线才抹（全唐文开）：离边超过 0.13 列宽、本横条里有墨的行不到一半的，
-    是字贴着界行的竖笔，不当第二道线（`column_text_band` inner_bar_span）。缺省关＝旧行为。
-    起因：全唐文「十」的竖、「恪」的忄贴着界行，`strip_column_rules` 按 240 行横条判带，把它们当内框连界行一起抹白，
-    Step4 拿到「亠」（001:121:1:6a、001:106:9:6a、014:108:3，台账 R033／R038）。"""
 
     ruled_warp: bool = False
     """列图不做射影，改「竖向线性、横向逐行按左右线插值」（`seg.warp.ruled_src_coords`，2026-11-08 A22）。缺省关＝射影。
@@ -65,8 +57,6 @@ class ColumnWarpParams(BaseModel):
             d.pop("ruled_warp", None)
         if isinstance(d, dict) and not self.tight_rule_band:
             d.pop("tight_rule_band", None)
-        if isinstance(d, dict) and not self.inner_bar_span:
-            d.pop("inner_bar_span", None)
         if isinstance(d, dict) and not self.det_warp:
             d.pop("det_warp", None)
         return d
@@ -175,8 +165,7 @@ class ColumnWarpStep(Step):
             layers=(int(fl.get("top", 1)), int(fl.get("bottom", 1))),
             layer_gap=(og.get("top"), og.get("bottom")),
             inner_bottom=win.border_bottom_in_column,
-            **({"bar_after_min_peak": TIGHT_INNER_BAR_PEAK, "first_valley": True} if p.tight_rule_band else {}),
-            **({"inner_bar_span": True} if p.inner_bar_span else {}))
+            **({"bar_after_min_peak": TIGHT_INNER_BAR_PEAK, "first_valley": True} if p.tight_rule_band else {}))
         return raw, cleaned, diag, warped
 
     # ── Step 接口 ─────────────────────────────────────────────────────
@@ -243,4 +232,15 @@ class ColumnWarpStep(Step):
         if win is None:
             raise KeyError(f"第 {page} 页没有第 {col} 列")
         raw, cleaned, _, _ = self._images(ctx, gray, win)
+        # 再生的列图尺寸须与产物记的 warped_size 一致（2026-11-25，CV4→CV0）：不一致说明产物是另一份配置／代码出的，
+        # 下游按产物里的格坐标裁这张图就裁偏。宁可报错，不悄悄出偏图。产物缺席（还没跑过）不验。
+        if ctx.has_product("column_windows", page):
+            rec = ctx.product("column_windows", page).column(col)
+            want = tuple(int(v) for v in rec.warped_size) if rec is not None and rec.warped_size else None
+            got = (int(cleaned.shape[1]), int(cleaned.shape[0]))
+            if want is not None and want != got:
+                from ..core.step import StaleRenderError
+                raise StaleRenderError(
+                    f"{kind_id} {key} 再生尺寸 {got[0]}×{got[1]} 与产物 warped_size {want[0]}×{want[1]} 不符："
+                    f"column_warp 产物不是按现在的代码／册配置出的，先从 column_warp 起重跑第 {page} 页。")
         return raw if kind_id == "column_raw" else cleaned

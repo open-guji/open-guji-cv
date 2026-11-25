@@ -18,7 +18,7 @@
   python scripts/zhengli/progress_report.py --books vol05 --note '148:2:14 等 GUJI-743 图片格'
 
 proof_cycle apply 收尾、republish push 推库后会自动对本册跑一次（失败只记 ⚠，不影响精校流程）。
-连库：经 guji-manager 的中心库连接（2026-11-18 起是 Cloudflare D1，经 Worker），要装 guji-manager、设 GUJI_DATA_TOKEN 类令牌。
+连库：GUJI_DATA_PG_DSN，或 NEON_DATABASE_URL（自动起 443 桥）。
 """
 from __future__ import annotations
 
@@ -181,14 +181,15 @@ def load_book_text(text_id: str, chapter: str) -> tuple[dict | None, dict | None
 
 
 def write(conn, text_id: str, chapter: str, res: dict) -> None:
-    # 2026-11-18 中心库迁 D1：库里没有 progress.put_* 存储函数了，改调 guji-manager 的同名函数
-    from guji_manager.datastore.progress import put_metric, put_volume
     conn.execute("UPDATE progress.section SET description = %s WHERE section = %s AND description IS DISTINCT FROM %s",
                  (SECTION_DESC, SECTION, SECTION_DESC))
-    put_volume(conn, text_id, chapter, res["fields"], WRITER)
+    conn.execute("SELECT progress.put_volume(%s, %s, %s::jsonb, %s)",
+                 (text_id, chapter, json.dumps(res["fields"], ensure_ascii=False), WRITER))
     for key, label, value, unit, detail, sort in res["metrics"]:
         vt = res["note"] if key == "note" else None
-        put_metric(conn, text_id, chapter, SECTION, key, label, value, unit, WRITER, vt, detail or None, sort)
+        conn.execute("SELECT progress.put_metric(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)",
+                     (text_id, chapter, SECTION, key, label, value, unit, WRITER, vt,
+                      json.dumps(detail, ensure_ascii=False) if detail else None, sort))
 
 
 def run(books: list[str], ws: str | None = None, text_id: str = DEFAULT_TEXT, note: str | None = None,

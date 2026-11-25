@@ -144,8 +144,7 @@ class RareCandidatesStep(Step):
         needs=("model",),
         code_deps=("open_guji_cv.clustering.rare_panel",
                    "open_guji_cv.clustering.cnn_candidates",
-                   "open_guji_cv.clustering.font_candidates",
-                   "open_guji_cv.clustering.stroke_evidence"),
+                   "open_guji_cv.clustering.font_candidates"),
         # `run_page` → `rare_for_batch` 读的是 `ctx.book.font`（`charset` 的
         # base/escalate/escalate_threshold/corpus/variants/allow，以及 `norm_stroke`），
         # 这些全都改变候选内容与排序，必须进指纹。
@@ -177,13 +176,10 @@ class RareCandidatesStep(Step):
         rare_for_batch([img], p.k, corpus, ctx.book.id, struct_rerank=p.struct_rerank,
                        struct_probe=p.struct_probe or None, real_proto=book_real_proto(ctx.book.font),
                        gw_enabled=book_gw_variant(ctx.book.font))
-        # 笔画证据（`font.stroke_evidence`，缺省关）的检测网络与骨架索引不在这里预热：
-        # 开着的书由各 worker 第一页时各自加载（约 1 秒，内存峰值多约 450 MB）。
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.cnn_candidates import book_gw_variant, book_real_proto
         from ..clustering.rare_panel import rare_for_batch
-        from ..clustering.stroke_evidence import book_stroke_evidence
 
         # 真刻例多原型档来源改按书配置（5-b 开关转正，2026-09-26）：`ctx.book.font.real_proto`
         # 决定开不开、读哪个 `glyph_store`，实例级传给 `CnnCandidates`，不再改
@@ -245,8 +241,7 @@ class RareCandidatesStep(Step):
                                    struct_rerank=p.struct_rerank,
                                    struct_probe=p.struct_probe or None,
                                    real_proto=real_proto,
-                                   gw_enabled=gw_enabled,
-                                   stroke=book_stroke_evidence(ctx.book.font)) if imgs else []
+                                   gw_enabled=gw_enabled) if imgs else []
         for (col, r), hits in zip(queue, hits_list):
             col_recs[col].append(RareRec(
                 id=r.id, slot=r.slot, sub=r.sub,

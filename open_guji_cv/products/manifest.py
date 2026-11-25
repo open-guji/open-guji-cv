@@ -66,11 +66,6 @@ class ManifestEntry:
 
     contract_version: int | None = None
     """生成这条产物时 pipeline 讲的契约版本（`core/contract.py`，2026-10-27 拆分 M1）。不进指纹；老条目是 None（按 0 算）。"""
-    corpus_pin: int | None = None
-    """跑这一页时册钉的语料总号（读语料的步才记，`core/corpus_pin.CORPUS_STEPS`；没钉记 0）。不进指纹；
-    只给 `stale_reason` 把「语料钉变了」和「代码或版本变了」分开报（SJ v0.1 预检 11-16）。老条目是 None。"""
-    corpus: str | None = None
-    """跑这一页时进指纹的语料内容串（`corpus_pin.step_pin_token`；没钉记空串）。不进指纹（指纹里已有它本身）；老条目是 None。"""
     manager_version: str | None = None
     """调用方 pipeline manager 的版本（环境变量 `GUJI_MANAGER_VERSION`，manager 设）。只供审计：不进指纹、不参与过期判定。"""
 

@@ -37,18 +37,10 @@ def main() -> None:
     args = ap.parse_args()
 
     store = ProductStore()
-    from open_guji_cv.core.book import gap_note, load_book
-    try:                                  # 缺页（册 yaml `gaps:`）：在缺处单起一行注记；读不到册配置就不注
-        gaps = {g["after_page"]: g for g in load_book(args.book).gaps}
-    except Exception as e:                # noqa: BLE001 — 只影响注记，不挡渲染
-        print(f"⚠ 读不到册配置，不注缺页：{e}", file=sys.stderr)
-        gaps = {}
     marks = book_marks(store, args.book, args.pages) if args.approx != "off" else {}
     inline = inline_ids_map(marks) if args.approx == "inline_ids" else None
     parts: list[str] = []
     stale: list[str] = []
-    if 0 in gaps and 1 in args.pages:
-        parts.append(gap_note(gaps[0]))
     for page in args.pages:
         parts.append(f"#第{page}页")
         try:
@@ -56,8 +48,6 @@ def main() -> None:
         except ProductMissing as e:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(1)
-        if page in gaps:
-            parts.append(gap_note(gaps[page]))
 
     if stale:
         print(f"⚠ {len(stale)} 处 Step7 记录在 Step3 cells 里查不到对应格子"
