@@ -776,6 +776,19 @@ class CellShrinkStep(Step):
         return ColumnChars(col=cc.col, ok=True, n_instances=len(recs), chars=recs)
 
 
+    @staticmethod
+    def _inner_memo_stamp(ctx: RunContext, page: int) -> tuple:
+        """`_INNER_MEMO` 的产物戳（2026-11-25，CV4 报同进程换配置会串）：整页内框线读 cells、column_windows
+        两份产物和原图，按这两份产物这一页的 sha 记；取不到的记 None（与老行为同，只按书页）。"""
+        out = []
+        for kind in ("cells", "column_windows"):
+            try:
+                ent = ctx.store.manifest(ctx.book.id, ctx.producer(kind).spec.id).get(f"p{page:04d}")
+                out.append(ent.sha256 if ent is not None and ent.status == "ok" else None)
+            except Exception:  # noqa: BLE001 —— 取不到戳就按 None 记
+                out.append(None)
+        return tuple(out)
+
     def _page_memo(self, ctx: RunContext, page: int, col: int) -> dict | None:
         """`render` 的按页记忆（键：cells 产物 sha、列图页戳、本步参数）；戳取不到返回 None（不记）。"""
         stamp_img = ctx.cache_stamp("column_image", column_key(page, col))
@@ -838,7 +851,7 @@ class CellShrinkStep(Step):
         if ctx.params_for(self).inner_frame_cut:  # type: ignore[attr-defined]
             wins: PageWindows = ctx.product("column_windows", page)
             wrec = wins.column(col)
-            mkey = (ctx.book.id, page)
+            mkey = (ctx.book.id, page, self._inner_memo_stamp(ctx, page), repr(ctx.params_for(self)))
             if mkey not in _INNER_MEMO:
                 while len(_INNER_MEMO) >= _RENDER_MEMO_MAX:
                     _INNER_MEMO.pop(next(iter(_INNER_MEMO)))
