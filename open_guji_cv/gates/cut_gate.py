@@ -20,6 +20,7 @@ from ..core.book import _expand_pages
 from ..core.spec import GateLevel, GateSpec, StepSpec, column_key
 from ..core.step import STEPS, RunContext, Step, attach_gate, register_step
 from ..impl.keben import jiazhu_split
+from ..seg.side_cut import side_cut_points
 from ..impl.keben.column_pair_merge import has_pair_merged
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateColumn, GateManifest
@@ -94,6 +95,12 @@ class CutGateParams(BaseModel):
     #: （vol01 p196 估出 80px＝115×0.7，真值≈115），Step3 拿它当格距「弹性 DP 无解」，整列 0 格。
     #: 写法同 `row_segment.roster_pages`：`params: {column_gate: {period_prior_pages: [196]}}`。
     table_cols: dict[int, list[int | str]] = {}
+    #: L2c 自检（2026-11-25，用户定）：当前左/右切点比「框内缘之后最少墨处」（`side_cut_points`，算时忽略上下
+    #: 边框前后各 `cut_probe_margin` 行）更靠里超过此像素数 → 拒收 `cut_too_inward`。0 = 关。
+    #: 标定：全唐文 053 360 列、脉经 420 列、殿本 vol01 360 列，切点与最少墨处的偏差分位 99% 均 ≤0，
+    #: 超 6px 只有全唐文 053 p148c9 左侧一列（30px，切进字里）；10 留足余量。
+    cut_inward_max_px: float = 10.0
+    cut_probe_margin: int = 60
 
 
     @model_serializer(mode="wrap")
@@ -111,12 +118,12 @@ class CutGateParams(BaseModel):
 class CutGateStep(Step):
     spec = StepSpec(
         id="cut_gate", title="2 切字出口闸（列级质量＋格级判据）", version="1.0", unit="column",
-        consumes=("column_geometry", "column_windows", "column_bands", "column_ends", "column_image", "cells",
+        consumes=("column_geometry", "column_windows", "column_bands", "column_ends", "column_image", "column_raw", "cells",
                   "border_detect_gate_manifest"),
         optional_consumes=("line_index",),
         produces=("gate_manifest", "row_segment_gate_manifest"),
         params=CutGateParams,
-        code_deps=("open_guji_cv.impl.keben.column_pair_merge", "open_guji_cv.gates.row_segment_gate"),
+        code_deps=("open_guji_cv.impl.keben.column_pair_merge", "open_guji_cv.gates.row_segment_gate", "open_guji_cv.seg.side_cut"),
         book_deps=("period_prior", "expected_cols", "chars_per_line"),
     )
 
@@ -226,6 +233,20 @@ class CutGateStep(Step):
                 # 判据只标记、不硬拦（那两条的注释里写着同样的理由）。
                 flags.append(f"side_ink：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}"
                              "（界行没剥干净或纸面污渍，flag 不算错）")
+            if p.cut_inward_max_px > 0 and c.col not in non_body and not is_jiazhu_col:
+                try:
+                    raw = ctx.image("column_raw", column_key(page, c.col))
+                except Exception:
+                    raw = None
+                pts = (side_cut_points(raw, c.border_top_in_column, c.border_bottom_in_column, p.ink_threshold,
+                                       p.cut_probe_margin) if raw is not None else None)
+                if pts is not None:
+                    d_l, d_r = c.band[0] - pts[0], pts[1] - c.band[1]
+                    if max(d_l, d_r) > p.cut_inward_max_px:
+                        side = "左" if d_l >= d_r else "右"
+                        reasons.append(
+                            f"cut_too_inward：{side}切点比框内缘之后最少墨处靠里 {max(d_l, d_r):.0f}px"
+                            f"（> {p.cut_inward_max_px:g}px），疑似切进字里")
             if c.stamp_noise > p.stamp_noise_max:
                 # flag 级，不进 reject：只在 115 列金标上验证过背景印章这一种机制，
                 # 未见过的书页上有没有误伤先例不确定，先标记攒人审证据，不硬拦。
@@ -269,6 +290,10 @@ class CutGateStep(Step):
 
 CUT_GATE_SPEC = GateSpec(
     id="cut_gate", unit="column", on_fail="block",
-    levels=COLUMN_GATE_SPEC.levels + ROW_SEGMENT_GATE_SPEC.levels,
+    levels=COLUMN_GATE_SPEC.levels + (
+        GateLevel(id="L2c", unit="column",
+                  desc="左/右切点是否比框内缘之后最少墨处靠里过多（算时忽略上下边框前后各一段）——拒收，疑似切进字里",
+                  name="cut_too_inward"),
+    ) + ROW_SEGMENT_GATE_SPEC.levels,
 )
 attach_gate("cell_shrink", CUT_GATE_SPEC)
