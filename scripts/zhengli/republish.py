@@ -1143,13 +1143,25 @@ def reconcile_items(ws: Path, book: str, plan: dict, a, old_doc: dict | None) ->
 DATA = "https://data.openguji.com"
 
 
-def _http(url: str, method: str = "GET", timeout: int = 30):
+def _http(url: str, method: str = "GET", timeout: int = 30, first_byte: bool = False):
     import urllib.request
     # data.openguji.com 的图有防盗链（无 Referer 一律 403），读者侧冒烟要带上，否则云端容器里必误报
-    req = urllib.request.Request(url, method=method, headers={"User-Agent": "open-guji-cv/republish",
-                                                              "Referer": "https://www.openguji.com/"})
+    headers = {"User-Agent": "open-guji-cv/republish", "Referer": "https://www.openguji.com/"}
+    if first_byte:              # 只取第 1 个字节：查图在不在，不下整张
+        headers["Range"] = "bytes=0-0"
+    req = urllib.request.Request(url, method=method, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.status, (r.read() if method == "GET" else b"")
+
+
+def _img_ok(url: str) -> int | str:
+    """读者侧查一张图：GET 只取首字节（200／206 都算到）。CDN 新对象 HEAD 常 403 好几分钟、GET 已 200
+    （史記 001-r2／013-r2，11-25），所以不用 HEAD。返回 200 或失败原因。"""
+    try:
+        code, _ = _http(url, first_byte=True)
+    except Exception as e:  # noqa: BLE001
+        return str(e)
+    return 200 if code in (200, 206) else code
 
 
 def wait_publish(since: str, timeout_s: int = 1800, poll_s: int = 20) -> str | None:
@@ -1189,10 +1201,7 @@ def smoke(text_id: str, chapter: str, rev: str, tries: int = 10, wait_s: int = 6
             bad = [f"线上单还是 {doc.get('rev')}，不是 {rev}"]
         elif doc:
             for name in sorted(sprite_pub.refs(doc)):
-                try:
-                    code, _ = _http(f"{DATA}/proof/{text_id}/{chapter}/{name}", method="HEAD")
-                except Exception as e:  # noqa: BLE001
-                    code = str(e)
+                code = _img_ok(f"{DATA}/proof/{text_id}/{chapter}/{name}")
                 if code != 200:
                     bad.append(f"{name} → {code}")
         if not bad:
