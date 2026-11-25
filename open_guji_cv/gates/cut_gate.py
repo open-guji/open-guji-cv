@@ -116,7 +116,8 @@ class CutGateStep(Step):
         optional_consumes=("line_index",),
         produces=("gate_manifest", "row_segment_gate_manifest"),
         params=CutGateParams,
-        code_deps=("open_guji_cv.impl.keben.column_pair_merge", "open_guji_cv.gates.row_segment_gate"),
+        code_deps=("open_guji_cv.impl.keben.column_pair_merge", "open_guji_cv.gates.row_segment_gate",
+                   "open_guji_cv.impl.keben.jiazhu_split", "open_guji_cv.steps._colview"),
         book_deps=("period_prior", "expected_cols", "chars_per_line"),
     )
 

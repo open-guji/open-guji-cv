@@ -232,7 +232,7 @@ class ColumnGateStep(Step):
         produces=("gate_manifest",),
         params=ColumnGateParams,
         code_deps=("open_guji_cv.impl.keben.row_boundaries", "open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.impl.keben.column",
-                   "open_guji_cv.impl.keben.column_pair_merge"),
+                   "open_guji_cv.impl.keben.column_pair_merge", "open_guji_cv.steps._colview"),
         # `period_prior` 既派生自相关窗口、又是空栏页兜底值；`expected_cols` /
         # `chars_per_line` 是参数为 None 时的取值来源——都影响输出，必须进指纹
         book_deps=("period_prior", "expected_cols", "chars_per_line"),

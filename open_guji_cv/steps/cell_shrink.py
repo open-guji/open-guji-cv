@@ -420,7 +420,7 @@ class CellShrinkStep(Step):
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
                    "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.seg.seam", "open_guji_cv.seg.frame_line",
                    "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect",
-                   "open_guji_cv.impl.keben.patch_clean"),
+                   "open_guji_cv.impl.keben.patch_clean", "open_guji_cv.steps._colview"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────
