@@ -1606,7 +1606,11 @@ def cmd_add_alt(a) -> int:
 
     给出单时漏了相似字的单子补救用（10-21 殿本 vol04–10）。卡片取 `guji audit alt` 的输出，
     必须是出这张单的那个产物包算的（格号要对得上）；对不上的格不补，打出来。
-    相似字字形图（`alt[].g`）不补：网站没有字形图时直接显示文字。"""
+    相似字字形图（`alt[].g`）不补：网站没有字形图时直接显示文字。
+
+    **已被 `guji land` 取代（GM4 11-25）**：land 对账待审条目时自动补 alt（含手加格、带字形图、按 u 对条目），不换 rev、不冲掉旧 alt。
+    本命令只留作应急；卡片的键兼容 `cell`／`a`／`id`。"""
+    print("⚠ add-alt 已被 `guji land` 取代（手加格也会补 alt、带字形图）；仅应急使用", file=sys.stderr)
     sys.path.insert(0, str(CV))
     from guji_manager.review.proof_fields import pending_fields
     ws, book = Path(a.workspace).resolve(), a.book
@@ -1617,8 +1621,11 @@ def cmd_add_alt(a) -> int:
     raw = json.loads(src.read_text(encoding="utf-8"))
     alt = {}
     for c in (raw["cards"] if isinstance(raw, dict) else raw):
-        if c.get("alt") and ":" in str(c.get("id")):
-            alt[c["id"].split(":", 1)[1]] = pending_fields({"alt": c["alt"]})["alt"]
+        k = c.get("cell") or c.get("a")                      # 合成卡（手加格）带 cell（裸格号）
+        if not k and ":" in str(c.get("id") or ""):
+            k = str(c["id"]).split(":", 1)[1]                 # review 卡只有 id（册:格号）
+        if c.get("alt") and k:
+            alt[str(k)] = pending_fields({"alt": c["alt"]})["alt"]
     cells = doc.get("cells") or []
     todo = [c for c in cells if c.get("review") != "human" and (a.replace or not c.get("alt"))]
     miss = [c["cell"] for c in todo if c["cell"] not in alt]
