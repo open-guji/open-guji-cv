@@ -508,6 +508,12 @@ _FRAME_1123 = ("版面框型规则：册配置 frame_layers 支持 1（单线）
                "与 dev d535a4b 产物逐字节相同；中心库无册写 frame_layers 1 或 side_frame；2026-11-23（A20 审；cv #1813）")
 
 
+_RENDER_GUARD_1125 = ("column_warp 加 _check_against_product、render 末尾调用（再生列图与产物 column_windows 的尺寸／削边对不上就抛错）；"
+                      "cell_shrink 加 _inner_memo_key、render 里 _INNER_MEMO 的键改带 cells／column_windows 产物 sha 与参数（取不到戳不记）。"
+                      "两处改动都只在 render（缓存丢失后再生）里，run_page 与 StepSpec 一字未动，各书产物逐字节不变按构造成立；"
+                      "tests/test_column_warp_render_guard.py、test_cell_shrink_render_memo.py；未另跑真书产物比对（无工作区数据），2026-11-25（CV1）")
+
+
 _INNER_PULL_1123 = ("版面 border_detect 新参数 inner_pull（缺省关、不进参数 dump）与 pull_inner_line：内框线落在外板框粗条上时拉回内板框，只在参数开且册声明 frame_layers 2 时走。"
                     "关着时：layout-gold 79 页的原图（殿本 vol01–10／30、全唐文 005／060／120／190、史記 05／20／40、脈經 01–06）× 无配置与 frame_layers 2/2 两种调用，"
                     "detect_borders 的 Borders 产物 JSON sha256 与 origin/dev 4a26d7c 逐一相同（158/158）；2026-11-23（CV1；cv #1813 之后）")
@@ -2550,6 +2556,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="515edb292d4fb83c5decdc0465df9a61489c5a6769936f62bdcf68e5b97bbf84",
           old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
           evidence=_BY_U_CACHE_1125),
+    # column_warp.render 对照产物报错、cell_shrink _INNER_MEMO 带页戳（CV1 11-25）
+    Equiv(module="open_guji_cv.steps.column_warp",
+          new="2cf3fabedf7b598f63630726afaf86aaea5bd6dbdaafdc19839bfb295008d203",
+          old="7d315de47ad1f2ae258c2428f9e919f17fe5996a0469df85c1d711581aa8305e",
+          evidence=_RENDER_GUARD_1125),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="09fa304a7719106a889c06bfba4c8774b1a634bcf41204c101e2344a5e6f8780",
+          old="dca88bf9728446c7ea5ecf372f3fd05ea88470b0dcc98273a4251fc3b8f01980",
+          evidence=_RENDER_GUARD_1125),
 )
 
 

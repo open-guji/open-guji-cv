@@ -242,5 +242,31 @@ class ColumnWarpStep(Step):
         win = next((w for w in wins if w.col == col), None)
         if win is None:
             raise KeyError(f"第 {page} 页没有第 {col} 列")
-        raw, cleaned, _, _ = self._images(ctx, gray, win)
+        raw, cleaned, diag, _ = self._images(ctx, gray, win)
+        self._check_against_product(ctx, page, col, cleaned, diag)
         return raw if kind_id == "column_raw" else cleaned
+
+    @staticmethod
+    def _check_against_product(ctx: RunContext, page: int, col: int, cleaned: np.ndarray, diag: dict) -> None:
+        """再生出的列图必须与产物 `column_windows` 当时记的一致，不一致就报错、不悄悄出偏图。
+
+        冷缓存下游（seed_admit 图像解法、看图页、字形库入库）按产物里的格坐标裁再生的列图；产物是旧配置下出的、
+        现在的册配置（`frame_layers`／`outer_gap`，双线框不做 refine_top、剥第二道）再生出另一尺寸的列图，
+        就会按旧坐标裁新图、裁偏（殿本 vol21 p76 c1 高 2466→2436，ZM replay 误判 44 格）。
+        产物里没有这一列（没跑过、或页被跳过）不验。"""
+        try:
+            rec = ctx.product("column_windows", page).column(col)
+        except FileNotFoundError:
+            return
+        if rec is None:
+            return
+        got_size = (int(cleaned.shape[1]), int(cleaned.shape[0]))
+        got_trim = (int(diag["top"]["px"]), int(diag["bottom"]["px"]))
+        want_size = tuple(int(v) for v in rec.warped_size)
+        want_trim = (int(rec.trim_top.px), int(rec.trim_bottom.px))
+        if got_size != want_size or got_trim != want_trim:
+            raise RuntimeError(
+                f"再生的列图与产物 column_windows 对不上: {ctx.book.id} p{page:04d} c{col}："
+                f"尺寸 产物 {want_size} / 现算 {got_size}，削边 产物 {want_trim} / 现算 {got_trim}。"
+                f"多半是册配置（frame_layers／outer_gap 等）在产物生成之后改过，产物已过期：从 column_warp 起重跑本册，"
+                f"别拿旧产物的格坐标去裁新列图。")

@@ -43,3 +43,34 @@ def test_regenerated_patches_match_with_and_without_memo(tmp_path, monkeypatch, 
     for k in keys:
         assert np.array_equal(off[k], orig[k]), k
         assert np.array_equal(on[k], orig[k]), k
+
+
+def test_inner_memo_key_follows_product_stamps(tmp_path, monkeypatch):
+    """`_INNER_MEMO` 的键带 cells／column_windows 产物 sha：产物换了（重跑、换配置）键就变，旧页内框线不串；没戳不记。"""
+    from helpers import make_book, make_ctx
+
+    import open_guji_cv.steps  # noqa: F401
+    from open_guji_cv.core.step import STEPS
+
+    ctx = make_ctx(tmp_path, make_book(expected_cols=9), raw={})
+    step = STEPS["cell_shrink"]
+    assert step._inner_memo_key(ctx, 1) is None            # 没有产物 manifest
+
+    sha = {"v": "a"}
+
+    class _E:
+        status = "ok"
+
+        @property
+        def sha256(self):
+            return sha["v"]
+
+    class _M:
+        def get(self, _k):
+            return _E()
+
+    monkeypatch.setattr(ctx.store, "manifest", lambda b, s: _M())
+    k1 = step._inner_memo_key(ctx, 1)
+    sha["v"] = "b"
+    k2 = step._inner_memo_key(ctx, 1)
+    assert k1 is not None and k1 != k2

@@ -784,6 +784,19 @@ class CellShrinkStep(Step):
         return ColumnChars(col=cc.col, ok=True, n_instances=len(recs), chars=recs)
 
 
+    def _inner_memo_key(self, ctx: RunContext, page: int) -> tuple | None:
+        """`_INNER_MEMO` 的键：册、页、cells 与 column_windows 产物 sha、本步参数；任一产物没有 ok 的戳就是 None（不记）。"""
+        shas = []
+        for kind in ("cells", "column_windows"):
+            try:
+                ent = ctx.store.manifest(ctx.book.id, ctx.producer(kind).spec.id).get(f"p{page:04d}")
+            except Exception:  # noqa: BLE001 —— 取不到戳就不记忆
+                return None
+            if ent is None or ent.status != "ok" or not ent.sha256:
+                return None
+            shas.append(ent.sha256)
+        return (ctx.book.id, page, *shas, repr(ctx.params_for(self)))
+
     def _page_memo(self, ctx: RunContext, page: int, col: int) -> dict | None:
         """`render` 的按页记忆（键：cells 产物 sha、列图页戳、本步参数）；戳取不到返回 None（不记）。"""
         stamp_img = ctx.cache_stamp("column_image", column_key(page, col))
@@ -846,12 +859,17 @@ class CellShrinkStep(Step):
         if ctx.params_for(self).inner_frame_cut:  # type: ignore[attr-defined]
             wins: PageWindows = ctx.product("column_windows", page)
             wrec = wins.column(col)
-            mkey = (ctx.book.id, page)
-            if mkey not in _INNER_MEMO:
-                while len(_INNER_MEMO) >= _RENDER_MEMO_MAX:
-                    _INNER_MEMO.pop(next(iter(_INNER_MEMO)))
-                _INNER_MEMO[mkey] = self._inner_frame_lines(ctx, page, cells, wins)
-            inner = _INNER_MEMO[mkey]
+            # 记忆键带页戳（cells／column_windows 产物 sha、本步参数）：同进程换了配置或重跑了上游，旧页的内框线不能串给新页。
+            # 戳取不到就不记，每次现算。
+            mkey = self._inner_memo_key(ctx, page)
+            if mkey is None:
+                inner = self._inner_frame_lines(ctx, page, cells, wins)
+            else:
+                if mkey not in _INNER_MEMO:
+                    while len(_INNER_MEMO) >= _RENDER_MEMO_MAX:
+                        _INNER_MEMO.pop(next(iter(_INNER_MEMO)))
+                    _INNER_MEMO[mkey] = self._inner_frame_lines(ctx, page, cells, wins)
+                inner = _INNER_MEMO[mkey]
             if inner and wrec is not None:
                 mapper = ColumnMapper.of(wins.page_size[0], wrec)
                 if ctx.params_for(self).inner_frame_only:  # type: ignore[attr-defined]
@@ -882,7 +900,7 @@ def _patch_clean_hook(ctx: RunContext):
 
 _PATCH_CLEAN = "open_guji_cv.impl.keben.patch_clean"
 _RENDER_MEMO: dict = {}
-_INNER_MEMO: dict = {}     # (书, 页) → 整页内框线（render 逐格再生时不必每格重拟）
+_INNER_MEMO: dict = {}     # (书, 页, 产物戳…) → 整页内框线（render 逐格再生时不必每格重拟）
 _RENDER_MEMO_MAX = 4      # 页数；一页 9 列字块合计几 MB，再生基本按页顺序来
 
 
