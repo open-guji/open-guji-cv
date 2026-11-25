@@ -544,6 +544,12 @@ _BY_U_1124 = ("裁定按字格永久编号 u 查 seed_admit.ruling_by_u（书级
               "（史記首轮 --jobs 4 p106 一页不同，同代码单跑两次、整 18 页复跑均相同，按并发偶发记）；"
               "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-24（CV0）")
 
+_BY_U_CACHE_1125 = ("ruling_by_u 扩到字组文意在线问前查缓存（rulings.UMAP_SCOPE、RulingStore.get_by_u_ver、RulingCache.lookup 加 cell 参数缺省 None；"
+                    "ctx_llm._entry 把 cell 传给 lookup、AnswerCache.lookup 加 cell 参数不用、命中 u 时 extra 记 ruling_key；seed_admit 只在 ruling_by_u 开时设本页 u，"
+                    "关时走原分支；CV0 T3）：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（页号与产物包同 _BY_U_1124），"
+                    "三书中心库 rev 1417300 在场（含殿本试点两册身份账与挂 u 的裁定），seed_admit 与 origin/dev 304bf9d4 产物逐字节相同；"
+                    "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-25（CV0）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2504,6 +2510,19 @@ ENTRIES: tuple[Equiv, ...] = (
           new="4b82f4a44d45d4281fda170891124cde9a3c9c8edfdc572f251690defec41fed",
           old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
           evidence=_BY_U_1124),
+    # ruling_by_u 扩到字组缓存（CV0 T3 11-25）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="925d756f44e9216864babb9109e7d5abe691586014ea6cbbe29df931137d6085",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_BY_U_CACHE_1125),
+    Equiv(module="open_guji_cv.groups.ctx_llm",
+          new="27e34b7b68328e0ac663d359fbebd0f611dab7a4c30960f96a53050fa05075d1",
+          old="3b2c29a55f7818bfde830222dbdbad75d73116c0733b888d436483c1352bd7ca",
+          evidence=_BY_U_CACHE_1125),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="515edb292d4fb83c5decdc0465df9a61489c5a6769936f62bdcf68e5b97bbf84",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_BY_U_CACHE_1125),
 )
 
 
