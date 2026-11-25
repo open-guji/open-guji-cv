@@ -98,6 +98,18 @@
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
 
+## [0.7.104] - 2026-11-25
+
+全唐文 patch 线：v0.7.101 ＋ 移植 dev #1848＋#1856（书级开关 `seed_admit.ruling_by_u`：窗口键没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，只收 high、前后 2 字至少一侧相同、裁定字在库候选或＝整理本字；字组在线问前查缓存也按 u 后备，版本须完全相同）。缺省关、关时不进参数 dump。本线没有格锚点／版本等价接入（seed_admit 只加 u 档）；`feedback/rulings.py` 取殿本线 v0.7.102 全文，`RulingLog.append` 写前校验在本线缺省不开。**23 步 code_hash 只有 seed_admit 变**，未登记 code_equiv：u 项目 11-25 起各书开 `ruling_by_u`，seed_admit 起重放。底库不变。（CV0，u 项目 T3；Sheldon 11-25「尽快完成转换」）
+
+## [0.7.103] - 2026-11-25
+
+史記 patch 线：v0.7.98 ＋ 移植 dev #1848＋#1856（书级开关 `seed_admit.ruling_by_u`：窗口键没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，只收 high、前后 2 字至少一侧相同、裁定字在库候选或＝整理本字；字组在线问前查缓存也按 u 后备，版本须完全相同）。缺省关、关时不进参数 dump。本线没有格锚点／版本等价接入（seed_admit 只加 u 档）；`feedback/rulings.py` 取殿本线 v0.7.102 全文，`RulingLog.append` 写前校验在本线缺省不开。**23 步 code_hash 只有 seed_admit 变**，未登记 code_equiv：u 项目 11-25 起各书开 `ruling_by_u`，seed_admit 起重放。底库不变。（CV0，u 项目 T3；Sheldon 11-25「尽快完成转换」）
+
+## [0.7.102] - 2026-11-25
+
+殿本 patch 线：v0.7.99 ＋ dev #1848（书级开关 `seed_admit.ruling_by_u`：窗口键、锚点都没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，护栏同宽松档；缺省关、关时不进参数 dump）＋ dev #1856（字组在线问前查缓存也按 u 后备，版本须完全相同）。本线没有 `seed_admit_params.py`，开关写在 `steps/seed_admit.py`。**23 步 code_hash 只有 seed_admit 变**，未登记 code_equiv：u 项目 11-25 起各书开 `ruling_by_u`，参数 dump 本来就变，seed_admit 起重放。（CV0，u 项目 T3；Sheldon 11-25「尽快完成转换」）
+
 ## [0.7.101] - 2026-11-25
 
 全唐文 patch 线：v0.7.100 ＋ #1852（pair_clf 核对 sim_model），内容已在 dev，本条仅记发版（CV0）。23 步 code_hash 不变；全唐文（开 stages）glyph_match 起过期。换 glyph_sim_qtw_v2 要等 pair_clf 在 v2 嵌入上重训后一起换。
