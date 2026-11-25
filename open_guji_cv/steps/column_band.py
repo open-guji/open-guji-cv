@@ -92,9 +92,9 @@ class ColumnBandStep(Step):
         for w in wins.columns:
             key = column_key(page, w.col)
             raw = ctx.image("column_raw", key)
-            band, cut, no_rules = band_and_strip(p, w, raw)
+            band, _cut, no_rules = band_and_strip(p, w, raw)
             ctx.cache.put(ctx.book.id, "column_banded", key, no_rules)
-            recs.append(ColumnBandRec(col=w.col, band=band, cut=cut))
+            recs.append(ColumnBandRec(col=w.col, band=band))
         return {"column_bands": PageBands(page=page, columns=recs)}
 
     def render(self, ctx: RunContext, kind_id: str, key: str) -> np.ndarray:
