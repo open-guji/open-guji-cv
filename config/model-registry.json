@@ -658,6 +658,38 @@
    "owner": "995ejelvk0"
   },
   {
+   "kind": "glyph_sim_qtw_v2",
+   "path": "models/glyph_sim_qtw_v2/calib.json",
+   "size": 605,
+   "sha256": "b9ecde99a75bd09598e1d3cc819031bab6852eec541dfef1652880bb97d537ff",
+   "level": "book",
+   "owner": "995ejelvk0"
+  },
+  {
+   "kind": "glyph_sim_qtw_v2",
+   "path": "models/glyph_sim_qtw_v2/model.pt",
+   "size": 3777853,
+   "sha256": "a6afa658f5f488177d1849851924447dc42e4d87da34d504c025edaadc682c07",
+   "level": "book",
+   "owner": "995ejelvk0"
+  },
+  {
+   "kind": "glyph_sim_shiji",
+   "path": "models/glyph_sim_shiji/calib.json",
+   "size": 610,
+   "sha256": "d4e930d089771290915a11ef7029e8e985f719c3d55bee1d2ad704519e4db3d4",
+   "level": "book",
+   "owner": "988g3f0wsu"
+  },
+  {
+   "kind": "glyph_sim_shiji",
+   "path": "models/glyph_sim_shiji/model.pt",
+   "size": 3778021,
+   "sha256": "cec39b1651e3fa4a31596c08e203a99b16e6fc16dc71d0f03bda01b0fd324a94",
+   "level": "book",
+   "owner": "988g3f0wsu"
+  },
+  {
    "kind": "pagetype",
    "path": "models/pagetype/pagetype_v1.joblib",
    "size": 57633,

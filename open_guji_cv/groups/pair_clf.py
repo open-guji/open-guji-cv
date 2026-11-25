@@ -83,6 +83,22 @@ def load(path: str | Path) -> dict:
     return _load(str(p), p.stat().st_mtime)
 
 
+def check_sim_model(model: dict, sim_path: str) -> None:
+    """分类器的权重是在某个相似度 CNN 的嵌入上训的，换了 `sim_model` 不重训，点乘出来的就是乱分（会按乱分改字）。
+    文件里记的 `sim_model`（权重 sha256 前缀，至少 12 位；或模型目录名，如旧文件的 `glyph_sim_qtw`）对不上当前
+    `glyph_match.sim_model` 就拒跑。没记的也拒跑：无从核对。重训：`scripts/build_pair_clf.py --sim-model <sha 前 12 位>`。"""
+    from ..clustering.sim_cnn import model_sha256, resolve_model
+    rec = str(model.get("sim_model") or "").strip()
+    p = resolve_model(sim_path)
+    sha = model_sha256(sim_path)
+    if rec and ((len(rec) >= 12 and sha.startswith(rec.lower())) or rec in (p.parent.name, str(sim_path))):
+        return
+    raise ValueError(
+        f"glyph_match.stages.pair：分类器文件记的嵌入模型是 {rec or '（没记）'}，当前 sim_model 是 {sim_path}（sha {sha[:12]}），"
+        f"对不上。换了 sim_model 要在新嵌入上重训 pair_clf（build_pair_clf.py --sim-model {sha[:12]}），"
+        f"或先从书配置去掉 glyph_match.stages.pair。")
+
+
 def fingerprint(path: str | Path | None) -> str:
     """进参数指纹的值：文件内容哈希；没有文件返回 `none`。"""
     if not path or not Path(path).exists():

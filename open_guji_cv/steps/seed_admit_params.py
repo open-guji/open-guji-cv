@@ -7,6 +7,7 @@ re-export 这里的名字，外面 `from open_guji_cv.steps.seed_admit import Se
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Literal
 
@@ -86,6 +87,81 @@ _ALWAYS_ON_IN_DUMP: dict = {k: True for k in _ALWAYS_ON if k not in (
 )}
 _RETIRED.update({k: True for k in _ALWAYS_ON})
 
+#: 收成常量的门槛（2026-11-24 CV4 整理 PR4，Sheldon 11-24 定）：397 册没有一册改过，不再是参数，代码照旧读 `p.<名>`
+#: （`SeedAdmitParams` 上的只读属性）。老配置写这个值照读（同 `_RETIRED`），写别的值报错。原先进参数指纹的照原值补回 dump
+#: （再按 `_DUMP_DROP` 去键，口径不变），各册 params_hash 不变。各项含义见类里同名注释。测试要换值用 `monkeypatch.setitem(_CONSTANTS, …)`。
+_CONSTANTS: dict = {
+    'solo_cov': 0.99,
+    'context_margin': 0.7,
+    'always_review': '己已巳',
+    'exclusion_origins': 'human,gate,pipeline',
+    'note_min_sim': 0.7,
+    'context_min_ink': 0.05,
+    'context_max_aspect': 2.5,
+    'group_flow_freq_major': 10,
+    'group_flow_freq_min_vols': 2,
+    'group_flow_llm_effort': 'low',
+    'group_flow_llm_panel': ('claude-opus-5-5:high', 'claude-fable-5-1:high'),
+    'group_flow_delta': 0.03,
+    'group_flow_min_cov': 0.85,
+    'group_flow_top1_cov': 0.97,
+    'group_flow_same_writing_keep': ['xu', 'feng', 'yi_560', 'guan', 'guang', 'jiao', 'jue'],
+    'group_flow_review_fix_agree': ['yr'],
+    'group_flow_dissent_margin': 1.0,
+    'group_flow_ref_pair_margin': 1.5,
+    'group_flow_pv_ref_gap': 0.01,
+    'group_flow_pv_ref_cov': 0.95,
+    'group_flow_l2_drift': 2,
+    'symbol_ref_gap_cov': 0.97,
+    'symbol_ref_gap_min_col': 3,
+    'p_ref_min_cov': 0.8,
+    'blank_ink_max_cov': 0.9,
+    'blank_ink_col_min_agree': 3,
+    'blank_ink_col_min_frac': 0.5,
+    'pua_code_admit_cov': 0.85,
+    'context_variant_ratio': 0.25,
+    'context_variant_lib_gap': 0.02,
+    'context_lib_dissent_gap': 0.03,
+    'context_lib_dissent_cov': 0.93,
+    'iron_ctx_prob': 0.5,
+    'iron_ctx_gap': 0.005,
+    'rare_ref_nf_max_n': 2,
+    'rare_ref_nf_cov': 0.96,
+    'rare_ref_sparse_max_n': 2,
+    'rare_ref_sparse_lead': 0.02,
+    'solo_5b_gap': 0.01,
+    'occluded_min_density': 4.0,
+    'occluded_min_cells': 12,
+    'occluded_min_cols': 3,
+    'occluded_min_peak': 8.0,
+    'occluded_min_contrast': 2.5,
+    'occluded_seal_min_noise': 4.0,
+    'occluded_seal_keep_cov': 0.93,
+    'seal_blank_thr': 0.35,
+    'seal_blank_overlap': 0.5,
+    'seal_blank_ink_out': 0.005,
+    'context_guard_cov': 0.8,
+    'context_garble_cov': 0.9,
+    'context_garble_rare_cov': 0.95,
+    'lane_coord_codepoint_gap': 0.005,
+    'lane_seal_via': 'coord,align',
+    'lane_seal_title_norm': '巻卷',
+    'lane_seal_lib_veto': 0.95,
+    'lane_seal_lib_veto_min_n': 2,
+    'pua_rule_cov': 0.85,
+    'lane_coord_blind_min_n': 3,
+    'lane_coord_blind_lib_cov': 0.98,
+    'lane_coord_blind_gap': 0.05,
+    'ref_lib_coord_cov': 0.96,
+    'ref_lib_coord_gap': 0.01,
+    'follow_ref_cov': 0.92,
+    'follow_ref_gap': 0.005,
+    'edge_pair_cov': 0.92,
+    'edge_pair_gap': 0.005,
+    'edge_pair_group_seam_nf_gap': 0.03,
+}
+_RETIRED.update(_CONSTANTS)
+
 
 #: 参数指纹的去键规则（`SeedAdmitParams._drop_off_rare`，2026-11-23 CV4 整理 PR3 由一百多段 if 改成表，规则逐条不变）：
 #: 每行（条件, 键）：条件为真就把这些键从 dump 里去掉。通用口径是「书级开关关着时、或参数取缺省值时不进 dump」，
@@ -105,6 +181,8 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.group_flow_llm_skip_half, ("group_flow_llm_skip_half",)),
     (lambda p: not p.vis_ruling_half, ("vis_ruling_half",)),
     (lambda p: not p.vis_ruling_ctx_subclasses, ("vis_ruling_ctx_subclasses",)),
+    (lambda p: not p.ruling_anchor_loose, ("ruling_anchor_loose",)),
+    (lambda p: not p.ruling_by_u, ("ruling_by_u",)),
     (lambda p: not p.group_flow_ruling_first, ("group_flow_ruling_first",)),
     (lambda p: not p.p_ref_admit, ("p_ref_admit",)),
     (lambda p: (not p.p_ref_admit or p.p_ref_max_cov is None), ("p_ref_max_cov",)),
@@ -239,36 +317,36 @@ _DUMP_DROP: tuple = (
 class SeedAdmitParams(BaseModel):
     variants: str = ""                  # 异体表；空 = VariantMap 默认
     semantic_extra: str = ""            # 书级补语义对「异体=正字,…」，叠在 VariantMap 之上（如史記 圗=圖：语义同、字形层照刻形）；空＝不补、不进 dump（A22 11-16）
-    solo_cov: float = 0.99              # match_solo 的 cov 闸，实测拐点
+    # ── `solo_cov` = 0.99（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    match_solo 的 cov 闸，实测拐点
     use_context: bool = True            # 把 Step6 的定字当第三路证据
-    context_margin: float = 0.70        # 用它时的 margin 门槛（生产值）
-    always_review: str = "己已巳"
-    """这些字不采信字形/OCR 通道的判决（用户 2026-09-04 定，2026-09-11 改口不再是
-    「永远人审」）：命中时先清空 `admission_decision` 给的通道，只看 `relax_split_ref`
-    （整理本给字）与下面的 context 通道（Step6 上下文判定）能不能定下来；两条都没有
-    结果才落人审。
-
-    2026-10-18（S6）起本族「哪个字」只由字组统一流程定：`group_flow` 点名 `jys` 时，这里放进来的格（`split_ref`／
-    `context`）在页末按文意复核——文意给了别的字就改字，没有文意证据就降审。**没点名 `jys` 的书，`split_ref` 放行的
-    就是整理本字、不再有任何复核**（旧的 `_resolve_ji_yi_si` 已删）。缺省值不改：vol04 A/B 上它＋`group_flow` 比旧路
-    放行多 8 格（强真值 40/0 → 48/0）。"""
+    # ── `context_margin` = 0.7（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    用它时的 margin 门槛（生产值）
+    # ── `always_review` = '己已巳'（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    这些字不采信字形/OCR 通道的判决（用户 2026-09-04 定，2026-09-11 改口不再是
+    #    「永远人审」）：命中时先清空 `admission_decision` 给的通道，只看 `relax_split_ref`
+    #    （整理本给字）与下面的 context 通道（Step6 上下文判定）能不能定下来；两条都没有
+    #    结果才落人审。
+    #    2026-10-18（S6）起本族「哪个字」只由字组统一流程定：`group_flow` 点名 `jys` 时，这里放进来的格（`split_ref`／
+    #    `context`）在页末按文意复核——文意给了别的字就改字，没有文意证据就降审。**没点名 `jys` 的书，`split_ref` 放行的
+    #    就是整理本字、不再有任何复核**（旧的 `_resolve_ji_yi_si` 已删）。缺省值不改：vol04 A/B 上它＋`group_flow` 比旧路
+    #    放行多 8 格（强真值 40/0 → 48/0）。
     edition: str = "wuyingdian_zongmu"  # 本书用字账（variant_ledger）的键
     # 整理本通道原来在这里配 corpus/corpus_fingerprint，2026-09-09 挪去了
     # `align_ref`（Step5-d，正式 Step，产物带自己的语料指纹）——本步只消费
     # 它的产物，通道开不开看 `align_ref` 锚没锚上，不用再在这里配一份。
     # ── `use_exclusions`（护栏／通道，2026-11-23 CV4 起恒开、不再是参数）：查 config/crop_exclusions.jsonl（切坏的图块不进库不出卡）
     exclusions: str = ""                # 名单路径；空 = exclusions.py 默认
-    exclusion_origins: str = "human,gate,pipeline"
-    """采信名单里的哪几档来源（逗号分隔）。
-
-    **按证据强度分级，别一刀切**（`exclusions.py` 模块头的纪律）：`human` 是人眼实锤；
-    `gate` / `pipeline` 是管线确定层旗标；`pipeline-suspect` 那 216 条**实测只有约 27%
-    是真有问题**——全采信会误伤约 150 个好格子（58 页上实测命中 68 条）。所以默认不含它，
-    要复核时显式打开，或等重扫后逐条判。
-    """
+    # ── `exclusion_origins` = 'human,gate,pipeline'（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    采信名单里的哪几档来源（逗号分隔）。
+    #    **按证据强度分级，别一刀切**（`exclusions.py` 模块头的纪律）：`human` 是人眼实锤；
+    #    `gate` / `pipeline` 是管线确定层旗标；`pipeline-suspect` 那 216 条**实测只有约 27%
+    #    是真有问题**——全采信会误伤约 150 个好格子（58 页上实测命中 68 条）。所以默认不含它，
+    #    要复核时显式打开，或等重扫后逐条判。
     # ── `use_note_lexicon`（护栏／通道，2026-11-23 CV4 起恒开、不再是参数）：版本注闭集通道（段级，只作用于夹注格）
     note_lexicon: str = ""              # 词表路径；空 = note_lexicon.py 默认
-    note_min_sim: float = 0.70          # 段相似度下限（见 note_lexicon.MIN_SIM）
+    # ── `note_min_sim` = 0.7（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    段相似度下限（见 note_lexicon.MIN_SIM）
     note_fingerprint: str = ""          # 自动填：词表变了产物过期
     use_human_verdicts: bool = True     # 人裁过的位直接采信人裁字形（最高优先级）
     # ── `human_unbound_review`（护栏／通道，2026-11-23 CV4 起恒开、不再是参数）
@@ -348,22 +426,22 @@ class SeedAdmitParams(BaseModel):
     # 时不走 context 通道，落人审（`context_blank_cell`）。只挡 context 这一条
     # 通道——`match_solo`/`iron` 等字形通道本身就要求库里能验出「像」，空白格
     # verify 不出 same，链路里已经挡住了，不需要重复设闸。
-    context_min_ink: float = 0.05
-    """`context_blank_gate` 的墨量闸。bxgb + vol03 两书全书 `char_index.ink_ratio`
-    分布实测（`scripts/measure_context_ink_gate.py`）＋逐格看图定的界：vol03 全
-    书 `channel=context` 的 262 格里最低 4 格（0.0415~0.0493，含 `vol03:9:9:21`
-    ink=0.0493、`vol03:67:9:21` ink=0.0415）图上看**都是空白**（碎墨点/划痕，
-    非字）；再往上第一个「像样」的格是 `vol03:33:2:1`（一，ink=0.0677）——
-    「一」只有一横，天然低墨，图上确认是真字；中间 0.0604（莫）图上零散不
-    确定，落在闸的"不拦"一侧（新闸第一版，拿不准就不拦，比错拦一个真字更
-    安全）。取 **0.05**：压在「确认空白」（≤0.0493）与「确认真字」（0.0677）
-    之间。bxgb 全书 `channel=context` 134 格最低也有 0.1093（臣），阈值对它
-    是纯保险栓、不会误伤。"""
-    context_max_aspect: float = 2.5
-    """`context_blank_gate` 的姊妹闸（A24 11-01，A32 报错放 vol39:176:3:1）：正文字块（不是夹注）高宽比大于它时不走 context 通道，
-    落人审（`context_tall_cell`）。高宽比 ≥2.5 的字块是印章边框碎块／粘连切多了的残片，字形库「像」只因为十、卜、丨 这类
-    竖笔字太容易匹配，context 又只看文意。r5 全 93 册 context 通道放行里只有 3 格（vol39:176:3:1 十 3.3、vol82:191:4:4 十 3.9、
-    vol96:95:9:2 卜 4.0）；字形通道（match_ref 等，库验过 same）不受影响。0＝关。只收紧。"""
+    # ── `context_min_ink` = 0.05（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `context_blank_gate` 的墨量闸。bxgb + vol03 两书全书 `char_index.ink_ratio`
+    #    分布实测（`scripts/measure_context_ink_gate.py`）＋逐格看图定的界：vol03 全
+    #    书 `channel=context` 的 262 格里最低 4 格（0.0415~0.0493，含 `vol03:9:9:21`
+    #    ink=0.0493、`vol03:67:9:21` ink=0.0415）图上看**都是空白**（碎墨点/划痕，
+    #    非字）；再往上第一个「像样」的格是 `vol03:33:2:1`（一，ink=0.0677）——
+    #    「一」只有一横，天然低墨，图上确认是真字；中间 0.0604（莫）图上零散不
+    #    确定，落在闸的"不拦"一侧（新闸第一版，拿不准就不拦，比错拦一个真字更
+    #    安全）。取 **0.05**：压在「确认空白」（≤0.0493）与「确认真字」（0.0677）
+    #    之间。bxgb 全书 `channel=context` 134 格最低也有 0.1093（臣），阈值对它
+    #    是纯保险栓、不会误伤。
+    # ── `context_max_aspect` = 2.5（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `context_blank_gate` 的姊妹闸（A24 11-01，A32 报错放 vol39:176:3:1）：正文字块（不是夹注）高宽比大于它时不走 context 通道，
+    #    落人审（`context_tall_cell`）。高宽比 ≥2.5 的字块是印章边框碎块／粘连切多了的残片，字形库「像」只因为十、卜、丨 这类
+    #    竖笔字太容易匹配，context 又只看文意。r5 全 93 册 context 通道放行里只有 3 格（vol39:176:3:1 十 3.3、vol82:191:4:4 十 3.9、
+    #    vol96:95:9:2 卜 4.0）；字形通道（match_ref 等，库验过 same）不受影响。0＝关。只收紧。
     # ── `relax_split_ref`（护栏／通道，2026-11-23 CV4 起恒开、不再是参数）
     # 己/已/巳：整理本给了字就放行——文意取整理本，字形取库 top1（用户 2026-09-06：
     # 「没必要每次都单独让我选文意，根据上下文或整理本直接选；字形选哪个都行」）。
@@ -389,8 +467,10 @@ class SeedAdmitParams(BaseModel):
     以后新增组跟不上。写法 `[shi]`；组 id 照 `registry.RENAMED` 换新名，不认识的组报错。空＝不减（不进参数 dump）；
     减后的 `group_flow` 照常进 dump，产物随之过期。"""
     group_flow_freq: str = ""               # 字频表（`python -m open_guji_cv.groups.freq <工作区>` 冻结），空＝字频解法弃权
-    group_flow_freq_major: int = 10         # 主形人裁数下限；其余成员须为 0（2026-10-20 sheldon 定 20→10）
-    group_flow_freq_min_vols: int = 2       # 主形人裁须来自至少这么多册（表里有册数才查；0＝不查）
+    # ── `group_flow_freq_major` = 10（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    主形人裁数下限；其余成员须为 0（2026-10-20 sheldon 定 20→10）
+    # ── `group_flow_freq_min_vols` = 2（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    主形人裁须来自至少这么多册（表里有册数才查；0＝不查）
     group_flow_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L3 大模型答案表（ctx_ver 3；目录沿用旧名 l2/）
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
     group_flow_book_knn: dict[str, str] = Field(default_factory=dict)   # 组 id → 书级刻形近邻库（`groups.book_knn`，缺省找 config/groups/book_knn/<组>.json；没有＝不跑，行为不变）
@@ -414,8 +494,8 @@ class SeedAdmitParams(BaseModel):
     group_flow_llm_model: str = "claude-opus-5-5"   # 文意 L3 在线（`groups/ctx_llm`）用的模型；空＝不问。密钥只从环境变量 GUJI_ANTHROPIC_API_KEY 读，没有就弃权
     group_flow_llm_groups: tuple[str, ...] = ("ry", "rm", "mz", "jys", "zy", "yz", "xz", "rr", "guan", "men", "wj", "chuo", "yh", "kgc", "tsh",
                                                "yr", "ly", "dt", "mb", "fc", "ts", "zh", "yt", "em", "wm", "sb", "feng", "liang", "wxs", "hou", "js")   # 哪些组问 L3 在线（要有 config/groups/<组>/prompt.md）
-    group_flow_llm_effort: str = "low"
-    group_flow_llm_panel: tuple[str, ...] = ("claude-opus-5-5:high", "claude-fable-5-1:high")
+    # ── `group_flow_llm_effort` = 'low'（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `group_flow_llm_panel` = ('claude-opus-5-5:high', 'claude-fable-5-1:high')（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     group_flow_llm_panel_groups: tuple[str, ...] = ("ry", "rm", "mz", "jys", "yr", "ly", "dt", "mb", "fc", "ts", "zh", "yt", "em", "wm", "sb", "feng", "liang", "wxs", "hou", "js")   # 用二审小组的组（别的组的 strong 语义没验过，先不开）
     """L3 二审小组（A24 2026-11-01）：首问不是「组内字、high」、或首问的字与整理本不同时，再让这几个模型（`"模型:effort"`）各自高 effort 独立读：
     全部同字（置信 ≥ mid）→ 给字且记 strong；全部说「其他」→ 共字组接手；其余照首问。空＝不开。见 `groups/ctx_llm.panel_verdict`。"""
@@ -434,13 +514,26 @@ class SeedAdmitParams(BaseModel):
     粗校第 4 层「AI 处理文意」：没有字组问的待审格（参校本缺字、复审、库缺例等）由两路独立对话盲判，同字且都 high、字在候选内才写
     `admit_ok`，子类按写入方定（全唐文形近字线 11-18 用 `A`）。其余放行条件与 Z/N 相同：整理本对位字须与裁定记的一致、越过整理本要在白名单。
     开之前须用人裁金标量这一类两路判读 0 错（Sheldon 11-18：形近字文意可以用 AI 判断，属第 4 层固定步骤）。"""
+    ruling_anchor_loose: bool = False
+    """格锚点后备键的宽松档（GM4 合并方案，GM3／CV0 确认 11-24；书级，缺省关、关时不进参数 dump、行为不变；开的册 seed_admit 起往下过期）。
+    关：锚点照 #1832——版本＝本问版本或其等价版本，窗口与裁定记的编辑距离 ≤3。
+    开（`RulingStore._anchor_loose`）：同格同 cells_sha 同 ref 下，本组 `validate` 认的任意版本（减 `ver_equiv.yaml` 的 `void`，O 组仍按目标版本）、
+    多条取最新、字不一致记 `ruling_conflict` 不放行；只收 high（fold 遍也是）；窗口改为前后 2 字至少一侧相同。
+    窗口键、版本等价表照旧先查；在线问前查缓存（`RulingCache`）仍按精确键。开之前须 20 册强制锚点回放人裁真错 0。"""
+    ruling_by_u: bool = False
+    """裁定按字格永久编号 u 查（CV0 T3 2026-11-24，执行方案 https://claude.ai/artifact/NksDge9ZxaEyebAgnS8s8Q；书级，缺省关、关时不进参数 dump、行为不变；
+    开的册 seed_admit 起往下过期，L1）。开：`_vis_ruling_pass` 与 fold 遍在窗口键、版本等价、格锚点都没中之后再查一档——
+    本格的 u 从本册字格身份账（`<feedback>/uid/<册>.jsonl`，`feedback.rulings.UidLedger`）按本页当前 cells_sha 取，
+    同组同册同 u 的裁定按格锚点宽松档口径取（`RulingStore.get_by_u`：validate 认的版本减 void、多条取最新、字不一致记 `ruling_conflict` 不放行、
+    只收 high、前后 2 字至少一侧相同），且裁定字在库候选或＝整理本对位字；看图判通道其余护栏（ref 一致、子类白名单、越过整理本白名单）照旧。
+    账里查不到本页这次切分就当没有 u（不回退格号）。账与裁定数据不进指纹，变了要 force 重放。开之前须试点册回放放行集合不变小、人裁真错 0。"""
     group_flow_ruling_first: list[str] = Field(default_factory=list)
     """这几组的文意解法先查裁定库（对话裁定，`feedback.rulings`），命中就照裁定给字，不再看 L1 规则、L2 表／小头（书级，缺省空、不进参数 dump、行为不变）。
     没命中照旧走 L1 → L2 → L3。复核时（`review_fix` 的组，如己已巳）已放行格的上下文有裁定、字不同 → 改成裁定字。
     全唐文 11-13 Sheldon 定：己已巳 刻形分不开、按文意＋AI 判；L2 小头放错的格（001–030 按文意核 23 格），对话裁定排在小头后面改不动。"""
-    group_flow_delta: float = 0.03
-    group_flow_min_cov: float = 0.85
-    group_flow_top1_cov: float = 0.97
+    # ── `group_flow_delta` = 0.03（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `group_flow_min_cov` = 0.85（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `group_flow_top1_cov` = 0.97（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     group_flow_tolerate_extra: dict[str, str] = Field(default_factory=dict)
     """书级追加的字组陪衬字（组 id → 字串，叠在注册表 `FlowSpec.tolerate` 上；2026-11-01 史記文淵閣本）：写本里
     曰 与借来的殿本库形 田／四／囬／臼 紧咬（分差内），格进不了日曰组、文意小头无从判，01–10 册约 900 格因此送审。
@@ -478,24 +571,24 @@ class SeedAdmitParams(BaseModel):
     """书级（A24 Z02 11-07，缺省空＝关、不进参数 dump；只对 `group_flow_dissent_keep` 里的组有效）：复核时已放行字＝整理本字，
     唯一反对的是文意 L1 规则（`ctx:ctx_l1`，二字组合规则，全册审计冲突率约 1–2%），而本组 ids 等非文意解法同意放行字 → 不降审，
     留痕 `dissent_keep`。殿本 B2／B2x 9 格（曾會、遺還、圓圖，规则收窄后仍命中的）放行字全对。写法 `[zh, yh, yt, js]`。"""
-    group_flow_same_writing_keep: list[str] = Field(default_factory=lambda: list(_SAME_WRITING_KEEP))
-    """书级（A24 Z03 深挖 2026-11-07，缺省 `[xu, feng, yi_560, guan, guang, jiao, jue]`＝Z03 里实有这类格的组、缺省值不进参数 dump；写 `[]` 关）：这几组复核已放行格时，给了别字的解法给的**全是放行字的另一写法**（`registry.PROVISIONAL` 同组，
-    外加宫宮）→ 不降审（`flow._same_writing`，留痕 `same_writing`）。殿本／史記 21 格（宮宫、賓賔、敘叙、敎教、絶絕）。"""
-    group_flow_review_fix_agree: list[str] = Field(default_factory=lambda: ["yr"])
-    """书级（A24 Z03 深挖 2026-11-07，缺省 `[yr]`、缺省值不进参数 dump；写 `[]` 关）：这几组复核时 ≥2 路不同的图像解法（`yr_bars`＋`ids` 等）给了同一个别的组员字、
-    没人（文意、码位）反对 → 改成那个字（`flow._agree_fix`，通道 `group_flow`）而不是降审。一二：殿本／史記 35 格，目视 24 格 yr_bars 数横画全对。"""
+    # ── `group_flow_same_writing_keep` = ['xu', 'feng', 'yi_560', 'guan', 'guang', 'jiao', 'jue']（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    书级（A24 Z03 深挖 2026-11-07，缺省 `[xu, feng, yi_560, guan, guang, jiao, jue]`＝Z03 里实有这类格的组、缺省值不进参数 dump；写 `[]` 关）：这几组复核已放行格时，给了别字的解法给的**全是放行字的另一写法**（`registry.PROVISIONAL` 同组，
+    #    外加宫宮）→ 不降审（`flow._same_writing`，留痕 `same_writing`）。殿本／史記 21 格（宮宫、賓賔、敘叙、敎教、絶絕）。
+    # ── `group_flow_review_fix_agree` = ['yr']（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    书级（A24 Z03 深挖 2026-11-07，缺省 `[yr]`、缺省值不进参数 dump；写 `[]` 关）：这几组复核时 ≥2 路不同的图像解法（`yr_bars`＋`ids` 等）给了同一个别的组员字、
+    #    没人（文意、码位）反对 → 改成那个字（`flow._agree_fix`，通道 `group_flow`）而不是降审。一二：殿本／史記 35 格，目视 24 格 yr_bars 数横画全对。
     # ── `group_flow_dissent_keep_form`（护栏／通道，2026-11-23 CV4 起恒开、不再是参数）
     # 书级（A24 Z03 11-08，缺省开、缺省值不进参数 dump）：`group_flow_dissent_keep` 的「至少一路解法给了放行字」也认 ids 弃权票（margin < `group_flow_dissent_margin`）的刻形＝放行字
     # （`flow._dissent_keep(form_support)`）。r7 殿本一二 27 格里 19 格是这样：ids 低 margin 弃权、刻形＝放行字＝整理本，只有 yr_bars 数横反对（目视多为单横，横上方是邻字残笔）。
-    group_flow_dissent_margin: float = 1.0
-    """`group_flow_dissent_keep` 里 `ids` 反对票算弱票的 margin 上限（缺省 1.0；仅 `group_flow_dissent_keep` 非空时进参数 dump）。"""
+    # ── `group_flow_dissent_margin` = 1.0（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `group_flow_dissent_keep` 里 `ids` 反对票算弱票的 margin 上限（缺省 1.0；仅 `group_flow_dissent_keep` 非空时进参数 dump）。
     group_flow_ref_pair: list[str] = Field(default_factory=list)
     """书级（A24 Z02 深挖 2026-11-06，缺省空＝关、不进参数 dump）：这几组补放／联合判卡在「字形与文意冲突」或「共字组搭档没裁定」时，若**整理本字（现役对位）＝
     本组解法给的字**、反对的全是图像路（margin < `group_flow_ref_pair_margin`；没有文意支持时须比支持的 ids 弱）→ 取这个字（`flow._ref_pair_pick`，留痕 `ref_pair`）。
     文意、码位、搭档文意给了别字不取。殿本 ★main 全册 309 格已被别的通道放行的，字全与它一致（0 异）；目视 Z02 待审 32 格全对。
     写法 `[men, chuo, zy, yr, wm, zh, ts, sy, rr, rm]`。"""
-    group_flow_ref_pair_margin: float = 1.5
-    """`group_flow_ref_pair` 里图像路反对票的 margin 上限（缺省 1.5；仅 `group_flow_ref_pair` 非空时进参数 dump）。"""
+    # ── `group_flow_ref_pair_margin` = 1.5（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `group_flow_ref_pair` 里图像路反对票的 margin 上限（缺省 1.5；仅 `group_flow_ref_pair` 非空时进参数 dump）。
     group_flow_ref_pair_coord: bool = False
     """书级（A24 Z07 差一路确认 11-07，缺省关、关时不进参数 dump）：`group_flow_ref_pair` 里的组联合判卡在「共字组搭档没表态」、
     现役对位缺这一格时，**坐标对位字＝本组解法给的字、没有任何解法（含搭档）给别字** → 取它（`flow._ref_pair_coord_pick`，留痕 `ref_pair_coord`）。
@@ -532,18 +625,18 @@ class SeedAdmitParams(BaseModel):
     group_flow_provisional_to: dict[str, str] = Field(default_factory=dict)
     #: 暂归一兜底放宽（A24 V01 第 7 轮 11-08）：整理本字（现役对位）与库首位都是某组暂归一的写法、首位 cov ≥ `group_flow_pv_ref_cov`、
     #: 领先最好的组外候选 ≥ 这个数时，分差内有组外形近字也进组兜底（殿本 𨽻→𨽾 被 諫 據 綠 裁 紧咬拦下的 20 格）。None＝关。缺省值不进参数 dump。
-    group_flow_pv_ref_gap: float | None = 0.01
-    group_flow_pv_ref_cov: float = 0.95
-    """书级暂归一字形：组 id → 字（须是 `registry.PROVISIONAL` 该组 forms 里的字，否则不理），压过表里的 `to`（缺省关；空时不进 dump，
-    `params_hash` 不变）。全唐文 彝组 yi_560：表里 `to`＝𢑱（殿本放行最多的形），本书刻的是 彝（Sheldon 11-05 同轮人裁 3 格），
-    r11 复核时 ids 读出 彝（彑米糸廾）而上段 margin 不够改字，兜底就放成了 𢑱（8 格）。"""
+    # ── `group_flow_pv_ref_gap` = 0.01（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `group_flow_pv_ref_cov` = 0.95（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    书级暂归一字形：组 id → 字（须是 `registry.PROVISIONAL` 该组 forms 里的字，否则不理），压过表里的 `to`（缺省关；空时不进 dump，
+    #    `params_hash` 不变）。全唐文 彝组 yi_560：表里 `to`＝𢑱（殿本放行最多的形），本书刻的是 彝（Sheldon 11-05 同轮人裁 3 格），
+    #    r11 复核时 ids 读出 彝（彑米糸廾）而上段 margin 不够改字，兜底就放成了 𢑱（8 格）。
     """同义字组暂归一兜底（sheldon 2026-10-27，见 `groups.flow._provisional`、`groups.registry.PROVISIONAL`）：字组方法拆不开写法、
     与整理本说法不一而留人审／降审的格，只要库形、整理本（或已放行字）都认是这个字，就放成这组最常见的字形，
     `evidence.group.decision` 记 `provisional`。False＝照旧留人审（2026-10-27 前的行为）。"""
-    group_flow_l2_drift: int = 2
-    """文意 L2 答案表的键（建表时的前后各 20 字）与本次窗口对不上时，若目标字两侧各 3 字内逐字相同、只远处差至多这么多个字位，
-    仍用表里的答案（证据 `ctx_drift`）；0＝逐字相同才用（2026-10-22 前的行为）。建表后重跑，邻格放行字会变（□→曰、徵→徴），
-    vol04–10 己已巳／日曰约 40 格因此整条对不上而送审。"""
+    # ── `group_flow_l2_drift` = 2（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    文意 L2 答案表的键（建表时的前后各 20 字）与本次窗口对不上时，若目标字两侧各 3 字内逐字相同、只远处差至多这么多个字位，
+    #    仍用表里的答案（证据 `ctx_drift`）；0＝逐字相同才用（2026-10-22 前的行为）。建表后重跑，邻格放行字会变（□→曰、徵→徴），
+    #    vol04–10 己已巳／日曰约 40 格因此整条对不上而送审。
     group_flow_fingerprint: str = ""        # 自动填（开关开时）：字频表、规则文件、答案表内容哈希
     witness3_knn_veto: bool = False
     """witness3 本书刻例近邻否决（缺省关；关时不进 dump，`params_hash` 不变；全唐文形近字线 2026-11-04）：`lane_witness3`
@@ -581,8 +674,8 @@ class SeedAdmitParams(BaseModel):
     A24 第 5 轮，长期计划线程转 SJ 史記 r9：ref_gap 里 17 格库首位是 ○、cov 0.92–0.999）。需 `symbol_ref_blank` 非空才生效。
     护栏：同一列里至少 `symbol_ref_gap_min_col` 个字位有坐标对位条目（防整页没对位、切分错）；cov 用 `symbol_ref_gap_cov`；
     遮挡、人裁、排除名单照旧不动；证据 lane 记 `via=gap`。缺省关（不进 dump）。"""
-    symbol_ref_gap_cov: float = 0.97
-    symbol_ref_gap_min_col: int = 3
+    # ── `symbol_ref_gap_cov` = 0.97（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `symbol_ref_gap_min_col` = 3（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     stroke_veto: str = ""
     """笔画反向护栏（`groups.stroke_veto`，A23 笔画识别 cv #1474）：书级模型路径（相对路径先找数据目录，模型随中心库走，
     如 `config/groups/stroke_veto.json`，再找工作区）。已放行、非人裁、放行字落在模型某组里（己／已／巳、千／干）的格，
@@ -649,11 +742,11 @@ class SeedAdmitParams(BaseModel):
     """`p_ref_admit` 的旋钮（A24 P01 深挖 11-06，缺省关、关时不进参数 dump；要同时开 `p_ref_admit`）：机器字与整理本字在关系层有**直接异体边**（`_direct_variant_edge`）的格不取整理本字，
     留给异体对流程按刻形定（殿本不按参校本取异体，`follow_ref_variants` 不适用）。依据：放开相邻／夹注、cov<0.95 后 p_ref 也会碰 L01（库认不出）格，殿本这类格抽 30 格 14 格
     是异体对（羨羡、諫諌、緣縁、奥奧、舟丹…），整理本字都对但会盖掉刻形；其余 16 格整理本对 15（1 格黑条）。"""
-    p_ref_min_cov: float | None = 0.8
-    """`p_ref_admit` 的下限闸（A24 P01，2026-11-08，**缺省 0.8 开**，缺省值不进参数 dump，`None`＝关；要同时开 `p_ref_admit`）：库里认不出机器字的格不放——
-    库判 `diff`（doubt「库里没有这个字」，多是切分坏格：一格两字、残块、墨块）或机器字库覆盖率 `evidence.cov` < 该值。依据：史記 r19 离线重跑 p_ref 新放约 112 格，118 格看图
-    0 认错字，但 7 格是切分坏格（01:127:8:1、03:88:4:21b、06:26:1:15、06:26:2:-1/1a/1b、06:29:1:10），多为库认不出或 cov<0.8，放了整理本字会盖住切分错（SJ 11-08）。
-    P01 本身的格必是 unsure 档（cov≥0.85），这条只挡 p_ref 碰到的 L04／切分类格。"""
+    # ── `p_ref_min_cov` = 0.8（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `p_ref_admit` 的下限闸（A24 P01，2026-11-08，**缺省 0.8 开**，缺省值不进参数 dump，`None`＝关；要同时开 `p_ref_admit`）：库里认不出机器字的格不放——
+    #    库判 `diff`（doubt「库里没有这个字」，多是切分坏格：一格两字、残块、墨块）或机器字库覆盖率 `evidence.cov` < 该值。依据：史記 r19 离线重跑 p_ref 新放约 112 格，118 格看图
+    #    0 认错字，但 7 格是切分坏格（01:127:8:1、03:88:4:21b、06:26:1:15、06:26:2:-1/1a/1b、06:29:1:10），多为库认不出或 cov<0.8，放了整理本字会盖住切分错（SJ 11-08）。
+    #    P01 本身的格必是 unsure 档（cov≥0.85），这条只挡 p_ref 碰到的 L04／切分类格。
     p_ref_irregular_gap: float | None = None
     """`p_ref_admit` 的旋钮（A24 P01 第 8 轮 11-08，缺省 `None`＝关、关时不进参数 dump；要同时开 `p_ref_admit`）：**整理本字是异体写法**（教育部异体字表 twedu／本地表 local:keben 指认它是某正字的异体：
     槪→概、寳→寶、囘→回、竒→奇、厯→歷…）、机器字与它没有直接异体边，且库候选里「整理本字及其正字」的最高 cov 与机器字 cov 的差 ≤ 该值 → 取整理本字，**不受 `p_ref_max_cov` 约束**
@@ -699,9 +792,9 @@ class SeedAdmitParams(BaseModel):
     至少 `blank_ink_col_min_agree` 格且占比 ≥ `blank_ink_col_min_frac`（这一列的格位对得上）。放法同印章空栏
     （`admit=True`、`char=None`、通道 `blank_ink`）——随整理本不出字。库有把握是汉字（same 或 cov 够高）的留审：
     可能是整理本漏字。起因：vol19 满文字母、vol10 p86 大印漏认的印文、碎笔格。遮挡格（`occluded`）归 R5，不碰。"""
-    blank_ink_max_cov: float = 0.9
-    blank_ink_col_min_agree: int = 3
-    blank_ink_col_min_frac: float = 0.5
+    # ── `blank_ink_max_cov` = 0.9（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `blank_ink_col_min_agree` = 3（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `blank_ink_col_min_frac` = 0.5（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     fold_ref_char: bool = True
     """`fold_groups` 的落字来源（sheldon 11-05 澄清：己已巳「匹配到其中任一个就归入这组，之后按文意定是哪一个，完全不能参考整理本」）：
     `True`＝旧行为（整理本字在组内就放整理本字，`fold.via=ref`；裁定优先护栏另算）；`False`＝**不取整理本字**，只放文意裁定（`fold.via=ruling`，
@@ -767,8 +860,8 @@ class SeedAdmitParams(BaseModel):
     对位字核对同上）、码表定了字（或一码多字的族），且库首位＝码表字（或族内字）、cov ≥ `pua_code_admit_cov`、库没判 diff、无护栏、
     无硬疑问 → 放行成库首位字（通道 `code_table`，`evidence.code_table.admit=True`）。码表字是人定的，库首位独立给出同一个字，两路互证。
     殿本 r6 ★main：R01 668 格里 408 格命中（卿 271）；留出核对：人裁 422 格命中，字 416 格同人裁，6 格是录法（勅敕、埀垂、㸃點），无认错字。"""
-    pua_code_admit_cov: float = 0.85
-    """`pua_code_admit` 的库首位 cov 下限（同 `pua_rule_cov`）。"""
+    # ── `pua_code_admit_cov` = 0.85（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `pua_code_admit` 的库首位 cov 下限（同 `pua_rule_cov`）。
 
     # ── `relax_ref_agree`（护栏／通道，2026-11-23 CV4 起恒开、不再是参数）
     # 整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
@@ -838,21 +931,21 @@ class SeedAdmitParams(BaseModel):
     # （vol14 235:7:4 两版一次 㕘 一次 叅）。放行字的 `ranked` 里有另一个**语义同字、字面不同**的候选，概率 ≥
     # `context_variant_ratio` × 放行字的概率，而库形分不开它俩（放行字的库 cov 领先不到 `context_variant_lib_gap`；
     # 那个候选不在库候选里 = 分得开）→ 不放行，doubt `context_variant_form`，落人审（异体看刻形）。书级码位归一后同字的不算。
-    context_variant_ratio: float = 0.25
-    context_variant_lib_gap: float = 0.02
-    context_lib_dissent_gap: float = 0.03
-    """context 通道与库形互证（A24 2026-10-23）：库 top1 与 context 字语义不同，而 context 字在库候选里落后 top1 至少这么多
-    （或根本不在库候选里、且 top1 cov ≥ `context_lib_dissent_cov`）→ 不放行，doubt `context_lib_dissent`。
-    `context_guard_diff` 只拦库判 diff 且 cov<0.8；vol14 的错放库判都是 unsure、cov 0.93–0.98（𣏌→相：库 𣏌 0.984／相 0.948；
-    㳫→書：杳 0.975／書 0.933；牽→事：奉 0.937、事 不在候选）。0 = 关。"""
-    context_lib_dissent_cov: float = 0.93
+    # ── `context_variant_ratio` = 0.25（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `context_variant_lib_gap` = 0.02（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `context_lib_dissent_gap` = 0.03（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    context 通道与库形互证（A24 2026-10-23）：库 top1 与 context 字语义不同，而 context 字在库候选里落后 top1 至少这么多
+    #    （或根本不在库候选里、且 top1 cov ≥ `context_lib_dissent_cov`）→ 不放行，doubt `context_lib_dissent`。
+    #    `context_guard_diff` 只拦库判 diff 且 cov<0.8；vol14 的错放库判都是 unsure、cov 0.93–0.98（𣏌→相：库 𣏌 0.984／相 0.948；
+    #    㳫→書：杳 0.975／書 0.933；牽→事：奉 0.937、事 不在候选）。0 = 关。
+    # ── `context_lib_dissent_cov` = 0.93（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     context_page_end_review: bool = True
     """每页读序最后一格不走 context 通道（A24 2026-10-23）：Step5-d 对位只收两头被 equal 夹住的 replace 段，页末那一格
     没有后一段，库字与整理本不一致时就拿不到对位字，只剩 context 猜。殿本 v0.5.9 vol12／vol14：页末格放行字变率
     1.9%／1.7%，其余格 0.07%／0.05%（vol12 布→補、葬→非、戴→裁，vol14 牽→事、睦→時 都在 9:21）。命中 → doubt
     `context_page_end`，落人审（每册约 2–5 格）。根治在对位侧，另查。"""
-    iron_ctx_prob: float = 0.5
-    iron_ctx_gap: float = 0.005
+    # ── `iron_ctx_prob` = 0.5（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `iron_ctx_gap` = 0.005（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     replace_form: str = "align"
     """`match_replace` 放行时字形（码位）取谁（2026-09-28，overview#155）：
     - `align`（缺省，旧行为）：库没下 same 断言时取整理本字；
@@ -932,8 +1025,8 @@ class SeedAdmitParams(BaseModel):
     # 的对手（强对手说明库有把握认成别的字）；候选里 cov ≥ 0.80 的字不是它的异体（`are_variants`）。
     # 护栏 `never_match`／`conflict`、`occluded`／`excluded` 等其余硬条件照旧。金标（5,980 条人裁格）回放：
     # 坐标对位×BMP 字×本规则 83 格 0 错。关着时不进参数哈希。
-    rare_ref_nf_max_n: int = 2
-    rare_ref_nf_cov: float = 0.96
+    # ── `rare_ref_nf_max_n` = 2（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `rare_ref_nf_cov` = 0.96（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     rare_ref_sparse: bool = False
     """规则 A 少刻例支「5-b 当证人」（2026-11-06，A23 L02 深挖，sheldon 11-06 同意；缺省关，关时逐字节不变、不进 dump）。
 
@@ -948,8 +1041,8 @@ class SeedAdmitParams(BaseModel):
     （分数只跟同一来源比，不同来源量纲不同）→ 放行，字＝整理本字，`channel`＝`rare_ref`，evidence
     `rare_ref.via = "sparse"`、带 `lead`、`n_lib`。护栏同规则 A：硬疑问（`_hard_blocked`）、库 same 认成别的字、
     整理本字或库首位在字组里、己已巳、〓 占位、非汉字都不放；人裁位不碰。只升不降。"""
-    rare_ref_sparse_max_n: int = 2
-    rare_ref_sparse_lead: float = 0.02
+    # ── `rare_ref_sparse_max_n` = 2（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `rare_ref_sparse_lead` = 0.02（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     # ── `rare_ref_sparse_variant`（护栏／通道，2026-11-23 CV4 起恒开、不再是参数）
     solo_5b_cov: float | None = None
     """无参照页「库首位＋5-b 作证」放行（2026-11-08，全唐文总目／姓氏韵编 001/002，形近字线与 A24 定口径；书级，缺省关，
@@ -964,8 +1057,9 @@ class SeedAdmitParams(BaseModel):
     依据（front1 包 001/002，cov≥0.98 去形近／护栏／字组后 4,026 格，看图 Paddle 不同意 93＋同意随机 350＋5-b 不同意 18）：
     只看 cov 错 36（丸 34＝刻「九」、库 丸 仅 2 例；主→王 1；古→右 1），加 5-b 作证后 0；
     0.98／0.01／3 档 001 放约 2,700 格。"""
-    solo_5b_gap: float = 0.01
+    # ── `solo_5b_gap` = 0.01（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     solo_5b_min_n: int = 3
+    """库首位在本书库里刻例下限（`solo_5b_cov` 开时用）。PR4 收常量后 11-24 恢复成参数：脉经序页、牒文页经 `no_ref_params` 要设 1（刻例少）。"""
     solo_adapt_pct: str | None = None
     """无参照格「按字自适应门槛」放行（2026-11-08，Sheldon 定方向，全唐文 001–003 形近字线；书级，缺省关，
     `None`＝关、关时逐字节不变、`solo_adapt_*` 都不进 dump）。取值 "p10"／"p25"：用字自比分布的哪个百分位当 cov 门槛。
@@ -1103,19 +1197,19 @@ class SeedAdmitParams(BaseModel):
     坐标对位说这一位是**空格**（印章切出来的假格）的，`char=None` 并记
     `evidence.occluded.ref_blank=True`（文本层当非字跳过，人审卡默认点「非字」）。
     人裁位照旧一票定案，不受这道闸影响。只会把格从放行挪到待审，不会反过来。"""
-    occluded_min_density: float = 4.0
-    """热格密度门槛（每万像素中等墨点数），标定见 `steps/occlusion.py` 模块头。"""
-    occluded_min_cells: int = 12
-    """热格连通块至少多少格才算遮挡。"""
-    occluded_min_cols: int = 3
-    """热格连通块至少横跨几列。"""
-    occluded_min_peak: float = 8.0
-    """块内最高密度门槛（真印章 9.2~20.2，vol05 p68 碎笔画误报 6.1）。"""
-    occluded_min_contrast: float = 2.5
-    """块内密度中位 / 本页其余格中位 的下限（真印章 ≥3.1 倍，碎笔画 1.9 倍）。"""
-    occluded_seal_min_noise: float = 4.0
-    """大印框内的格，格内背景噪点密度（每万像素中等墨点数）< 此值且整格墨占比 < 0.5 的不算遮挡（sheldon 10-28 定「印章范围内＋
-    背景有大量噪点」才算；20–99 册抽样约 14% 遮挡格背景干净）。0＝关。缺省开，进参数哈希。"""
+    # ── `occluded_min_density` = 4.0（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    热格密度门槛（每万像素中等墨点数），标定见 `steps/occlusion.py` 模块头。
+    # ── `occluded_min_cells` = 12（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    热格连通块至少多少格才算遮挡。
+    # ── `occluded_min_cols` = 3（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    热格连通块至少横跨几列。
+    # ── `occluded_min_peak` = 8.0（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    块内最高密度门槛（真印章 9.2~20.2，vol05 p68 碎笔画误报 6.1）。
+    # ── `occluded_min_contrast` = 2.5（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    块内密度中位 / 本页其余格中位 的下限（真印章 ≥3.1 倍，碎笔画 1.9 倍）。
+    # ── `occluded_seal_min_noise` = 4.0（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    大印框内的格，格内背景噪点密度（每万像素中等墨点数）< 此值且整格墨占比 < 0.5 的不算遮挡（sheldon 10-28 定「印章范围内＋
+    #    背景有大量噪点」才算；20–99 册抽样约 14% 遮挡格背景干净）。0＝关。缺省开，进参数哈希。
     occluded_ref_empty_blank: bool = False
     """书级（缺省关，不进 dump）：遮挡格所在列整理本这一行是**空的**（坐标对位退回原因 `整理本行为空`，页已按页钉定位）、
     且这一列没有现役对位字 → 默认字来源记 `coord_blank`，由 R5 判非字（同 `occluded_past_leaf_blank`）。
@@ -1128,9 +1222,9 @@ class SeedAdmitParams(BaseModel):
     坐标对位给了字的格照旧（印压真字）；库认得出的格（判 same，或判 unsure 且首位相似度 ≥ `occluded_seal_keep_cov`）
     也照旧——印压真字时现役对位常给对字（056:77:1:10 三 0.969、054:89:1:9 五 0.965、051:3:1:10 十 0.944），
     印纹硬配的字库都判 diff 或首位偏低（052:91:2:19 一 0.913）。算法认的印（`frame`／`density`／`template`）不受影响。"""
-    occluded_seal_keep_cov: float = 0.93
-    """`occluded_manual_seal_blank`／`occluded_seal_align_yield` 的「印压真字」保险：库判 unsure 时首位相似度 ≥ 此值不判空。
-    两个开关都关时不进 dump。全唐文 046–060 人定印框下无坐标字的 120 格里，判空的 117 格首位最高 0.913，保下的 3 格真字 ≥ 0.944。"""
+    # ── `occluded_seal_keep_cov` = 0.93（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `occluded_manual_seal_blank`／`occluded_seal_align_yield` 的「印压真字」保险：库判 unsure 时首位相似度 ≥ 此值不判空。
+    #    两个开关都关时不进 dump。全唐文 046–060 人定印框下无坐标字的 120 格里，判空的 117 格首位最高 0.913，保下的 3 格真字 ≥ 0.944。
     occluded_seal_align_yield: bool = False
     """书级（缺省关，不进 dump）：`occluded_past_leaf_blank`／`occluded_ref_empty_blank` 判「整理本说这一列没字」时，
     **落在遮挡格里的现役对位字不算**，这些遮挡格的 `align` 默认字也让位给 `coord_blank`。起因：全唐文 057 p90 列 8、9
@@ -1149,14 +1243,14 @@ class SeedAdmitParams(BaseModel):
     放行、不是人裁格 → 挪成「遮挡待审、默认字 None」，再由 `lane_seal` 的 coord_blank 分支判非字
     （admit=True、char=None、文本层跳过）。context 通道**不算**强通道。只按格判，绝不按列判：印压真字的页
     框内有字的格不动。关着时不进参数哈希，产物逐字节不变。书 yaml `params: {seed_admit: {seal_blank_page: true}}`。"""
-    seal_blank_thr: float = 0.35
-    """印框 NCC 门槛（留一法 5/5 召回，非印页最高 0.282，阈值两侧余量 ≥0.07）。"""
-    seal_blank_overlap: float = 0.5
-    """格与印框重叠面积 ÷ 格面积 的下限。"""
-    seal_blank_ink_out: float = 0.005
-    """第四条保险：格内「模板外墨」＝格框内 <128 且落在本页命中模板覆盖区（二值化＋5px 膨胀）外的像素 ÷ 格面积；
-    ≥ 此值的格不算空（退出候选，仍待审）。只收窄。道 A 量法（overview#493）：真字页 vol02 p188 的 4 格真字
-    模板外墨 ≥ 0.045，阈值 0.005 与之有 9 倍空档；不是已校准的阈值，只是已知真字都在它外面。"""
+    # ── `seal_blank_thr` = 0.35（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    印框 NCC 门槛（留一法 5/5 召回，非印页最高 0.282，阈值两侧余量 ≥0.07）。
+    # ── `seal_blank_overlap` = 0.5（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    格与印框重叠面积 ÷ 格面积 的下限。
+    # ── `seal_blank_ink_out` = 0.005（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    第四条保险：格内「模板外墨」＝格框内 <128 且落在本页命中模板覆盖区（二值化＋5px 膨胀）外的像素 ÷ 格面积；
+    #    ≥ 此值的格不算空（退出候选，仍待审）。只收窄。道 A 量法（overview#493）：真字页 vol02 p188 的 4 格真字
+    #    模板外墨 ≥ 0.045，阈值 0.005 与之有 9 倍空档；不是已校准的阈值，只是已知真字都在它外面。
 
     shadow_veto: bool = True    # 2026-10-24 sheldon 定缺省开（殿本 vol05–20 原本逐册开着，门槛都是 0.8）
     """影子放行闸（overview#305 第一阶段，2026-10-24 起缺省开）：对**现行规则已放行**的格再算一次影子预测，
@@ -1180,8 +1274,8 @@ class SeedAdmitParams(BaseModel):
     """context 通道放行前，库判 `diff` 且 `cov < context_guard_cov` 就不放行（doubt
     `ctx_guard_diff`，overview#333 建议 1 前半）。库已经明确说「不像」，上下文单凭文意不该
     把它抬成字。缺省关；四个 `context_guard_*` 全是缺省值时都不进 dump，产物逐字节不变。"""
-    context_guard_cov: float = 0.8
-    """`context_guard_diff` 的 cov 门槛。"""
+    # ── `context_guard_cov` = 0.8（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `context_guard_diff` 的 cov 门槛。
     context_guard_ref_blank: bool = True   # 2026-10-23 sheldon 定缺省开（20 册全开）
     """坐标对位（`align_ref.coord`）说这一位是**空格**（`ref_char == ''`）、而库判不是 `same`
     时，context 通道不放字（doubt `ctx_guard_ref_blank`，`char=None`，卡片默认非字；建议 2）。"""
@@ -1205,8 +1299,8 @@ class SeedAdmitParams(BaseModel):
     vol04（快照 20261006T0716）：乱码列 context 放行 93 格拦 89；其余 339 格拦 43，看图
     全是错放或非字（版框角、圈号、半字、错位夹注），没有一格是对的。vol03 拦 7/93，同样全是
     错放。数字见 HANDOFF_C1.md（合并后移入 doc/handoffs/），重放脚本 research/garble_guard/replay.py。"""
-    context_garble_cov: float = 0.90
-    context_garble_rare_cov: float = 0.95
+    # ── `context_garble_cov` = 0.9（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `context_garble_rare_cov` = 0.95（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
 
     # ── 待审补放三通道（overview#433，R2 道）。各一个开关，缺省都关，书 yaml 打开 ──────────
     # 接在 iron／ji_yi_si／rare_ref／shadow 之后（页末 `_review_lanes_pass`），只碰仍待审的格：
@@ -1237,15 +1331,15 @@ class SeedAdmitParams(BaseModel):
     （`lane.via=lib_coord_codepoint`、`variant_norm=codepoint`）。另要求库候选里归一后不同字的最强对手比首位低
     `lane_coord_codepoint_gap` 以上、首位不是 diff；`lane_coord_codepoint_skip` 列出的字（逗号分隔）不放。
     全唐文 r8 这一类待审 114 格。缺省关，逐书开。"""
-    lane_coord_codepoint_gap: float = 0.005
+    # ── `lane_coord_codepoint_gap` = 0.005（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     lane_seal: bool = True
     """（2026-10-22 起缺省开，殿本十册原先逐册开。）R5 印章区（通道 `seal`）：`occluded_gate` 拦下的格，默认字来源在 `lane_seal_via` 里且有字 →
     放行默认字；坐标对位说这一位是空格（`via=coord_blank`）→ 判非字（`admit=True`、`char=None`、
     `evidence.occluded.ref_blank`，文本层跳过不占位）。护栏：本列坐标对位字连起来含
     `lane_seal_title_marks` 里任一串（卷端／版心题，坐标对位常错位）→ 整列不放。"""
-    lane_seal_via: str = "coord,align"
-    """R5 放行哪些来源的默认字（`_occluded` 的 via）：`coord`；加 `align` 连现役对位字也放。
-    2026-10-26 起缺省 `coord,align`（A32 印章格研究，sheldon 定：印章区 via=align 的 81 格看图未见错字；108 页回放新放 105 格，看图见 1 错：vol43 p2 整理本漏「有」致对位错一格）。"""
+    # ── `lane_seal_via` = 'coord,align'（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    R5 放行哪些来源的默认字（`_occluded` 的 via）：`coord`；加 `align` 连现役对位字也放。
+    #    2026-10-26 起缺省 `coord,align`（A32 印章格研究，sheldon 定：印章区 via=align 的 81 格看图未见错字；108 页回放新放 105 格，看图见 1 错：vol43 p2 整理本漏「有」致对位错一格）。
     lane_seal_title_marks: str = "書總目,四庫全書"
     """卷端／版心题列的标记串（本列坐标对位字连起来含任一串 → 整列不走 R5，除非是 `lane_seal_title_formula`
     套语列）。2026-10-26 由「總目,四庫全書」改为「書總目,四庫全書」：正文里的「崇文總目」之类不再连累整列。"""
@@ -1254,7 +1348,7 @@ class SeedAdmitParams(BaseModel):
     印章格按坐标对位字放行，不受 `lane_seal_title_marks` 整列不放、异体护栏、`lane_seal_lib_veto` 的限制
     （套语本身就是第二证据；印泥斑点下字形库几乎读不出）。殿本 47 册 58 列题列逐格看图：56 列与整理本全同，
     另 2 列坐标对位不全或整页错位，本规则或 `lane_seal_shift_guard` 自然不放。空串＝关。"""
-    lane_seal_title_norm: str = "巻卷"
+    # ── `lane_seal_title_norm` = '巻卷'（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     lane_seal_title_tolerance: int = 0
     """题列套语容错（2026-11-06，A32 D01 深挖，A31 定；书级开关，缺省 0＝关，殿本开 1）：本列坐标字连起来
     **前 8 字**（欽定四庫全書總目）与套语至多差这么多字、其余（卷＋数字）完全符合时，仍按套语放；不一致的那个字位
@@ -1263,10 +1357,10 @@ class SeedAdmitParams(BaseModel):
     """`lane_seal_title_tolerance` 用的套语前缀。"""
     """题列套语放行时的字形归一，两两一对「原字→新字」（sheldon 10-26：題列「巻」一律写「卷」，是本项目的
     新规矩，不必与整理本一致；刻本图上也是「卷」，9 次人裁全取「卷」）。"""
-    lane_seal_lib_veto: float = 0.95
-    """R5 库否决（2026-10-26，A32）：印章格的字形库首位覆盖度 ≥ 此值、与默认字不同又不是异体对 → 不放，
-    照旧送审（`lane_skip.why=lib_veto`）。47 册命中 61 格，看图约 12 格默认字是错的（整理本错字
-    兀/元、新/浙、一/十、門/開，及 vol40 p2 整页错位）。题列套语不受此限。0＝关。"""
+    # ── `lane_seal_lib_veto` = 0.95（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    R5 库否决（2026-10-26，A32）：印章格的字形库首位覆盖度 ≥ 此值、与默认字不同又不是异体对 → 不放，
+    #    照旧送审（`lane_skip.why=lib_veto`）。47 册命中 61 格，看图约 12 格默认字是错的（整理本错字
+    #    兀/元、新/浙、一/十、門/開，及 vol40 p2 整页错位）。题列套语不受此限。0＝关。
     # ── `lane_seal_lib_veto_second`（护栏／通道，2026-11-23 CV4 起恒开、不再是参数）
     lane_lib_veto: float = 0.0
     """witness3／coord_fallback 两条补放通道的库否决（2026-11-19，全唐文·形近字线；Sheldon 11-19 同意）：要放的字与
@@ -1280,10 +1374,10 @@ class SeedAdmitParams(BaseModel):
     （寇/𡨥 80、奧/奥 49、遙/遥 47、皐/臯 20、冑/胄 17、冊/𠕋 17）。空＝不例外（缺省，不进参数 dump）。"""
     """库否决放宽（2026-10-31，A32）：默认字正是字形库第二名时不否决（印泥压着，近形两字分差常不到 0.01）。
     vol20–99 r3 包里库否决 340 格，看图默认字错的约 10 格，全在「默认字不在库前二」那一档；默认字是第二名的 150 格看图未见错。"""
-    lane_seal_lib_veto_min_n: int = 2
-    """库否决只在库认得这个字时才算（2026-11-02，A32）：默认字在字形库里的刻例数 < 此值时不否决——库里没有（或只有
-    一例）这个字，首位必然是别的近形字，「库反对」不是证据。vol20–99 r1 包库否决 177 格里，默认字刻例 ≤1 的 83 格
-    看图 0 错；刻例 2 的 12 格有 1 错（母/毋），≥10 的 44 格有 6 错。0＝关（旧行为）。"""
+    # ── `lane_seal_lib_veto_min_n` = 2（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    库否决只在库认得这个字时才算（2026-11-02，A32）：默认字在字形库里的刻例数 < 此值时不否决——库里没有（或只有
+    #    一例）这个字，首位必然是别的近形字，「库反对」不是证据。vol20–99 r1 包库否决 177 格里，默认字刻例 ≤1 的 83 格
+    #    看图 0 错；刻例 2 的 12 格有 1 错（母/毋），≥10 的 44 格有 6 错。0＝关（旧行为）。
     lane_header_formula: bool = False
     """题列套语放行（史記文淵閣本 2026-11-02，目錄页题列；需同开 `row_segment.header_ref_flag`）：列级旗 `header_ref:<整理本行>`
     整行匹配 `史記卷N` 或 `X第N[上中下][篇名]`（本紀／世家／列傳／表／書），且本列字格数＝整理本行字数 →
@@ -1335,8 +1429,8 @@ class SeedAdmitParams(BaseModel):
     `match_solo`（cov ≥ `solo_cov`）；其余照旧送审。格式：逗号分隔，`库首位字` 或 `库首位字=录入字`，
     如 `絃,鉉,確,埀=垂,點=㸃`。表是一套书的数据，写在册 yaml；空 = 关（不进 dump）。
     殿本 vol11–20：sheldon 看图定 9 族 299 格（玄旁缺笔 絃鉉炫弦眩 录正字、確、㽔、邦、鬼、直、垂、㸃、負）。"""
-    pua_rule_cov: float = 0.85
-    """`pua_rules` 的库首位 cov 下限。殿本 9 族 299 格最低 0.89，全是 verdict=unsure、无护栏。"""
+    # ── `pua_rule_cov` = 0.85（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `pua_rules` 的库首位 cov 下限。殿本 9 族 299 格最低 0.89，全是 verdict=unsure、无护栏。
     """自动填（R1/R4 开着时）：`references` 证人文件内容戳，证人改了本步要过期
     （`core.step._with_witness_fingerprint`）。"""
     follow_ref: str = ""
@@ -1383,12 +1477,12 @@ class SeedAdmitParams(BaseModel):
     殿本 飲→餘、二→三 图上是库首位）：库首位 cov ≥ `lane_coord_blind_lib_cov`，参校字在库候选里但比库首位低 ≥ `lane_coord_blind_gap`，
     且参校字在本书库里刻例 ≥ `lane_coord_blind_min_n` → 不放，留审（`lane_skip.why=ref_blind`）。参校字不在候选里的不拦
     （r6 回放：不在候选一支 10 格拦对 1 错拦 8）。第 6 轮殿本 80 册 ★main 回放：4051 格里恰拦 2 格，都拦对。缺省关，关时不进参数 dump。"""
-    lane_coord_blind_min_n: int = 3
-    lane_coord_blind_lib_cov: float = 0.98
-    lane_coord_blind_gap: float = 0.05
-    ref_lib_coord_cov: float = 0.96
-    ref_lib_coord_gap: float = 0.01
-    """只在 `ref_lib_coord` 开着、`reference_trust` 关着时用：库首位 cov 下限，与语义不同的最好对手的领先下限。"""
+    # ── `lane_coord_blind_min_n` = 3（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `lane_coord_blind_lib_cov` = 0.98（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `lane_coord_blind_gap` = 0.05（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `ref_lib_coord_cov` = 0.96（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    # ── `ref_lib_coord_gap` = 0.01（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    只在 `ref_lib_coord` 开着、`reference_trust` 关着时用：库首位 cov 下限，与语义不同的最好对手的领先下限。
     ref_topk_follow: bool = False
     """库前 5 名候选里有整理本字、且与首位 cov 差 ≤ `REFERENCE_TRUST_TOPK_GAP` 时按整理本放（史記文淵閣本 2026-11-03，
     第 2 轮 P 类「机器字≠整理本」90 + 「整理本改字层」71 格看图：161 格里整理本字对的 ≥ 95%，库首位是形近字抢先；
@@ -1406,10 +1500,10 @@ class SeedAdmitParams(BaseModel):
     """`follow_ref_seen` 也接「护栏 conflict」格（书级，缺省关、关时不进 dump；A24 N01 第 7 轮复查 11-08，殿本 七／𠤎 28 格）：库把这一对里的两个字都判 same
     （候选前两名恰是 ref 与 seen 对里的另一形、护栏 `conflict`）——字形本就相同，只有整理本文意能定，放整理本形。只认 `护栏:conflict`，
     `never_match`／`timeout` 和别的 `护栏:*` 照旧拦；候选前两名里混进这一对以外的字也不放。要在本书看图确认这一对字形一样才开。"""
-    follow_ref_cov: float = 0.92
-    """`follow_ref` 待审格的库首位 cov 下限。殿本回放放行 27 格最低 0.939；0.87–0.89 的 2 格是切坏的残字。"""
-    follow_ref_gap: float = 0.005
-    """`follow_ref` 待审格：库首位领先这一对以外最好候选的下限。"""
+    # ── `follow_ref_cov` = 0.92（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `follow_ref` 待审格的库首位 cov 下限。殿本回放放行 27 格最低 0.939；0.87–0.89 的 2 格是切坏的残字。
+    # ── `follow_ref_gap` = 0.005（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `follow_ref` 待审格：库首位领先这一对以外最好候选的下限。
     # ── `edge_pair`（护栏／通道，2026-11-23 CV4 起恒开、不再是参数）
     # 异体边表自动暂归一（通道 `edge_pair`，A24 2026-10-31，r5 重放 V 类单格长尾约 360 对）：整理本字与库首位互为「自动对」
     # （`edge_pairs.is_auto_pair`：边表 T1 纯异体且 ≥2 个异体来源、不在字组、不在 `config/variants/edge_pair_exclude.tsv`）的待审格，
@@ -1422,16 +1516,16 @@ class SeedAdmitParams(BaseModel):
     - `lib`：放库首位（刻形证据）——按刻形转写的书（殿本）用，「同字」只表示这格可以不人审、不写暂归一；
     - `ref`：放整理本字——按整理本录的书（史記、全唐文）用。
     缺省 `freq` 逐字节不变、不进参数 dump。"""
-    edge_pair_cov: float = 0.92
-    """`edge_pair` 库首位 cov 下限（同 `follow_ref_cov`）。"""
-    edge_pair_gap: float = 0.005
-    """`edge_pair` 库首位领先这一对以外最好候选的下限（同 `follow_ref_gap`）。"""
+    # ── `edge_pair_cov` = 0.92（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `edge_pair` 库首位 cov 下限（同 `follow_ref_cov`）。
+    # ── `edge_pair_gap` = 0.005（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    `edge_pair` 库首位领先这一对以外最好候选的下限（同 `follow_ref_gap`）。
     edge_pair_group_seam: bool = True
     """`edge_pair` 补字组缝（A24 V01 深挖 11-06，第 7 轮）：整理本字与库首位是纯异体强边、但有一字是字组成员（`is_auto_pair` 不认），
     且这一格字组没接（evidence 里没有 group）→ 也按 `edge_pair` 判；涉及形近组时领先要 ≥ `edge_pair_group_seam_nf_gap`。
     殿本三书 ★main 包回看 9 格看图字都对（衞衛、隸隷、陰隂、尙尚、歲歳、𩀱雙、呂吕、嘗甞、廹迫）。"""
-    edge_pair_group_seam_nf_gap: float = 0.03
-    """字组缝涉及形近组时，库首位领先对外最好候选的下限（同字组入口的 delta）。"""
+    # ── `edge_pair_group_seam_nf_gap` = 0.03（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
+    #    字组缝涉及形近组时，库首位领先对外最好候选的下限（同字组入口的 delta）。
 
     # ── `codepoint_semantic`（护栏／通道，2026-11-23 CV4 起恒开、不再是参数）
     # 书级 `codepoints:` 并进语义判等（缺省开）：册配置声明过的码位对（巻→卷、别→別、岀→出、晩→晚、內→内 …）
@@ -1490,6 +1584,7 @@ class SeedAdmitParams(BaseModel):
             return d
         d.update(_RETIRED_IN_DUMP)
         d.update(_ALWAYS_ON_IN_DUMP)
+        d.update({k: copy.deepcopy(v) for k, v in _CONSTANTS.items()})
         for cond, keys in _DUMP_DROP:
             if cond(self):
                 for k in keys:
@@ -1517,7 +1612,7 @@ class SeedAdmitParams(BaseModel):
             if not same:
                 bad.append(f"{k}={v!r}")
         if bad:
-            raise ValueError(f"seed_admit 参数已退役（无书改过，2026-11-23 CV4 删或改恒开）：{', '.join(bad)}；"
+            raise ValueError(f"seed_admit 参数已退役（无书改过，2026-11-23／24 CV4 删、改恒开或收常量）：{', '.join(bad)}；"
                              "要用请找 CV4，说明哪本书、为什么")
         return {k: v for k, v in data.items() if k not in _RETIRED}
 
@@ -1668,3 +1763,12 @@ class SeedAdmitParams(BaseModel):
             from ..clustering.iron_evidence import _CONFIG as _IRON_CONFIG
             object.__setattr__(self, "iron_config_fingerprint",
                                corpus_fingerprint([str(_IRON_CONFIG)]))
+
+
+def _const_prop(k: str) -> property:
+    return property(lambda self: copy.deepcopy(_CONSTANTS[k]), doc=f"常量 `{k}`（见 `_CONSTANTS`）")
+
+
+for _k in _CONSTANTS:
+    setattr(SeedAdmitParams, _k, _const_prop(_k))
+del _k

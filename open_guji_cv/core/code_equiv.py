@@ -513,6 +513,52 @@ _INNER_PULL_1123 = ("版面 border_detect 新参数 inner_pull（缺省关、不
                     "detect_borders 的 Borders 产物 JSON sha256 与 origin/dev 4a26d7c 逐一相同（158/158）；2026-11-23（CV1；cv #1813 之后）")
 
 
+_OUTER_BAR_1124 = ("border_detect 加 outer_bar（左右外框线先找粗外框条再找内框细线，impl/keben/border.refit_outer_by_bar；缺省关、不进参数 dump，"
+                   "_bend_verticals／refit_bends／detect_borders 多一个缺省 False 的参数、关时那一支不进；其余是新函数定义）：殿本 vol01 8 页（9,40,45,132,161,1,50,79）、"
+                   "脈經 01 3 页（3,4,47）、全唐文 120 2 页（8,118）、史記 05 3 页（3,8,58）border_detect 与 origin/dev 08b0d2c 产物逐字节相同；"
+                   "column_warp、border_detect_gate 只把 impl/keben/border 列进 code_deps、不调改动的函数；scripts/code_equiv.py check，2026-11-24（CV1）")
+_VLINE_TRACK_1125 = ("border_detect 加 vline_track（竖线逐条先直线、贴不住再自由折点三段折线，impl/keben/border.refit_vlines_by_track；缺省关、不进参数 dump，"
+                     "_bend_verticals／refit_bends／detect_borders 多一个缺省 False 的参数、关时那一支不进；_apply_vline_override 多一个缺省 False 的 chord_slope，"
+                     "关时走原式；其余是新函数定义）：殿本 vol01 9 页（9,40,45,100,132,161,1,50,79，含 vline_overrides 页 100）、脈經 01 3 页（3,4,47）、"
+                     "全唐文 120 2 页（8,118）、史記 05 3 页（3,8,58）border_detect 与 cv1-outer-bar c6c410d 产物逐字节相同；"
+                     "scripts/code_equiv.py check，2026-11-25（CV1）")
+_VER_EQUIV_1124 = ("裁定版本等价登记表（RulingStore.get_equiv；_vis_ruling_pass 与 fold 遍改用它，没有 ver_equiv.yaml 时与 get 完全相同；"
+                   "非精确命中才写 ruling_key／ruling_ver；白名单按目标版本判，精确命中时与原判据同）：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，"
+                   "main 包 cv0.7.86-c36-g24-m3-r17notch86）、全唐文 020 16 页（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，"
+                   "main 包 cv0.7.93-c82-g-631101-k11-qtw020-vf1-a4）、史記 02 18 页（4,9,19,24,33,41,44,53,86,95,102,106,114,141,173,180,185,199，"
+                   "main 包 cv0.7.59-c10-g23-m2-k25-job5767），三书中心库现有裁定库（殿本 52,312 条、全唐文 6,229、史記 714）在场，"
+                   "seed_admit 与 origin/dev a941e67 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4，裁定键长期方案②）")
+
+_ANCHOR_1124 = ("裁定格锚点后备键（RulingStore.get_anchor、rulings.page_cells_sha、edit_distance；_vis_ruling_pass／fold 遍在窗口键都没中后查锚点，"
+                "只在裁定库里有带 cells_sha 的裁定时才算本页 sha——三书现库一条都没有）：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页"
+                "（页号与产物包同 _VER_EQUIV_1124），三书中心库现有裁定库在场，seed_admit 与 origin/dev 2ecc951 产物逐字节相同；"
+                "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4，裁定键长期方案③）")
+
+_VALIDATE_1124 = ("写裁定前校验（rulings.validate／validate_payload、RulingLog.append 拒写；看图判版本与子类表挪到 rulings.VIS_RULING_SPECS，"
+                  "seed_admit 引用同一份，值不变）：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（页号与产物包同 _VER_EQUIV_1124），"
+                  "三书中心库现有裁定库在场，seed_admit 与 origin/dev 939ec88 产物逐字节相同；scripts/code_equiv.py check，"
+                  "GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4，裁定键长期方案①）")
+
+_LOOSE_1124 = ("格锚点宽松档 seed_admit.ruling_anchor_loose（书级，缺省关、关时不进参数 dump；GM4 合并方案，CV0 条件 (b)）："
+               "殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（页号与产物包同 _VER_EQUIV_1124），三书中心库现有裁定库在场"
+               "（未推任何锚点回填），seed_admit 与 origin/dev a68b379 产物逐字节相同；scripts/code_equiv.py check，"
+               "GUJI_CORPUS_DRIFT=warn，2026-11-24（CV4）")
+
+_BY_U_1124 = ("裁定按字格永久编号 u 查 seed_admit.ruling_by_u（书级，缺省关、关时不进参数 dump；RulingStore 加按 payload.u 的索引与 get_by_u、"
+              "_anchor_loose 加 key 参数缺省 anchor、put 加 u 参数缺省 None、新类 UidLedger；_vis_ruling_pass／_fold_pass 加 umap 参数缺省 None，"
+              "关时 _uid_map 返回 None 不读账；CV0 T3）：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190，"
+              "main 包 cv0.7.86-c36-g24-m3-r17notch86）、全唐文 020 16 页（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170，"
+              "main 包 cv0.7.93-c82-g-715f07-k11-qtw020-vh3-a5）、史記 02 18 页（4,9,19,24,33,41,44,53,86,95,102,106,114,141,173,180,185,199，"
+              "main 包 cv0.7.59-c10-g23-m2-k25-job5767），三书中心库现有裁定库在场，seed_admit 与 origin/dev 728e635 产物逐字节相同"
+              "（史記首轮 --jobs 4 p106 一页不同，同代码单跑两次、整 18 页复跑均相同，按并发偶发记）；"
+              "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-24（CV0）")
+
+_BY_U_CACHE_1125 = ("ruling_by_u 扩到字组文意在线问前查缓存（rulings.UMAP_SCOPE、RulingStore.get_by_u_ver、RulingCache.lookup 加 cell 参数缺省 None；"
+                    "ctx_llm._entry 把 cell 传给 lookup、AnswerCache.lookup 加 cell 参数不用、命中 u 时 extra 记 ruling_key；seed_admit 只在 ruling_by_u 开时设本页 u，"
+                    "关时走原分支；CV0 T3）：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（页号与产物包同 _BY_U_1124），"
+                    "三书中心库 rev 1417300 在场（含殿本试点两册身份账与挂 u 的裁定），seed_admit 与 origin/dev 304bf9d4 产物逐字节相同；"
+                    "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-25（CV0）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2409,6 +2455,101 @@ ENTRIES: tuple[Equiv, ...] = (
           new="f83cc97bd92b20b4e28664f04acdfc845819bbdc3240a8fd73fd6167d71c667e",
           old="7401f1dbd7d03195f07ca34a8ad64f4571e92a079e93a36ffb9dc05505577611",
           evidence=_INNER_PULL_1123),
+    # border_detect outer_bar（外框线先粗条后细线，缺省关；CV1 11-24）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='0510de3a2163d7bf166e8a23c6b2a5fdd7e124c40acfd0e3502f7b1e66b36a91',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_OUTER_BAR_1124),
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='b0c0fb8c4f891a718541855f3f604292da003e6315a268906121dd3bc9a60304',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_OUTER_BAR_1124),
+    # vline_track（CV1 11-25）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='077e87276f1290fee0c8e97e02a94a58b73fcd74d787e30836521e913856400c',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_VLINE_TRACK_1125),
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='00df255d51ef67106ea3fe04c32fb1e7efaa87de70ae61fbb8e6c71e08243567',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_VLINE_TRACK_1125),
+    # 裁定版本等价登记表（CV4，裁定键长期方案②，GM4 11-24）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="df5ba5579860f18cf02afb968a88ce999ec0f89cf297eabcea8c1a4210514d08",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_VER_EQUIV_1124),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="0fd369d3398f0f49b5b70556e44af04253164676145ecb02c9ae30c0e63168d4",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_VER_EQUIV_1124),
+    # 裁定格锚点后备键（CV4，裁定键长期方案③，GM4 11-24）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="3eb95b3fbb6515d162bc2c418cf4cc84e211110066eafcd508165be87a9ddc32",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_ANCHOR_1124),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="51da67a783eca81b6b3d6cb1a3202c53358f8ae6d99a2ba3bed5a2e8044020cb",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_ANCHOR_1124),
+    # 写裁定前校验（CV4，裁定键长期方案①，GM4 11-24）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="9a4a4a6e299ecb3d90d1baeb97fb4fbe13e48ef3883bc826784df114e6a9cdb7",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_VALIDATE_1124),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="b5e9cc4e459c1a0e3b05677069445080b32066073ccc31172e8e341ed6bddc01",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_VALIDATE_1124),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="a810a0bd290947d8e270b452a00cfc4185af8433d947568c520085ab292202eb",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_LOOSE_1124),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="0c2d5bf7c777901690fb36447e80a6b014eb199530ec29ca66ff456fa3a7e67e",
+          old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
+          evidence=_LOOSE_1124),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="48114ec6b04e2a85a6f3550c4ca98235058f5b61f45aacfa3db4aa2e35ea94d6",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_LOOSE_1124),
+    # seed_admit 69 个门槛收成常量（CV4 整理 PR4，Sheldon 11-24 定）：字段改 `_CONSTANTS`＋只读属性，参数指纹 12,472 组全同
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="0e45e99f8310562215d11c37c1c6cae104054f4821befd7e55cb083bbc5c1515",
+          old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
+          evidence="seed_admit 与 62c715fd 产物逐字节相同：殿本 vol28 16 页（1,2,3,5,8,12,20,30,45,60,80,100,102,130,160,190）、"
+                   "全唐文 020 16 页（3,10,20,30,40,50,60,70,80,90,100,110,120,130,150,170）、"
+                   "史記 02 18 页（4,9,19,24,33,41,44,53,86,95,102,106,114,141,173,180,185,199）"),
+    # solo_5b_min_n 恢复成参数（脉经 no_ref_params 要设 1，11-24）：缺省 3、缺省不进 dump，参数指纹 12,472 组全同
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="8bc6350ef775871af2dda3013f4dd207b8efebc1a871e863402dbdddea585f8e",
+          old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
+          evidence="seed_admit 与 bda9a06 产物逐字节相同：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（页同上条）"),
+    # 裁定按 u 查（CV0 T3，字格永久编号 u 执行方案 11-24）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="7cea519cb92fc41428dfc925453bd905596bd3ba89a62338fa647ebb05c3c2f6",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_BY_U_1124),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="5728bc579766f98a8aa7bea84769d9033d18f15601892e0221da6337dfb082e2",
+          old="e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091",
+          evidence=_BY_U_1124),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="4b82f4a44d45d4281fda170891124cde9a3c9c8edfdc572f251690defec41fed",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_BY_U_1124),
+    # ruling_by_u 扩到字组缓存（CV0 T3 11-25）——dev 哈希
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="925d756f44e9216864babb9109e7d5abe691586014ea6cbbe29df931137d6085",
+          old="110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6",
+          evidence=_BY_U_CACHE_1125),
+    Equiv(module="open_guji_cv.groups.ctx_llm",
+          new="27e34b7b68328e0ac663d359fbebd0f611dab7a4c30960f96a53050fa05075d1",
+          old="3b2c29a55f7818bfde830222dbdbad75d73116c0733b888d436483c1352bd7ca",
+          evidence=_BY_U_CACHE_1125),
+    Equiv(module="open_guji_cv.feedback.rulings",
+          new="515edb292d4fb83c5decdc0465df9a61489c5a6769936f62bdcf68e5b97bbf84",
+          old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
+          evidence=_BY_U_CACHE_1125),
 )
 
 
