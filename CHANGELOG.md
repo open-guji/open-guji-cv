@@ -6,6 +6,10 @@
 - PATCH（库里没有带 cells_sha 的裁定时产物逐字节不变，code_equiv 登记）：裁定格锚点后备键（GM4／CV4 11-24，裁定键长期方案③）。窗口键（含版本等价）都没中时，`RulingStore.get_anchor` 按「格号＋写裁定时本页 `cells_sha`（`rulings.page_cells_sha`＝`bindings.page_state` 两份 sha 用 + 连）＋整理本对位字 `ref`」三样全对取裁定，另要求裁定字在库候选或＝ref，其余护栏照旧；`_vis_ruling_pass` 与 fold 遍用它，证据记 `ruling_key=anchor`。只认 payload 自带 `cells_sha` 的裁定（新裁定写入方当场写，存量由 manager 回填、只回填能证明是写裁定那一刻产物的）；库里一条都没有时不算 cells_sha。
 - PATCH（缺省无表时产物逐字节不变，code_equiv 登记）：裁定版本等价登记表（GM4／CV4 11-24，裁定键长期方案②）。数据目录 `<feedback>/rulings/ver_equiv.yaml`（随中心库同步，缺文件＝空表）登记「旧提示词版本→新版本」，可开 `model_suffix`（只差 `#模型` 后缀即等价，各后缀须同字、conf 取最低）。`RulingStore.get_equiv` 精确键没中再按表查；`_vis_ruling_pass` 放行与 fold 遍用它，护栏照旧，白名单按目标版本判；非精确命中的 `evidence.vis_ruling`／`evidence.fold` 多带 `ruling_key=ver_equiv`、`ruling_ver`。在线问前查缓存仍按精确键（二审小组按「版本#模型:effort」分键）。
 
+## [0.7.105] - 2026-11-25
+
+殿本 patch 线：v0.7.102 ＋ dev #1864（冷缓存再生列图护栏：column_warp.render 再生尺寸≠产物 warped_size 报错、cell_shrink 内框线记忆带产物戳、core/step 册配置漂移拒绝现算；只动 render 路径，按本线哈希登记 code_equiv）＋ dev #1863（group_flow：一二复核整理本＝放行字时不按两路图像改字）。含 #1848＋#1856（ruling_by_u，v0.7.102 已带）；#1813／#1820／#1838 在 v0.7.97–0.7.99 已有，#1862 已关（#1864 的子集）。**对 v0.7.99 实测（check_fp_change）23 步只有 seed_admit 指纹变**：border_detect 到 read 不变，指纹变更：seed_admit 起过期（殿本开 ruling_by_u 后统一重跑）。`ruling_anchor_loose` 参数名与去键规则同 v0.7.99，已开它的册参数 dump 不变。（CV0，ZM／CV1 11-25 定）
+
 ## [0.7.102] - 2026-11-25
 
 殿本 patch 线：v0.7.99 ＋ dev #1848（书级开关 `seed_admit.ruling_by_u`：窗口键、锚点都没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，护栏同宽松档；缺省关、关时不进参数 dump）＋ dev #1856（字组在线问前查缓存也按 u 后备，版本须完全相同）。本线没有 `seed_admit_params.py`，开关写在 `steps/seed_admit.py`。**23 步 code_hash 只有 seed_admit 变**，未登记 code_equiv：u 项目 11-25 起各书开 `ruling_by_u`，参数 dump 本来就变，seed_admit 起重放。（CV0，u 项目 T3；Sheldon 11-25「尽快完成转换」）
