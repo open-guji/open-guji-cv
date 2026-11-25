@@ -54,6 +54,10 @@
 
 ## [未发版]
 
+## [0.9.1] - 2026-11-25
+
+0.9 patch 线（跟 v0.9.0 的书：脈經、北行）：v0.9.0 ＋ 移植 dev #1848＋#1856（书级开关 `seed_admit.ruling_by_u`：窗口键没中时按字格永久编号 u 查裁定，读身份账 `<feedback>/uid/<册>.jsonl`，只收 high、前后 2 字至少一侧相同、裁定字在库候选或＝整理本字；字组在线问前查缓存也按 u 后备，版本须完全相同）。缺省关、关时不进参数 dump。做法同 v0.7.103／v0.7.104：本线无格锚点接入，seed_admit 只加 u 档；`feedback/rulings.py` 取 v0.7.102 全文，`RulingLog.append` 写前校验缺省不开。**不含** v0.9.0 之后 dev 的其他改动（dev 上未登记的 seed_admit 指纹变更与底库 b35 都不带）。对 v0.9.0 实测（check_fp_change）23 步只有 seed_admit 变：指纹变更：seed_admit 起过期（开 ruling_by_u 的书从 seed_admit 重放）。底库不变。（CV0，u 项目 T3；Sheldon 11-25「彻底收尾」）
+
 ## [0.9.0] - 2026-11-23
 
 - **MINOR**（Sheldon 11-22 定，11-23 说「可以发新版」）：九步并成四大步、cv 自己的入口 `guji-cv`、原 Step8／Step9 移到 guji-manager。23 步 `code_hash` 与 v0.8.0 相同，各书产物不过期。影响见 RELEASES.md v0.9.0。
