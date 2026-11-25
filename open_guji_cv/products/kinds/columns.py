@@ -103,7 +103,8 @@ COLUMN_IMAGE = register_kind(ProductKindSpec(
 # ── 2b 定字带左右边：`column_bands` + 缓存列图 `column_banded`（2026-11-25 切字五小步拆分）──
 class ColumnBandRec(BaseModel):
     col: int
-    band: tuple[int, int]          # 文字带 [x_lo, x_hi)，列图坐标；带外已抹白（`column_banded`）
+    band: tuple[int, int]          # 文字带 [x_lo, x_hi)，列图坐标；带外界行已抹（`column_banded`）
+    cut: tuple[int, int] | None = None  # 2b 左右切点 [x_lo, x_hi)（`column_band.side_cut`），切点外整列已抹白；关着为 None
 
 
 class PageBands(BaseModel):
