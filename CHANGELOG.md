@@ -107,6 +107,10 @@
 
 - PATCH（只改分组，步骤 id、产物、指纹都不变）：单列拉直（`column_warp`／`column_crop`／`column_trace`、`line_ocr`，骨架槽位 `columns`）从大步 1 版面移到 2 切字（Sheldon 2026-11-22 定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。`--from cut` 现在从拉直起跑；小步编号改为 2a 单列拉直、2b 逐字切分、2c 字框收缩，doc／Wiki 同步。
 
+## [0.7.107] - 2026-11-25
+
+史記 patch 线：v0.7.103 ＋ 只改 `scripts/zhengli/republish.py`（不进任何 Step 的 code_hash，23 步指纹与 v0.7.103 全同，不用登 code_equiv）。① 出单导出改走 guji-manager 的 `guji_manager.output.guji_format_export`（同 dev），册有字格身份账时 char 每格带 `u`（v0.6），推 book-text 时 local_check 不再报标点／专名 u 对不上；没装 manager 才退回本线 `scripts/export_guji_format.py`。要 guji-manager ≥ 0.6.20（导出器配老 cv 不崩、带 u 的 char 保持 v0.6）。② 移植 dev 067f2229：出单后 `db sync` 缺省不推字形库（GUJI_DB_NO_GLYPH）。史記 012 实跑：012-r1 1 格 → 012-r2 3 格，book-text 0.1.1→0.1.2。（CV0 u T1，11-25）
+
 ## [0.7.106] - 2026-11-25
 
 殿本 patch 线：v0.7.105 ＋ dev #1868（CV1，border_detect 书级开关 `head_raise_fit`：抬头列认下后校内框高度、量上外框跳过抬头列；缺省关、关时不进参数 dump）。只带 border_detect／impl.keben.border 的改动，eval/ 与文档不带。**对 v0.7.105 实测（check_fp_change）23 步指纹全不变**：本线哈希已登 code_equiv（vol28 12 页 border_detect＋gate 逐字节同）。不开 `head_raise_fit` 的册不过期；开了的册按参数指纹从 border_detect 起过期。（CV0，ZM 11-25 定）
