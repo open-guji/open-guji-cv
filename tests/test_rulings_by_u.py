@@ -155,3 +155,49 @@ def test_put_with_u(tmp_path):
     st.put("ry", "ry-l2-2", "某甲乙", "丙丁", char="曰", conf="high", why="", model="m", cell=CELL, u=5)
     assert st.get_by_u("ry", "ry-l2-2", BOOK, 5, "甲乙", "丙丁")["char"] == "曰"          # 内存索引即时可查
     assert RulingStore(tmp_path).get_by_u("ry", "ry-l2-2", BOOK, 5, "甲乙", "丙丁")["u"] == 5   # 落盘后重读
+
+
+# —— 字组文意在线问前查缓存的 u 后备（RulingCache.lookup，CV0 T3 11-25）——
+# 用例取自殿本试点强制 u 回放里只靠字组缓存放行的 7 格（vol28:12:2:11 子 yz、18:1:-1 諭 ly、106:6:11 諭 ly、82:9:8 已 jys；
+# vol31:185:1:9 末 wm、203:8:2 本 mb、205:4:15 本 mb），这里按它们的组、版本、字自造数据。
+SEVEN = [("vol28:12:2:11", "yz", "yz-l2-1", "子", 101), ("vol28:18:1:-1", "ly", "ly-l2-1", "諭", 102),
+         ("vol28:106:6:11", "ly", "ly-l2-1", "諭", 103), ("vol28:82:9:8", "jys", "jys-l2-1", "已", 104),
+         ("vol31:185:1:9", "wm", "wm-l2-2", "末", 105), ("vol31:203:8:2", "mb", "mb-l2-1", "本", 106),
+         ("vol31:205:4:15", "mb", "mb-l2-1", "本", 107)]
+
+
+def _seven(tmp_path):
+    st = RulingStore(tmp_path)
+    for cell, g, ver, ch, u in SEVEN:
+        st.put(g, ver, "甲乙", "丙丁", char=ch, conf="high", why="", model="m", cell=cell, u=u)
+    return RulingStore(tmp_path)
+
+
+def test_cache_lookup_by_u_seven(tmp_path):
+    from open_guji_cv.feedback.rulings import UMAP_SCOPE, RulingCache
+    rc = RulingCache(_seven(tmp_path))
+    um = {cell: u for cell, *_, u in SEVEN}
+    for cell, g, ver, ch, u in SEVEN:
+        assert rc.lookup(g, ver, "m", "某甲乙", "改改", cell=cell) is None          # 没设本页 u：窗口变了就查不到（原行为）
+    tok = UMAP_SCOPE.set(um)
+    try:
+        for cell, g, ver, ch, u in SEVEN:
+            e = rc.lookup(g, ver, "m", "某甲乙", "改改", cell=cell)                 # 窗口变了、左 2 字同：按 u 找回
+            assert e["char"] == ch and e["ruling_key"] == "u" and e["u"] == u
+            assert rc.lookup(g, ver, "m", "改改", "改改", cell=cell) is None          # 两侧 2 字都不同：不认
+            assert rc.lookup(g, ver + "#x:high", "m", "某甲乙", "改改", cell=cell) is None   # 版本须完全相同（小组成员不串）
+        assert rc.lookup("yz", "yz-l2-1", "m", "甲乙", "丙丁", cell="vol28:12:2:11").get("ruling_key") is None   # 窗口键先中
+    finally:
+        UMAP_SCOPE.reset(tok)
+
+
+def test_ctx_llm_judge_uses_u_cache(tmp_path):
+    from open_guji_cv.feedback.rulings import UMAP_SCOPE, RulingCache
+    from open_guji_cv.groups import ctx_llm
+    rc = RulingCache(_seven(tmp_path))
+    tok = UMAP_SCOPE.set({"vol31:185:1:9": 105})
+    try:
+        v = ctx_llm.judge("wm", "s", "wm-l2-2", "某甲乙", "改改", ("末", "未"), cache=rc, cell="vol31:185:1:9")
+    finally:
+        UMAP_SCOPE.reset(tok)
+    assert v.char == "末" and v.extra.get("cached") and v.extra.get("ruling_key") == "u" and v.extra.get("u") == 105

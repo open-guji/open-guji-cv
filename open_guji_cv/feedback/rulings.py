@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+from contextvars import ContextVar
 import time
 from pathlib import Path
 
@@ -49,6 +50,9 @@ WIDTH = 20
 CELL_CODE_VER = "src-2"      # 格→私用码记录（按格号取，不是窗口键）
 EQUIV_FILE = "ver_equiv.yaml"
 _CONF_RANK = {"high": 3, "mid": 2, "low": 1}
+#: 本页 {格号: u}（seed_admit 在 `ruling_by_u` 开着时、跑字组流程前设，跑完复原；缺省 None＝不按 u 查）。
+#: `RulingCache.lookup` 窗口键没中时按它查同版本的裁定（字组文意在线问前查缓存，CV0 T3 11-25）
+UMAP_SCOPE: "ContextVar[dict | None]" = ContextVar("rulings_umap_scope", default=None)
 
 
 ANCHOR_MAX_WIN_DIFF = 3   # 格锚点命中时，裁定窗口与现窗口的编辑距离上限（GM4 审 #1832）
@@ -393,6 +397,26 @@ class RulingStore:
             return None
         return self._anchor_loose(group, prompt_ver, rows, self.ver_equiv(), left, right, key="u")
 
+    def get_by_u_ver(self, group: str, prompt_ver: str, book: str | None, u: int | None,
+                     left: str | None = None, right: str | None = None) -> dict | None:
+        """字组在线问前查缓存的 u 后备（`RulingCache.lookup`）：同组同册同 u、**版本完全相同**（含 `#模型:effort` 后缀，
+        二审小组各成员分键存，不能串）的那一条；前后 2 字至少一侧与裁定记的窗口相同，没记窗口弃权。不看 conf（judge 自己按 conf 判）。
+        → payload 副本（`ruling_key="u"`、`win_sides`）｜None。"""
+        if not book or not u:
+            return None
+        self._load()
+        x = (self._uix.get((group, book, u)) or {}).get(prompt_ver)
+        if x is None:
+            return None
+        c = x.get("ctx") or {}
+        if "left" not in c or "right" not in c:
+            return None
+        sides = [s for s, a, b in (("left", c["left"][-ANCHOR_WIN:], (left or "")[-ANCHOR_WIN:]),
+                                   ("right", c["right"][:ANCHOR_WIN], (right or "")[:ANCHOR_WIN])) if a == b]
+        if not sides:
+            return None
+        return {**x, "ruling_key": "u", "win_sides": sides}
+
     def uid_ledger(self) -> "UidLedger":
         """本裁定库同一 feedback 根下的字格身份账（只读）。"""
         if getattr(self, "_uled", None) is None:
@@ -499,12 +523,22 @@ class RulingCache:
     def __init__(self, store: RulingStore):
         self.store_ = store
 
-    def lookup(self, group, prompt_ver, model, left, right):
+    def lookup(self, group, prompt_ver, model, left, right, cell: str | None = None):
+        """窗口精确键；没中且本页设了 `UMAP_SCOPE`（`ruling_by_u` 开）、`cell` 在里面 → 按 u 查同版本裁定（`get_by_u_ver`），
+        命中的条目多带 `ruling_key="u"`、`u`。没设 `UMAP_SCOPE` 时与原来完全相同。"""
         p = self.store_.get(group, prompt_ver, left, right)
+        extra = {}
         if p is None:
-            return None
+            um = UMAP_SCOPE.get()
+            u = um.get(cell) if (um and cell) else None
+            if not u:
+                return None
+            p = self.store_.get_by_u_ver(group, prompt_ver, _book(cell), u, left, right)
+            if p is None:
+                return None
+            extra = {"ruling_key": "u", "u": u}
         return {"char": OTHER if p.get("other") else p.get("char"), "conf": p.get("conf"), "why": p.get("why"), "model": p.get("model"),
-                "tok": p.get("tok") or {}}
+                "tok": p.get("tok") or {}, **extra}
 
     def store(self, group, prompt_ver, model, left, right, e: dict, cell=None) -> None:
         self.store_.put(group, prompt_ver, left, right, char=e.get("char"), conf=e.get("conf"), why=e.get("why") or "",
