@@ -37,7 +37,8 @@ def main(argv=None) -> int:
     ap.add_argument("--prev")
     ap.add_argument("--keep-prev-on-regress", action="store_true")
     ap.add_argument("--snapshot", default="")
-    ap.add_argument("--sim-model", default="")
+    ap.add_argument("--sim-model", required=True,
+                    help="嵌入模型权重 sha256 前 12 位（与书配置 glyph_match.sim_model 同一个）；5a.3 起跑前核对，对不上拒跑")
     a = ap.parse_args(argv)
 
     labels = json.loads(Path(a.labels).read_text(encoding="utf-8"))
