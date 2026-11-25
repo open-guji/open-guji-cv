@@ -22,7 +22,7 @@ def _gate(tmp_path, shift, **params):
     ctx.store.write(book.id, "border_detect", f"p{PAGE:04d}", {"borders": borders})
     ctx.store.write(book.id, "border_detect_gate", f"p{PAGE:04d}", {"border_detect_gate_manifest": make_gate1(
         PAGE, n_cols=borders.expected_cols, expected_cols=book.expected_cols)})
-    return run_steps(ctx, PAGE, ["column_warp", "column_band", "column_end", "column_gate"])["gate_manifest"]
+    return run_steps(ctx, PAGE, ["column_warp", "column_band", "column_end", "column_geometry", "column_gate"])["gate_manifest"]
 
 
 def _narrow(gm):

@@ -84,3 +84,8 @@ class GateManifest(BaseModel):
 GATE_MANIFEST = register_kind(ProductKindSpec(
     id="gate_manifest", title="Step2→3 交接闸裁决", storage="numeric", unit="column",
     schema=GateManifest, coord_space=COLUMN_PX))
+
+
+COLUMN_GEOMETRY = register_kind(ProductKindSpec(
+    id="column_geometry", title="2 列几何（文字带、格线范围、页级字距；结构性可切裁决）", storage="numeric", unit="column",
+    schema=GateManifest, coord_space=COLUMN_PX))

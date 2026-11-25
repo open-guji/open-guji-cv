@@ -17,10 +17,13 @@ def _gate(tmp_path, xs=None, **params):
     ctx = make_ctx(tmp_path, book, raw={PAGE: gray})
     if params:
         ctx.params["column_gate"] = ColumnGateParams(**params)
+        for sid in ("column_geometry", "cut_gate"):       # 刻本链：同名字段复制到新 Step（见 pipeline.LEGACY_PARAM_COPIES）
+            P = STEPS[sid].spec.params
+            ctx.params[sid] = P(**{k: v for k, v in params.items() if k in P.model_fields})
     ctx.store.write(book.id, "border_detect", f"p{PAGE:04d}", {"borders": borders})
     ctx.store.write(book.id, "border_detect_gate", f"p{PAGE:04d}", {"border_detect_gate_manifest": make_gate1(
         PAGE, n_cols=borders.expected_cols, expected_cols=book.expected_cols)})
-    return run_steps(ctx, PAGE, ["column_warp", "column_band", "column_end", "column_gate", "row_segment", "row_segment_gate"])
+    return run_steps(ctx, PAGE, ["column_warp", "column_band", "column_end", "column_geometry", "column_gate", "row_segment", "row_segment_gate"])
 
 
 def test_page_kinds_table_cols_loads_and_maps():

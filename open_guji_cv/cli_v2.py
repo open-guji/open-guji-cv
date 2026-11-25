@@ -292,7 +292,7 @@ def _failed_pages(eng, steps: list[str], pages: list[int]) -> list[str]:
     store = ProductStore(eng.store.root)
     out = []
     for sid in steps:
-        gate = STEPS[sid].spec.gate if sid in STEPS else None
+        gate = eng.pipeline.gate_of(sid) if sid in STEPS and sid in eng.pipeline.steps else None
         for s in (sid, gate.id) if gate else (sid,):
             m = store.manifest(eng.book.id, s)
             out += [f"{s} p{pg}" for pg in pages
