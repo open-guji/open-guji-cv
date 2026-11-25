@@ -789,7 +789,17 @@ class SeedAdmitStep(Step):
         # 字组统一流程（group_flow）紧接主循环：组内格先按组判，免得 rare_ref 等补放遍把整理本字
         # 放进来（vol04 A/B：rare_ref 把刻作 𫎇 的格放成整理本的 蒙）
         if p.group_flow:
-            d_gf = _group_flow_pass(p, out, amap, mmap, ctx, page, patch_missing)
+            # `ruling_by_u`：字组文意在线问前查缓存时，窗口键没中再按本格 u 查同版本裁定（CV0 T3 11-25）；关时不设、不读账
+            _um = _uid_map(p, ctx, page) if getattr(p, "ruling_by_u", False) else None
+            if _um:
+                from ..feedback.rulings import UMAP_SCOPE
+                _tok = UMAP_SCOPE.set(_um)
+                try:
+                    d_gf = _group_flow_pass(p, out, amap, mmap, ctx, page, patch_missing)
+                finally:
+                    UMAP_SCOPE.reset(_tok)
+            else:
+                d_gf = _group_flow_pass(p, out, amap, mmap, ctx, page, patch_missing)
             n_auto += d_gf
             n_review -= d_gf
             if p.group_flow_rr_shape:
