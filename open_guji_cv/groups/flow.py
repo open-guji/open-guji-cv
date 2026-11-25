@@ -81,7 +81,6 @@ class FlowConfig:
     l3_need_l2_agree: bool = False                     # L3 在线给的字须与 L2 模型弃权时的首选字相同
     l3_skip_half: bool = False                         # 夹注 a/b 半格不走 L3（答案表、在线、二审小组都不碰；SJ 史記 06:12:5:12a 错放，A31 11-04 定半格归 S）
     l3_half_groups: frozenset = frozenset()            # 书级：这几组不受 `l3_skip_half` 限制（seed_admit `group_flow_llm_half_groups`，A24 11-08）
-    ruling_first: frozenset = frozenset()              # 书级：这几组文意先查裁定库，命中就照裁定给字（L1 规则、L2 表／小头都让位；seed_admit `group_flow_ruling_first`，全唐文 11-13）
     l3_panel: tuple = ()                               # L3 二审小组 ("模型:effort", …)：首问不稳时全部同字才给字，记 strong（`ctx_llm.panel_verdict`）；空＝不开
     l3_panel_groups: tuple = ()                        # 哪些组用二审小组（其余组不问）
     canon: Callable[[str], str] | None = None          # 书级码位归一（L2 表键按它归一再比；None＝逐字比）
@@ -268,6 +267,11 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         return g, "lift"
     for g in groups_in(top, cfg.groups):      # 库首位与整理本（缺位时坐标对位）字同在本组：分差内的组外字不拦（`FlowSpec.ref_top_enter`）
         if GROUPS[g].flow.ref_top_enter and rr and (rr in GROUPS[g].members or canon(rr) in GROUPS[g].members):
+            return g, "lift"
+    for g in groups_in(top, cfg.groups):      # 库首位与整理本（缺位时坐标对位）字同在本组、分差内的组外字都在 `ref_top_extra` 里（库补常用字的新邻字）
+        f = GROUPS[g].flow
+        if f.ref_top_extra and rr and (rr in GROUPS[g].members or canon(rr) in GROUPS[g].members) and all(
+                c in GROUPS[g].members or c in _tol(g, cfg) or c in f.ref_top_extra for c, v in cands[1:] if c1 - v < cfg.delta):
             return g, "lift"
     for g in groups_in(top, cfg.groups):      # 整理本与库首位都是本组暂归一的写法、领先组外字够：分差内的组外形近字不拦（`pv_ref_gap`）
         if not _rf(g, cfg) and _pv_ref_ok(g, cands, ref, cfg, canon):
@@ -602,13 +606,6 @@ def _agree_fix(trail: list, ch: str | None, members) -> bool:
     if not ch or ch not in members:
         return False
     return len({_sname(t) for t in trail if t.get("char") == ch and _sname(t) in IMG_SOLVERS}) >= 2
-
-
-def _ref_backs(char: str | None, ref: str | None, norm: Callable[[str], str]) -> bool:
-    """`review_fix_agree` 的例外：整理本（现役对位缺格时用坐标对位字）与已放行字同字 → 不按图像两路改字，照常降审。
-    两路图像解法吃的是同一张字块，字块裁偏（换了框型配置、冷缓存再生列图，格坐标还是旧列图的）时会一起错：
-    殿本 replay-1125 二→一 37 格全是整理本＝库首位＝二、ids 与 yr_bars 看的是只剩下一横的偏块（CV4 2026-11-25）。"""
-    return bool(char and ref and ref not in GAPS and norm(ref) == norm(char))
 
 
 def _sname(t: dict) -> str:
@@ -949,8 +946,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 and any(t["solver"] == "ctx" and t["char"] == ch and t.get("via") == "ctx:ctx_l1" for t in trail)) or (
                 f.review_fix_margin > 0 and why == "agree" and any(
                     t["char"] == ch and (_margin(t) or 0) >= f.review_fix_margin for t in trail)) or (
-                g in cfg.review_fix_agree and why == "agree" and _agree_fix(trail, ch, GROUPS[g].members)
-                and not _ref_backs(r.char, ref or (veto_refs or {}).get(r.id), norm))
+                g in cfg.review_fix_agree and why == "agree" and _agree_fix(trail, ch, GROUPS[g].members))
             other = ch is not None and not _same(g, ch, r.char, norm)
             code = ("group_flow_disagree" if (other and not fix) or why == "conflict"
                     else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)

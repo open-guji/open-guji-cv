@@ -296,11 +296,6 @@ class BookSpec:
     #: **怎么定**：看整册 `frame_kind` 分布——上边框 90% 判 double 说明版式就是 2 层。
     #: ⚠️ 只管上下；左右 Step1 只探内框，外框不关心（2026-09-22 用户确认）。
     frame_layers: dict = field(default_factory=dict)
-    #: 左右外框在哪一侧（yaml 的 `side_frame: {even: left, odd: right}`，2026-11-23）。键是页码奇偶，
-    #: 值是**纸边侧**（有外框的那一侧；远离版心）——靠版心一侧没有外框。声明了就只在那一侧量外框，
-    #: 量不到按 `outer_gap.side` 估；不声明＝老行为（两侧比强弱）。值 `none` 表示这一类页左右都不找（如封面类整册规律不适用时）。
-    #: **怎么定**：看整册金标／产物里 `v_outer_side` 与页码奇偶的对应；换书必须重标，别抄（殿本偶左奇右，史記相反）。
-    side_frame: dict = field(default_factory=dict)
     #: `vline_polyline`（yaml 同名，默认 True）：Step1 界行要不要按弯度做三段折线拟合。
     #: **界行淡而断的书要关**：折线的判弯量 w80 在那种书上量的是"线有多断"，平直页
     #: 也被判成弯页，折点在淡线上找不到墨就整页齐刷刷平移几十 px（北行日錄刻本
@@ -505,7 +500,7 @@ class BookSpec:
             "norm_stroke": self.norm_stroke,
             "frame_height": self.frame_height,
             "vline_polyline": self.vline_polyline,
-            "font": dict(self.font), "frame_layers": dict(self.frame_layers), "side_frame": dict(self.side_frame),
+            "font": dict(self.font), "frame_layers": dict(self.frame_layers),
             "codepoints": dict(self.codepoints),
             "pipeline": self.default_pipeline_id(),
             "in_workspace": self.in_workspace(),
@@ -577,21 +572,6 @@ def _expand_pages(raw) -> list[int]:
 def _load_seg_set(v):
     from .seg_set import validate_seg_set
     return validate_seg_set(None if v is None else str(v))
-
-
-def _load_side_frame(raw) -> dict:
-    """`side_frame: {even|odd: left|right|none}` → {"even": .., "odd": ..}；写错直接报错。"""
-    if not raw:
-        return {}
-    bad = set(raw) - {"even", "odd"}
-    if bad:
-        raise ValueError(f"side_frame 只认 even／odd，多了 {sorted(bad)}")
-    out = {}
-    for k, v in raw.items():
-        if v not in ("left", "right", "none"):
-            raise ValueError(f"side_frame.{k} 只能是 left／right／none，不是 {v!r}")
-        out[str(k)] = str(v)
-    return out
 
 
 def _load_layout_hints(raw) -> dict:
@@ -733,7 +713,6 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         outer_shift={str(k): float(v) for k, v in (d.get("outer_shift") or {}).items()},
         outer_gap={str(k): float(v) for k, v in (d.get("outer_gap") or {}).items()},
         frame_layers={str(k): int(v) for k, v in (d.get("frame_layers") or {}).items()},
-        side_frame=_load_side_frame(d.get("side_frame")),
         pages=_expand_pages(d.get("pages")),
         preclean=_load_preclean(d.get("preclean")),
         pipeline=(None if d.get("pipeline") is None else str(d["pipeline"])),

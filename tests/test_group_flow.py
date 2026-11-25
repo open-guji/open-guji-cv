@@ -1231,53 +1231,30 @@ def test_zw_lift_requires_ref_agree(monkeypatch):
     assert r.admit and r.char == "文"
 
 
-# —— 嗚鳴（QTW 2026-11-13）：需点名才开，不进缺省 group_flow／GROUPS ——
+def test_group_flow_exclude_subtracts_from_default():
+    """书级减法 `group_flow_exclude`（史記 勢𫝑，A22 11-16）：从缺省全名单去掉点名的组；空时不进 dump；不认识的组报错。"""
+    from open_guji_cv.groups.registry import generic_flow_names
+    allg = generic_flow_names()                                      # 测试环境缺省 group_flow 为空，显式给全名单
+    full = SeedAdmitParams(db_path="x", group_flow=allg)
+    assert "shi" in full.group_flow
+    assert "group_flow_exclude" not in full.model_dump()
+    p = SeedAdmitParams(db_path="x", group_flow=allg, group_flow_exclude=["shi"])
+    assert "shi" not in p.group_flow
+    assert p.group_flow == tuple(g for g in generic_flow_names() if g != "shi")
+    d = p.model_dump()
+    assert d["group_flow_exclude"] == ["shi"] and "shi" not in d["group_flow"]
+    assert SeedAdmitParams(**d).group_flow == p.group_flow          # 从 dump 重建：减法幂等
+    with pytest.raises(ValueError):
+        SeedAdmitParams(db_path="x", group_flow=allg, group_flow_exclude=["no_such_group"])
 
-def test_wu_is_opt_in():
-    from open_guji_cv.groups.registry import FLOW_GROUPS, GROUPS, OPT_IN_GROUPS, generic_flow_names
-    assert "wu" in OPT_IN_GROUPS and "wu" in FLOW_GROUPS
-    assert "wu" not in GROUPS and "wu" not in generic_flow_names()
-    assert FLOW_GROUPS["wu"].flow.solvers == ("ctx",) or "ctx" in FLOW_GROUPS["wu"].flow.solvers[0]
 
-
-def test_wu_review_fix_strong(monkeypatch):
-    """库首位鳴、文意说嗚：补放给嗚（组内，文意 strong 越过整理本）。"""
-    from open_guji_cv.groups import flow
-    from open_guji_cv.groups.protocol import GroupVerdict
-    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict("嗚", via=name))
+def test_entry_ry_ref_top_extra_hui():
+    """日曰 ry：库补常用字后「回」新进 0.03 窗口（史記 v0.2 g27，44 格），库首位 日 与坐标对位 曰 同在组里仍进；其余组外字照挡。"""
     r = Rec("a")
-    group_flow_pass([r], {"a": ("嗚", "equal")}, lambda cid: [("鳴", 0.99), ("嗚", 0.985)], lambda r: False,
-                    FlowConfig(groups=("wu",), provisional=False))
-    assert r.admit and r.char == "嗚"
-
-
-def test_ruling_first_review_fixes_released_cell(tmp_path, monkeypatch):
-    """`ruling_first`（全唐文 11-13 己已巳按文意＋AI）：已放行的 已（L1「而已」规则也说已）有对话裁定 己 → 复核改成 己；
-    不开照旧（L1 先给字、同放行字，不动）；在线模式（GUJI_LLM_ONLINE=1）不先查。"""
-    from open_guji_cv.groups import ctx_llm
-    from open_guji_cv.groups.methods import _L3C
-
-    class FC:
-        def ask(self, system, user, members, model, effort):
-            return {"char": "己", "conf": "high", "why": "x"}, {"in": 1, "out": 1, "cache_read": 0, "model": model}, None
-    monkeypatch.delenv(ctx_llm.ENV_ONLINE, raising=False)
-    cp = tmp_path / "rul.jsonl"
-    left, right = "其爲人也學而", "矣云云"
-    ctx_llm.judge("jys", "提示詞", "t", left, right, frozenset("己已巳"), model="m", effort="low",
-                  cache=ctx_llm.AnswerCache(cp), client=FC())
-    l3 = {"jys": {"system": "提示詞", "ver": "t", "cache": str(cp)}}
-
-    def run(first):
-        _L3C.clear()
-        r = Rec("a", "已", True, "match_ref", "match")
-        group_flow_pass([r], {}, lambda cid: [], lambda r: False, _cfg(l3_online=l3, l3_model="m", ruling_first=first),
-                        ctx_fn=lambda seq, i, d: left if d < 0 else right)
-        return r
-    r = run(frozenset())
-    assert r.admit and r.char == "已" and "fixed_from" not in r.evidence
-    r = run(frozenset({"jys"}))
-    assert r.admit and r.char == "己" and r.evidence["fixed_from"] == {"channel": "match_ref", "char": "已"}
-    assert r.evidence["group"]["solvers"][0]["ruling_first"]
-    monkeypatch.setenv(ctx_llm.ENV_ONLINE, "1")
-    r = run(frozenset({"jys"}))
-    assert r.char == "已"
+    cfg = FlowConfig(groups=("ry", "rm"))
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9731)], None, cfg, coord_ref="曰") == ("ry", "lift")   # 回 0.9731 在 0.03 窗口内（g27 后新进），库首位 日×坐标对位 曰 同组
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9800)], None, cfg, coord_ref="曰") == ("ry", "lift")
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9800)], None, cfg) is None                  # 没有整理本／坐标对位字：不走
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("回", 0.9800)], None, cfg, coord_ref="指") is None   # 整理本是组外字：照挡
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("目", 0.9900)], None, cfg, coord_ref="曰") is None   # 目 留给 joint
+    assert entry(r, [("日", 0.9969), ("曰", 0.9951), ("百", 0.9900)], None, cfg, coord_ref="曰") is None

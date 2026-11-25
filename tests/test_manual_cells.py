@@ -102,19 +102,3 @@ def test_manual_ink_fit_rev_only_in_dump_when_on():
     from open_guji_cv.steps.cell_shrink import MANUAL_INK_FIT_REV, CellShrinkParams
     assert "manual_ink_fit_rev" not in CellShrinkParams().model_dump(mode="json")
     assert CellShrinkParams(manual_ink_fit=True).model_dump(mode="json")["manual_ink_fit_rev"] == MANUAL_INK_FIT_REV
-
-
-def test_manual_grid_n_counts_grid_slots_and_flags_overflow():
-    """职名页开了 roster_grid_slots：人裁号是格网号（可跳号），n_body_slots 取格数与最大号的大者，超格数打旗。"""
-    gate, wins = _env()
-    pc = PageCells(page=5, period=100.0, ref_w=200.0, columns=[_col(1), _col(2)])
-    gappy = [{"slot": s, "sub": None, "kind": "char", "y0": 10 * s, "y1": 10 * s + 8, "x0": 10, "x1": 90}
-             for s in (3, 7, 21)]
-    over = [{"slot": s, "sub": None, "kind": "char", "y0": 10 * s, "y1": 10 * s + 8, "x0": 10, "x1": 90}
-            for s in (2, 28)]
-    out = _apply_manual_cells(pc, {1: gappy, 2: over}, gate, wins, grid_n=21)
-    a, b = out.columns
-    assert a.n_body_slots == 21 and "roster_slot_overflow" not in a.flags
-    assert b.n_body_slots == 28 and "roster_slot_overflow" in b.flags
-    off = _apply_manual_cells(pc, {1: gappy}, gate, wins)
-    assert off.columns[0].n_body_slots == 3 and "roster_slot_overflow" not in off.columns[0].flags

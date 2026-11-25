@@ -26,6 +26,7 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.borders import Borders
 from ..products.kinds.line_index import LineIndex, LineRec
 from ..impl.keben.border import detect_borders, refit_bends
+from ..impl.keben.column_pair_merge import PAIR_MERGED_FLAG, merge_narrow_pair
 from ..impl.keben.column_types import classify_columns
 from ..impl.keben.pitch_rescue import rescue as pitch_rescue
 from ..seg.columns import COL_WIDTH_FLAG, ColumnSpec, check_columns
@@ -123,6 +124,10 @@ def _apply_vline_override(res, xs: list[float]) -> None:
 class BorderDetectParams(BaseModel):
     expected_cols: int | None = Field(default=None, description="列数先验；None = 用 Book 的 expected_cols")
     ink_threshold: int = 128
+    merge_narrow_pair: bool = False
+    """窄对合并（`impl/keben/column_pair_merge`，overview GUJI-155）：相邻两条**内部**窄列、宽度和≈一列时，
+    用 `expected_cols−1` 重探，接受条件见该模块。**缺省关**（要不要让各册 Step1 重算由 Morgan 定）；
+    关着、或页上没有窄对时，产物逐字节不变。触发页的 `expected_cols` 记成少一列，闸读它。"""
 
     column_grid_pages: list[int | str] = []
     """页级网格模式：点名的页竖线走 `column_grid`（版框定死、列距均匀），其余页照书级配置。
@@ -150,19 +155,6 @@ class BorderDetectParams(BaseModel):
     的缩放比。那组长度常数是在旧图上量的绝对像素，换图源 siku-qiefen-v2（约 0.70 倍）后抬头框整片认不出
     （vol07 新 p43 五列抬头全丢）。换源的册与 `bottom_gap`、`period_prior` 乘同一个缩放比，如
     `params: {border_detect: {head_raise_scale: 0.7021}}`。缺省 1.0 不进参数 dump，产物与加字段前逐字节相同。"""
-
-    head_raise_notch: bool = False
-    """主上框认在抬头框上的页改认缺口（`impl/keben/border.notch_top`，2026-11-20，A22）：一页上抬头列占多数时，主上版框被认在
-    抬头框的内框线上，没抬头的列反成版框上的「缺口」，整页抬头认不出（殿本 vol24 p27、vol28 p4–24 卷首段 15 页：抬头格只有 20 多 px
-    高、缺口里切出假字格、抬头列末字没格；原先只能逐页写 `hline_hints`）。开了：本页一个抬头框都没认出、又没写 `hline_hints.top`
-    时，找「主上框不横穿、下面先白后有框条」的缺口列，主上框挪到缺口列的框条内沿重探抬头，缺口以外的列全认成抬头才接受。
-    殿本 vol05/24/28/60/95 共 796 页只动这 16 页、看图全对。缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
-
-    head_raise_fit: bool = False
-    """抬头列认下以后校内框高度（`impl/keben/border._fit_head_raise`，2026-11-25，A21 版面基准）：①相邻两列都抬头、本列内框
-    低出一截而邻列高度上有细线，改到那条线（原来认在抬头字顶笔上，殿本 vol01 p30、vol04 p6）；②只有粗外框的列内框按粗框外延
-    ＋本页内外间距推（原来落在粗外框上）；③量上外框时跳过抬头列（抬头列那一段主上框上方没有外框条，抬头列占多数的页原来量不出
-    外框）。缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
 
     top_weak_ratio: float = 0.3
     """上版框弱线护栏的门槛（1.20，`seg/lines._weak_top_guard`）：选中的上框线横向墨量不到带里最强横线的这个比例才动。
@@ -192,16 +184,6 @@ class BorderDetectParams(BaseModel):
     倾角 0.035，真框在 128–146 行），整页上框、抬头全错。开了贴图顶时在 ±0.05 各档倾角里找离开图顶的最好峰。
     缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
 
-    inner_pull: bool = False
-    """内框线落在外板框粗条上时拉回内板框（`impl/keben/border.pull_inner_line`，2026-11-23）：双线版框的书内板框线磨淡时，
-    探出的上／下框会落在外框粗条上（殿本下框偏 8–33px，全唐文下框 31px，layout-gold 已知问题 1／4）。只对册配置声明了
-    `frame_layers: 2` 的边起作用，估位用册 `outer_gap`。layout-gold 79 页：偏差 >8px 的边 43→38，改善 19 处、回退 2 处（金标本身有歧义的页）。
-    缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
-
-    expected_cols_pages: dict[int, int] = {}
-    """按页列数（2026-11-12，殿本 vol01 p100：图上 10 列、版框只探出 9 列，参校本质检）：`{页: 本页列数}`，覆盖册级 `expected_cols`。
-    职名页、个别页列数与册级不同时用；一般同 `vline_overrides` 配用（给出本页全部竖线）。border_detect、border_detect_gate、
-    column_gate 三处都要写同一张表。缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
     vline_overrides: dict[int, list[float]] = {}
     """页级人核竖线（2026-11-02，史記文淵閣本 06 p63、04 p122 类）：自由／网格模式在右（左）外框被扫描裁掉、
     小注双行带内多出一条假界行的页上都挑不对界行（整列漏掉、小注缝被当成列界）。点名的页用人核给的界行
@@ -229,6 +211,8 @@ class BorderDetectParams(BaseModel):
     def _drop_off_merge(self, handler):
         """缺省关时不进 dump：没开的书 `params_hash` 与加这个字段之前逐位相同。"""
         d = handler(self)
+        if isinstance(d, dict) and not self.merge_narrow_pair:
+            d.pop("merge_narrow_pair", None)
         if isinstance(d, dict) and not self.column_grid_pages:
             d.pop("column_grid_pages", None)
             d.pop("grid_col_pitch", None)
@@ -236,10 +220,6 @@ class BorderDetectParams(BaseModel):
             d.pop("grid_lattice_fallback", None)
         if isinstance(d, dict) and self.head_raise_scale == 1.0:
             d.pop("head_raise_scale", None)
-        if isinstance(d, dict) and not self.head_raise_notch:
-            d.pop("head_raise_notch", None)
-        if isinstance(d, dict) and not self.head_raise_fit:
-            d.pop("head_raise_fit", None)
         if isinstance(d, dict) and self.top_weak_ratio == 0.3:
             d.pop("top_weak_ratio", None)
         if isinstance(d, dict) and self.top_weak_floor is None:
@@ -250,10 +230,6 @@ class BorderDetectParams(BaseModel):
             d.pop("bottom_lock_reslope", None)
         if isinstance(d, dict) and not self.top_edge_reslope:
             d.pop("top_edge_reslope", None)
-        if isinstance(d, dict) and not self.inner_pull:
-            d.pop("inner_pull", None)
-        if isinstance(d, dict) and not self.expected_cols_pages:
-            d.pop("expected_cols_pages", None)
         if isinstance(d, dict) and not self.vline_overrides:
             d.pop("vline_overrides", None)
         if isinstance(d, dict) and not self.hline_hints:
@@ -290,7 +266,7 @@ class BorderDetectStep(Step):
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: BorderDetectParams = ctx.params_for(self)  # type: ignore[assignment]
-        cols = p.expected_cols_pages.get(page) or p.expected_cols or ctx.book.expected_cols
+        cols = p.expected_cols or ctx.book.expected_cols
         gray = ctx.raw_page(page)
         H, W = gray.shape[:2]
         grid = ctx.book.column_grid
@@ -308,9 +284,6 @@ class BorderDetectStep(Step):
         bad = set(hint) - {"top", "bottom"}
         if bad:
             raise ValueError(f"border_detect.hline_hints.{page} 只认 top／bottom，多了 {sorted(bad)}")
-        # 套书规则：左右外框在纸边侧，按页码奇偶定（册配置 side_frame）；没声明不传，与加字段前一模一样
-        _side = (ctx.book.side_frame or {}).get("even" if page % 2 == 0 else "odd")
-        side_kw = {"outer_side": _side} if _side in ("left", "right") else {}
         hint_kw = {f"{k}_hint": float(v) for k, v in hint.items() if v is not None}
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
@@ -325,16 +298,12 @@ class BorderDetectStep(Step):
                                   outer_shift=ctx.book.outer_shift,
                                   book_outer_gap=ctx.book.outer_gap,
                                   frame_layers=ctx.book.frame_layers,
-                                  **side_kw,
                                   vline_polyline=ctx.book.vline_polyline,
                                   head_raise_scale=p.head_raise_scale,
                                   top_weak_ratio=p.top_weak_ratio, top_weak_floor=p.top_weak_floor,
                                   **({"bottom_weak_ratio": p.bottom_weak_ratio} if p.bottom_weak_ratio else {}),
                                   **({"bottom_lock_reslope": True} if p.bottom_lock_reslope else {}),
                                   **({"top_edge_reslope": True} if p.top_edge_reslope else {}),
-                                  **({"inner_pull": True} if p.inner_pull else {}),
-                                  **({"head_raise_notch": True} if p.head_raise_notch else {}),
-                                  **({"head_raise_fit": True} if p.head_raise_fit else {}),
                                   **hint_kw, **lattice_kw, **bend_kw)
 
         res = _detect(cols)
@@ -351,6 +320,12 @@ class BorderDetectStep(Step):
                 # 换了线就在新的一串直线上重拟合折线（旧形状是在错的线网上拟的，vol46 p78）
                 res = refit_bends(res, gray, ink_threshold=p.ink_threshold,
                                   vline_polyline=ctx.book.vline_polyline, **bend_kw)
+        # 窄对合并（缺省关）：内部相邻两条窄列、宽度和≈一列 → 多了一条竖线，用 cols−1 重探。
+        # 没触发／重探不被接受时原样返回，下面的产物逐字节不变。
+        merged_col = None
+        if p.merge_narrow_pair:
+            res, cols, merged_col = merge_narrow_pair(res, cols, _detect,
+                                                      leaf_layout=ctx.book.leaf_layout)
         if page in p.vline_overrides:
             _apply_vline_override(res, p.vline_overrides[page])
         # 人裁逐列抬头（`lookup.resolved_head_raise`）：补 Step1 漏认的抬头框／去掉认错的。本页没有裁决时不动
@@ -378,6 +353,9 @@ class BorderDetectStep(Step):
         lines = []
         for c in classify_columns(xs, leaf_layout=ctx.book.leaf_layout):
             flags = [c.reason] if c.reason else []
+            if merged_col is not None and c.col == merged_col:
+                flags.append(f"{PAIR_MERGED_FLAG}：原相邻两条窄列（宽度和≈一列）被多余竖线劈开，"
+                             f"已用 {cols} 列重探去掉那条线")
             # 列位 col（1 起）夹在 xs[col-1] 与 xs[col] 之间；任一侧是插值线就标出来
             if filled[c.col - 1] or filled[c.col]:
                 flags.append("rule_interpolated")
