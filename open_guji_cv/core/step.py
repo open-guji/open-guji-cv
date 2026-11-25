@@ -603,8 +603,62 @@ class RunContext:
         diff = {k: (then.get(k), now.get(k)) for k in sorted(set(now) | set(then)) if then.get(k) != now.get(k)}
         return diff or None
 
+    def chain_fingerprint(self, step_id: str, page: int) -> str | None:
+        """`step_id` 及它在本管线里的全部上游这一页 manifest 指纹的合哈希（16 位）：跨机器共享派生图的键
+        （2026-11-25「字块随包存 R2」）。每步指纹含自身版本、参数、代码、册配置与直接上游产物 sha，最上游吃原图 sha，
+        任何一项变了它就变。只读 manifest、不重算；哪一步这一页没有 ok 记录回 None（不取不传）。"""
+        import hashlib
+        pl = self.pipeline
+        if step_id not in pl.steps:
+            return None
+        seen: list[str] = []
+        stack = [step_id]
+        while stack:
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.append(cur)
+            stack.extend(pl.upstream(cur))
+        parts = []
+        pk = page_key(page)
+        for sid in sorted(seen):
+            try:
+                ent = self.store.manifest(self.book.id, sid).get(pk)
+            except Exception:                  # noqa: BLE001
+                return None
+            if ent is None or ent.status != "ok" or not ent.fingerprint:
+                return None
+            parts.append(f"{sid}:{ent.fingerprint}")
+        return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
+
+    def _page_fetch(self, kind_id: str, key: str, stamp: str | None) -> None:
+        """缓存不在时整页去别处取一次（`core.derived.PAGE_FETCHER`）。同一进程同一页只试一次。"""
+        import re as _re
+        from . import derived
+        m = _re.match(r"^p(\d{4})", key)
+        if not m or kind_id not in derived.PAGE_KINDS or not derived.page_fetch_enabled():
+            return
+        page = int(m.group(1))
+        prod = self.producer(kind_id).spec.id
+        if getattr(self, "step_id", None) == prod:
+            return                         # 产出它的那一步自己在跑：manifest 还是旧的，取回的会是上一代
+        tried = self.__dict__.setdefault("_page_fetch_tried", set())
+        if (kind_id, page) in tried:
+            return
+        tried.add((kind_id, page))
+        if self.cache.get(self.book.id, kind_id, key, stamp=stamp) is not None:
+            return
+        fp = self.chain_fingerprint(prod, page)
+        if not fp:
+            return
+        try:
+            derived.PAGE_FETCHER(self.book.id, kind_id, page, fp, self.cache, stamp)
+        except Exception as e:                 # noqa: BLE001 —— 取不到就现算
+            self.log(f"  （{kind_id} p{page:04d} 没取回：{type(e).__name__}: {str(e)[:120]}，现算）")
+
     def materialize(self, kind_id: str, key: str) -> Path:
         step = self.producer(kind_id)
+        self._page_fetch(kind_id, key, self.cache_stamp(kind_id, key))
 
         def build() -> np.ndarray:
             drift = self.render_book_drift(step, key)
