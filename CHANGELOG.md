@@ -5,7 +5,6 @@
 
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26）：`border_detect` 加开关 `outer_scale`（缺省关、不进参数 dump）：外框探测的像素量（搜索窗上限、墨条厚度上限、外延刹车、先验窗、条外纸带）按列距/220 放大，只对列距 >220px 的页（全唐文大图）起作用。全唐文外框粗条厚约 56px、外延离界行 80~95px，关着时压在殿本标的窗上限 78、或被厚度上限 40 挡掉，上下框判 none 或外延截在 78（046 p93）。layout-gold 79 页开着框型判对 287→289，殿本、史記 0 页变；关着 79 页逐页同。全唐文要用在册配置写 `params: {border_detect: {outer_scale: true}}`（书线定）。
 
-- PATCH（11-25，CV0「字块随包存 R2」第一步，产物与 23 步 code_hash 逐位不变，L0）：`RunContext.chain_fingerprint(步, 页)`＝该步及全部上游这一页 manifest 指纹的合哈希（跨机共享派生图的键）；`RunContext.materialize` 缓存不在时先问 `core.derived.PAGE_FETCHER`（只管 `char_patch`，由 manager 注册；产出它的那一步自己在跑时不问；同页只问一次；`GUJI_PATCH_FETCH=0` 关），取不到照旧现算；`ImageCache.put_bytes` 放取回的已编码图。`core/step.py`、`core/derived.py`、`products/cache.py` 不在任何 code_deps。
 - PATCH（指纹换算，产物不变，L0；CV4 11-26，QTW 全唐文 004–030 改钉 k13）：`engine._collapse_splits` 合回后的那一项按旧名记，后面的 SPLITS 条目能把它当一块再合；新 SPLITS 条目把全唐文书仓 k13 的 `guji_book.quantangwen.admit_lanes`（这一版）记成 cv 缺省 `impl.keben.admit_lanes`——没写 `book_lanes` 的册不调钩子，产物同 k11；写了的册参数指纹本就跟着变。效果：全唐文 k11→k13 各步指纹全同（改前 seed_admit 会过期）；殿本、史記、脉经书仓与无书仓、全唐文 k6／k8／k9／k10 各步指纹改前改后全同（27 步逐一比对）。
 
 - 重构（PATCH，产物逐字节不变、指纹不变，code_equiv.SPLITS 合回；CV4 整理 PR3c，Sheldon 11-23「深度整理」）：`steps/seed_admit.py`（5,284 行）拆出三块——`seed_admit_lanes`（整理本／无参照放行通道与降审护栏 26 项：rare_ref、solo_5b、follow_ref、edge_pair、review_lanes、p_ref …）、`seed_admit_shapes`（字形判官 8 遍：rr／wu／hou／part／pair_shape、stroke_veto、book_knn、near_knn）、`seed_admit_common`（各遍共用的常量、小工具与字块读取 `_page_patch`），主模块剩 Step 壳、主循环与其余各遍（3,352 行）。代码原样搬，只把 `_page_patch`／`_edge_pair_excluded` 改成经 `seed_admit_common` 模块属性调用（测试换字块读取改 `setattr(seed_admit_common, "_page_patch", …)`）；对外名字照旧从 `steps.seed_admit` import。
@@ -113,6 +112,12 @@
 - 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时殿本 vol30、全唐文 020、史記 42 逐字节同，登 code_equiv `_FREE_SEAM_1117`。建议值 0.35。
 
 ## [未发版]
+
+## [0.9.5] - 2026-11-26
+
+补发（PATCH，用户 11-26 定「发 patch 随时用」）＝v0.9.4＋#1899（字块按页取回接口，配 manager ≥ 含 #1013 的版本）。产物与各步 code_hash 逐位不变，各书不过期。
+
+- PATCH（11-25，CV0「字块随包存 R2」第一步，产物与 23 步 code_hash 逐位不变，L0）：`RunContext.chain_fingerprint(步, 页)`＝该步及全部上游这一页 manifest 指纹的合哈希（跨机共享派生图的键）；`RunContext.materialize` 缓存不在时先问 `core.derived.PAGE_FETCHER`（只管 `char_patch`，由 manager 注册；产出它的那一步自己在跑时不问；同页只问一次；`GUJI_PATCH_FETCH=0` 关），取不到照旧现算；`ImageCache.put_bytes` 放取回的已编码图。`core/step.py`、`core/derived.py`、`products/cache.py` 不在任何 code_deps。
 
 ## [0.9.4] - 2026-11-26
 
