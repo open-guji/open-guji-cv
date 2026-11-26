@@ -71,7 +71,7 @@ from pathlib import Path
 
 from ..gold.drift import FP_TOL
 from .anchor import parse_cell_key, patch_key, patch_path, quad_bbox
-from .events import counts_as_human
+from .events import counts_as_pin
 
 IOU_SAME = 0.85       # 框几乎没动：原图上同一块像素，必是同一个字，不再看图块（图块会因 Step4 去噪/收紧而变）
 IOU_OK = 0.6          # 重合到这个程度、且图块也像，才算「还是那一格」
@@ -291,7 +291,7 @@ def _verdict_events(book: str, log, evs: list | None = None) -> dict[int, list]:
     """本书逐格裁决事件（confirm 类），按页分组、按时间排序。`evs`：已排好的 `_sorted_events(log)`。"""
     out: dict[int, list] = {}
     for e in (evs if evs is not None else _sorted_events(log)):
-        if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_human(e):
+        if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_pin(e):
             continue                  # 看图结论不进绑定表（overview#428）：绑定表只给人裁找回格
         pk = parse_cell_key(e.target.key)
         if pk is None or pk[0] != book:

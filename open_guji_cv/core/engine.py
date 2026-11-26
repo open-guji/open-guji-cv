@@ -212,7 +212,8 @@ def _collapse_splits(mods: list[str]) -> list[tuple[str, str]]:
         first = min(idx)
         keep = [(i, pr) for i, pr in enumerate(pairs) if i == first or i not in idx]
         pairs = [((old, old_hash) if i == first else pr) for i, pr in keep]
-        mods = [mods[i] for i, _ in keep]
+        # 合回后的那一项按旧名记，后面的 SPLITS 条目可以把它当一块再合（书仓模块先改名回 cv 模块、再随 cv 的拆分合回）
+        mods = [(old if i == first else mods[i]) for i, _ in keep]
     return pairs
 
 
@@ -240,8 +241,9 @@ _FORMAL_CV = re.compile(r"^\d+\.\d+\.\d+$")     # 正式版 cv_version（不带 
 def params_hash(params: BaseModel, soft: tuple[str, ...] = (),
                 path: tuple[str, ...] = ()) -> str:
     """参数指纹。`soft`（`StepSpec.soft_params`）、`path`（`StepSpec.path_params`）里的
-    字段剔掉不算；两者都空的步与 2026-09-25 之前逐位相同。"""
-    d = params.model_dump(mode="json")
+    字段剔掉不算；两者都空的步与 2026-09-25 之前逐位相同。`context={"hash": True}` 让参数类分清
+    「算指纹」与「重建参数用的 dump」（seed_admit 改过缺省的键只在算指纹时按旧缺省去，见 `_DUMP_DROP_HASH`）。"""
+    d = params.model_dump(mode="json", context={"hash": True})
     for k in (*soft, *path):
         d.pop(k, None)
     return hashlib.sha256(json.dumps(d, sort_keys=True,
@@ -250,7 +252,7 @@ def params_hash(params: BaseModel, soft: tuple[str, ...] = (),
 
 def param_parts(params: BaseModel, soft: tuple[str, ...] = (), path: tuple[str, ...] = ()) -> dict[str, str]:
     """参数逐字段的短哈希（剔除口径同 `params_hash`）。记进 manifest，不进指纹；`stale_reason` 用它点名变了的字段。"""
-    d = params.model_dump(mode="json")
+    d = params.model_dump(mode="json", context={"hash": True})
     return {k: hashlib.sha256(json.dumps(v, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
             for k, v in sorted(d.items()) if k not in soft and k not in path}
 
@@ -334,6 +336,13 @@ def _lib_store_token(font: dict) -> str:
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:12] if parts else "none"
 
 
+#: 双线版框下端剥层修订号（见 `_self_payload` 里 `frame_layer_rev` 一段）。改 `impl/keben/column.py` 里
+#: `frame_layers` 下端 ≥2 才走到的剥层判据、又登了 code_equiv 时 +1。
+#: 1：cv #1891，下端第三道线只认边距证据，末字「二／三」下横不再被当框剥掉（殿本 ZM 报，2026-11-25）。
+#: 2：CV1 补 #1891，第三道候选离 Step1 内框线 >10 行的也只认边距证据（vol04 p207c6、vol05 p149c6 等末字下横离内框线 13 行白）。
+FRAME_LAYER_REV = 2
+
+
 def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False) -> dict:
     """指纹里**不含上游**的那部分：步 id、版本、参数、代码、册配置。
     `fingerprint` = 它 + 上游 sha；`self_hash` = 只有它（格级复用的判据，见 core/reuse.py）。
@@ -359,6 +368,11 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     # （不进 `book_deps`，同 rare_charset，见 core/ref_profile.py 模块头）。
     if step.spec.id == "border_detect" and getattr(book, "side_frame", None):
         payload["side_frame"] = dict(sorted(book.side_frame.items()))
+    # 双线版框下端剥层修订号（2c column_end，2026-11-25 CV0 定，cv #1891）：`impl/keben/column.py` 里只有册配置
+    # `frame_layers.bottom >= 2` 才走到的剥层逻辑一改，模块哈希登 code_equiv（别的书逐字节不变、不白过期），
+    # 再把这个修订号 +1，只让下端两层的册（现在只有殿本）从 column_end 起判过期。没声明两层的册不写这个键，指纹逐位不变。
+    if step.spec.id == "column_end" and int((getattr(book, "frame_layers", None) or {}).get("bottom", 1) or 1) >= 2:
+        payload["frame_layer_rev"] = FRAME_LAYER_REV
     # Step5-b 的字表语料由册配置 `rare_charset` 指定（参校本属性 C 块）：只在写了的册加键，没写的册指纹逐位不变
     # （不进 `book_deps`，那会让所有册指纹变，见 core/ref_profile.py 模块头）。
     if step.spec.id == "rare_candidates" and getattr(book, "rare_charset", None):

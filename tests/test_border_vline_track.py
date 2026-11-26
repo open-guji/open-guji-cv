@@ -40,9 +40,9 @@ def _v(x_old: float) -> VLine:
     return VLine(x_at_top=(W - 1) - x_old, slope=0.0)
 
 
-def test_default_not_in_params_dump():
-    assert "vline_track" not in BorderDetectParams().model_dump()
-    assert BorderDetectParams(vline_track=True).model_dump()["vline_track"] is True
+def test_default_on_in_params_dump():
+    assert BorderDetectParams().model_dump()["vline_track"] is True          # 11-25 起缺省开
+    assert BorderDetectParams(vline_track=False).model_dump()["vline_track"] is False
 
 
 def test_straight_line_stays_straight():
@@ -111,3 +111,41 @@ def test_three_segment_page_stays_uniform():
                                     bend_w80_med=0.0, vline_track=True)
     if vseg == 3:
         assert all(v.segments == 3 for v in out)
+
+
+def _gray_faint(xfn, depth=25.0, chars=True):
+    """淡线页灰度图：底 200，线比底暗 depth（二值化 <128 看不见）；线两侧每 120px 一块黑字。"""
+    g = np.full((H, W), 200.0)
+    for y in range(TOP, BOT):
+        x = xfn(y)
+        xi = int(round(x))
+        g[y, xi - 2:xi + 3] -= depth
+        if chars and (y // 120) % 2 == 0:
+            g[y, int(x) + 25:int(x) + 70] = 20.0
+            g[y, int(x) - 70:int(x) - 25] = 20.0
+    g[TOP:TOP + 5, :] = 20.0
+    g[BOT - 5:BOT, :] = 20.0
+    return g.astype(np.uint8)
+
+
+def test_faint_line_found_by_gray_fallback():
+    """二值图里没有这条线（逐行追不到），给了灰度就按暗度分段找回来：斜 20px 的淡线。"""
+    xfn = lambda y: 600.0 + 20.0 * (y - TOP) / (BOT - TOP)
+    g = _gray_faint(xfn)
+    m = (g < 128).astype(np.float64)
+    top, bottom = _lines()
+    out, n = refit_vlines_by_track(m, top, bottom, [_v(600.0)], W, H)
+    assert n == 0                                    # 不给灰度：追不到，不动
+    out, n = refit_vlines_by_track(m, top, bottom, [_v(600.0)], W, H, gray=g)
+    assert n == 1
+    for y in (300.0, 1300.0, 2300.0):            # 分段按 0.5px 平移取样，斜线会有 1–2px 系统偏；< 5px 算准
+        assert abs(((W - 1) - out[0].x_at(y)) - xfn(y)) <= 3
+
+
+def test_no_faint_line_stays_put():
+    """灰度里也没有线（只有字）：兜底不动现线。"""
+    g = _gray_faint(lambda y: 600.0, depth=0.0)
+    m = (g < 128).astype(np.float64)
+    top, bottom = _lines()
+    out, n = refit_vlines_by_track(m, top, bottom, [_v(600.0)], W, H, gray=g)
+    assert n == 0

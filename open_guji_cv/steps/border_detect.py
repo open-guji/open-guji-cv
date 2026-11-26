@@ -425,11 +425,11 @@ class BorderDetectParams(BaseModel):
     时，找「主上框不横穿、下面先白后有框条」的缺口列，主上框挪到缺口列的框条内沿重探抬头，缺口以外的列全认成抬头才接受。
     殿本 vol05/24/28/60/95 共 796 页只动这 16 页、看图全对。缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
 
-    head_raise_fit: bool = False
+    head_raise_fit: bool = True
     """抬头列认下以后校内框高度（`impl/keben/border._fit_head_raise`，2026-11-25，A21 版面基准）：①相邻两列都抬头、本列内框
     低出一截而邻列高度上有细线，改到那条线（原来认在抬头字顶笔上，殿本 vol01 p30、vol04 p6）；②只有粗外框的列内框按粗框外延
     ＋本页内外间距推（原来落在粗外框上）；③量上外框时跳过抬头列（抬头列那一段主上框上方没有外框条，抬头列占多数的页原来量不出
-    外框）。缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
+    外框）。2026-11-25 起缺省开（用户定），进参数 dump；不要就在册配置写 false。"""
 
     top_weak_ratio: float = 0.3
     """上版框弱线护栏的门槛（1.20，`seg/lines._weak_top_guard`）：选中的上框线横向墨量不到带里最强横线的这个比例才动。
@@ -459,11 +459,19 @@ class BorderDetectParams(BaseModel):
     倾角 0.035，真框在 128–146 行），整页上框、抬头全错。开了贴图顶时在 ±0.05 各档倾角里找离开图顶的最好峰。
     缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
 
-    inner_pull: bool = False
+    inner_pull: bool = True
     """内框线落在外板框粗条上时拉回内板框（`impl/keben/border.pull_inner_line`，2026-11-23）：双线版框的书内板框线磨淡时，
     探出的上／下框会落在外框粗条上（殿本下框偏 8–33px，全唐文下框 31px，layout-gold 已知问题 1／4）。只对册配置声明了
     `frame_layers: 2` 的边起作用，估位用册 `outer_gap`。layout-gold 79 页：偏差 >8px 的边 43→38，改善 19 处、回退 2 处（金标本身有歧义的页）。
-    缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
+    2026-11-25 起缺省开（用户定：没问题的开关尽量缺省开），开关都进参数 dump；不要就在册配置写 false。"""
+
+    outer_scale: bool = False
+    """外框探测按列距缩放（`impl/keben/border.detect_outer_borders` 的 `outer_scale`，2026-11-26 CV1）：外框探测的像素量
+    （搜索窗上限 78、墨条厚度上限 40、外延刹车、先验窗）是按殿本（列距约 185px）标的；全唐文大图（列距约 350px）外框粗条厚约
+    56px、离界行外延约 80~95px，压在窗边或被厚度上限挡掉，上下框判 none 或外延截在 78（046 p93、qtw005:48、qtw120:118）。
+    开了列距 >220px 的页按 列距/220 放大这些量，列距 ≤220 的页（殿本、脈經、史記正文）逐字节不变。
+    layout-gold 79 页：框型判对 287→289，殿本、史記 0 页变。缺省关、不进参数 dump（殿本产物不过期，用户 11-26 定殿本不动）；
+    要用在册配置写 `params: {border_detect: {outer_scale: true}}`。"""
 
     expected_cols_pages: dict[int, int] = {}
     """按页列数（2026-11-12，殿本 vol01 p100：图上 10 列、版框只探出 9 列，参校本质检）：`{页: 本页列数}`，覆盖册级 `expected_cols`。
@@ -492,17 +500,18 @@ class BorderDetectParams(BaseModel):
     （R02 碰裁边 17%→30%，ai-team domain/CV/质检/待审原因深挖/R02-第7轮列端切半-A20）。殿本在 book_defaults 写
     `params: {border_detect: {bend_w80_med: 0}}`。缺省 None 不进参数 dump，产物与加字段前逐字节相同。"""
 
-    outer_bar: bool = False
+    outer_bar: bool = True
     """左右外框线「先找粗外框条、再找内框细线」（`impl/keben/border.refit_outer_by_bar`，2026-11-24 用户定）：细线磨没的
     地方按「粗条内沿 − 本页间距」补，收成三段折线；现线压在细线上的横带不动，没有粗条的一侧不动。殿本 vol02 p150、
     vol01 p9 这类细线磨没、算法贴到粗条内沿或白纸上的页偏 25–33px → 2–4px。换了线的直线页整页转三段格式。
-    缺省关，关时不进参数 dump，产物与加字段前逐字节相同。"""
+    2026-11-25 起缺省开（用户定），进参数 dump；不要就在册配置写 false。"""
 
-    vline_track: bool = False
+    vline_track: bool = True
     """竖线逐条「先直线、贴不住再折线」（`impl/keben/border.refit_vlines_by_track`，2026-11-23 用户定 B）：每条线沿现线
     追细墨（线旁鱼尾、粗框条边上的碎墨不算），直线残差够小就用直线，否则试折点位置自由的三段折线，折角小、每段有细墨
     支撑才收；磨没的线不动。不看页级 w80 门槛、也不看书级 `vline_polyline`。79 页版面金标上偏 >5px 的线 88→19。
-    换了线的直线页整页转三段格式。缺省关，关时不进参数 dump，产物与加字段前逐字节相同。"""
+    换了线的直线页整页转三段格式。逐行追不到细墨的淡线再看灰度暗度分段找（淡线兜底，11-25）。
+    2026-11-25 起缺省开（用户定），进参数 dump；不要就在册配置写 false。"""
 
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
@@ -525,8 +534,6 @@ class BorderDetectParams(BaseModel):
             d.pop("head_raise_scale", None)
         if isinstance(d, dict) and not self.head_raise_notch:
             d.pop("head_raise_notch", None)
-        if isinstance(d, dict) and not self.head_raise_fit:
-            d.pop("head_raise_fit", None)
         if isinstance(d, dict) and self.top_weak_ratio == 0.3:
             d.pop("top_weak_ratio", None)
         if isinstance(d, dict) and self.top_weak_floor is None:
@@ -537,8 +544,8 @@ class BorderDetectParams(BaseModel):
             d.pop("bottom_lock_reslope", None)
         if isinstance(d, dict) and not self.top_edge_reslope:
             d.pop("top_edge_reslope", None)
-        if isinstance(d, dict) and not self.inner_pull:
-            d.pop("inner_pull", None)
+        if isinstance(d, dict) and not self.outer_scale:
+            d.pop("outer_scale", None)
         if isinstance(d, dict) and not self.expected_cols_pages:
             d.pop("expected_cols_pages", None)
         if isinstance(d, dict) and not self.vline_overrides:
@@ -547,17 +554,13 @@ class BorderDetectParams(BaseModel):
             d.pop("hline_hints", None)
         if isinstance(d, dict) and self.bend_w80_med is None:
             d.pop("bend_w80_med", None)
-        if isinstance(d, dict) and not self.outer_bar:
-            d.pop("outer_bar", None)
-        if isinstance(d, dict) and not self.vline_track:
-            d.pop("vline_track", None)
         return d
 
 
 @register_step
 class BorderDetectStep(Step):
     spec = StepSpec(
-        id="border_detect", title="Step1 边框探测", version="1.20", unit="page",   # 1.20：上版框弱线护栏（seg/lines._weak_top_guard）：选中的线横向墨量不到带里最强横线的 0.3、上方 ≥0.021 页高处另有够强的横线，改取那条；横墨在带里峰最高的那档倾角上量（选中线倾角搜飞时不被它带偏，vol93 p18）（粗框条／双边框页上版框落到首行字顶，殿本全 99 册 16516 页只动 15 页：vol56 p43、vol63 p8、vol82 p217、vol93 p18、vol15 p151、vol38 p161 等，下游整页假抬头框、真抬头列判不出，或整列少切一格）；1.19：列宽重拟合第一遍拟不出时，墨投影减本页底色（20 分位）再扣墨、找空白，重拟一次（第一遍拟得出的页不变）：满页霉点／污渍的页字缝里也有墨，真线全被扣成负分、DP 无解（第 3 轮 vol43 p1 卷首页漏两条界行、只剩 8 列；pitch_rescue 2.1）；1.18：列宽重拟合换了线后，在新的一串直线上重拟合三段折线（`border.refit_bends`）；旧折线形状是在自由模式错的线网上拟的、护栏借形状把真线拗弯，殿本 r3 vol46 p78 左三条线下半段斜进字里；1.17：「横带按文字缝重定位」后的线，沿线压着细墨（界行）的行不许比直线少，少了不重定位（A20 11-03 报 vol84 p101/112、vol21 p68、vol40 p173：真界行直、单条线弯 20–30px 斜穿字；seg/polyline._hit_frac）；1.16：列宽均匀约束（doc/design/列宽均匀约束.md，Sheldon 11-03 定为强约束）：列距救援 7 路并成一路 `seg/columns.fit_columns`（候选：自由线、网格线、界行残段、淡界行细峰、字间空白中点、外推／补宽外框线，扣两侧墨后 DP 挑一串列宽全在带里的线）；带与 strict/loose/off 由册配置 `columns:` 定；出带的列打 flag `col_width_out_of_band`；1.15：列距救援三处放宽（殿本 r2 待审 S 类 4 页、90 格）：frame 路残段搜到外列宽进带为止（vol73 p110、vol94 p123 外框线挑在外列字心）；extend 路外推出图边截到图边（vol86 p151 折痕劈列、末列贴图边）；snap 路吸不动时按合格邻列列距推线再吸（vol44 p108 假线在字心、真界行断续）；1.14：列距救援加最后一路 pad：外列偏窄、外侧既没版框残段也没字（版框没印出来），外框线按中位列距外推（全唐文 07 p47、13 p141、11 p74、05 p160 首／末列被劈半）；前几路救得了的页结果不变；1.13：下版框次选峰在加宽的曲线上量（seg/lines.find_horizontal_border），不再取窗边截断峰；末行字身被当下框、整页丢末行的页（vol84 p89、vol85 p94 等 vol20–99 共 54 页）改对；1.12：三段折线加验收「折线沿线墨不许比直线多 0.08」，否则这条线退回直线（新图源界行淡，折点被字竖笔勾走、整页线中段平移进字里：vol70 p77、vol59 p58、vol24 p67、vol40 p34）；1.11：列距救援的网格路只护附近有界行残段的旧线（换图源 vol40 新 p1 卷首大印页，印泥里自由模式连挑三条字心线）；1.10：列距救援加第 4 路 snap：出带列两边的线吸到淡界行细峰／字间空白中点（vol24 p69、vol29 p28、vol37 p76、vol48 p121），网格线数比自由模式多也照收（vol45 p54）；1.9：列距救援加第 0 路「窄外列吸到外侧版框」，并不许任何一路把贴版框的旧外列甩出网（v0.5.17 首跑 vol40 p14、vol46 p118/p148：fuse 外推进版心条、整网平移一列丢真列）；1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，impl/keben/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
+        id="border_detect", title="Step1 边框探测", version="1.21", unit="page",   # 1.21：版面开关缺省开（outer_bar、vline_track 含淡线兜底、inner_pull、head_raise_fit，2026-11-25 用户定）；1.20：上版框弱线护栏（seg/lines._weak_top_guard）：选中的线横向墨量不到带里最强横线的 0.3、上方 ≥0.021 页高处另有够强的横线，改取那条；横墨在带里峰最高的那档倾角上量（选中线倾角搜飞时不被它带偏，vol93 p18）（粗框条／双边框页上版框落到首行字顶，殿本全 99 册 16516 页只动 15 页：vol56 p43、vol63 p8、vol82 p217、vol93 p18、vol15 p151、vol38 p161 等，下游整页假抬头框、真抬头列判不出，或整列少切一格）；1.19：列宽重拟合第一遍拟不出时，墨投影减本页底色（20 分位）再扣墨、找空白，重拟一次（第一遍拟得出的页不变）：满页霉点／污渍的页字缝里也有墨，真线全被扣成负分、DP 无解（第 3 轮 vol43 p1 卷首页漏两条界行、只剩 8 列；pitch_rescue 2.1）；1.18：列宽重拟合换了线后，在新的一串直线上重拟合三段折线（`border.refit_bends`）；旧折线形状是在自由模式错的线网上拟的、护栏借形状把真线拗弯，殿本 r3 vol46 p78 左三条线下半段斜进字里；1.17：「横带按文字缝重定位」后的线，沿线压着细墨（界行）的行不许比直线少，少了不重定位（A20 11-03 报 vol84 p101/112、vol21 p68、vol40 p173：真界行直、单条线弯 20–30px 斜穿字；seg/polyline._hit_frac）；1.16：列宽均匀约束（doc/design/列宽均匀约束.md，Sheldon 11-03 定为强约束）：列距救援 7 路并成一路 `seg/columns.fit_columns`（候选：自由线、网格线、界行残段、淡界行细峰、字间空白中点、外推／补宽外框线，扣两侧墨后 DP 挑一串列宽全在带里的线）；带与 strict/loose/off 由册配置 `columns:` 定；出带的列打 flag `col_width_out_of_band`；1.15：列距救援三处放宽（殿本 r2 待审 S 类 4 页、90 格）：frame 路残段搜到外列宽进带为止（vol73 p110、vol94 p123 外框线挑在外列字心）；extend 路外推出图边截到图边（vol86 p151 折痕劈列、末列贴图边）；snap 路吸不动时按合格邻列列距推线再吸（vol44 p108 假线在字心、真界行断续）；1.14：列距救援加最后一路 pad：外列偏窄、外侧既没版框残段也没字（版框没印出来），外框线按中位列距外推（全唐文 07 p47、13 p141、11 p74、05 p160 首／末列被劈半）；前几路救得了的页结果不变；1.13：下版框次选峰在加宽的曲线上量（seg/lines.find_horizontal_border），不再取窗边截断峰；末行字身被当下框、整页丢末行的页（vol84 p89、vol85 p94 等 vol20–99 共 54 页）改对；1.12：三段折线加验收「折线沿线墨不许比直线多 0.08」，否则这条线退回直线（新图源界行淡，折点被字竖笔勾走、整页线中段平移进字里：vol70 p77、vol59 p58、vol24 p67、vol40 p34）；1.11：列距救援的网格路只护附近有界行残段的旧线（换图源 vol40 新 p1 卷首大印页，印泥里自由模式连挑三条字心线）；1.10：列距救援加第 4 路 snap：出带列两边的线吸到淡界行细峰／字间空白中点（vol24 p69、vol29 p28、vol37 p76、vol48 p121），网格线数比自由模式多也照收（vol45 p54）；1.9：列距救援加第 0 路「窄外列吸到外侧版框」，并不许任何一路把贴版框的旧外列甩出网（v0.5.17 首跑 vol40 p14、vol46 p118/p148：fuse 外推进版心条、整网平移一列丢真列）；1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，impl/keben/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
         consumes=("raw_page",), produces=("borders", "line_index"), params=BorderDetectParams,
         code_deps=("open_guji_cv.impl.keben.border", "open_guji_cv.seg.polyline", "open_guji_cv.seg.frame_types", "open_guji_cv.seg.grid", "open_guji_cv.seg.lines",
                    "open_guji_cv.impl.keben.column_types", "open_guji_cv.impl.keben.column_pair_merge",
@@ -655,6 +658,7 @@ class BorderDetectStep(Step):
                                   **({"inner_pull": True} if p.inner_pull else {}),
                                   **({"head_raise_notch": True} if p.head_raise_notch else {}),
                                   **({"head_raise_fit": True} if p.head_raise_fit else {}),
+                                  **({"outer_scale": True} if p.outer_scale else {}),
                                   **hint_kw, **lattice_kw, **bend_kw)
 
         res = _detect(cols)

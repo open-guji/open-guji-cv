@@ -385,6 +385,10 @@ def _top_bar_edge(curve: np.ndarray, lo: int) -> float | None:
     return _outer_edge(curve, lo, float(lo + min(peaks))) if peaks else None
 
 
+#: `_fit_head_raise` 迭代上限（每列几轮）：只在值真变了才再来一轮，这个上限只兜底来回跳的情形。
+HR_FIT_MAX_ROUNDS = 4
+
+
 def _fit_head_raise(out: list[HeadRaiseBorder], curves: list, text_cols: set[int],
                     g: _HRGeom) -> list[HeadRaiseBorder]:
     """抬头列认下以后校内框高度（`detect_head_raise(fit=True)`，2026-11-25，A21 版面基准）。
@@ -415,8 +419,10 @@ def _fit_head_raise(out: list[HeadRaiseBorder], curves: list, text_cols: set[int
             continue
         by_col[c] = HeadRaiseBorder(col=c, inner_y=float(oy + gap), outer_y=float(oy), estimated=True)
     changed = True
-    while changed:
+    rounds = 0
+    while changed and rounds < HR_FIT_MAX_ROUNDS * max(1, len(by_col)):
         changed = False
+        rounds += 1
         for c in sorted(by_col):
             b = by_col[c]
             cv = curves[c - 1] if 0 < c <= len(curves) else None
@@ -435,16 +441,20 @@ def _fit_head_raise(out: list[HeadRaiseBorder], curves: list, text_cols: set[int
                     if wd <= g.THIN_WD_MAX and (best is None or curve[ci] > best[1]):
                         best = (y, float(curve[ci]))
                 if best is not None:
-                    by_col[c] = HeadRaiseBorder(col=c, inner_y=best[0],
-                                                outer_y=best[0] - (r.inner_y - r.outer_y),
-                                                estimated=b.estimated or r.estimated)
-                    changed = True
+                    nb = HeadRaiseBorder(col=c, inner_y=best[0],
+                                         outer_y=best[0] - (r.inner_y - r.outer_y),
+                                         estimated=b.estimated or r.estimated)
+                    if nb != b:        # 原地不动的更新不算变（脈經 01 p67：两邻列互吸、同值反复写，死循环）
+                        by_col[c] = nb
+                        changed = True
                     break
                 oy = _top_bar_edge(curve, lo)
                 if oy is not None and abs(oy + gap - r.inner_y) <= 2 * HR_FIT_OUTER_DY:
                     # 细线淡到认不出，但本列最上一道粗框条跟邻列在同一高度（同一个抬头框）：内框按本页内外间距从框条推
-                    by_col[c] = HeadRaiseBorder(col=c, inner_y=float(oy + gap), outer_y=float(oy), estimated=True)
-                    changed = True
+                    nb = HeadRaiseBorder(col=c, inner_y=float(oy + gap), outer_y=float(oy), estimated=True)
+                    if nb != b:
+                        by_col[c] = nb
+                        changed = True
                     break
     return [by_col[c] for c in sorted(by_col)]
 
@@ -531,6 +541,12 @@ def notch_top(mask: np.ndarray, top: HLine, verticals: list[VLine], width: int,
 
 # --- 外边框探测（形态常数来自 14 页金标实测） ---
 OUTER_GAP_MIN, OUTER_GAP_MAX = 12, 78   # 外框离内框多远，金标实测 24~47
+#: 外框搜索窗上限按列距缩放（2026-11-26）：`OUTER_GAP_MAX` 是殿本（列距约 185px）标的，
+#: 全唐文大图（页宽 4296、列距约 350px）内外框距约 80px，压在窗上限上，量到与否看线的细小斜率差（046 p93）。
+#: 只在 `outer_scale`（border_detect 参数，缺省关）开时生效。列距 ≤ `OUTER_REF_PITCH` 的页窗口不变（殿本、脈經、史記逐字节同）；更大的页按 scale=列距/OUTER_REF_PITCH
+#: 把外框探测里的像素量一并放大（窗上限、墨条厚度上限 OUTER_RUN_MAX、外延刹车、先验窗与容差、条外纸带）——
+#: 全唐文外框粗条厚约 56px，只放窗不放厚度上限会被 OUTER_RUN_MAX=40 整段挡掉（qtw005:18、qtw190:138）。
+OUTER_REF_PITCH = 220.0
 OUTER_INK_MIN = 0.25      # 认一段"外框墨"的绝对门槛。
                           # **2026-09-19 从 0.30 降到 0.25**，依据是两册全书实扫
                           # （不是原来那 14 页金标，那批太小且早于厚度 off-by-one 修复）：
@@ -605,7 +621,7 @@ OUTER_PAPER_MAX = 0.11    # **外框条外面必须是纸**：外延再往外 10
 
 
 def _outer_run(prof: np.ndarray, offs: np.ndarray,
-                prefer_abs: float | None = None) -> tuple[float, float] | None:
+                prefer_abs: float | None = None, scale: float = 1.0) -> tuple[float, float] | None:
     """在"由内向外"单调排列的剖面里找外框墨条，返回 (外延offset, 峰值墨)。
 
     **`offs` 必须单调**（不能按绝对值排序）——负方向排成递减的话
@@ -635,19 +651,19 @@ def _outer_run(prof: np.ndarray, offs: np.ndarray,
         # ——vol02 上下外框实测只有 3~5px 厚（竖直外框 19~24px，RUN_MIN=4 是按它标的），
         # 正好卡在这个 off-by-one 上，整册 top 漏报 11 页、bottom 更多。
         thick = abs(float(offs[b] - offs[a])) + 1.0
-        if not (OUTER_RUN_MIN <= thick <= OUTER_RUN_MAX):
+        if not (OUTER_RUN_MIN <= thick <= OUTER_RUN_MAX * scale):
             continue
         score = float(prof[a:b + 1].mean()) * (thick + 1.0)
         if prefer_abs is not None:
             mid = abs(float(offs[a] + offs[b]) / 2.0)
-            score /= 1.0 + (abs(mid - prefer_abs) / OUTER_PRIOR_TOL) ** 2
+            score /= 1.0 + (abs(mid - prefer_abs) / (OUTER_PRIOR_TOL * scale)) ** 2
         if best is None or score > best[0]:
             pk = float(prof[a:b + 1].max())
             half = pk * 0.5
             # 外延要有刹车：半高门槛在低对比区会一路滑到搜索边界（vol01/32 top
             # 的段明明在 -45~-50，却一路滑出去报了 -78=GAP_MAX）。最多再走
             # OUTER_EDGE_RUN px。
-            i, limit = b, min(len(prof) - 1, b + OUTER_EDGE_RUN)
+            i, limit = b, min(len(prof) - 1, b + int(round(OUTER_EDGE_RUN * scale)))
             while i < limit and prof[i + 1] >= half:
                 i += 1
             if i >= len(prof) - 1 or prof[i + 1] >= half:
@@ -661,11 +677,13 @@ def _outer_run(prof: np.ndarray, offs: np.ndarray,
 
 
 def _paper_beyond(binm: np.ndarray, base: np.ndarray, xs: np.ndarray,
-                   edge: float, sign: float, height: int) -> float:
+                   edge: float, sign: float, height: int, scale: float = 1.0) -> float:
     """外延再往外 `OUTER_PAPER_LO..HI` px 的行墨中位数——版框之外应该是纸。"""
     far = abs(edge)
     vals = []
-    for o in range(int(far) + OUTER_PAPER_LO, int(far) + OUTER_PAPER_HI + 1):
+    lo_, hi_ = (OUTER_PAPER_LO, OUTER_PAPER_HI) if scale == 1.0 else (
+        int(round(OUTER_PAPER_LO * scale)), int(round(OUTER_PAPER_HI * scale)))
+    for o in range(int(far) + lo_, int(far) + hi_ + 1):
         yy = np.rint(base + o * sign).astype(int)
         ok = (yy >= 0) & (yy < height)
         if ok.mean() < 0.5:          # 大半跑出页面了，别拿残缺的行下判断
@@ -684,7 +702,8 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                           book_gap: dict | None = None,
                           frame_layers: dict | None = None,
                           outer_side: str | None = None,
-                          skip_top: list[tuple[float, float]] | None = None) -> dict:
+                          skip_top: list[tuple[float, float]] | None = None,
+                          outer_scale: bool = False) -> dict:
     """上下版框的外框偏移 + 纸边侧竖直外框偏移。
 
     `skip_top`（旧坐标 x 区间，`head_raise_fit` 传抬头列）：量上外框时不看这些 x——抬头列那一段主上框上方是抬头框里的字，
@@ -725,6 +744,12 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                      top_outer_estimated=False, bottom_outer_estimated=False,
                      v_outer_side=None, v_outer_offset=None, v_outer_estimated=False)
     vx = sorted((width - 1) - v.x_at(height / 2.0) for v in verticals)
+    gap_max, scale = OUTER_GAP_MAX, 1.0
+    if outer_scale and len(vx) >= 3:
+        pitch = float(np.median(np.diff(vx)))
+        if pitch > OUTER_REF_PITCH:
+            scale = pitch / OUTER_REF_PITCH
+            gap_max = int(round(OUTER_GAP_MAX * scale))
     xs = np.arange(int(vx[0] + 30), int(vx[-1] - 30), 2)
     # 界行探到图外（史記09 年表页）时 xs 会越过图宽、取墨 IndexError：去掉越界的列。只去 ≥ 图宽的，没越界的页逐字节不变
     xs = xs[xs < width]
@@ -736,13 +761,13 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
             if outer_side in ("left", "right") and side != outer_side:
                 continue        # 按套书规则：靠版心一侧没有外框，不量
             base = np.array([(width - 1) - verticals[vi].x_at(y) for y in ys])
-            offs = np.arange(OUTER_GAP_MIN, OUTER_GAP_MAX + 1, 1.0) * sign
+            offs = np.arange(OUTER_GAP_MIN, gap_max + 1, 1.0) * sign
             prof = []
             for o in offs:
                 xx = (base - o).astype(int)     # 新坐标 x 向左递增 => 旧坐标取反
                 ok = (xx >= 0) & (xx < width)
                 prof.append(binm[ys[ok], xx[ok]].mean() if ok.any() else 0.0)
-            r = _outer_run(np.array(prof), offs)
+            r = _outer_run(np.array(prof), offs, scale=scale)
             if r is not None and r[1] < OUTER_V_INK_MIN:
                 r = None            # 竖直外框是先验，弱峰宁可不要（见 OUTER_V_INK_MIN）
             if r is not None and (best is None or r[1] > best[2]):
@@ -758,7 +783,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
             vi = 0 if outer_side == "right" else len(verticals) - 1
             edge = (width - 1) - verticals[vi].x_at(height / 2.0)   # 旧坐标（左上原点）里内框线的 x
             sgn = -1.0 if outer_side == "right" else 1.0
-            off = min(float(g) + OUTER_ESTIMATE_SLACK, float(OUTER_GAP_MAX))
+            off = min(float(g) + OUTER_ESTIMATE_SLACK, float(gap_max))
             room = edge if sgn < 0 else (width - 1 - edge)
             off = min(off, max(0.0, room - 1.0))
             if off > 0:
@@ -783,7 +808,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
             if declared == 1:
                 # 版式就是单线：不找外框，只量这条粗条（从内框线起往外连续的粗墨）的宽度
                 ext = 0
-                for o in range(0, OUTER_GAP_MAX + 1):
+                for o in range(0, gap_max + 1):
                     yy = (base + o * sign).astype(int)
                     ok = (yy >= 0) & (yy < height)
                     v = binm[yy[ok], xs[ok]].mean() if ok.any() else 0.0
@@ -796,7 +821,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 continue
             # 先判單邊框：从内框线起往外连续的粗墨。是粗条就不找第二条了。
             run0, start0 = 0, None
-            for o in range(0, OUTER_GAP_MAX + 1):
+            for o in range(0, gap_max + 1):
                 yy = (base + o * sign).astype(int)
                 ok = (yy >= 0) & (yy < height)
                 v = binm[yy[ok], xs[ok]].mean() if ok.any() else 0.0
@@ -811,7 +836,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
             if start0 is not None and run0 >= SINGLE_BAR_MIN:
                 # 粗条之外还有墨 → 那才是外框，这条粗条只是内框（见 SINGLE_BAR_GAP）
                 second = 0.0
-                for o in range(start0 + run0 + SINGLE_BAR_GAP, OUTER_GAP_MAX + 1):
+                for o in range(start0 + run0 + SINGLE_BAR_GAP, gap_max + 1):
                     yy = (base + o * sign).astype(int)
                     ok = (yy >= 0) & (yy < height)
                     v = binm[yy[ok], xs[ok]].mean() if ok.any() else 0.0
@@ -821,15 +846,15 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                     out[f"{kind}_bar_extent"] = float(start0 + run0)
                     continue
             out[f"{kind}_frame_kind"] = "none"
-            lo, hi = OUTER_GAP_MIN, OUTER_GAP_MAX
+            lo, hi = OUTER_GAP_MIN, gap_max
             if prior is not None:      # 钉在页级间距先验上，见函数 docstring
                 # 四边不等距，先按边校正。`outer_shift` 是**书级**标定值
                 # （`BookSpec.outer_shift`），不给才退回缺省——这个差按书变，
                 # vol01 -4.2/-6.3 对 vol02 -12.0/-19.8，抄错就整册漏报。
-                shift = (outer_shift or {}).get(kind, OUTER_PRIOR_SHIFT[kind])
+                shift = (outer_shift or {}).get(kind, OUTER_PRIOR_SHIFT[kind] * scale)
                 c = prior + shift
-                lo = max(lo, c - OUTER_PRIOR_WIN)
-                hi = min(hi, c + OUTER_PRIOR_WIN)
+                lo = max(lo, c - OUTER_PRIOR_WIN * scale)
+                hi = min(hi, c + OUTER_PRIOR_WIN * scale)
             if hi - lo < 5:
                 continue
             offs = np.arange(lo, hi + 1, 1.0) * sign
@@ -838,10 +863,10 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 yy = (base + o).astype(int)
                 ok = (yy >= 0) & (yy < height)
                 prof.append(binm[yy[ok], xs[ok]].mean() if ok.any() else 0.0)
-            r = _outer_run(np.array(prof), offs, prefer_abs=prior)
+            r = _outer_run(np.array(prof), offs, prefer_abs=prior, scale=scale)
             if r is None:
                 continue
-            if _paper_beyond(binm, base, xs, r[0], sign, height) > OUTER_PAPER_MAX:
+            if _paper_beyond(binm, base, xs, r[0], sign, height, scale) > OUTER_PAPER_MAX:
                 continue          # 条外面还是墨 => 这根本不是最外层，见常量注释
             out[f"{kind}_outer_offset"] = r[0]
             out[f"{kind}_frame_kind"] = "double"
@@ -861,7 +886,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 continue
             base = np.array([line.y_at((width - 1) - x) for x in xs])
             lo = float(OUTER_GAP_MIN)          # 下界不收，见 OUTER_PRIOR_FALLBACK_WIN
-            hi = min(OUTER_GAP_MAX, g + OUTER_PRIOR_FALLBACK_WIN)
+            hi = min(gap_max, g + OUTER_PRIOR_FALLBACK_WIN * scale)
             best = None
             for o in np.arange(lo, hi + 1, 1.0):
                 yy = (base + o * sign).astype(int)
@@ -870,7 +895,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 if v >= OUTER_INK_FALLBACK and (best is None or v > best[1]):
                     best = (float(o), v)
             if best is not None and _paper_beyond(
-                    binm, base, xs, best[0] * sign, sign, height) > OUTER_PAPER_MAX:
+                    binm, base, xs, best[0] * sign, sign, height, scale) > OUTER_PAPER_MAX:
                 best = None        # 条外面还是墨 => 不是最外层，当没找着
             if best is None:
                 if declared != 2:
@@ -881,7 +906,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 off = g + OUTER_ESTIMATE_SLACK
             else:
                 off = best[0]      # 见到墨了就是实测位置，不外让
-            off = min(float(off), float(OUTER_GAP_MAX))
+            off = min(float(off), float(gap_max))
             # 让出纸面就退回纸边内侧，别把框画到图像外头
             room = (float(base.min()) if sign < 0
                     else float(height - 1 - base.max()))
@@ -1601,6 +1626,13 @@ TRK_INLIER = 2.0
 TRK_HUBER = 1.5
 TRK_LW_K = (1.6, 2.0)     # 本线墨宽中位 lw：细线上限 max(TRK_THIN[1], 1.6·lw)，宽墨下限 max(TRK_WIDE, 2·lw)
                           # （殿本有的页界行粗到 12px，按死门槛 10 整条线都被当成宽墨，只剩毛边可追，vol01 p100）
+TRK_FAINT_HALF = 4         # 淡线：横向闭运算半宽（px）；宽过细线、窄过粗框条（粗条、字块里暗度为 0）
+TRK_DARK_CAP = 60.0        # 暗度封顶（字块、粗墨不压过淡线）
+TRK_GSEC = 200             # 淡线兜底：分段长（px）
+TRK_GWIN = 12              # 淡线兜底：每段平移搜索半宽（px）
+TRK_GQ = 2.5               # 淡线兜底：段峰值 / 剖面中位 下限
+TRK_GCOVER = 0.5           # 淡线兜底：看见的段占比下限
+TRK_GBETTER = 1.1          # 淡线兜底：新线沿线平均暗度要比现线高这么多倍
 TRK_HIT_DROP = 0.05       # 新线「线心 ±1px 压着墨」的行占比比现线低这么多 ⇒ 新线跑到白纸上了，不换
 
 
@@ -1730,15 +1762,80 @@ def _trk_as_three(v: VLine, top: HLine, bottom: HLine, h: int) -> VLine:
     return VLine(v.x_at_top, v.slope, v.slope, v.slope, yt + (yb - yt) / 3.0, yt + 2.0 * (yb - yt) / 3.0)
 
 
+def _trk_dark(gray: np.ndarray) -> np.ndarray:
+    """每个像素比左右各 TRK_FAINT_HALF px 内最亮处（横向闭运算）暗多少（封顶 TRK_DARK_CAP）。"""
+    import cv2
+    g = np.asarray(gray)
+    if g.dtype != np.uint8:
+        g = np.clip(g, 0, 255).astype(np.uint8)
+    bg = cv2.morphologyEx(g, cv2.MORPH_CLOSE, np.ones((1, 2 * TRK_FAINT_HALF + 1), np.uint8))
+    return np.clip(bg.astype(np.float32) - g.astype(np.float32), 0, TRK_DARK_CAP)
+
+
+def _trk_gray_line(dark: np.ndarray, v: VLine, yt: float, yb: float, w: int) -> VLine | None:
+    """淡线兜底（逐行追不到细墨时）：沿现线分段（TRK_GSEC 长、半段步进），每段在 ±TRK_GWIN px 内平移，
+    取沿线平均暗度最大的平移；段的峰值比该段平移剖面中位高 TRK_GQ 倍才算看见。看见的段够多就按段心
+    拟直线、不够再自由折点三段（同 `_trk_line` 的护栏）；新线沿线平均暗度要比现线高才换。"""
+    h = dark.shape[0]
+    xs_old = lambda yy: (w - 1) - v.x_at(yy)
+    dxs = np.arange(-TRK_GWIN, TRK_GWIN + 0.25, 0.5)
+    cy, cx = [], []
+    for a in np.arange(yt + 4, yb - 4 - TRK_GSEC / 2, TRK_GSEC / 2):
+        yy = np.arange(a, min(a + TRK_GSEC, yb - 4), 1.0)
+        yi = yy.astype(int)
+        xo = xs_old(yy)
+        prof = np.empty(len(dxs))
+        for k, dx in enumerate(dxs):
+            xi = np.clip(np.round(xo + dx).astype(int), 0, w - 1)
+            prof[k] = float(dark[yi, xi].mean())
+        k = int(np.argmax(prof))
+        if prof[k] >= TRK_GQ * (float(np.median(prof)) + 1e-3):
+            cy.append(float(yy.mean()))
+            cx.append(float(np.interp(yy.mean(), yy, xo)) + float(dxs[k]))
+    n_all = max(1, len(np.arange(yt + 4, yb - 4 - TRK_GSEC / 2, TRK_GSEC / 2)))
+    if len(cy) < 4 or len(cy) < TRK_GCOVER * n_all:
+        return None
+    yo, xo_ = np.array(cy), np.array(cx)
+    span = yb - yt
+    co, s80 = _trk_fit(yo, xo_, [])
+    best = (s80, [], co)
+    if s80 > TRK_STRAIGHT:
+        g = np.linspace(yt + 0.08 * span, yb - 0.08 * span, TRK_KNOT_N)
+        for i in range(len(g)):
+            for j in range(i + 1, len(g)):
+                p, q = float(g[i]), float(g[j])
+                if min((yo < p).sum(), ((yo >= p) & (yo < q)).sum(), (yo >= q).sum()) < 2:
+                    continue
+                co2, s2 = _trk_fit(yo, xo_, [p, q])
+                if s2 >= best[0] - TRK_GAIN or abs(co2[2]) > TRK_DSLOPE or abs(co2[3]) > TRK_DSLOPE:
+                    continue
+                best = (s2, [p, q], co2)
+    ys = np.arange(yt + 4, yb - 4, TRK_STEP)
+    new = _trk_basis(ys, best[1]) @ best[2]
+    yi = ys.astype(int)
+    d_new = float(dark[yi, np.clip(np.round(new).astype(int), 0, w - 1)].mean())
+    d_old = float(dark[yi, np.clip(np.round(xs_old(ys)).astype(int), 0, w - 1)].mean())
+    if d_new < d_old * TRK_GBETTER:
+        return None
+    c = [float(t) for t in best[2]]
+    if not best[1]:
+        return VLine((w - 1) - c[0], -c[1])
+    return VLine((w - 1) - c[0], -c[1], -(c[1] + c[2]), -(c[1] + c[2] + c[3]), float(best[1][0]), float(best[1][1]))
+
+
 def refit_vlines_by_track(mask: np.ndarray, top: HLine, bottom: HLine, verticals: list[VLine],
-                          w: int, h: int) -> tuple[list[VLine], int]:
-    """每条竖线按 `_trk_line` 重拟（见 TRK_*）。返回 (新线表, 换了几条)；调用方负责把整页统一成三段。"""
+                          w: int, h: int, gray: np.ndarray | None = None) -> tuple[list[VLine], int]:
+    """每条竖线按 `_trk_line` 重拟（见 TRK_*）。返回 (新线表, 换了几条)；调用方负责把整页统一成三段。
+    给了 `gray`，逐行追不到细墨的线再走淡线兜底（`_trk_gray_line`）。"""
     mask01 = (np.asarray(mask) > 0)
+    dark = _trk_dark(gray) if gray is not None else None
     out, changed = list(verticals), 0
     for vi, v in enumerate(verticals):
         xc = v.x_at(h / 2.0)
         yt, yb = float(top.y_at(xc)), float(bottom.y_at(xc))
         nv = _trk_line(mask01, v, yt, yb, w)
+        if nv is None and dark is not None:
+            nv = _trk_gray_line(dark, v, yt, yb, w)
         if nv is None:
             continue
         out[vi] = nv
@@ -1749,7 +1846,7 @@ def refit_vlines_by_track(mask: np.ndarray, top: HLine, bottom: HLine, verticals
 def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLine,
                     straight: list[VLine], w: int, h: int, vline_polyline: bool,
                     bend_w80_med: float | None = None, outer_bar: bool = False,
-                    outer_side: str | None = None, vline_track: bool = False):
+                    outer_side: str | None = None, vline_track: bool = False, gray: np.ndarray | None = None):
     """直线竖线 → 本页最终竖线：弯页整页换三段折线（先量 w80 再决定，直线页原样通过），再按横带证据重定位
     （见 SNAP_*），换了线的页统一成三段格式。要在 top/bottom 之后，折点 y 取自这条线跟上下版框的交点。
     返回 (verticals, segments, w80_med, w80_max, snapped)。`detect_borders` 与列宽重拟合后的
@@ -1762,7 +1859,7 @@ def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLin
         verticals, n_bar = refit_outer_by_bar(mask, top, bottom, verticals, w, h, outer_side=outer_side)
         snapped += n_bar
     if vline_track:                # 缺省关不走
-        verticals, n_trk = refit_vlines_by_track(mask, top, bottom, verticals, w, h)
+        verticals, n_trk = refit_vlines_by_track(mask, top, bottom, verticals, w, h, gray=gray)
         snapped += n_trk
         if n_trk and vseg == 3:    # 本来就是三段页：换成直线的线也写成三段格式（整页统一，下游按 vline_segments 读）
             verticals = [v if v.segments == 3 else _trk_as_three(v, top, bottom, h) for v in verticals]
@@ -1799,7 +1896,7 @@ def refit_bends(res, gray: np.ndarray, *, ink_threshold: int = 128, vline_polyli
     verticals, vseg, w80_med, w80_max, snapped = _bend_verticals(
         mask, binm, res.top, res.bottom, straight, w, h, vline_polyline, bend_w80_med,
         **({"outer_bar": True, "outer_side": outer_side} if outer_bar else {}),
-        **({"vline_track": True} if vline_track else {}))
+        **({"vline_track": True, "gray": gray} if vline_track else {}))
     from dataclasses import replace
     return replace(res, verticals=verticals, vline_segments=vseg, bend_w80_med=w80_med,
                    bend_w80_max=w80_max, vlines_snapped=int(snapped))
@@ -1833,11 +1930,13 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     top_hint: float | None = None,
                     bottom_hint: float | None = None,
                     head_raise_notch: bool = False,
-                    head_raise_fit: bool = False) -> BorderDetectionResult:
+                    head_raise_fit: bool = False,
+                    outer_scale: bool = False) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `head_raise_notch`：一个抬头框都没认出的页，查主上框是不是认在了抬头框上（`notch_top`）。缺省关。
     `head_raise_fit`：抬头列认下以后校内框高度（`_fit_head_raise`），量上外框时跳过抬头列。缺省关。
+    `outer_scale`：外框探测的像素量按列距缩放（见 `OUTER_REF_PITCH`）。缺省关。
 
     `top_hint` / `bottom_hint`：人给的上／下版框大致 y（页面横向中点处的行号），只在附近重找那条线，
     见 `seg/lines.find_horizontal_border` 的 `hint`。下游（折线、抬头框、外框）都在改后的线上算。缺省 None 不传。
@@ -1946,7 +2045,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     verticals, vseg, w80_med, w80_max, vlines_snapped = _bend_verticals(
         mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline, bend_w80_med,
         **({"outer_bar": True, "outer_side": outer_side} if outer_bar else {}),
-        **({"vline_track": True} if vline_track else {}))
+        **({"vline_track": True, "gray": gray} if vline_track else {}))
     fit_kw = {"fit": True} if head_raise_fit else {}
     head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend,
                                    scale=head_raise_scale, **fit_kw)
@@ -1966,7 +2065,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
             skip_kw = {"skip_top": spans}
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
                                  outer_shift=outer_shift, book_gap=book_outer_gap,
-                                 frame_layers=frame_layers, outer_side=outer_side, **skip_kw)
+                                 frame_layers=frame_layers, outer_side=outer_side, **skip_kw,
+                                 **({"outer_scale": True} if outer_scale else {}))
     return BorderDetectionResult(width=w, height=h, top=top, bottom=bottom,
                                   verticals=verticals, head_raise=head_raise,
                                   vline_segments=vseg, bend_w80_med=w80_med,

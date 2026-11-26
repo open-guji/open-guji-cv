@@ -1,4 +1,5 @@
 """书级两字刻形二选一（`groups.pair_shape`）：两字分得开、组外护栏、分差门槛、模型 schema、补放只认「整理本字或库首位」。数据全在测试里造。"""
+import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 import cv2
 import numpy as np
 import pytest
@@ -155,7 +156,7 @@ def test_pass_lifts_pending_and_vetoes_admitted(tmp_path, monkeypatch):
     p.write_text(__import__("json").dumps(js, ensure_ascii=False), encoding="utf-8")
     pair_shape.load.cache_clear()
     imgs = {1: da_img(True), 2: da_img(False), 3: da_img(True), 4: tian_img(), 5: da_img(True)}
-    monkeypatch.setattr(sa, "_page_patch", lambda ctx, page, col, slot, sub: imgs[slot])
+    monkeypatch.setattr(_sac, "_page_patch", lambda ctx, page, col, slot, sub: imgs[slot])
     out = _admit_page([
         {"id": "b:1:1:1", "slot": 1, "char": "太", "doubts": ["group_flow_disagree"]},          # 打架格：刻形＝库首位 → 放
         {"id": "b:1:1:2", "slot": 2, "char": "太", "doubts": ["group_flow_disagree"]},          # 刻形说大，库首位太、整理本太 → 不放
@@ -186,7 +187,7 @@ def test_pass_skips_when_ref_is_third_char(tmp_path, monkeypatch):
     p = tmp_path / "dt.json"
     p.write_text(__import__("json").dumps(js, ensure_ascii=False), encoding="utf-8")
     pair_shape.load.cache_clear()
-    monkeypatch.setattr(sa, "_page_patch", lambda ctx, page, col, slot, sub: da_img(True))
+    monkeypatch.setattr(_sac, "_page_patch", lambda ctx, page, col, slot, sub: da_img(True))
     out = _admit_page([
         {"id": "b:1:1:1", "slot": 1, "char": "太", "doubts": []},      # 库首位太、整理本天
         {"id": "b:1:1:2", "slot": 2, "char": "太", "doubts": []},      # 库首位太、整理本缺、坐标对位天
