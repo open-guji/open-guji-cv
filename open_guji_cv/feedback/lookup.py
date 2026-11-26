@@ -348,9 +348,9 @@ def _resolved_forced(book: str, reason: str, allow_sub: bool, log=None) -> dict[
         evs = list(el.iter_all())
     except FileNotFoundError:
         return {}
-    from .events import counts_as_human
+    from .events import counts_as_pin
     for e in evs:
-        if e.target.unit != "cell" or not e.target.key.startswith(pre) or not counts_as_human(e):
+        if e.target.unit != "cell" or not e.target.key.startswith(pre) or not counts_as_pin(e):
             continue
         p = e.payload or {}
         v = p.get("v") or e.kind
@@ -647,7 +647,7 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
                                    "或悄悄丢掉；先查原因（原图／glyph.db／字块缓存），确知可忽略时设 GUJI_LOOKUP_LENIENT=1") from e
             _logger.warning("human_chars(%s)：绑定表算不出来，退回按格号（GUJI_LOOKUP_LENIENT）：%r", book, e)
             bound = {}
-    from .events import EventLog, counts_as_human, iter_events_readonly
+    from .events import EventLog, counts_as_pin, iter_events_readonly
     out: dict[str, tuple[str, str | None]] = {}
     pre = f"{book}:"
     if log is None:
@@ -677,9 +677,9 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
             continue
         if e.kind != "confirm" or e.target.unit != "cell" or not e.target.key.startswith(pre):
             continue
-        # 看图结论不算人裁定字（overview#428，口径见 `events.counts_as_human`）：混进来的话
+        # 看图结论不算人裁定字（overview#428，口径见 `events.counts_as_pin`）：混进来的话
         # seed_admit 会当人裁一票定案。
-        if not counts_as_human(e):
+        if not counts_as_pin(e):
             continue
         p = e.payload or {}
         if p.get("v") == "figure":

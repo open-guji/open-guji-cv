@@ -1258,7 +1258,7 @@ def bind_check(products: Path, book: str) -> dict:
     import datetime as dt
     from collections import defaultdict
     from guji_manager.exp.rough_bench import _split_key
-    from open_guji_cv.feedback.events import EventLog, counts_as_human, iter_events_readonly
+    from open_guji_cv.feedback.events import EventLog, counts_as_pin, iter_events_readonly
     from open_guji_cv.products.store import ProductStore
     sys.path.insert(0, str(HERE))
     from pending_route import deciding, overridden_ids
@@ -1273,7 +1273,7 @@ def bind_check(products: Path, book: str) -> dict:
     by_page: dict[int, list] = defaultdict(list)
     mine = []
     for e in sorted(iter_events_readonly(EventLog()), key=lambda e: (e.ts, e.batch, e.seq)):
-        if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_human(e):
+        if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_pin(e):
             continue
         if not deciding({"kind": e.kind, "payload": e.payload or {}}):
             continue

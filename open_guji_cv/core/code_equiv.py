@@ -611,6 +611,13 @@ _OUTER_SCALE_1126 = ("border_detect 加开关 outer_scale（CV1 2026-11-26，缺
                      "另 layout-gold 79 页（殿本 vol01–10/30、脈經 01–06、全唐文 005/060/120/190、史記 05/20/40 的金标页）关着跑 border_detect 与 dev 逐页 json 全同。"
                      "开了只动列距 >220px 的页（全唐文）。2026-11-26 CV1")
 
+_EVENT_LEVEL_1126 = ("feedback/events.py 分事件级别（CV0 2026-11-26，GM4 批量规则）：lookup.py／bindings.py 的读者由 counts_as_human 改调 "
+                     "counts_as_pin（＝原 counts_as_human 口径，人裁或已放行 AI 钉），events.py 不在 seed_admit code_deps 里。"
+                     "seed_admit 在史記 02 25 页（4,7,8,9,19,21,24,25,29,33,41,44,53,86,95,102,104,105,106,114,141,173,180,185,199）、"
+                     "殿本 vol28 13 页（16 页里 3 页 column_band 失败）、全唐文 020 16 页上与 origin/dev 491585d 产物逐字节相同"
+                     "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。史記 104/106 首跑曾异：绑定表 fp_diff 随字块缓存先后变，"
+                     "同一份旧代码重跑也给出同样结果，非本改动所致，复跑逐字节同。")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.steps.border_detect",
           new="49cd0268f8136c2778937cb96c9068380ec9b89059695ce23b3db13370fe1904",
@@ -2682,6 +2689,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="118becc6bfab8f9549b62a8952190a273c5b9356c02848c4d10256c5f4312f1f",
           old="94920dd2cee9eadd603976906505ea6efd04a61bc75be07d976c5b01b509fdee",
           evidence=_COLEND_THIRD_NEAR),
+    Equiv(module="open_guji_cv.feedback.lookup",
+          new="05340e674852169796c404d7048c42e80a48eac1964cc90be263a7ba2755b43f",
+          old="f92a02c93d76432954d1e021802af8faa4f900855e1de867ba3fd7b7613c9de2",
+          evidence=_EVENT_LEVEL_1126),
+    Equiv(module="open_guji_cv.feedback.bindings",
+          new="caba419a5cfc4ee8101abf72729b444f53f9b896680fe3398597a047c1d3fa1d",
+          old="ddf0c55cd63fe58202633d1e664647a5435749994140cf6c4e744358275cceee",
+          evidence=_EVENT_LEVEL_1126),
 )
 
 
