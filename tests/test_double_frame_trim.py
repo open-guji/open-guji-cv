@@ -112,3 +112,13 @@ def test_wide_last_char_stroke_is_not_third_layer_after_inner_frame():
     _, d = clean_column(img, layers=(1, 2), layer_gap=(None, 40.0), inner_bottom=343.0)
     assert img.shape[0] - d["bottom"]["px"] >= 336    # 「二」下横不碰
     assert img.shape[0] - d["bottom"]["px"] <= 340    # 内框照剥
+
+
+def test_hairline_after_two_layers_is_stripped_even_far_from_inner():
+    # 2026-11-26 殿本 vol17 p14c9：空列，外框＋内框剥完后底下还有一条 1 行厚、跨度 0.72 的发丝线，离内框线 45 行
+    img = _col()
+    img[298:299, 14:100] = 0               # 发丝线（1 行、跨度约 0.8，离内框线约 45 行）
+    img[340:346, 10:110] = 0               # 内框
+    img[375:392, 8:112] = 0                # 外框
+    _, d = clean_column(img, layers=(1, 2), layer_gap=(None, 40.0), inner_bottom=343.0)
+    assert img.shape[0] - d["bottom"]["px"] <= 298

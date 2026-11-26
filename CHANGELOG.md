@@ -11,6 +11,7 @@
 
 - 文档（无代码变化，产物与指纹不变，CV0）：`doc/参考/性能统计.md` 按四大步重整：任务库已在 D1、`top --remote` 先列任务阶段（含 prep 分段）再按版面／切字／识字／定字分组、第三轮分段名单（row_segment、column_band、cell_shrink、rare_candidates、读缓存图）与冷缓存再生小计；配 manager 同日 PR。
 - PATCH（CV0 复核 #1891 余两格 vol04 p207c6、vol05 p149c6，11-25；改 `impl/keben/column.py` 下端第三道线，只在 `frame_layers` 下端≥2 时走到）：第三道候选离 Step1 内框线 >10 行的也只认边距证据（末字下横与内框线隔 13 行白，原先靠「隔白≥8 行」放过）。殿本 vol03 108 页比 #1891 版再变 2 列（8:8、17:3，末字下横回来）；vol02 夹具 1 端变（145:6 留残线）。登 code_equiv，`FRAME_LAYER_REV=2`。
+- PATCH（CV0 报 vol17 p14c9 空列底留一条 1px 细线，11-26；改 `impl/keben/column.py` 下端第三道，只在 `frame_layers` 下端≥2 时走到）：第三道里通栏（跨度 ≥0.7）又只有 ≤3 行厚的发丝线直接剥，不再看边距证据／离内框线远近（字的横画最薄 6 行）。vol03 108 页零变化、vol17 前 70 页只 p14c9 一列变、vol02 夹具零变化。登 code_equiv，`FRAME_LAYER_REV=3`。
 - PATCH（脚本，不进指纹）：republish 读者侧冒烟查图改用 GET＋`Range: bytes=0-0`（200／206 都算到），不再用 HEAD——CDN 新对象 HEAD 常 403 好几分钟而 GET 已 200（史記 001-r2／013-r2 冒烟误报，11-25，CV0 u T1）。
 - PATCH（指纹补漏，随 #1869／#1872 同一轮重跑，不另加重跑）：`steps._colview`（2a–2c 合并视图）补进 `column_geometry`、`column_gate`、`cell_shrink`、`cut_gate` 的 code_deps，`impl.keben.jiazhu_split` 补进 `cut_gate`——原先改这两个模块产物照报新鲜（manager `test_code_deps_coverage` 11-25 报红）。四步 code_hash 变，这四步今天已因 #1869／#1872 过期。CV0。
 - MINOR（用户 2026-11-25 定；只动 `cut_gate`：从 cut_gate 起过期，切字各步产物逐字节不变）：出口闸加自检 L2c `cut_too_inward`：当前左/右切点比「框内缘之后最少墨处」（新 `seg/side_cut.side_cut_points`，算时忽略上下边框前后各 60 行）更靠里超过 `cut_inward_max_px`（缺省 10，0=关）→ 拒收。全唐文 053、殿本 vol01、脉经 共 1140 列实测偏差 99 分位 ≤0，命中只有全唐文 053 p148c9 左侧（30px）。
