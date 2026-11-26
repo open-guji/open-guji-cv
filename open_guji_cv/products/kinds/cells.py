@@ -2,7 +2,7 @@
 
 坐标在**列图坐标**（COLUMN_PX，左上原点）；`quad_page` 是同一格四角经 Step2
 逆映射回原图、再换算到规范空间 raw_page_px@top-right 的结果（没有映射时为 None）。
-slot 编号：正文 1..n_body_slots，抬头格 -n_raised..-1，跳过 0；pos 是 1 起的物理位置。
+slot 编号：正文 1..n_body_slots，抬头格 -n_raised..-1，跳过 0；pos 是 1 起的物理位置（书级 `jiazhu_step.row_split` 切过的列例外：雙行小注段按小字分行，pos／slot／boundaries 都是逻辑编号，段内本行第几字、段后顺延，列旗 `jiazhu_row_split+N`，见 `row_boundaries.segment_column`）。
 """
 
 from __future__ import annotations

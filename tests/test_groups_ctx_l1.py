@@ -57,7 +57,7 @@ def test_judge_uses_window_and_members(tmp_path):
 
 
 @pytest.mark.parametrize("g", ["jys", "ry", "rr", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt", "rm",
-                               "mz", "yr", "zy", "sb", "js", "em", "fc", "mb", "yz", "guan", "hou", "liang", "zw"])
+                               "mz", "yr", "zy", "sb", "js", "em", "fc", "mb", "yz", "guan", "hou", "liang", "zw", "wu"])
 def test_shipped_rules_load_and_stay_in_group(g):
     from open_guji_cv.groups.registry import FLOW_GROUPS
     spec = FLOW_GROUPS[g]
@@ -126,3 +126,17 @@ def test_real_symbol_in_window_is_not_target(tmp_path):
     be = _backend(tmp_path, "rules:\n  - {id: a, char: 日, re: '月十◎'}\n")
     assert be.decide("月十", "")[0] == "日"
     assert be.decide("月十◎之", "")[0] is None        # 左窗里的真 ◎ 不是目标位
+
+
+# 嗚鳴（全唐文 2026-11-13）：嗚呼／嗚咽／喑嗚 给嗚；雞鳴、鳴鑾、自鳴 给鳴；两可词必须弃权。
+@pytest.mark.parametrize("left,right,want", [
+    ("", "呼哀哉", "嗚"), ("", "乎", "嗚"), ("", "咽不能言", "嗚"), ("泣", "咽", "嗚"), ("喑", "，", "嗚"),
+    ("雞", "而起", "鳴"), ("", "鑾", "鳴"), ("風自", "。", "鳴"), ("寒蟬", "樹間", "鳴"), ("", "鳥", "鳴"),
+    ("蕭瑟", "呼哀哉", "嗚"), ("之鶴", "呼衷哉", "嗚"), ("寒鐘", "乎", "嗚"),
+    ("悲", "。", None), ("", "於天下", None), ("天下", "", None),
+])
+def test_wu_ming_rules(left, right, want):
+    from open_guji_cv.groups.registry import FLOW_GROUPS
+    spec = FLOW_GROUPS["wu"]
+    be = CtxL1Backend(ROOT / spec.config_dir / "rules.yaml", spec.members)
+    assert be.decide(left, right)[0] == want

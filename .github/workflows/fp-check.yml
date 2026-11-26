@@ -1,0 +1,41 @@
+name: 指纹变更检查
+
+# 发版 tag、合并 PR 时查「哪几步的代码指纹变了」：变了却既没登记 code_equiv、说明里也没写明就挡
+# （v0.7.83、v0.7.99 两次 patch 线漏登之后加，GM2 2026-11-24）。见 scripts/check_fp_change.py。
+# 书面放行：tag 说明／PR 正文写一行「指纹变更：<步> 起过期（随统一重跑／原因）」。
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  fp-change:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 取全部 tag（annotated tag 的说明要用）
+        run: git fetch --force --tags origin
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: 发版 tag
+        if: github.event_name == 'push'
+        run: python scripts/check_fp_change.py --tag "$GITHUB_REF_NAME"
+      - name: PR
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" > "$RUNNER_TEMP/note.txt"
+          git log --format='%B' "$(git merge-base "$BASE" "$HEAD")..$HEAD" >> "$RUNNER_TEMP/note.txt"
+          python scripts/check_fp_change.py --base "$(git merge-base "$BASE" "$HEAD")" --head "$HEAD" --note-file "$RUNNER_TEMP/note.txt"

@@ -987,6 +987,10 @@ LONG_RULE_LINE_W = 0.06     # 夹注格（through）线跟字碰上时，贴外�
 LONG_RULE_EDGE = 3         # 夹注格（through）只抹线列时，两边连带抹掉的毛边列数上限
 LONG_RULE_OUT = 0.05       # ……下端（列首格是上端）离格外沿不到这么多格高算连到了（框线到下框前常断一两行）
 LONG_RULE_OUT_GROW = 0.15  # strip_long_rule(grow=True) 的放宽值
+#: strip_long_rule(outer_only=True)（cell_shrink.long_rule_outer_only，全唐文）：线那一段得落在图块外沿这么宽（× 图块宽）以内。
+#: 一列只一两个字（「制」「敕」单独成列）时字缘 `column_ink_edges` 就是这个字自己的字身，刂 必在字缘以外；列首又是列尾，
+#: 刂 的长竖钩一直连到格底，按拐角线抹掉（009:33:7:5、009:40:4:5「制」丢刂，R038）。版框、界行竖线贴着列窗边，刂 在列中间偏右。
+LONG_RULE_OUTER = 0.18
 
 
 def _run_around(rows: np.ndarray, lo: int, hi: int, gap: int) -> list[tuple[int, int]]:
@@ -1040,7 +1044,7 @@ def column_ink_edges(strip_ink: np.ndarray, rows: list[tuple[float, float]]) -> 
 def strip_long_rule(patch: np.ndarray, strip_ink: np.ndarray, y0: int, cell_top: float, cell_bot: float,
                     tail: bool = False, head: bool = False,
                     ink_edges: tuple[float, float] | None = None, through: bool = False,
-                    grow: bool = False) -> np.ndarray:
+                    grow: bool = False, outer_only: bool = False) -> np.ndarray:
     """抹掉图块左右最外侧的界行／版框竖线（判据见上方注释）。
 
     strip_ink 是整列条带的墨（与图块同宽、同 x 原点）；y0 是图块顶在条带里的行，cell_top/cell_bot 是
@@ -1048,7 +1052,8 @@ def strip_long_rule(patch: np.ndarray, strip_ink: np.ndarray, y0: int, cell_top:
     拐角线要用。双边框是粗框＋细线两道，每侧最多剥两层。through=True（夹注格）：不看字缘（半格小字贴着列缘，
     字缘量不准），只认上下贯穿 RULE_H_RATIO 格高以上的线、不认列端拐角线。grow=True（书级开关
     cell_shrink.frame_line_grow）：列端拐角线离格外沿放宽到 LONG_RULE_OUT_GROW（全唐文嘉慶本第 1 列外侧竖框
-    在上框下面断开约 0.08 格高才起，11p109「此」）。"""
+    在上框下面断开约 0.08 格高才起，11p109「此」）。outer_only=True（书级开关 cell_shrink.long_rule_outer_only）：
+    不是夹注格时，那一段还得落在图块外沿 LONG_RULE_OUTER 宽以内才认（单字成列的「制」，刂 落在字缘外却在列中间）。"""
     h, w = patch.shape[:2]
     cell_h = cell_bot - cell_top
     out = patch
@@ -1086,6 +1091,8 @@ def strip_long_rule(patch: np.ndarray, strip_ink: np.ndarray, y0: int, cell_top:
                 continue
             if not through and (ink_edges is None or (b > ink_edges[0] and a < ink_edges[1])):
                 continue        # 没整个落在本列字缘以外（「則」的刂、「陸」的阝跟上下字的竖笔连成长线）
+            if outer_only and not through and (a > LONG_RULE_OUTER * w if left else b < (1 - LONG_RULE_OUTER) * w):
+                continue        # 不贴列窗外沿：是字的竖笔（单字成列「制」的刂）
             runs = _run_around(strip_ink[:, ra:rb].any(axis=1), int(cell_top), int(np.ceil(cell_bot)),
                                LONG_RULE_GAP)
             line = any(r1 - r0 >= RULE_H_RATIO * cell_h for r0, r1 in runs)
@@ -3337,7 +3344,8 @@ class CharExtractor:
                     patch = strip_long_rule(patch, ink_px, y0, ltop, lbot, tail=idx == tail_cell,
                                             head=idx == head_cell, ink_edges=ink_edges,
                                             **({"through": True} if jz_rules else {}),
-                                            **({"grow": True} if gmeta.get("frame_line_grow") else {}))
+                                            **({"grow": True} if gmeta.get("frame_line_grow") else {}),
+                                            **({"outer_only": True} if gmeta.get("long_rule_outer") else {}))
                 # 整页内框细线已抹掉的一端（inner_frame_only）：框渣剥离、断段、曲线切边都不做——框线连同线外已经白了，
                 # 这几道按「与字身分离」「贴着字身」猜框渣，猜中的多是字的部件（灬、心的点、八的脚、三的上横）
                 end_sides = {s_ for s_, grp in (("top", order[:2 + n_head_rows]), ("bottom", order[-2:])) if idx in grp}

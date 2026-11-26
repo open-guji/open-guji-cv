@@ -241,6 +241,10 @@ class BookSpec:
     #: 都不用动（`side_floor` 比值 1.000、`FRAME_ROW_T=0.5` 仍分得开框与正文），
     #: 但这是**这一册**的结论，不能推广到四庫那种版框模糊的册。
     binarized_input: bool = False
+    #: `ink`（yaml 同名，2026-11-17 用户定）：册级墨层＋二值化（`utils/ink.InkSpec`）。写了就由它决定
+    #: Step1 起读的页：彩图先转墨色（压朱印朱批），再二值（缺省 Otsu＋去小斑）。**None＝没写＝老行为**
+    #: （灰度；`binarized_input` 照旧），指纹逐位不变。写了它 `binarized_input` 不再起作用。见 `utils/ink.py`。
+    ink: "InkSpec | None" = None
     #: `column_grid`（yaml 同名）：Step1 竖线走**网格模式**——版框定死、列距均匀、
     #: 逐槽验线、探不到的槽位按几何插值（`peak_line_search.find_vertical_lines_grid`）。
     #: 给**界行没印全**的书用：北行日錄刻本 972 个槽位里 120 个（12.3%）没有线，
@@ -296,6 +300,11 @@ class BookSpec:
     #: **怎么定**：看整册 `frame_kind` 分布——上边框 90% 判 double 说明版式就是 2 层。
     #: ⚠️ 只管上下；左右 Step1 只探内框，外框不关心（2026-09-22 用户确认）。
     frame_layers: dict = field(default_factory=dict)
+    #: 左右外框在哪一侧（yaml 的 `side_frame: {even: left, odd: right}`，2026-11-23）。键是页码奇偶，
+    #: 值是**纸边侧**（有外框的那一侧；远离版心）——靠版心一侧没有外框。声明了就只在那一侧量外框，
+    #: 量不到按 `outer_gap.side` 估；不声明＝老行为（两侧比强弱）。值 `none` 表示这一类页左右都不找（如封面类整册规律不适用时）。
+    #: **怎么定**：看整册金标／产物里 `v_outer_side` 与页码奇偶的对应；换书必须重标，别抄（殿本偶左奇右，史記相反）。
+    side_frame: dict = field(default_factory=dict)
     #: `vline_polyline`（yaml 同名，默认 True）：Step1 界行要不要按弯度做三段折线拟合。
     #: **界行淡而断的书要关**：折线的判弯量 w80 在那种书上量的是"线有多断"，平直页
     #: 也被判成弯页，折点在淡线上找不到墨就整页齐刷刷平移几十 px（北行日錄刻本
@@ -355,6 +364,10 @@ class BookSpec:
     #: seed_admit 的人裁、近似字指纹在 `params_for` 里换成 `glyph-gN`，别处人裁进库不让本册过期；
     #: 不写 = 照旧按库内容哈希，行为与加这个字段之前逐位相同。
     glyph_pin: int | None = None
+    #: 本册钉住的 PUA 码表共享层版本（yaml 的 `pua_table_pin: 1` 或 `v1`；中心库 `pua-wyg`，见 `core/pua_table_pin.py`）。
+    #: 钉了之后 seed_admit 的码表（`pua_code_table`）读共享层这一版、码表内容指纹进参数；不写 = 读本书 `config/pua/pua_table.jsonl`，
+    #: 行为与加这个字段之前逐位相同。
+    pua_table_pin: int | None = None
     #: 本册钉住的模型总号（yaml 的 `model: 1` 或 `m1`；见 `core/model_pack.py`）。钉了之后读模型的步
     #: 起跑前校验清单；同时钉了 `corpus:` 的册，`group_flow_fingerprint` 并上模型内容（补缺口）。
     #: 不写 = 行为与加这个字段之前逐位相同。
@@ -368,6 +381,12 @@ class BookSpec:
     #: 或 `manifest: <快照 manifest.json 路径，相对工作区>`。登记后 `close-check` 1a 改比快照
     #: 产物 sha，不再因 cv 升版、人裁进库报过期。不进 `book_deps`、不进指纹；空 = 草稿册。
     freeze: dict = field(default_factory=dict)
+    #: 缺页（yaml 的 `gaps:`，2026-11-18 用户定）：**只按图片页号记**，不另立书上页号。一段连续缺的写一条：
+    #: `after_page`（缺在这张图之后）、`what`（照书上说缺了什么，如「卷九叶九、叶十」）、
+    #: `kind`（`原书缺`＝藏本本身没有 / `未拍`＝书里有、图没拍到）、`est_chars`（估计缺多少字，可缺）、
+    #: `evidence`（怎么定的、谁、哪天，可缺）。图片页号、产物、人裁、字位 id 一概不动；
+    #: 不进任何 Step 的指纹（没有 Step 读它），只给导出（`NNN.gaps.json`）、对勘报告和网站用。
+    gaps: list[dict] = field(default_factory=list)
 
     def canonical_char(self, ch: str) -> str:
         """`ch` 是本书 `codepoints` 配置里「该统一掉的那个码位」时，返回本书指定的
@@ -489,6 +508,8 @@ class BookSpec:
             "notes": self.notes,
             "iron_gate": self.iron_gate,
             "writing_mode": self.writing_mode, "frame": self.frame, "script": self.script,
+            # 墨层：控制台据此决定字块卡缺省显示二值还是灰度（None＝没写＝老行为）
+            "ink": (self.ink.token() if self.ink is not None else None),
             # 只给个数，不外泄路径——控制台判「Step5-d 整理本锚定有没有意义」够用了
             "n_references": len(self.references),
             "reference_profile": self.reference_profile.summary(self.all_pages()),
@@ -500,7 +521,7 @@ class BookSpec:
             "norm_stroke": self.norm_stroke,
             "frame_height": self.frame_height,
             "vline_polyline": self.vline_polyline,
-            "font": dict(self.font), "frame_layers": dict(self.frame_layers),
+            "font": dict(self.font), "frame_layers": dict(self.frame_layers), "side_frame": dict(self.side_frame),
             "codepoints": dict(self.codepoints),
             "pipeline": self.default_pipeline_id(),
             "in_workspace": self.in_workspace(),
@@ -572,6 +593,21 @@ def _expand_pages(raw) -> list[int]:
 def _load_seg_set(v):
     from .seg_set import validate_seg_set
     return validate_seg_set(None if v is None else str(v))
+
+
+def _load_side_frame(raw) -> dict:
+    """`side_frame: {even|odd: left|right|none}` → {"even": .., "odd": ..}；写错直接报错。"""
+    if not raw:
+        return {}
+    bad = set(raw) - {"even", "odd"}
+    if bad:
+        raise ValueError(f"side_frame 只认 even／odd，多了 {sorted(bad)}")
+    out = {}
+    for k, v in raw.items():
+        if v not in ("left", "right", "none"):
+            raise ValueError(f"side_frame.{k} 只能是 left／right／none，不是 {v!r}")
+        out[str(k)] = str(v)
+    return out
 
 
 def _load_layout_hints(raw) -> dict:
@@ -713,6 +749,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         outer_shift={str(k): float(v) for k, v in (d.get("outer_shift") or {}).items()},
         outer_gap={str(k): float(v) for k, v in (d.get("outer_gap") or {}).items()},
         frame_layers={str(k): int(v) for k, v in (d.get("frame_layers") or {}).items()},
+        side_frame=_load_side_frame(d.get("side_frame")),
         pages=_expand_pages(d.get("pages")),
         preclean=_load_preclean(d.get("preclean")),
         pipeline=(None if d.get("pipeline") is None else str(d["pipeline"])),
@@ -737,6 +774,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         norm_stroke=(None if d.get("norm_stroke") is None else int(d["norm_stroke"])),
         frame_bar_strategy=str(d.get("frame_bar_strategy") or "side_gap"),
         binarized_input=bool(d.get("binarized_input", False)),
+        ink=_parse_ink(d.get("ink")),
         col_pitch=(None if d.get("col_pitch") is None else float(d["col_pitch"])),
         columns=dict(d.get("columns") or {}),
         frame_height=(None if d.get("frame_height") is None
@@ -750,10 +788,17 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         corpus=_parse_corpus_pin(d.get("corpus")),
         corpus_dev=bool(d.get("corpus_dev", False)),
         glyph_pin=_parse_glyph_pin(d.get("glyph_pin")),
+        pua_table_pin=_parse_pua_table_pin(d.get("pua_table_pin")),
         model=_parse_model_pin(d.get("model")),
         code=_parse_code_pin(d.get("code")),
         freeze=_load_freeze(d.get("freeze"), book_id),
+        gaps=load_gaps(d.get("gaps"), book_id),
     )
+
+
+def _parse_ink(raw):
+    from ..utils.ink import parse_ink
+    return parse_ink(raw)
 
 
 def _load_ref_profile(raw, refs, book_id: str):
@@ -802,6 +847,11 @@ def _parse_corpus_pin(v) -> int | None:
     return parse_pin(v)
 
 
+def _parse_pua_table_pin(v) -> int | None:
+    from .pua_table_pin import parse_pin
+    return parse_pin(v)
+
+
 def _parse_glyph_pin(v) -> int | None:
     from .glyph_pin import parse_pin
     return parse_pin(v)
@@ -815,6 +865,65 @@ def _load_freeze(v, book_id: str) -> dict:
         raise ValueError(f"册 {book_id} 的 freeze: 应是映射（at、cv_version、snapshot 或 manifest），"
                          f"现在是 {type(v).__name__}：{v!r}")
     return {str(k): x for k, x in v.items()}
+
+
+GAP_KINDS = ("原书缺", "未拍")
+_GAP_KEYS = {"after_page", "what", "kind", "est_chars", "evidence"}
+
+
+def load_gaps(v, book_id: str) -> list[dict]:
+    """册 yaml 的 `gaps:` → 校验过的缺页记录（按 `after_page` 排序）。写错了给一句清楚的错（`BookConfigError`）。
+
+    `after_page` 可以是 0（缺在第一张图之前）；同一页后面只许一条（一段连续缺页写成一条）。"""
+    from .book_config import BookConfigError
+    if not v:
+        return []
+    if not isinstance(v, list):
+        raise BookConfigError(f"册 {book_id} 的 gaps: 应是列表，每条一段缺页；现在是 {type(v).__name__}")
+    out, seen = [], set()
+    for i, g in enumerate(v):
+        where = f"册 {book_id} 的 gaps 第 {i + 1} 条"
+        if not isinstance(g, dict):
+            raise BookConfigError(f"{where} 应是映射（after_page、what、kind…），现在是 {g!r}")
+        extra = set(g) - _GAP_KEYS
+        if extra:
+            raise BookConfigError(f"{where} 有不认识的键 {sorted(extra)}；只认 {sorted(_GAP_KEYS)}")
+        ap = g.get("after_page")
+        if isinstance(ap, bool) or not isinstance(ap, int) or ap < 0:
+            raise BookConfigError(f"{where}：after_page 要写图片页号（≥0 的整数），现在是 {ap!r}")
+        what = g.get("what")
+        if not isinstance(what, str) or not what.strip():
+            raise BookConfigError(f"{where}：what 必填，照书上写缺了什么（如「卷九叶九、叶十」）")
+        kind = g.get("kind", "原书缺")
+        if kind not in GAP_KINDS:
+            raise BookConfigError(f"{where}：kind 只能是 {'／'.join(GAP_KINDS)}，现在是 {kind!r}")
+        if ap in seen:
+            raise BookConfigError(f"{where}：第 {ap} 页之后已有一条缺页；连续缺的合成一条")
+        seen.add(ap)
+        rec = {"after_page": ap, "what": what.strip(), "kind": kind}
+        if g.get("est_chars") is not None:
+            n = g["est_chars"]
+            if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+                raise BookConfigError(f"{where}：est_chars 要是 ≥0 的整数，现在是 {n!r}")
+            rec["est_chars"] = n
+        if g.get("evidence") is not None:
+            rec["evidence"] = str(g["evidence"])
+        out.append(rec)
+    return sorted(out, key=lambda r: r["after_page"])
+
+
+def gaps_for_pages(gaps: list[dict], pages: list[int]) -> list[dict]:
+    """一批导出页（一章）里落着的缺页：`after_page` 是这批里的页（缺在章末的也归这一章），
+    `after_page` = 0（缺在第一张图之前）归含第 1 页的那一批。"""
+    ps = set(pages)
+    return [g for g in gaps if g["after_page"] in ps or (g["after_page"] == 0 and 1 in ps)]
+
+
+def gap_note(g: dict) -> str:
+    """缺页在文字版里的一行注记，如「〔原书此处缺卷九叶九、叶十，约 830 字〕」（网站文字版与 Step9 稿同一写法）。"""
+    head = "原书此处缺" if g.get("kind", "原书缺") == "原书缺" else "此处未拍"
+    n = g.get("est_chars")
+    return f"〔{head}{g['what']}" + (f"，约 {n} 字" if n else "") + "〕"
 
 
 def list_books(books_dir: Path | None = None) -> list[str]:

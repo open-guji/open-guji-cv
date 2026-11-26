@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""把 `export_wikisource.py` 出的逐页 wikitext 上传到 zh.wikisource `Page:` 页。
+"""把 `guji output export wikisource`（guji-manager）出的逐页 wikitext 上传到 zh.wikisource `Page:` 页。
 
     python scripts/upload_wikisource.py bxgb --pages 3,4 --level 3 [--dir DIR] [--dry-run]
 
 登录用机器人密码（Special:BotPasswords），读 `~/.wikisource-bot`（两行 `WS_USER=` / `WS_PASS=`，
-权限 600，不进任何仓）。页名映射复用 `export_wikisource.BOOKS`。已存在的页直接覆盖（历史里留旧版）。
+权限 600，不进任何仓）。页名映射复用 `guji_manager.output.wikisource_export.BOOKS`。已存在的页直接覆盖（历史里留旧版）。
 页眉页脚留空；`--level` 是 ProofreadPage 校对等级（1 未校对 / 3 已校对 / 4 已核对），默认 3（用户 2026-09-26 定：一律标已校对）。
 """
 from __future__ import annotations
@@ -12,16 +12,12 @@ from __future__ import annotations
 import argparse
 import http.cookiejar
 import json
-import sys
 import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "scripts"))
-
-from export_wikisource import BOOKS  # noqa: E402
+from guji_manager.output.wikisource_export import BOOKS  # 要装 guji-manager
 
 API = "https://zh.wikisource.org/w/api.php"
 UA = "guji-upload/0.1 (open-guji; sheldonli.dev@gmail.com)"

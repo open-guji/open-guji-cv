@@ -49,3 +49,13 @@ def test_prepare_uses_registered_hook(empty_hooks):
     hooks.add("prepare", lambda book, steps, jobs: got.append((book.id, steps, jobs)))
     cli_v2._prepare(SimpleNamespace(book=SimpleNamespace(id="vol01", glyph_pin=19)), ["glyph_match"], jobs=4)
     assert got == [("vol01", ["glyph_match"], 4)]
+
+
+def test_route_rewrites_argv_before_parse(empty_hooks, monkeypatch):
+    """`route` 钩子在解析前改写命令行（manager 的步骤前缀 `guji pipeline <命令> …`，2026-11-22）。"""
+    from open_guji_cv import cli_v2
+    seen = []
+    hooks.add("route", lambda argv: argv[1:] if argv[:2] == ["pipeline", "version"] else None)
+    monkeypatch.setitem(cli_v2.COMMANDS_V2, "version", lambda args: seen.append(args.command))
+    cli_v2.main(["pipeline", "version"])
+    assert seen == ["version"]

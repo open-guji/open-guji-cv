@@ -51,9 +51,9 @@ class ColumnWindowRec(BaseModel):
     raised: bool = False
     head_raise_inner_y: float | None = None
     warped_size: tuple[int, int]   # (w, h) —— 以实际列图 shape 为准（三段页可能差 1~2px）
-    band: tuple[int, int]          # 文字带 [x_lo, x_hi)，列图坐标
-    trim_top: BorderTrim
-    trim_bottom: BorderTrim
+    band: tuple[int, int] | None = None   # 文字带 [x_lo, x_hi)，列图坐标；刻本链由 2b `column_bands` 产，这里空
+    trim_top: BorderTrim | None = None    # 刻本链由 2c `column_ends` 产，这里空
+    trim_bottom: BorderTrim | None = None
     triage: ColumnTriage | None = None   # 老产物没有这一项
     side_floor: float              # 两侧外 25% 最低墨占比（原始矫正图上量）
     stamp_noise: float = 0.0       # 中等面积孤立墨点密度（原始矫正图上量，抓整列噪点污染）
@@ -70,6 +70,9 @@ class ColumnWindowRec(BaseModel):
         d = handler(self)
         if isinstance(d, dict) and not self.ruled:
             d.pop("ruled", None)
+        for k in ("band", "trim_top", "trim_bottom"):   # 刻本链 2a 不写这三项
+            if isinstance(d, dict) and d.get(k) is None:
+                d.pop(k, None)
         return d
 
 
@@ -95,3 +98,49 @@ COLUMN_RAW = register_kind(ProductKindSpec(
 COLUMN_IMAGE = register_kind(ProductKindSpec(
     id="column_image", title="清理后列图（缓存）", storage="image_cache", unit="column",
     coord_space=COLUMN_PX))
+
+
+# ── 2b 定字带左右边：`column_bands` + 缓存列图 `column_banded`（2026-11-25 切字五小步拆分）──
+class ColumnBandRec(BaseModel):
+    col: int
+    band: tuple[int, int]          # 文字带 [x_lo, x_hi)，列图坐标；带外已抹白（`column_banded`）
+
+
+class PageBands(BaseModel):
+    page: int
+    columns: list[ColumnBandRec] = Field(default_factory=list)
+
+    def column(self, col: int) -> ColumnBandRec | None:
+        return next((c for c in self.columns if c.col == col), None)
+
+
+COLUMN_BANDS = register_kind(ProductKindSpec(
+    id="column_bands", title="2b 逐列文字带左右边", storage="numeric",
+    unit="column", schema=PageBands, coord_space=COLUMN_PX))
+
+COLUMN_BANDED = register_kind(ProductKindSpec(
+    id="column_banded", title="两侧界行抹白后的列图（缓存）", storage="image_cache", unit="column",
+    coord_space=COLUMN_PX))
+
+
+# ── 2c 列端字：`column_ends`（上下端抹框）──
+class ColumnEndRec(BaseModel):
+    col: int
+    trim_top: BorderTrim
+    trim_bottom: BorderTrim
+    triage: ColumnTriage | None = None
+    frame_residue_top: int = 0
+    frame_residue_bottom: int = 0
+
+
+class PageEnds(BaseModel):
+    page: int
+    columns: list[ColumnEndRec] = Field(default_factory=list)
+
+    def column(self, col: int) -> ColumnEndRec | None:
+        return next((c for c in self.columns if c.col == col), None)
+
+
+COLUMN_ENDS = register_kind(ProductKindSpec(
+    id="column_ends", title="2c 逐列上下端版框削除", storage="numeric",
+    unit="column", schema=PageEnds, coord_space=COLUMN_PX))
