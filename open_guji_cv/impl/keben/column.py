@@ -152,6 +152,10 @@ THIRD_GAP_MIN = 8
 #: 第三道候选起点离 Step1 内框线再远过这么多行的也只认边距证据（2026-11-25，CV0 复核 vol04 p207c6、vol05 p149c6）：
 #: 末字下横与内框线隔 13 行白，只靠 THIRD_GAP_MIN 放不过；它离 Step1 线 13~15 行，vol02 的第三道虚线离 Step1 线 2~7 行（仅 145:6 为 12，宁可留残线）。
 THIRD_NEAR_INNER = 10
+#: 第三道里通栏（跨度 ≥HAIRLINE_EXTENT）又只有这么薄的线不看边距证据：字的横画最薄也 6 行（殿本实测），2~3 行厚的通栏线是磨细的框线
+#: （vol17 p14c9 空列，外框内框剥完后底下留一条 2 行的发丝线，边距证据 0.93 差一点）。
+HAIRLINE_ROWS = 3
+HAIRLINE_EXTENT = 0.7
 #: 下端**第三道**线（剥完内外两道之后第二次找）只认边距证据（2026-11-25，ZM 报殿本列末「二/三」被判成「一」）：
 #: 末字的下横（「二」「三」满宽粗横、前面隔白）跨度够 0.85，旧判据把它当第三道线剥掉（vol21 p130c2 剥 82 行、vol03 p64c1
 #: 剥 129 行，正常 43）。真框线横贯整列、在文字带外的边距里也有墨，字止于文字带；位置分不开（Step1 线常落在外框内沿，
@@ -291,10 +295,11 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             if float(p[j:k].max()) >= inset_min_peak:
                 break
             j = k                                # 噪点段（vol02 p123c9：两道框之间 3 行麻点）：跳过接着找
-        if glued and hint is not None and j > hint + INNER_SEARCH and not (
+        thin = int((np.cumprod(p[j:j + HAIRLINE_ROWS + 1] > ink_eps)).sum()) <= HAIRLINE_ROWS    # 墨段只有发丝线那么厚（见 HAIRLINE_ROWS）
+        if glued and hint is not None and not thin and j > hint + INNER_SEARCH and not (
                 p[max(0, int(hint) - INNER_SEARCH):int(hint) + INNER_SEARCH + 1] > ink_eps).any():
             return None                          # Step1 说内框在这儿、这儿却是白纸（内框磨没了），再往里的墨是字（vol05 p23c7）
-        if glued and hint is not None and j > hint + FAR_FROM_INNER:
+        if glued and hint is not None and not thin and j > hint + FAR_FROM_INNER:
             return None                          # 候选起点远在 Step1 内框线之外 FAR_FROM_INNER 行以上：是字（见该常量注）
         if glued:
             k = line_end(p, j)
@@ -320,6 +325,8 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             return None                          # 缓起：字的底边，不是线
         cols = np.where(ink2[j:k].any(axis=0))[0]
         extent = (cols[-1] - cols[0] + 1) / bw if len(cols) else 0.0
+        if margin_only and k - j <= HAIRLINE_ROWS and extent >= HAIRLINE_EXTENT:
+            return k                             # 通栏发丝线（≤HAIRLINE_ROWS 行厚）：字的笔画至少 6 行，这是磨出来的框线（vol17 p14c9 空列底）
         if margin_only and (j - cut < THIRD_GAP_MIN or hint is None or j > hint + THIRD_NEAR_INNER):   # 第三道只认边距证据（见 THIRD_MARGIN_T 注）
             if m is not None and float(m[j:k].max()) >= THIRD_MARGIN_T and \
                     float(m[j:k].max()) - float(np.median(m)) >= LAYER2_MARGIN_RISE:

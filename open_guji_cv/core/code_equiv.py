@@ -604,6 +604,10 @@ _COLEND_THIRD_NEAR = ("impl/keben/column.py 双线版框下端第三道线：候
                       "与 #1891 同一条分支（two() 的 glued 且 n_layers>=2），别的书按构造逐字节不变，殿本靠 engine.FRAME_LAYER_REV=2 进 column_end 指纹判过期。"
                       "殿本实测（不靠登记）：vol03 全册 108 页对 #1891 版，下端再变 2 列（8:8、17:3，末字下横回来），其余同；vol02 夹具 1 端变（145:6 宁可留残线）。2026-11-25 CV1")
 
+_COLEND_HAIRLINE = ("impl/keben/column.py 双线版框下端第三道里通栏发丝线（≤3 行厚、跨度 ≥0.7）直接剥（CV1，CV0 报 vol17 p14c9 空列底留 1px 细线）："
+                    "仍只在 two() 的 glued 且 n_layers>=2 时走到，别的书按构造逐字节不变，殿本靠 engine.FRAME_LAYER_REV=3 进 column_end 指纹判过期。"
+                    "殿本实测（不靠登记）：vol03 全册 108 页对 #1896 版零变化，vol17 前 70 页只 p14c9 一列变（发丝线剥掉），vol02 夹具 231 端零变化。2026-11-26 CV1")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2662,6 +2666,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="118becc6bfab8f9549b62a8952190a273c5b9356c02848c4d10256c5f4312f1f",
           old="94920dd2cee9eadd603976906505ea6efd04a61bc75be07d976c5b01b509fdee",
           evidence=_COLEND_THIRD_NEAR),
+    Equiv(module="open_guji_cv.impl.keben.column",
+          new="90e798460506f5beccafdf211a58bdc544d411adcde4cd4f9784ef356961032e",
+          old="118becc6bfab8f9549b62a8952190a273c5b9356c02848c4d10256c5f4312f1f",
+          evidence=_COLEND_HAIRLINE),
 )
 
 
