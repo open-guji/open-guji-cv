@@ -604,7 +604,21 @@ _COLEND_THIRD_NEAR = ("impl/keben/column.py 双线版框下端第三道线：候
                       "与 #1891 同一条分支（two() 的 glued 且 n_layers>=2），别的书按构造逐字节不变，殿本靠 engine.FRAME_LAYER_REV=2 进 column_end 指纹判过期。"
                       "殿本实测（不靠登记）：vol03 全册 108 页对 #1891 版，下端再变 2 列（8:8、17:3，末字下横回来），其余同；vol02 夹具 1 端变（145:6 宁可留残线）。2026-11-25 CV1")
 
+_PIN_GEOM_096 = ("row_segment 套整列钉子前按钉子记的列图几何底（manager column_basis.geom）换算（CV1 2026-11-26，CV0 批的钉子护栏，"
+                 "v0.9.6 补发线＝v0.9.5＋#1924）：没记 geom 的钉子（现有全部）照原坐标套、只写 stderr；几何一致照套。"
+                 "row_segment 在殿本 vol01 10 页（30,32,48,88,89,105,117,129,179,182，其中 9 页带钉子）、全唐文 053 12 页"
+                 "（28,74,76,77,83,84,89,90,94,95,97,116，全带钉子）与 origin/main 04c7e75（v0.9.5）产物逐字节相同；"
+                 "cell_shrink→cut_gate 在 053 同 12 页逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
+
 ENTRIES: tuple[Equiv, ...] = (
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="cf886dc57c42f8be18f36935ae07dabe11b8dd48b6a322316479873aa4679111",
+          old="27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee",
+          evidence=_PIN_GEOM_096),
+    Equiv(module="open_guji_cv.gates.row_segment_gate",
+          new="ec5c8b2501b409c620dd1890a16ea13adf9761551b0c1fbdc143f0c860e72bd3",
+          old="60b2f74610de83d13c681021d618b1e0523e35e93cd48675bfad1dbce1813ce8",
+          evidence=_PIN_GEOM_096),
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
           old="7fa5464da6ca4c45382394b0ecc847e8b8495c806609e2505da4ef9b0c762ab5",
