@@ -4,6 +4,7 @@
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
 - PATCH（11-25，CV0「字块随包存 R2」第一步，产物与 23 步 code_hash 逐位不变，L0）：`RunContext.chain_fingerprint(步, 页)`＝该步及全部上游这一页 manifest 指纹的合哈希（跨机共享派生图的键）；`RunContext.materialize` 缓存不在时先问 `core.derived.PAGE_FETCHER`（只管 `char_patch`，由 manager 注册；产出它的那一步自己在跑时不问；同页只问一次；`GUJI_PATCH_FETCH=0` 关），取不到照旧现算；`ImageCache.put_bytes` 放取回的已编码图。`core/step.py`、`core/derived.py`、`products/cache.py` 不在任何 code_deps。
+- MINOR（用户 2026-11-25 定「接进 2b、缺省开」；动 `column_band`，从 2b 起过期）：2b 新开关 `column_band.side_cut`（缺省开）：整列竖直墨量投影（只取上下边框之间、各让 60 行）认出框线，在框线内侧 15% 列宽内取第一个够低处、往里缩 2px 为左右切点，切点外整列抹白（在旧算法抹界行之上再抹）。**文字带 `band` 仍用旧算法的值**：2d 对带宽极敏感，史記 42 测试集用新带列全对 287→264（不缩 274），只抹边 287→284；全唐文 053 新带 324→325、只抹边 324→323。`seg/side_cut` 换成验证版（界行衰减到谷、第一个够低处、半开区间），`cut_gate` L2c 探针随之变；更正 L2c 唯一命中 053 p148c9 是误报（双线细内线）。CV2。
 - PATCH（W1 急修，产物逐字节不变，code_equiv 登记，L0）：`border._fit_head_raise`（head_raise_fit，v0.9.2 起缺省开）死循环——两邻列内框互吸、同值反复写，`while changed` 不结束（脈經 01 p67 单页卡 25 分钟以上，MJ 报）。改为值真变了才再来一轮，另加迭代上限 `HR_FIT_MAX_ROUNDS`×列数兜底。殿本 vol01／04、脈經 01／06 共 21 页逐字节同。CV1。
 
 - PATCH（ZM→CV1 殿本列末「二／三」被判成「一」，11-25；改 `impl/keben/column.py::column_border_trim` 下端剥层，影响 `column_end` 起的产物，只在册配置 `frame_layers` 下端≥2 时走到）：下端外框＋内框剥完后再找的**第三道**线，改为只认边距证据（边距带满墨 ≥0.95，且比列内中位高 ≥0.3），除非它与上一道线隔着 ≥8 行白（vol02 的第三道虚线）；另外 Step1 说内框在某处而该处 ±10 行是白纸时、或候选起点在内框线外 30 行以远时，里面的墨一律当字（vol03 p64c1、vol05 p23c7）。殿本 vol03 全册 108 页比 dev：23 列变，全是末字下横被削回来，无内框残线退步；vol02 夹具 231 端 5 端变（都是旧深剥预警端，1 端 px 不变只改档位名）。上端同类（vol16 p164c3「三」首横离顶 9 行被当第一道框）本 PR 不修。
@@ -106,6 +107,15 @@
 - 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时殿本 vol30、全唐文 020、史記 42 逐字节同，登 code_equiv `_FREE_SEAM_1117`。建议值 0.35。
 
 ## [未发版]
+
+## [0.9.4] - 2026-11-26
+
+W1 补发（PATCH，用户 11-26 定）＝v0.9.3＋三件：
+- #1903 `border._fit_head_raise` 死循环修复（head_raise_fit；值真变才再来一轮＋迭代上限），code_equiv 登记，产物不变。
+- #1896 殿本列末第三道线再收紧（vol04 207:6、vol05 149:6 回成「二」），`FRAME_LAYER_REV=2`：只有殿本（frame_layers 下端 2）从 column_end 起过期。
+- #1902 `core/parallel.py` row_segment 并行登记峰值 1.0→4.0 GB（全唐文 001 执行机 OOM），不进指纹。
+
+指纹：只有殿本从 column_end 起过期，其余书不变。底库 b35。
 
 ## [0.9.3] - 2026-11-25
 
