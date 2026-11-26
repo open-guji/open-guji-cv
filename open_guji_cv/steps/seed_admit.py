@@ -1111,7 +1111,7 @@ class SeedAdmitStep(Step):
             # 建的（`_clf_ctx` 取邻格放行字），提前改邻格字会让键对不上、组内格被误降。
             for col in out:
                 for rec in col.chars or []:
-                    if rec.admit and rec.char and not _codepoint_exempt(rec, ctx.book):
+                    if rec.admit and rec.char and not _codepoint_exempt(rec, ctx.book, p.codepoint_no_exempt):
                         rec.char = ctx.book.canonical_char(rec.char)
         if patch_missing:
             lanes: dict[str, int] = {}
@@ -1125,7 +1125,7 @@ class SeedAdmitStep(Step):
                                         n_code_fix=n_code_fix, n_code_mismatch=n_code_mismatch)}
 
 
-def _codepoint_exempt(rec, book) -> bool:
+def _codepoint_exempt(rec, book, no_exempt: tuple = ()) -> bool:
     """放行字落册码位的例外：这对字已有按刻形拆判的字组（`registry.SHAPE_GROUPS`，如 變𠮓 bian），
     码位归一只是兜底（「暂归一」），人裁的刻形、该组判出的刻形照录，不归一。
     vol04:197:7:3 人裁 變 被工作区 變→𠮓 改回 𠮓（A32 10-25 报），bian 组判出的 變 也一样被改回（A24 10-25）。"""
@@ -1134,7 +1134,7 @@ def _codepoint_exempt(rec, book) -> bool:
         return False
     if ((rec.evidence or {}).get("hou_shape") or {}).get("char") == rec.char:
         return True                       # 候𠋫 书级刻形判法判出的 候 照录，不归 𠋫
-    gids = _shape_split(rec.char, tgt)
+    gids = _shape_split(rec.char, tgt) - frozenset(no_exempt)     # 书级 `codepoint_no_exempt`：这些拆判组的码位归一不留例外
     if not gids:
         return False
     if rec.channel == "human" or rec.provenance == "human":
