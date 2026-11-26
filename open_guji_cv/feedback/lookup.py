@@ -596,7 +596,8 @@ def _superseded_events(evs: list, bound: dict[str, dict], pre: str) -> set[str]:
 
 
 def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
-                bind: bool | None = None, lost: dict[str, dict] | None = None) -> dict[str, str]:
+                bind: bool | None = None, lost: dict[str, dict] | None = None,
+                pages: list[int] | None = None) -> dict[str, str]:
     """人在定字台上定过的字 → `{裸 id: 字}`，同一位**后到覆盖**。
 
     只有字形（2026-09-26 取消读法）。唯一的例外是**老事件**里的 己/已/巳：当时允许「看着像 X、
@@ -620,6 +621,9 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     按锚在现行切分里找回它现在对应的格：原格仍是那个字照用，整列顺移了改绑到新编号，
     切开/合并/找不到的不采信（回待审）。缺省 `bind=None` = 读工作区事件日志时开、传入测试日志时关。
 
+    ``pages``（GM4 11-24）：只算这几页裁决事件的绑定（其余页的事件按原格号用、不重绑）。收单 draft 只关心有票的几页，
+    全书重绑定在 QTW 004 上跑了 30 多分钟没完；默认 None＝全书，口径不变。
+
     **绑丢了的人裁不能悄悄消失**（2026-10-20，GUJI-697）：传 `lost`（一个空 dict）时，绑定后
     不采信的裁决按**原编号**记进去：`{原编号: {"char", "status", "event", "ts"}}`；同一编号之后
     又有可采信的裁决（出现在返回值里）的不记。`seed_admit` 拿它做「人裁绑丢」闸：机器在这一格
@@ -636,7 +640,7 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     if bind:
         try:
             from .bindings import book_bindings
-            bound = book_bindings(book, log)
+            bound = book_bindings(book, log, pages=pages) if pages is not None else book_bindings(book, log)
         except Exception as e:
             if not _lenient():
                 raise RuntimeError(f"human_chars({book})：绑定表算不出来：{e!r}。退回按格号会把换了切分的人裁落错格、"
