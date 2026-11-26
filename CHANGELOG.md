@@ -120,6 +120,12 @@
 
 ## [未发版]
 
+## [0.9.6] - 2026-11-26
+
+补发（PATCH，L0）＝v0.9.5＋#1924（钉子护栏，CV0 11-26 批；dev 上已有 MINOR 改动，故走补发线）。指纹不变（code_equiv 登记）。配 manager ≥ v0.6.35（写钉子时记几何底 geom）。
+
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26）：`row_segment` 套整列钉子（manual-cells）前比钉子写入时记的列图几何底（manager v0.6.35 `column_basis.geom`）：一致照套；不一致经旧／新 `ColumnMapper` 把格框经原图换到新列图，角点最大位移 >3px 的列打 `manual_cells_remapped`，出口闸（row_segment_gate）记旗「待人核」。没记 geom 的老钉子照原坐标套、只在日志提示。开关登记表 outer_bar 记「直线页可能被记成三段，人钉切格的书慎开」。缘由：全唐文 031–060 outer_bar 让列图挪 10–32px，钉子照旧坐标套切偏。
+
 ## [0.9.5] - 2026-11-26
 
 补发（PATCH，用户 11-26 定「发 patch 随时用」）＝v0.9.4＋#1899（字块按页取回接口，配 manager ≥ 含 #1013 的版本）。产物与各步 code_hash 逐位不变，各书不过期。
