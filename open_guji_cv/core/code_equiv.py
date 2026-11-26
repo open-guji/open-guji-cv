@@ -618,7 +618,21 @@ _EVENT_LEVEL_1126 = ("feedback/events.py 分事件级别（CV0 2026-11-26，GM4 
                      "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。史記 104/106 首跑曾异：绑定表 fp_diff 随字块缓存先后变，"
                      "同一份旧代码重跑也给出同样结果，非本改动所致，复跑逐字节同。")
 
+_PIN_GEOM_1126 = ("row_segment 套整列钉子前按钉子记的列图几何底（manager column_basis.geom）换算（CV1 2026-11-26，CV0 批的钉子护栏）："
+                  "没记 geom 的钉子（现有全部）照原坐标套、只写 stderr；几何一致照套。row_segment 在殿本 vol01 10 页"
+                  "（30,32,48,88,89,105,117,129,179,182，其中 9 页带钉子）、全唐文 053 12 页（28,74,76,77,83,84,89,90,94,95,97,116，全带钉子）"
+                  "与 origin/dev 7c5b894 产物逐字节相同；row_segment_gate 只在列旗有 manual_cells_remapped 时多记一条旗，"
+                  "cell_shrink→cut_gate 在 053 同 12 页逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
+
 ENTRIES: tuple[Equiv, ...] = (
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="f4812f0b455a1f3cfb40fe24a6a844d5c7ddbf9b5708842ad327c3a2a1baa690",
+          old="27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee",
+          evidence=_PIN_GEOM_1126),
+    Equiv(module="open_guji_cv.gates.row_segment_gate",
+          new="ec5c8b2501b409c620dd1890a16ea13adf9761551b0c1fbdc143f0c860e72bd3",
+          old="60b2f74610de83d13c681021d618b1e0523e35e93cd48675bfad1dbce1813ce8",
+          evidence=_PIN_GEOM_1126),
     Equiv(module="open_guji_cv.steps.border_detect",
           new="49cd0268f8136c2778937cb96c9068380ec9b89059695ce23b3db13370fe1904",
           old="3ae398ba0cfb5484d4e08e9be95bba628765633346bc784eaeb92bce984d3b78",

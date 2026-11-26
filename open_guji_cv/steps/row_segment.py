@@ -1320,7 +1320,7 @@ class RowSegmentStep(Step):
             pc = self._run_roster(ctx, p, page, gate, wins)
             # 开了 `roster_grid_slots`：人裁整列格的号也是格网号（可跳号），格数按格网算
             grid_n = (p.n_body_slots or ctx.book.chars_per_line or 0) if p.roster_grid_slots else 0
-            return {"cells": _apply_manual_cells(pc, manual, gate, wins, grid_n=grid_n)}
+            return {"cells": _apply_manual_cells(pc, manual, gate, wins, grid_n=grid_n, geoms=_page_manual_geom(ctx.book.id, page))}
         book_resolved = ov.cuts          # 人裁回流的切点：slot_above → kind，给 segment_column 收敛候选
         book_slots = ov.slots            # 逐列字数＋字距匀不匀（`review/slot_count_cards.py`；p33c19 22 字 vs 常量 21）
         book_solo = ov.solo              # 人指认的單行小注格
@@ -1886,7 +1886,7 @@ class RowSegmentStep(Step):
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
         pc = self._header_ref_flags(ctx, p, page, pc)
         pc = self._roster_cols(ctx, p, page, gate, wins, pc)
-        pc = _apply_manual_cells(pc, manual, gate, wins)
+        pc = _apply_manual_cells(pc, manual, gate, wins, geoms=_page_manual_geom(ctx.book.id, page) if manual else None)
         if alt_out:
             # 卷端标题列、人工指定的列已换掉主切法，备选不再有意义：只留主切法仍是本步切出来那份的列
             mains = {id(c.cells) for c in out}
@@ -2147,8 +2147,133 @@ class RowSegmentStep(Step):
         return PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
 
 
+#: 钉子按列图几何变化换算后，格框角点最大位移超过这么多 px 的列打 `manual_cells_remapped`、出口闸送人核（CV0 11-26）。
+MANUAL_REMAP_FLAG_PX = 3.0
+
+
+def _page_manual_geom(book: str, page: int) -> dict[int, dict]:
+    """本页整列钉子写入时的列图几何底：`col → geom`（manager v0.6.35 `seg_pin.column_geom` 写进
+    `input.column_basis.geom`；格式见 manager doc/参考/钉子上游底.md）。没记的钉子不在表里。"""
+    from ..feedback.lookup import MANUAL_CELLS_SHARD, _manual_items_lenient
+    from ..gold.store import verdict_store
+    store = verdict_store()
+    try:
+        items = store.list(MANUAL_CELLS_SHARD, legacy=False)
+    except Exception:  # noqa: BLE001
+        items = _manual_items_lenient(store.items_path(MANUAL_CELLS_SHARD))
+    out: dict[int, dict] = {}
+    for it in items:
+        if it.status != "active" or str(it.anchor.book) != book or it.anchor.page != page or it.anchor.col is None:
+            continue
+        g = ((it.input or {}).get("column_basis") or {}).get("geom")
+        if isinstance(g, dict):
+            out[int(it.anchor.col)] = g
+    return out
+
+
+def _geom_vline(v: list):
+    from ..seg.frame_types import VLine
+    return VLine(x_at_top=float(v[0]), slope=float(v[1]), k2=v[2], k3=v[3], y1=v[4], y2=v[5])
+
+
+def _geom_of(wrec, page_w: int) -> dict:
+    """现行列窗的几何底，口径同 manager `seg_pin.column_geom`（取整位数一致，才能逐项比）。"""
+    def line(ln):
+        d = ln.model_dump(mode="json")
+        r = lambda x, n: None if x is None else round(float(x), n)  # noqa: E731
+        return [r(d["x_at_top"], 3), r(d["slope"], 6), r(d.get("k2"), 6), r(d.get("k3"), 6),
+                r(d.get("y1"), 3), r(d.get("y2"), 3)]
+    return {"page_w": int(page_w), "left": line(wrec.left_line), "right": line(wrec.right_line),
+            "top_y": round(float(wrec.top_y), 3), "bottom_y": round(float(wrec.bottom_y), 3),
+            "ruled": bool(getattr(wrec, "ruled", False))}
+
+
+_GEOM_KEYS = ("page_w", "left", "right", "top_y", "bottom_y", "ruled")
+
+
+def _page_to_col(mapper: ColumnMapper, X: float, Y: float, guess: tuple[float, float]) -> tuple[float, float]:
+    """原图左上原点 (X, Y) → 这个映射的列图坐标：牛顿迭代解 `to_page_tl(x, y) = (X, Y)`（三段、ruled 都适用；
+    列图与原图近似等比，几步就收敛）。"""
+    import numpy as np
+    x, y = guess
+    for _ in range(30):
+        fx, fy = mapper.to_page_tl(x, y)
+        ex, ey = fx - X, fy - Y
+        if abs(ex) < 1e-3 and abs(ey) < 1e-3:
+            break
+        h = 0.5
+        ax, ay = mapper.to_page_tl(x + h, y)
+        bx, by = mapper.to_page_tl(x, y + h)
+        j = np.array([[(ax - fx) / h, (bx - fx) / h], [(ay - fy) / h, (by - fy) / h]])
+        try:
+            dx, dy = np.linalg.solve(j, [ex, ey])
+        except np.linalg.LinAlgError:
+            break
+        x, y = x - float(dx), y - float(dy)
+    return x, y
+
+
+def _remap_manual_spec(spec: list[dict], old: ColumnMapper, new: ColumnMapper) -> tuple[list[dict], float]:
+    """钉子格框（旧列图坐标）经原图换到新列图坐标：四角各换、取外接框。→ (新格表, 角点最大位移 px)。"""
+    out, worst = [], 0.0
+    for c in spec:
+        xs, ys = [], []
+        for x, y in ((c["x0"], c["y0"]), (c["x1"], c["y0"]), (c["x1"], c["y1"]), (c["x0"], c["y1"])):
+            X, Y = old.to_page_tl(float(x), float(y))
+            nx, ny = _page_to_col(new, X, Y, (float(x), float(y)))
+            worst = max(worst, abs(nx - x), abs(ny - y))
+            xs.append(nx)
+            ys.append(ny)
+        out.append({**c, "x0": round(min(xs), 1), "x1": round(max(xs), 1),
+                    "y0": round(min(ys), 1), "y1": round(max(ys), 1)})
+    return out, worst
+
+
+def _remap_manual(manual: dict[int, list[dict]], geoms: dict[int, dict] | None, wins: PageWindows,
+                  page: int | None = None) -> tuple[dict[int, list[dict]], set[int]]:
+    """按钉子写入时记的列图几何底（manager `column_basis.geom`）把钉子换到现行列图（CV0 11-26 批的钉子护栏）。
+
+    - 几何与现行列窗一致（绝大多数）→ 原样，逐字节不变；
+    - 不一致 → 经旧／新两个列图映射换算；角点最大位移 > `MANUAL_REMAP_FLAG_PX` 的列返回在 flagged 里（打旗送人核）；
+    - 没记几何底的老钉子 → 原样套（同以前），只在 stderr 提示一次（不进产物，免得老钉子所在页全部变样）。
+    → (换算后的钉子表, 要打 `manual_cells_remapped` 的列)。"""
+    import sys
+    if not manual:
+        return manual, set()
+    geoms = geoms or {}
+    page_w = wins.page_size[0]
+    out, flagged, nobasis = dict(manual), set(), []
+    for col, spec in manual.items():
+        g = geoms.get(col)
+        wrec = wins.column(col)
+        if g is None:
+            nobasis.append(col)
+            continue
+        if wrec is None:
+            continue
+        now = _geom_of(wrec, page_w)
+        if all(now.get(k) == g.get(k) for k in _GEOM_KEYS):
+            continue
+        try:
+            old = ColumnMapper(int(g["page_w"]), _geom_vline(g["left"]), _geom_vline(g["right"]),
+                               float(g["top_y"]), float(g["bottom_y"]), ruled=bool(g.get("ruled")))
+        except (KeyError, TypeError, ValueError, IndexError):
+            nobasis.append(col)
+            continue
+        new_spec, worst = _remap_manual_spec(spec, old, ColumnMapper.of(page_w, wrec))
+        out[col] = new_spec
+        if worst > MANUAL_REMAP_FLAG_PX:
+            flagged.add(col)
+            print(f"⚠️ manual-cells p{page}c{col}：列图几何变了，钉子已换算到新列图（最大位移 {worst:.1f}px），送人核",
+                  file=sys.stderr)
+    if nobasis:
+        print(f"ℹ️ manual-cells p{page} 列 {sorted(nobasis)}：钉子没记列图几何底，照原坐标套（列图变了不会自动换算；"
+              f"manager `guji pipeline seg pins-backfill-geom` 可补）", file=sys.stderr)
+    return out, flagged
+
+
 def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: GateManifest,
-                        wins: PageWindows, grid_n: int = 0) -> PageCells:
+                        wins: PageWindows, grid_n: int = 0, geoms: dict[int, dict] | None = None) -> PageCells:
     """人工指定的整列格（`lookup.resolved_manual_cells`）替换算法切出的那一列。
 
     与职名页同一套下游约定：列级 flags 带 `roster`（闸3 不按版式格数拦、Step4 不按格线裁）加 `manual_cells`，
@@ -2158,6 +2283,7 @@ def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: Gate
     最大号的大者（同职名分支），最大号超过格数的列打 `roster_slot_overflow`。0（缺省）＝照旧按不同号的个数。"""
     if not manual:
         return pc
+    manual, remapped = _remap_manual(manual, geoms, wins, pc.page) if geoms is not None else (manual, set())
     page_w = wins.page_size[0]
     cols = []
     for cc in pc.columns:
@@ -2192,7 +2318,7 @@ def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: Gate
             over = ["roster_slot_overflow"] if top > grid_n else []
         cols.append(ColumnCells(
             ok=True, n_body_slots=n_pos, cells=cells, boundaries=[], em=None,
-            flags=["roster", "manual_cells", *over], col=cc.col, n_raised=0, period=gate.period,
+            flags=["roster", "manual_cells", *over, *(["manual_cells_remapped"] if cc.col in remapped else [])], col=cc.col, n_raised=0, period=gate.period,
             ref_w=gate.ref_w, content_x=gc.content_x, border_top=gc.border_top,
             border_bottom=gc.border_bottom, top_slack=0.0))
     return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=cols)
