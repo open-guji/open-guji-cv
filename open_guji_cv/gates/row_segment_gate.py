@@ -125,6 +125,8 @@ class RowSegmentGateStep(Step):
                     flags.append("roster_dense_guess：职名列有粘连密排段，字数是推出来的，待人核")
                 if "roster_jiazhu" in cc.flags:
                     flags.append("roster_jiazhu：职名列有雙行小字，两行相位不齐，字数待人核")
+                if "manual_cells_remapped" in cc.flags:
+                    flags.append("manual_cells_remapped：人钉的格按列图几何变化换算到新列图，位移超过 3px，待人核")
                 if "roster_overlap" in cc.flags:
                     flags.append("roster_overlap：相邻两字 y 重叠（多是「臣」贴官衔末字），Step4 满宽裁会互相带墨")
             elif expected is not None and abs(cc.n_body_slots - row_split_extra(cc.flags) - expected) > p.slot_tol:
