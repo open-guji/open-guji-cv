@@ -2662,6 +2662,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="118becc6bfab8f9549b62a8952190a273c5b9356c02848c4d10256c5f4312f1f",
           old="94920dd2cee9eadd603976906505ea6efd04a61bc75be07d976c5b01b509fdee",
           evidence=_COLEND_THIRD_NEAR),
+    Equiv(module="open_guji_cv.feedback.lookup",
+          new="60a454a83f8d64eb04b9639ad7ee846929dfd82406e40a79c4eed7c0c79c5948",
+          old="f92a02c93d76432954d1e021802af8faa4f900855e1de867ba3fd7b7613c9de2",
+          evidence=("human_chars 加可选参数 pages（默认 None）：pages 为 None 时调 book_bindings(book, log) 的参数与改前逐字相同，"
+                    "不传 pages 的调用路径无任何变化；只有 manager 收单 draft 传 pages 才走新分支。#1839（GM4，2026-11-26）补登。"
+                    "证据：代码对读（改动仅 human_chars 签名加 pages、book_bindings 调用按 pages 是否为 None 二选一），"
+                    "tests/test_human_chars_lookup、test_verdict_bindings、test_human_unbound、test_bindings_strict、test_zhengli_proof_cycle 共 52 个通过；"
+                    "尚缺 scripts/code_equiv.py check 的逐页产物对比（GM4 云端机没有 seed_admit 上游产物），待 CV0 在有产物的机器上补跑后可改写本行证据。")),
 )
 
 
