@@ -209,6 +209,7 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.vis_ruling_ctx_subclasses, ("vis_ruling_ctx_subclasses",)),
     (lambda p: not p.ruling_anchor_loose, ("ruling_anchor_loose",)),
     (lambda p: not p.ruling_by_u, ("ruling_by_u",)),
+    (lambda p: not p.codepoint_no_exempt, ("codepoint_no_exempt",)),
     (lambda p: not p.group_flow_ruling_first, ("group_flow_ruling_first",)),
     (lambda p: not p.p_ref_admit, ("p_ref_admit",)),
     (lambda p: (not p.p_ref_admit or p.p_ref_max_cov is None), ("p_ref_max_cov",)),
@@ -527,6 +528,9 @@ class SeedAdmitParams(BaseModel):
     开（`RulingStore._anchor_loose`）：同格同 cells_sha 同 ref 下，本组 `validate` 认的任意版本（减 `ver_equiv.yaml` 的 `void`，O 组仍按目标版本）、
     多条取最新、字不一致记 `ruling_conflict` 不放行；只收 high（fold 遍也是）；窗口改为前后 2 字至少一侧相同。
     窗口键、版本等价表照旧先查；在线问前查缓存（`RulingCache`）仍按精确键。开之前须 20 册强制锚点回放人裁真错 0。"""
+    codepoint_no_exempt: tuple = ()
+    """书级，缺省空、关时不进参数 dump、行为不变（史記 sui/guanm/yinv/can 统一归一，Sheldon 11-26）。列出的拆判字组 id：册 `codepoints:` 归一时
+    不再留「人裁／该组判出的刻形照录」的例外，各出口（match_ref／match_replace／human／字组）放行字都落到册指定码位。"""
     ruling_by_u: bool = False
     """裁定按字格永久编号 u 查（CV0 T3 2026-11-24，执行方案 https://claude.ai/artifact/NksDge9ZxaEyebAgnS8s8Q；书级，缺省关、关时不进参数 dump、行为不变；
     开的册 seed_admit 起往下过期，L1）。开：`_vis_ruling_pass` 与 fold 遍在窗口键、版本等价、格锚点都没中之后再查一档——
