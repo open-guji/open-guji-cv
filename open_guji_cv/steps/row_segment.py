@@ -21,6 +21,7 @@ from ..products.kinds.gate import GateManifest
 from ..seg.cut_select import ckpt_fingerprint, get_judge
 from ..seg.profile import frame_only_edge_cells as _frame_only_edge_cells
 from ..impl.keben.row_grid import fit_page_grids
+from ..impl.keben import boundary_net as _bnet
 from ..impl.keben.row_boundaries import slot_mask_from_occupied
 
 #: 行切分正门（`segment_column` 等）所在的缺省模块。套书可复制一份到 books/<套书>/ 并在 `core/seg_set.OVERRIDES`
@@ -1104,6 +1105,16 @@ class RowSegmentParams(BaseModel):
     #: 下一格的字块带着上字的笔画碎片（用户 2026-11-03 人审表）。大印下的列仍取等距格网（`_under_stain`，与本开关无关）。
     #: 书级；`uniform`＝缺省，不进参数哈希。
     row_pitch: Literal["uniform", "free"] = "uniform"
+    #: **无先验格网（`layout_off`）的违表容差**（2026-11-26，CV2；全唐文 060:3:3）：格位表与图对不上时（表 22 格、列里 14 字加空白），
+    #: 无先验格网的违表格数天然多，原先要「违表＋劈字」严格不多于按表的格网才选得上——刀刃：版面换三段竖线后 period 206→205，
+    #: 按表格网少违一格（7 对 8），无先验格网落选，下半格线错位多出空格。开着时：无先验格网违表＋劈字不多于中选格网 `layout_off_tol`
+    #: 格以内、且劈字、格高不匀、穿字（逐项按序比）严格更好，就改取它。书级；0＝关（缺省，不进参数哈希）。
+    layout_off_tol: int = 0
+    #: **字间界线判官**（2026-11-26，CV2；`impl/keben/boundary_net`）：`models/<名>/model.pt` 的小 CNN 看切线上下各一格，判是不是两字之间；
+    #: 挑定格网后、终切前，只重排「上下都是正文字」的内部线（格数不变，现线判官分 < `boundary_net_p` 才许挪到隔着墨的另一条缝）。
+    #: 治写本高字字内白缝当字缝（史記 42:66:4「而｜佗」等）。书级（模型按书训，名字带版本号）；空＝关（缺省，不进参数哈希）。
+    boundary_net: str = ""
+    boundary_net_p: float = 0.05
     #: **等距格网末线外推到末字墨外沿**（2026-11-09，殿本 vol28 列尾下溢，`row_boundaries.fit_grid_end`）：末线是列尾、不是字缝，
     #: 有的册版面两端字距被拉开、末字坐在下版框细线上（vol28 末字心偏下 0.09 格、字高 1.06 倍，r6 旧图、r8 新图都有），
     #: 等距末线切进末字下半截。开着时中选格网定下后（只在最后重切那一遍，不影响挑格网）末线下有墨就顺墨往下走到第一段白行或
@@ -1239,6 +1250,11 @@ class RowSegmentParams(BaseModel):
                 d.pop("alt_cut", None)
             if self.row_pitch == "uniform":
                 d.pop("row_pitch", None)
+            if not self.layout_off_tol:
+                d.pop("layout_off_tol", None)
+            if not self.boundary_net:
+                d.pop("boundary_net", None)
+                d.pop("boundary_net_p", None)
             if not self.grid_end_fit:
                 d.pop("grid_end_fit", None)
             if not self.snap_cut:
@@ -1292,7 +1308,8 @@ class RowSegmentStep(Step):
                    "open_guji_cv.impl.keben.roster_glyph", "open_guji_cv.impl.keben.yolo_tool_infer", "open_guji_cv.steps.occlusion",
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",
                    "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige",
-                   "open_guji_cv.impl.keben.jiazhu_step", "open_guji_cv.impl.keben.seal_ink"),
+                   "open_guji_cv.impl.keben.jiazhu_step", "open_guji_cv.impl.keben.seal_ink",
+                   "open_guji_cv.impl.keben.boundary_net"),
         soft_params=("roster_glyph_fingerprint", "manual_cells_fingerprint"),
         path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins", "page_map_pins",
                      "page_map_ref_file", "page_map_overrides"),
@@ -1580,12 +1597,29 @@ class RowSegmentStep(Step):
                 res._junk = args                                    # 列端记空的参数，重切后照样补
                 return _blank_frame_junk(img, res.cells, *args)
 
+            bnet_flags: list[str] = []
+
             def _finalize(res):
                 """试切结果 → 按同样参数带折线与判官重切（再补列端记空）；不是试切出来的原样返回。"""
                 a = getattr(res, "_explore", None)
                 if a is None:
                     return res
                 n_body, alt, grid, bounds = a
+                if p.boundary_net and lay_cuts is None and not human_col:
+                    # 字间界线判官：只重排正文字｜正文字的内部线，格数不变（见参数说明）
+                    rb_ = _bnet.refine_bounds(p.boundary_net, img, res.content_x or gc.content_x, res.cells, gate.period,
+                                              p.boundary_net_p)
+                    if rb_ is not None:
+                        moves, log_ = rb_
+                        body_ = sorted((c for c in res.cells if c.kind != "blank"), key=lambda c: c.y0)
+                        nb = list(res.boundaries)
+                        for j_, y_ in moves:
+                            old_ = body_[j_].y1
+                            k_ = min(range(len(nb)), key=lambda k: abs(nb[k] - old_))
+                            nb[k_] = y_
+                        if all(b2 > b1 for b1, b2 in zip(nb, nb[1:])):
+                            bounds, grid = nb, False
+                            bnet_flags.append("boundary_net：" + "；".join(f"{o}→{n_}（{po}→{pn}）" for _, o, n_, po, pn in log_))
                 out_ = _seg(n_body, alt, grid=grid, bounds=bounds, final=True)
                 j = getattr(res, "_junk", None)
                 if j is not None:
@@ -1768,6 +1802,12 @@ class RowSegmentStep(Step):
                         shifted = shifted_u
                     if shifted and scores[min(shifted, key=key_)][0] < scores[best][0]:
                         best = min(shifted, key=key_)
+                    # 无先验格网的违表容差（`layout_off_tol`，见参数说明）：违表多出几格以内、其余三项严格更好就取它
+                    if p.layout_off_tol and cands[best][4] != "layout_off":
+                        lo_ = [i for i, c in enumerate(cands) if c[4] == "layout_off"]
+                        if lo_ and scores[lo_[0]][0] <= scores[best][0] + p.layout_off_tol \
+                                and scores[lo_[0]][1:] < scores[best][1:]:
+                            best = lo_[0]
                     # 挤格：选中的格网里有一格挤着两个字（殿本个别列字排得比整页格网密，如挖改处多刻一字）→ 在两字的缝里
                     # 补一条格线、再去掉一条，格数不变；去哪条按 _score 挑，坏格、劈字不多才换
                     for _ in range(MERGE_MAX_FIX):
@@ -1831,6 +1871,9 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue
             r = _finalize(r)
+            if bnet_flags:
+                prior_flags = list(prior_flags) + bnet_flags
+                bnet_flags.clear()
             if step_notes is not None and lay is not None and not human_col and step_notes.get(gc.col):
                 r, fl_ = _step_impl.apply(r, img, gc.content_x or (0.0, float(img.shape[1])), gate.period,
                                           step_notes[gc.col], p.ink_threshold, reading_order=reading_order)
@@ -1905,6 +1948,7 @@ class RowSegmentStep(Step):
                 ra = _seg(n_body_col, (gate_raised, gc.top_slack, {}, None, None))
                 if ra is not None:
                     ra = _finalize(ra)
+                    bnet_flags.clear()
                     alt_fl = ["alt_cut：不带先验的备选格网（align_ref 坐标对位按吻合数挑）"]
                     # 有意不要求 lay：备选格网本就不带版式先验，夹注段分法取自整理本页钉，与先验无关，照样逐步切
                     if step_notes is not None and not human_col and step_notes.get(gc.col):
