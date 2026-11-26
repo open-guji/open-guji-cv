@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（W1 急修，产物逐字节不变，code_equiv 登记，L0）：`border._fit_head_raise`（head_raise_fit，v0.9.2 起缺省开）死循环——两邻列内框互吸、同值反复写，`while changed` 不结束（脈經 01 p67 单页卡 25 分钟以上，MJ 报）。改为值真变了才再来一轮，另加迭代上限 `HR_FIT_MAX_ROUNDS`×列数兜底。殿本 vol01／04、脈經 01／06 共 21 页逐字节同。CV1。
+
 - PATCH（ZM→CV1 殿本列末「二／三」被判成「一」，11-25；改 `impl/keben/column.py::column_border_trim` 下端剥层，影响 `column_end` 起的产物，只在册配置 `frame_layers` 下端≥2 时走到）：下端外框＋内框剥完后再找的**第三道**线，改为只认边距证据（边距带满墨 ≥0.95，且比列内中位高 ≥0.3），除非它与上一道线隔着 ≥8 行白（vol02 的第三道虚线）；另外 Step1 说内框在某处而该处 ±10 行是白纸时、或候选起点在内框线外 30 行以远时，里面的墨一律当字（vol03 p64c1、vol05 p23c7）。殿本 vol03 全册 108 页比 dev：23 列变，全是末字下横被削回来，无内框残线退步；vol02 夹具 231 端 5 端变（都是旧深剥预警端，1 端 px 不变只改档位名）。上端同类（vol16 p164c3「三」首横离顶 9 行被当第一道框）本 PR 不修。
 - PATCH（随上条，CV0）：`impl/keben/column.py` 登 code_equiv（上条新分支只在 `frame_layers.bottom>=2` 时走到，中心库只有殿本这样配，别的书按构造逐字节不变），另在 `core/engine._self_payload` 给 `column_end` 加 `frame_layer_rev`（`engine.FRAME_LAYER_REV=1`）：只有下端两层的册写这个键、从 column_end 起判过期（殿本 L3），别的册指纹逐位不变。以后改这段剥层判据：登 code_equiv＋把 `FRAME_LAYER_REV` 加一。
 - PATCH（W1 v0.9.2，Sheldon 11-25 定；指纹变更：border_detect 起过期（W1 统一重跑））：版面 5 个开关改缺省开——`border_detect.outer_bar`、`vline_track`（含淡线兜底 #1890）、`inner_pull`（只对册配 `frame_layers: 2` 的边起作用）、`head_raise_fit`，`border_detect_gate.no_frame_skip`；都进参数 dump（border_detect 1.21、闸 1.4），不要的书在册配置写 false。79 页版面金标：界行 >5px 17→17、非正文放行 3→0；殿本 vol01–20 样页 200 页 A/B 看图 46 处开对 46（ai-team domain/CV/里程碑/W1-殿本版面开关AB.md）。CV1。
