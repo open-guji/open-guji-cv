@@ -1027,7 +1027,8 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             else:
                 decision = "keep"
         r.evidence = {**(r.evidence or {}), "group": {"id": g, "mode": mode, "pick": ch, "why": why,
-                                                       "decision": decision, "solvers": trail}}
+                                                       "decision": decision, "solvers": trail,
+                                                       "members": "".join(sorted(GROUPS[g].members))}}
     return res
 
 
