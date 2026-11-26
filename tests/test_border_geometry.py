@@ -595,3 +595,27 @@ def test_head_raise_fit_leaves_double_raise_alone():
     a = {r.col: r.inner_y for r in detect_head_raise(mask, top, verts, width=1000)}
     b = {r.col: r.inner_y for r in detect_head_raise(mask, top, verts, width=1000, fit=True)}
     assert a == b
+
+
+def test_fit_head_raise_terminates_on_noop_update():
+    """`_fit_head_raise` 不许死循环（脈經 01 p67，v0.9.2）：本列按粗框条＋间距推出的内框仍比邻列低出
+    HR_FIT_TOL 以上时，下一轮又推到同一个值——原先每轮都置 changed，while 永不结束。"""
+    import threading
+    import numpy as np
+    from open_guji_cv.impl.keben import border as bg
+    from open_guji_cv.seg.frame_types import HeadRaiseBorder
+
+    g = bg._HRGeom(1.0)
+    curve = np.zeros(200)
+    curve[60:70] = 0.9                                   # 一道粗框条，外延 59.5；59.5 + 38 = 97.5
+    out = [HeadRaiseBorder(col=1, inner_y=88.0, outer_y=50.0),
+           HeadRaiseBorder(col=2, inner_y=120.0, outer_y=82.0)]
+    res = {}
+    th = threading.Thread(target=lambda: res.setdefault("r", bg._fit_head_raise(out, [None, (curve, 0)], set(), g)),
+                          daemon=True)
+    th.start()
+    th.join(timeout=10)
+    assert not th.is_alive(), "_fit_head_raise 死循环"
+    r = {b.col: b for b in res["r"]}
+    assert r[2].inner_y == 97.5 and r[2].estimated
+    assert r[1].inner_y == 88.0
