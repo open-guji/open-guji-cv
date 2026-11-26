@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-26，GM4 方案第九节定 A）：删钉垫片 `pin_removed`：`feedback.bindings.removed_pin_events` 读 `<feedback>/pins/*.state.jsonl`（manager 钉状态流 `pin_state`，每个 `pin_id` 后到覆盖先到），最后为 `removed` 的钉，其 `payload.events` 列的答案事件不进 `human_chars`、不进绑定表（`expired`／`reactivated` 不删）。没有钉状态文件时行为不变。钉状态是数据、不进指纹：写了 removed 要从 `seed_admit` 起 force 重放。cv 改读编好的钉表后去掉。
+
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV2 2026-11-26）：`row_segment` 加两个开关（缺省关、不进参数 dump）。`layout_off_tol`：无先验格网违表＋劈字只多 ≤tol、劈字／格高不匀／穿字严格更好时改选（全唐文 060:3:3 多出空格；053 册 L2 列全对 323→324、0 回退）。`boundary_net`／`boundary_net_p`：字间界线判官（新 `impl/keben/boundary_net`＋模型 `models/boundary_net_shiji_v1`），只重排全正文列内部低分切线、格数不变（史記 42 cut-lattice 线 789→808/874、错列修回 4、好列不坏）。史記 42 40 页 row_segment 逐字节同，新 code_dep 经 SPLITS 合回。
 
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-26，GM4 批量规则）：人裁事件分级 `events.event_level`（`payload.level` 优先；`actor=model` 没写 level 的按 9 个人授意批次认 human，其余 ai；看图结论/文意裁定/模型判断来源为 None）。新 `counts_as_pin`＝原 `counts_as_human` 口径（人裁或已放行 AI 钉），lookup/bindings/republish 改调它；`counts_as_human` 收紧为只认 human，只给统计评测用。史記 02、殿本 vol28、全唐文 020 共 54 页 seed_admit 逐字节同。

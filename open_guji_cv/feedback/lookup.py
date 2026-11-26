@@ -339,6 +339,10 @@ def _resolved_forced(book: str, reason: str, allow_sub: bool, log=None) -> dict[
             (p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in el.events_dir.glob("*.jsonl"))))
     except OSError:
         return {}
+    from .bindings import _log_root, removed_pin_events
+    gone = removed_pin_events(_log_root(el))
+    if gone:
+        sig = (*sig, gone)
     hit = _FORCED_JZ_CACHE.get((book, sig[0], reason))
     if hit and hit[0] == sig:
         return hit[1]
@@ -350,7 +354,7 @@ def _resolved_forced(book: str, reason: str, allow_sub: bool, log=None) -> dict[
         return {}
     from .events import counts_as_pin
     for e in evs:
-        if e.target.unit != "cell" or not e.target.key.startswith(pre) or not counts_as_pin(e):
+        if e.target.unit != "cell" or not e.target.key.startswith(pre) or not counts_as_pin(e) or e.id in gone:
             continue
         p = e.payload or {}
         v = p.get("v") or e.kind
@@ -663,6 +667,8 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     gone = sum(n for d in (getattr(_log, "dropped", None) or {}).values() for b, n in d.items() if b == book)
     if gone:                  # 换图源：旧页号的事件不采信，要看得见（GUJI-748 §六）
         _logger.warning("human_chars(%s)：%d 条事件锚里页表 rev 与册 yaml 的 source_rev 不符，不采信", book, gone)
+    from .bindings import _log_root, removed_pin_events
+    pins_gone = removed_pin_events(_log_root(_log))
     superseded: set[str] = set()
     no_patch: list[str] = []
     # 库内审阅改标的新字（`stale_human_rules` 的 relabel 范围用）
@@ -679,7 +685,7 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
             continue
         # 看图结论不算人裁定字（overview#428，口径见 `events.counts_as_pin`）：混进来的话
         # seed_admit 会当人裁一票定案。
-        if not counts_as_pin(e):
+        if not counts_as_pin(e) or e.id in pins_gone:     # 删了的钉（pin_state removed）也不认
             continue
         p = e.payload or {}
         if p.get("v") == "figure":
