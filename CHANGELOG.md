@@ -106,6 +106,15 @@
 
 ## [未发版]
 
+## [0.9.4] - 2026-11-26
+
+W1 补发（PATCH，用户 11-26 定）＝v0.9.3＋三件：
+- #1903 `border._fit_head_raise` 死循环修复（head_raise_fit；值真变才再来一轮＋迭代上限），code_equiv 登记，产物不变。
+- #1896 殿本列末第三道线再收紧（vol04 207:6、vol05 149:6 回成「二」），`FRAME_LAYER_REV=2`：只有殿本（frame_layers 下端 2）从 column_end 起过期。
+- #1902 `core/parallel.py` row_segment 并行登记峰值 1.0→4.0 GB（全唐文 001 执行机 OOM），不进指纹。
+
+指纹：只有殿本从 column_end 起过期，其余书不变。底库 b35。
+
 ## [0.9.3] - 2026-11-25
 
 W1 补发（殿本）：v0.9.2 ＋ #1891 列端剥层第二版（下端第三道线只认边距证据，末字下横不再被当框剥掉；含 b0f76ea `column.py` 登 code_equiv）。**只有殿本（册配 frame_layers 下端 2）经 column_end 指纹里的 frame_layer_rev 从 column_end 起过期，其余书指纹与产物不变**（check_fp_change 对 v0.9.2：0 步变），钉 0.9.2 的书不用改钉。未修好：vol04 207:6、vol05 149:6 两格（已交 CV1）；vol17 14:9 空列底多留 1px 细线（可忽略）。全量测试 4386 过，1 条 dev 老红（test_seg_move）。底库仍 b35。
