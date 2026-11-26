@@ -143,44 +143,23 @@ def build_binarized(book, pages=None, *, force: bool = False, window: int = SAUV
     from .preclean import effective_raw_path
 
     todo = list(pages) if pages is not None else book.all_pages()
-    spec = binarized_ink_spec(book)
     written: list[Path] = []
     for page in todo:
         dst = binarized_path(book.id, page, repo_root)
         if dst.exists() and not force:
             continue
         src = effective_raw_path(book, page)
-        img = imread(str(src), 1 if spec is not None else 0)
+        img = imread(str(src), 0)
         if img is None:
             log(f"  p{page} 原图读不出来，跳过: {src}")
             continue
-        if spec is not None:
-            from .ink import ink_page
-            out = ink_page(img, spec)
-            # 写了 ink 的册顺带体检：二值可能出问题、该看彩图的区域（utils/binqc.py；不进指纹）
-            from .binqc import write_qc
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            write_qc(dst, page, img, getattr(book, "ink", None) or spec)
-        else:
-            out = binarize_page(img, window=window, k=k)
+        out = binarize_page(img, window=window, k=k)
         dst.parent.mkdir(parents=True, exist_ok=True)
         if not imwrite(str(dst), out):
             raise IOError(f"写盘失败: {dst}")
         written.append(dst)
     log(f"[binarize] {book.id}: 写出 {len(written)} 页 → {binarized_root(repo_root) / book.id}")
     return written
-
-
-def binarized_ink_spec(book):
-    """写了 `ink` 的册：二值副本按册的墨层出（与 `raw_page` 同一张）；`binarize: none` 的册（管线读灰度）
-    副本仍要是二值的（给人审、进库看），用同一墨层＋缺省 Otsu。没写 `ink` → None（老做法：灰度＋Sauvola）。"""
-    ink = getattr(book, "ink", None)
-    if ink is None:
-        return None
-    if ink.binary:
-        return ink
-    from dataclasses import replace
-    return replace(ink, binarize="otsu")
 
 
 def binarized_or_none(book_id: str, page: int, repo_root: Path | None = None) -> Path | None:

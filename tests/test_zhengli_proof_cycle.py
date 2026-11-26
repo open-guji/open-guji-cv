@@ -111,7 +111,7 @@ def test_split_changes_human_vs_machine_and_revert(tmp_path):
     new = _char(tmp_path, "new.json", [("3:1:1", "官"), ("3:1:2", "論"), ("3:1:3", "彖"), ("3:1:4", "甲"), ("3:1:5", "已")])
     sp = pc.split_changes(old, new, {"3:1:2": "論", "3:1:3": "象"})
     assert sp == {"human": [("3:1:2", "", "論")], "overrule": [("3:1:3", "象", "彖")],
-                  "machine": [("3:1:1", "宫", "官"), ("3:1:5", "", "已")], "norm": [], "keep": []}
+                  "machine": [("3:1:1", "宫", "官"), ("3:1:5", "", "已")], "norm": []}
     pc.revert_cells(new, {a: o for a, o, _ in sp["overrule"]})
     assert pc._cells(new) == {"3:1:1": "官", "3:1:2": "論", "3:1:3": "象", "3:1:4": "甲", "3:1:5": "已"}
 
@@ -162,77 +162,3 @@ def test_engine_version_from_tag(tmp_path):
     assert pc.engine_version(tmp_path) is None
     g("tag", "v0.5.17")
     assert pc.engine_version(tmp_path) == "0.5.17"
-
-
-def test_split_changes_empty_new_keeps_human(tmp_path):
-    """机器无字（印章遮挡 admit=false，新字空）而旧字是人裁＝keep：留人裁字、不算推翻、不复审；旧字非人裁则走原逻辑（殿本 vol05 1:4:13）。"""
-    old = _char(tmp_path, "old.json", [("3:1:1", "象"), ("3:1:2", "甲"), ("3:1:3", "乙")])
-    new = _char(tmp_path, "new.json", [("3:1:1", ""), ("3:1:2", ""), ("3:1:3", "")])
-    sp = pc.split_changes(old, new, {"3:1:1": "象"})
-    assert sp["keep"] == [("3:1:1", "象", "")] and sp["overrule"] == []
-    assert sp["machine"] == [("3:1:2", "甲", ""), ("3:1:3", "乙", "")]
-    pc.revert_cells(new, {a: o for a, o, _ in sp["keep"]})
-    assert pc._cells(new) == {"3:1:1": "象", "3:1:2": "", "3:1:3": ""}
-
-
-def test_human_chars_of_uses_bound_lookup(tmp_path, monkeypatch):
-    """人裁口径只有一个（lookup.human_chars，过绑定表）；格位去册前缀；绑定表对着沙箱产物算（env 临时设、用完还原）。"""
-    import os
-    seen = {}
-
-    def fake(book):
-        seen.update(ws=os.environ.get("GUJI_WORKSPACE"), prod=os.environ.get("GUJI_PRODUCTS_DIR"))
-        return {"vol05:1:4:1": "撰", "vol05:2:1:1": "周"}
-
-    import open_guji_cv.feedback.bindings as BD
-    import open_guji_cv.feedback.lookup as LK
-    monkeypatch.setattr(LK, "human_chars", fake)
-    monkeypatch.setattr(BD, "book_bindings", lambda book: {})
-    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
-    got = pc.human_chars_of(tmp_path, "vol05", tmp_path / "sb")
-    assert got == {"1:4:1": "撰", "2:1:1": "周"}
-    assert seen == {"ws": str(tmp_path), "prod": str(tmp_path / "sb")}
-    assert "GUJI_PRODUCTS_DIR" not in os.environ
-
-    def boom(book):
-        raise RuntimeError("no such table: instances")
-    monkeypatch.setattr(BD, "book_bindings", boom)
-    with pytest.raises(RuntimeError, match="绑定表算不出来"):      # 不悄悄退回按格号
-        pc.human_chars_of(tmp_path, "vol05", tmp_path / "sb")
-
-
-def test_overturn_rows_carry_prior_char():
-    """机器推翻人裁的复审行第 4 列要带旧人裁的字（出单门归一比对、网站「已有判断」都靠它）。"""
-    import inspect
-    assert '\\t\\t{o}\\t' in inspect.getsource(pc.cmd_apply)
-
-
-def _char_raw(tmp_path, name, cells):
-    f = tmp_path / name
-    f.write_text(json.dumps({"pages": [{"page": 3, "columns": [{"col": 1, "cells": cells}]}]}, ensure_ascii=False), encoding="utf-8")
-    return f
-
-
-def test_split_changes_unread_box_keeps_human_but_verdicts_overrule(tmp_path):
-    """新导出里「没认出」的 □（lacuna、无 guess_c）与 〓／▣ 占位＝机器无字→keep；排除名单判残的 □（不带 lacuna）、
-    图片格、无法识别字、原刻残带推测字是判定→照算 overrule，复审行写明判定（殿本 vol20 020-r13 5 格 overturn_empty）。"""
-    old = _char(tmp_path, "old.json", [(f"3:1:{i}", ch) for i, ch in enumerate("蒺曰出因子甲乙丙", 1)])
-    new = _char_raw(tmp_path, "new.json", [
-        {"a": "3:1:1", "c": "□", "lacuna": True},
-        {"a": "3:1:2", "c": "〓", "zi": "⿰口曰"},
-        {"a": "3:1:3", "c": "▣"},
-        {"a": "3:1:4", "c": "□"},
-        {"a": "3:1:5", "c": "□", "fig": "f1"},
-        {"a": "3:1:6", "c": "□", "unk": "从口"},
-        {"a": "3:1:7", "c": "□", "lacuna": True, "guess_c": "乙"},
-        {"a": "3:1:8", "c": "□", "lacuna": True},
-    ])
-    human = {f"3:1:{i}": ch for i, ch in enumerate("蒺曰出因子甲乙", 1)}
-    sp = pc.split_changes(old, new, human)
-    assert [x for x, _, _ in sp["keep"]] == ["3:1:1", "3:1:2", "3:1:3"]
-    assert [x for x, _, _ in sp["overrule"]] == ["3:1:4", "3:1:5", "3:1:6", "3:1:7"]
-    assert sp["machine"] == [("3:1:8", "丙", "□")]      # 旧字不是人裁：机器无字照进文本
-    assert pc._verdicts(new) == {"3:1:4": "判残", "3:1:5": "图片格", "3:1:6": "无法识别字", "3:1:7": "原刻残"}
-    pc.revert_cells(new, {a: o for a, o, _ in sp["keep"]})
-    cells = {c["a"]: c for c in json.loads(new.read_text(encoding="utf-8"))["pages"][0]["columns"][0]["cells"]}
-    assert cells["3:1:1"] == {"a": "3:1:1", "c": "蒺"} and cells["3:1:2"] == {"a": "3:1:2", "c": "曰"}

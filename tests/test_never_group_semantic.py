@@ -35,29 +35,11 @@ def test_hand_table_still_overrides(tmp_path, monkeypatch):
     monkeypatch.setattr(V, "DEFAULT_VARIANTS_PATH", hand)
     monkeypatch.setattr(V, "NEVER_GROUP_PATH", never)
     monkeypatch.setattr(V.never_group_pairs, "__defaults__", (never,))
-    # 只测「手工表 vs 名单」：字对关系表（pair_kind，11-21 起压在两表之上）换成空表，免得跟着真配置走
-    # （11-22 用户把 回/迴 定为 C 纯形近，真表下 迴 不再归 回）
-    from open_guji_cv import pair_kind as PK
-    monkeypatch.setattr(PK, "PAIR_KIND_PATH", tmp_path / "no-pairkind.tsv")
     vm = VariantMap.load()
     assert vm.semantic("砂") == "砂"
     assert vm.semantic("迴") == "回"          # 人定的手工表压过名单
     # 显式给路径时只读那一份，名单不介入
     assert VariantMap.load(auto).semantic("砂") == "沙"
-
-
-def test_pair_kind_c_overrides_hand_table(tmp_path, monkeypatch):
-    """字对关系表的 C（纯形近）压过手工表：手工表写 迴→回、关系表定 回/迴 为 C，语义层就拆开。"""
-    auto, hand, pk = tmp_path / "a.tsv", tmp_path / "h.tsv", tmp_path / "pk.tsv"
-    auto.write_text("", encoding="utf-8")
-    hand.write_text("迴\t回\n", encoding="utf-8")
-    pk.write_text("回\t迴\tC\t人定\t测试\n", encoding="utf-8")
-    from open_guji_cv import pair_kind as PK
-    monkeypatch.setattr(V, "DEFAULT_AUTO_PATH", auto)
-    monkeypatch.setattr(V, "DEFAULT_VARIANTS_PATH", hand)
-    monkeypatch.setattr(V.never_group_pairs, "__defaults__", (tmp_path / "n.json",))
-    monkeypatch.setattr(PK, "PAIR_KIND_PATH", pk)
-    assert VariantMap.load().semantic("迴") == "迴"
 
 
 def test_production_config_splits_the_five_pairs():

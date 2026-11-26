@@ -88,6 +88,18 @@ def test_untrusted_variant_is_blocked(tmp_path, monkeypatch):
     assert r.channel != "ref_lib"
 
 
+def test_guard_default_on():
+    assert SeedAdmitParams().ref_lib_variant_guard is True
+
+
+def test_guard_disabled_restores_old_behavior(tmp_path, monkeypatch):
+    """关掉开关要能回到加闸前的行为（回归安全阀）。"""
+    sa = _run(tmp_path, monkeypatch, lib_char="變", align_char="𠮓",
+             params={"ref_lib_variant_guard": False})
+    r = _rec(sa)
+    assert r.admit is True and r.channel == "ref_lib" and r.char == "變"
+
+
 # ── 2. 可信边照放 ────────────────────────────────────────────────
 
 def test_bidirectional_variant_is_admitted(tmp_path, monkeypatch):

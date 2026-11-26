@@ -18,14 +18,7 @@ import open_guji_cv.steps  # noqa: F401  注册 v2 步骤与产物种类
 
 
 def _write_page(d: Path, page: int, w: int, h: int) -> None:
-    """白纸上画几道黑竖条（像字列）：纯白页会被闸的 no_frame_skip（11-25 起缺省开）当空白页跳过。"""
-    from PIL import ImageDraw
-    im = Image.new("L", (w, h), color=255)
-    dr = ImageDraw.Draw(im)
-    for k in range(1, 10):
-        x = k * w // 10
-        dr.rectangle([x - w // 40, h // 10, x + w // 40, h * 9 // 10], fill=0)
-    im.save(d / f"{page}.png")
+    Image.new("L", (w, h), color=255).save(d / f"{page}.png")
 
 
 # ── survey_book()：纯尺寸判据，不碰任何产物 ──────────────────────────────

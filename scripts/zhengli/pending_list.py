@@ -70,20 +70,46 @@ def products_source_rev(products: Path, book: str) -> int | None:
         return None
 
 
+def _human_settled_excluded(ch: dict) -> bool:
+    """排除名单上的格：人已定过（给字／判残／非字／图）的不上单；管线 gate:crop_defect 等没人看过的照样待审。
+    口径同 guji-manager `pack_stats.is_pending`（2026-11-09 A31）。"""
+    if "excluded" not in (ch.get("doubts") or []):
+        return False
+    ev = ch.get("evidence") or {}
+    why = str(ev.get("excluded") or "")
+    return bool(ev.get("human_char") or ev.get("damaged") or why.startswith("human:"))
+
+
 def pending_cells(seed_dir: Path, book: str) -> tuple[list[dict], int]:
-    """返回 (待审格列表, 应有格数)。口径在 cv `feedback/pending_cells.machine_pending`（manager 收尾也调它）。"""
-    from open_guji_cv.feedback.pending_cells import machine_pending
-    try:
-        cells, n_review, _ = machine_pending(Path(seed_dir).parent.parent, book)
-    except ValueError as e:
-        sys.exit(str(e))
+    """返回 (待审格列表, 应有格数)。应有格数 = 产物页头 n_review 之和 + 排除名单上没人定过而照样上单的格
+    （gate:crop_defect 等，页头 n_review 不计它们）。格号 a = 页:列:格序[sub]。"""
+    cells: list[dict] = []
+    n_review = 0
+    for f in sorted(seed_dir.glob("p*.json")):
+        s = json.loads(f.read_text(encoding="utf-8"))["seed_admit"]
+        n_review += s.get("n_review", 0)
+        for col in s["columns"]:
+            for ch in col["chars"]:
+                if ch["admit"] or _human_settled_excluded(ch):
+                    continue
+                if "excluded" in (ch.get("doubts") or []):
+                    n_review += 1
+                prefix = f"{book}:"
+                cid = ch["id"]
+                if not cid.startswith(prefix):
+                    sys.exit(f"格号 {cid} 不以 {prefix} 开头")
+                cells.append({KEY_CELL: cid[len(prefix):], KEY_STATUS: STATUS_PENDING})
     return cells, n_review
 
 
 def all_cells(seed_dir: Path, book: str) -> set[str]:
     """现行产物里的全部格号（放行、待审、排除名单都算）。"""
-    from open_guji_cv.feedback.pending_cells import machine_pending
-    return machine_pending(Path(seed_dir).parent.parent, book)[2]
+    out: set[str] = set()
+    for f in sorted(seed_dir.glob("p*.json")):
+        for col in json.loads(f.read_text(encoding="utf-8"))["seed_admit"]["columns"]:
+            for ch in col["chars"]:
+                out.add(ch["id"].split(":", 1)[1] if ch["id"].startswith(f"{book}:") else ch["id"])
+    return out
 
 
 def read_recheck(path: Path, book: str) -> dict[str, dict]:

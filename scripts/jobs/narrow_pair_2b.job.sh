@@ -1,5 +1,5 @@
 # longrun job：GUJI-208ex 件二 2b——「窄对合并分支（开关关）」对「main 代码」的全册产物字节对比（Step1＋闸1＋Step2＋闸2）。
-# 首个用例（GUJI-508）。用法见 doc/参考/longrun.md。必须设置的环境变量（start 时用 --env 传下去，resume 自动带）：
+# 首个用例（GUJI-508）。用法见 doc/longrun.md。必须设置的环境变量（start 时用 --env 传下去，resume 自动带）：
 #   CVA   main 代码的 cv 检出（如 4eed859 的 worktree）      CVB   分支代码的 cv 检出（如 claude/narrow-pair-merge-1014）
 #   SBX   沙箱根（产物 prodA／prodB、缓存 cacheA／cacheB 都写这里；不碰正式 products/）
 #   WS    沙箱工作区（SBX/ws：books、data_full 等指向真工作区的软链，不含 products/cache/runs）

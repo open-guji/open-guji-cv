@@ -9,7 +9,7 @@
 > 切分管线 v2 的 **Step 3**，对外产物已经从「一串切分点」升级成「带类型的
 > 字格 + 列内读序」（`segment_column` / `Cell`，含双行小注 a/b 拆分），
 > 接口口径与实测都在
-> **[segmentation_v2_pipeline.md](../经验/切分四步-研发记录.md) §Step 3**，
+> **[segmentation_v2_pipeline.md](../segmentation_v2_pipeline.md) §Step 3**，
 > 从那里进。下面「抬头列」一节的结论已被后续实测修正，见该节末尾。
 
 ## 要解决的问题

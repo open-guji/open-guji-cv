@@ -99,7 +99,7 @@ def _run(tmp_path, gray, borders, *, ignore_dash: bool) -> dict[int, int]:
     ctx.store.write(book.id, "border_detect_gate", "p0001",
                     {"border_detect_gate_manifest": make_gate1(
                         1, n_cols=borders.expected_cols, expected_cols=book.expected_cols)})
-    out = run_steps(ctx, 1, ["column_warp", "column_band", "column_end", "column_geometry", "column_gate"])
+    out = run_steps(ctx, 1, ["column_warp", "column_gate"])
     return {c.col: c.n_raised_hint for c in out["gate_manifest"].columns}
 
 

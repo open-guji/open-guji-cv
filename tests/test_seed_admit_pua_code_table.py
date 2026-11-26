@@ -113,6 +113,28 @@ def test_load_table_derived_from_daizhige_rows_and_multi(tmp_path):
     assert fams["F1007"] == frozenset("瓠𤬄")
 
 
+def test_keep_channels_not_overwritten(tmp_path):
+    """书级旋钮 pua_code_keep_channels：保留的通道不按码改，计入仍不一致。"""
+    st = _st(tmp_path, **{"1": ("F100A", "炫"), "2": ("F100A", "炫")})
+    cells = {1: {"char": "炫", "channel": "group_flow"}, 2: {"char": "炫", "channel": "pua_rule"}}
+    recs = [AdmitRec(id=f"{B}:1:{s}", slot=s, admit=True, char=c["char"], doubts=[], channel=c["channel"], provenance="match", evidence={}) for s, c in cells.items()]
+    amap = {f"{B}:1:{s}": ("炫", None) for s in cells}
+    out = _pua_code_pass([ColumnAdmit(col=1, chars=recs)], amap, st, TABLE, p=SeedAdmitParams(pua_code_keep_channels="group_flow"))
+    assert out == (1, 1, 0) and recs[0].char == "炫" and recs[1].char == "眩"
+
+
+def test_family_demote_off_only_counts(tmp_path):
+    st = _st(tmp_path, **{"1": ("F1001", "乖")})
+    rec = AdmitRec(id=f"{B}:1:1", slot=1, admit=True, char="乘", doubts=[], channel="context", provenance="match", evidence={})
+    out = _pua_code_pass([ColumnAdmit(col=1, chars=[rec])], {f"{B}:1:1": ("乖", None)}, st, TABLE, p=SeedAdmitParams(pua_code_family_demote=False))
+    assert out == (0, 1, 0) and rec.admit and rec.char == "乘"
+
+
+def test_new_knobs_not_in_default_dump():
+    d = SeedAdmitParams().model_dump()
+    assert "pua_code_keep_channels" not in d and "pua_code_family_demote" not in d
+
+
 def test_multi_code_family_only(tmp_path):
     """纯多字码（只登族、无单字）：族内字认，族外降审，不改字。"""
     tab = ({}, {"F1111": frozenset("甲乙")})

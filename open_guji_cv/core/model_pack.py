@@ -66,8 +66,6 @@ KINDS: tuple[Kind, ...] = (
     # 5a 精验的度量学习 CNN（`clustering/sim_cnn.py`，`glyph_match.sim_model` 开关）：每本书用本书库刻例各训一份
     Kind("glyph_sim", "repo", "models/glyph_sim_qtw/*", "book", QUANTANGWEN,
          ("glyph_match",), "全唐文字形库刻例训的 5a 相似度 CNN（model.pt）＋分数校准表（calib.json）；换权重要重拟校准表"),
-    Kind("glyph_sim_qtw_v2", "repo", "models/glyph_sim_qtw_v2/*", "book", QUANTANGWEN,
-         ("glyph_match",), "全唐文 11-24 字形库重训的 5a 相似度 CNN（model.pt）＋分数校准表（calib.json）；旧版 glyph_sim_qtw 不动"),
     Kind("glyph_sim_shiji", "repo", "models/glyph_sim_shiji/*", "book", SHIJI,
          ("glyph_match",), "史記字形库刻例训的 5a 相似度 CNN（model.pt）＋分数校准表（calib.json）；换权重要重拟校准表"),
     # 5a 相似度 CNN 的跨书通用底座：几本书的字形库合训一份（同码位跨书合一类），新书开书直接用。多书混合归 global。
@@ -92,8 +90,6 @@ KINDS: tuple[Kind, ...] = (
     Kind("l2_head", "data", "config/groups/l2model/*.json", "book", "*", ("seed_admit",),
          "文意 L2 小头（SikuRoBERTa 上的线性头）"),
     Kind("rr_shape", "data", "config/groups/rr_shape.json", "book", "*", ("seed_admit",), "入人八 书级刻形判法"),
-    Kind("wu_shape", "data", "config/groups/wu_shape.json", "book", "*", ("seed_admit",), "嗚鳴 书级刻形判法"),
-    Kind("part_shape", "data", "config/groups/part_shape.json", "book", "*", ("seed_admit",), "部件刻形判法（剌刺／疎踈 等，一份挂多对）"),
     Kind("pair_shape", "data", "config/groups/pair_shape*.json", "book", "*", ("seed_admit",), "两字刻形二选一"),
     Kind("book_knn", "data", "config/groups/book_knn/*.json", "book", "*", ("seed_admit",), "书级刻形近邻库"),
     Kind("ids_model", "data", "config/groups/ids/*", "book", "*", ("seed_admit",), "在线 IDS 判法"),

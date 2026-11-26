@@ -145,7 +145,6 @@ class BorderDetectionResult:
     bottom_pushed: float = 0.0
     vlines_snapped: int = 0
     v_outer_side: str | None = None  # "left" | "right"，由页码奇偶决定
-    v_outer_estimated: bool = False  # 规则说该有外框但没量到、按册基准估的
     v_outer_offset: float | None = None  # 相对 verticals[0](right)或verticals[-1](left) 的偏移量
     # 界行是直线(1)还是三段折线(3)——**整页统一**。由 `fit_vlines_polyline()`
     # 按弯度指标决定：`bend_w80_med`/`bend_w80_max` 是直线拟合下的 w80（装下

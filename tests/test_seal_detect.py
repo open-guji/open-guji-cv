@@ -183,9 +183,7 @@ def test_clean_background_cells_inside_big_seal_are_not_occluded():
     gray[500:600, W - 480:W - 300] = 0                          # 3 格整块黑（印芯）
     ctx = _seal_ctx(cells, seals, gray)
     assert set(page_occluded(ctx, 3, SeedAdmitParams())) == {(1, 1, ""), (1, 3, "")}   # 2 格干净，放出
-    from tests.helpers import seed_admit_consts
-    with seed_admit_consts(occluded_seal_min_noise=0):
-        assert set(page_occluded(ctx, 3, SeedAdmitParams())) == {(1, 1, ""), (1, 2, ""), (1, 3, "")}
+    assert set(page_occluded(ctx, 3, SeedAdmitParams(occluded_seal_min_noise=0))) == {(1, 1, ""), (1, 2, ""), (1, 3, "")}
 
 
 def test_stain_pages_keeps_big_seal_only_on_listed_pages(monkeypatch):
