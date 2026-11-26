@@ -2749,6 +2749,12 @@ FORKED: dict[str, tuple[str, str]] = {
 #: 也用来登 Step 新加的 code_dep（不是拆分）：旧模块名就是 Step 模块自己，块表＝它自己＋新加的那个模块；
 #: 两块都还是登记时那一版就合回原来一项，指纹不变（row_segment＋jiazhu_step 空实现，cv#1011）。这种项不是错登，别删。
 SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
+    # 全唐文书仓 k13 覆盖了 impl.keben.admit_lanes（四条无参照补放通道，只在册配置写了 seed_admit.book_lanes 时调）。
+    # 没写 book_lanes 的册（004 起）钩子根本不 import，产物同 k11；写了的（001–003）参数指纹本就跟着 book_lanes 变。
+    # 所以书仓这一版 admit_lanes 按 cv 缺省模块记（单块「拆分」＝改名），下面 seed_admit 那条照样合回，k11→k13 不过期。
+    # 书仓之后改了 admit_lanes 就不再合，seed_admit 照常过期（CV4 2026-11-26，QTW 004–030 改钉 k13）。必须排在 seed_admit 条目之前。
+    "open_guji_cv.impl.keben.admit_lanes": ("26976aeeb23db0ece76f341f7cefbc0c2a4e25fbed3faa4671bcace3f4672cac", (
+        ("guji_book.quantangwen.admit_lanes", "110539c6e051bd89a943b9ed5d57b045fecaed7a5e401d9f69383265317de8ac"),)),
     # seed_admit 的参数类与参数表搬到 steps.seed_admit_params（CV4 整理 2026-11-23，纯搬家，殿本 vol28 16 页、全唐文 020 16 页、
     # 史記 02 18 页 seed_admit 产物与 dev b189b2e 逐字节相同）：两块都还是这一版时合回 seed_admit 一项，各书不过期。
     "open_guji_cv.steps.seed_admit": ("1f1f1fb43270438a7f7ae51c94fbf4f26b93ba7317a21bd05334211b1820663c", (

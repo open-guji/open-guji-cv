@@ -212,7 +212,8 @@ def _collapse_splits(mods: list[str]) -> list[tuple[str, str]]:
         first = min(idx)
         keep = [(i, pr) for i, pr in enumerate(pairs) if i == first or i not in idx]
         pairs = [((old, old_hash) if i == first else pr) for i, pr in keep]
-        mods = [mods[i] for i, _ in keep]
+        # 合回后的那一项按旧名记，后面的 SPLITS 条目可以把它当一块再合（书仓模块先改名回 cv 模块、再随 cv 的拆分合回）
+        mods = [(old if i == first else mods[i]) for i, _ in keep]
     return pairs
 
 
