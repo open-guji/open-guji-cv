@@ -560,6 +560,8 @@ _BY_U_1124 = ("裁定按字格永久编号 u 查 seed_admit.ruling_by_u（书级
               "（史記首轮 --jobs 4 p106 一页不同，同代码单跑两次、整 18 页复跑均相同，按并发偶发记）；"
               "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-24（CV0）")
 
+_LOOKUP_PAGES_1839 = ("cv #1839（dev 9dfcf8d1，11-25）：feedback.lookup.human_chars 加 pages 参数缺省 None，None 时走原调用 book_bindings(book, log)；"
+                      "seed_admit 调 human_chars 不传 pages，按构造逐字节同。只改签名与一行分支，CV0 11-25 补登（另一协调者报 seed_admit 指纹漂）。")
 _BY_U_CACHE_1125 = ("ruling_by_u 扩到字组文意在线问前查缓存（rulings.UMAP_SCOPE、RulingStore.get_by_u_ver、RulingCache.lookup 加 cell 参数缺省 None；"
                     "ctx_llm._entry 把 cell 传给 lookup、AnswerCache.lookup 加 cell 参数不用、命中 u 时 extra 记 ruling_key；seed_admit 只在 ruling_by_u 开时设本页 u，"
                     "关时走原分支；CV0 T3）：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（页号与产物包同 _BY_U_1124），"
@@ -2614,6 +2616,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="515edb292d4fb83c5decdc0465df9a61489c5a6769936f62bdcf68e5b97bbf84",
           old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
           evidence=_BY_U_CACHE_1125),
+    # human_chars pages 参数（#1839，CV0 补登 11-25）——dev 哈希
+    Equiv(module="open_guji_cv.feedback.lookup",
+          new="60a454a83f8d64eb04b9639ad7ee846929dfd82406e40a79c4eed7c0c79c5948",
+          old="f92a02c93d76432954d1e021802af8faa4f900855e1de867ba3fd7b7613c9de2",
+          evidence=_LOOKUP_PAGES_1839),
     # 冷缓存再生护栏（CV0 11-25）——dev 哈希
     Equiv(module="open_guji_cv.steps.column_warp",
           new="6b0b6c3c9e3a73899ebfc525dc14b321734194df0280e02d51a5018ce1ed8741",
