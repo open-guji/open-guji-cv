@@ -623,6 +623,10 @@ _PIN_GEOM_1126 = ("row_segment 套整列钉子前按钉子记的列图几何底�
                   "（30,32,48,88,89,105,117,129,179,182，其中 9 页带钉子）、全唐文 053 12 页（28,74,76,77,83,84,89,90,94,95,97,116，全带钉子）"
                   "与 origin/dev 7c5b894 产物逐字节相同；row_segment_gate 只在列旗有 manual_cells_remapped 时多记一条旗，"
                   "cell_shrink→cut_gate 在 053 同 12 页逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
+_SOLO5B_SCOPE_1126 = ("seed_admit 加 solo_5b_scope 参数（any|no_ref，缺省 any 不进 dump、不改行为；CV0 2026-11-26，Sheldon 定）。"
+                      "缺省下 border_detect→seed_admit 整册与 dev 7c5b894 逐格相同：全唐文 030 194 页 30,205 格（任务库 #17835 对 #17836）、"
+                      "殿本 vol28 192 页 28,815 格（#17838 对 #17839），cells/text/state/geom 全不变，GUJI_CORPUS_DRIFT=warn。"
+                      "登记哈希按合入时的 origin/dev 重算（改动同一处）。")
 
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.steps.row_segment",
@@ -2718,6 +2722,19 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence='row_segment 在史記 42 册 cut-bench 40 页（--pages 2,3,7,14,17,18,25,27,33,34,38,40,43,46,54,55,59,64,66,69,70,73,78,79,81,82,'
                    '93,94,96,98,99,100,102,106,114,116,117,120,135,137）上与 origin/dev 3698522 产物逐字节相同（两开关关）；'
                    '新 code_dep impl.keben.boundary_net 经 SPLITS 合回 seg_overrides；scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn，2026-11-26（CV2）'),
+    # seed_admit solo_5b_scope（无参照放行收窄，缺省 any 不变；CV0 11-26，#1920）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="861f2eb9818bcbd7643164eb32921feb05a27a5801e97823003794331c08c878",
+          old="c487fdb201dae03c2adbc8e352c0fa66be368b2a4c5ba0ba2db89cad72400633",
+          evidence=_SOLO5B_SCOPE_1126),
+    Equiv(module="open_guji_cv.steps.seed_admit_lanes",
+          new="edbe250857b9aedf78278c6dd78c00f34c92fe711591293980f9ea70d419139c",
+          old="d372c3a9245e947aeb235335460dc5f193eef77371b1050c5af5ea3472041baa",
+          evidence=_SOLO5B_SCOPE_1126),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97",
+          old="d9af94abb75fb9557ab425514532c9506ac1274ae3ceb0c47c50ce78b817c9c6",
+          evidence=_SOLO5B_SCOPE_1126),
 )
 
 
