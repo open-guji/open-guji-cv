@@ -632,7 +632,18 @@ _SOLO5B_SCOPE_1126 = ("seed_admit 加 solo_5b_scope 参数（any|no_ref，缺省
                       "殿本 vol28 192 页 28,815 格（#17838 对 #17839），cells/text/state/geom 全不变，GUJI_CORPUS_DRIFT=warn。"
                       "登记哈希按合入时的 origin/dev 重算（改动同一处）。")
 
+_PIN_GEOM_096 = ("row_segment 套整列钉子前按钉子记的列图几何底（manager column_basis.geom）换算（CV1 2026-11-26，CV0 批的钉子护栏，"
+                 "v0.9.6 补发线＝v0.9.5＋#1924）：没记 geom 的钉子（现有全部）照原坐标套、只写 stderr；几何一致照套。"
+                 "row_segment 在殿本 vol01 10 页（30,32,48,88,89,105,117,129,179,182，其中 9 页带钉子）、全唐文 053 12 页"
+                 "（28,74,76,77,83,84,89,90,94,95,97,116，全带钉子）与 origin/main 04c7e75（v0.9.5）产物逐字节相同；"
+                 "cell_shrink→cut_gate 在 053 同 12 页逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
+
 ENTRIES: tuple[Equiv, ...] = (
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="cf886dc57c42f8be18f36935ae07dabe11b8dd48b6a322316479873aa4679111",
+          old="27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee",
+          evidence=_PIN_GEOM_096),
+    # row_segment_gate 补发线与 dev 同一哈希，已由 _PIN_GEOM_1126 那条登记
     Equiv(module="open_guji_cv.steps.row_segment",
           new="f4812f0b455a1f3cfb40fe24a6a844d5c7ddbf9b5708842ad327c3a2a1baa690",
           old="27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee",
