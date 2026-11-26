@@ -156,6 +156,8 @@ THIRD_NEAR_INNER = 10
 #: （vol17 p14c9 空列，外框内框剥完后底下留一条 2 行的发丝线，边距证据 0.93 差一点）。
 HAIRLINE_ROWS = 3
 HAIRLINE_EXTENT = 0.7
+#: 上端内缩第一道线之后，这么多行内又见墨就当它是字的笔画（天头实测 ≥35 行，三字横画间距 24~30 行）。
+TOP_NEXT_INK = 32
 #: 下端**第三道**线（剥完内外两道之后第二次找）只认边距证据（2026-11-25，ZM 报殿本列末「二/三」被判成「一」）：
 #: 末字的下横（「二」「三」满宽粗横、前面隔白）跨度够 0.85，旧判据把它当第三道线剥掉（vol21 p130c2 剥 82 行、vol03 p64c1
 #: 剥 129 行，正常 43）。真框线横贯整列、在文字带外的边距里也有墨，字止于文字带；位置分不开（Step1 线常落在外框内沿，
@@ -348,6 +350,16 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
     def two(p: np.ndarray, m: np.ndarray | None, ink2: np.ndarray, n_layers: int,
             gap: float | None, hint: float | None = None, glued: bool = False) -> tuple[int, str]:
         px, case = one(p, m)
+        if n_layers >= 2 and not glued and case == "d" and px and int(np.argmax(p > ink_eps)) > FLUSH_MAX \
+                and float(p[:px].max()) < LAYER2_BOLD:
+            # 上端内缩（离顶 > FLUSH_MAX 行）冒出来的「第一道线」，紧接着 TOP_NEXT_INK 行内又有墨：是首字的一道横画，不是框
+            # （vol16 p164c3「三」首横离顶 9 行、与次横隔 24 行，被当第一、二道框剥掉只剩「一」）。真框残线之后是天头，
+            # 空 ≥35 行（vol03 上端 17 列框残线之后都是空或 150 行外）；粗框条（峰 ≥LAYER2_BOLD，vol03 p98c7 峰 0.95）不算，字的一道横画峰值 ≤0.5
+            k = px
+            while k < len(p) and p[k] < inset_min_peak:
+                k += 1
+            if k < len(p) and k - px <= TOP_NEXT_INK:
+                return 0, "c"
         if n_layers >= 2 and case in ("a", "d", "e") and px:
             # 至多再剥两道：vol02 有的列尾除了内外两道框，最外还压着一截页边/上一道框的残墨
             # （第一刀削掉的是那截，外框粗线与内框虚线都还在，p17c4 实测）

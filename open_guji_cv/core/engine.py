@@ -340,7 +340,8 @@ def _lib_store_token(font: dict) -> str:
 #: 1：cv #1891，下端第三道线只认边距证据，末字「二／三」下横不再被当框剥掉（殿本 ZM 报，2026-11-25）。
 #: 2：CV1 补 #1891，第三道候选离 Step1 内框线 >10 行的也只认边距证据（vol04 p207c6、vol05 p149c6 等末字下横离内框线 13 行白）。
 #: 3：CV1，第三道里通栏发丝线（≤3 行厚、跨度 ≥0.7）直接剥（vol17 p14c9 空列底 1px 细线，CV0 报）。
-FRAME_LAYER_REV = 3
+#: 4：CV1，上端内缩第一道线（非粗框条）之后 32 行内又见墨当字的笔画，不剥（vol16 p164c3「三」被剥成「一」）。
+FRAME_LAYER_REV = 4
 
 
 def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False) -> dict:

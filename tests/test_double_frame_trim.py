@@ -122,3 +122,13 @@ def test_hairline_after_two_layers_is_stripped_even_far_from_inner():
     img[375:392, 8:112] = 0                # 外框
     _, d = clean_column(img, layers=(1, 2), layer_gap=(None, 40.0), inner_bottom=343.0)
     assert img.shape[0] - d["bottom"]["px"] <= 298
+
+
+def test_inset_char_stroke_at_top_is_not_first_layer():
+    # 2026-11-26 殿本 vol16 p164c3：「三」首横离顶 9 行（峰 0.48），次横隔 24 行；被当第一、二道框剥掉只剩「一」
+    img = _col()
+    img[9:21, 14:100] = 0                  # 首横（12 行厚，离顶 9 行）
+    img[45:57, 14:100] = 0                 # 次横（隔 24 行）
+    img[75:93, 14:100] = 0                 # 下横
+    _, d = clean_column(img, layers=(2, 1), layer_gap=(40.0, None))
+    assert d["top"]["px"] == 0
