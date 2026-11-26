@@ -638,7 +638,16 @@ _PIN_GEOM_096 = ("row_segment 套整列钉子前按钉子记的列图几何底�
                  "（28,74,76,77,83,84,89,90,94,95,97,116，全带钉子）与 origin/main 04c7e75（v0.9.5）产物逐字节相同；"
                  "cell_shrink→cut_gate 在 053 同 12 页逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
 
+_CUTGATE_REMAP_1126 = ("cut_gate（刻本链出口闸）也认 row_segment 列旗 manual_cells_remapped，只记旗不拦，口径同 row_segment_gate"
+                       "（CV1 2026-11-26，CV0 定）。现有产物没有列带这个旗，按构造逐字节同：cell_shrink→cut_gate 在殿本 vol01 10 页"
+                       "（30,32,48,88,89,105,117,129,179,182）、全唐文 053 12 页（28,74,76,77,83,84,89,90,94,95,97,116）与 origin/dev 产物"
+                       "逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
+
 ENTRIES: tuple[Equiv, ...] = (
+    Equiv(module="open_guji_cv.gates.cut_gate",
+          new="925a3ee71711731992ffa1a26abe8f1444c23cf679f84ced22508507aa578938",
+          old="f91957b70ddd5e767f5361d6f1c0fb33ffe433f9c3e92a03ffbd447df3404065",
+          evidence=_CUTGATE_REMAP_1126),
     Equiv(module="open_guji_cv.steps.row_segment",
           new="cf886dc57c42f8be18f36935ae07dabe11b8dd48b6a322316479873aa4679111",
           old="27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee",
