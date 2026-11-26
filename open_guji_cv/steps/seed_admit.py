@@ -282,6 +282,9 @@ class SeedAdmitParams(BaseModel):
     没有裁定的半格照旧受保护（本就不放行）。书级，缺省关、关时不进参数 dump、行为不变（SJ 史記 11-12：必 04:26:1:13b、解 03:46:1:4a、遲 等半格裁定放不出，半格是形近待审大头）。
     放行条件（A22 评估 11-12）：裁定记的 cell＝当前格号、裁定字＝整理本字（不走白名单）、本格无 clipped／frame_residue／jiazhu_*／split_* 疑点；放行格 evidence.half=True。
     起因的错放（men 组 06:12:5:12a）是旧在线 L3，不是现在的对话双路裁定；放行前须金标验证 0 错。"""
+    codepoint_no_exempt: tuple = ()
+    """书级，缺省空、关时不进参数 dump、行为不变（史記 sui/guanm/yinv/can 统一归一，Sheldon 11-26；dev #1923 移植）。列出的拆判字组 id：册 `codepoints:` 归一时
+    不再留「人裁／该组判出的刻形照录」的例外，各出口（match_ref／match_replace／human／字组）放行字都落到册指定码位。"""
     ruling_by_u: bool = False
     """裁定按字格永久编号 u 查（CV0 T3，cv#1848＋#1856 移植；书级，缺省关、关时不进参数 dump、行为不变）。
     窗口键没中 → 按身份账 `<feedback>/uid/<册>.jsonl` 取本格 u，查同册同 u 的裁定（只收 high、前后 2 字至少一侧相同、裁定字在库候选或＝整理本字）。"""
@@ -1417,6 +1420,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("vis_ruling_half", None)
         if isinstance(d, dict) and not self.ruling_by_u:
             d.pop("ruling_by_u", None)
+        if isinstance(d, dict) and not self.codepoint_no_exempt:
+            d.pop("codepoint_no_exempt", None)
         if isinstance(d, dict) and not self.group_flow_llm_half_groups:
             d.pop("group_flow_llm_half_groups", None)
         if isinstance(d, dict) and self.group_flow_form_open:
@@ -2832,7 +2837,7 @@ class SeedAdmitStep(Step):
             # 建的（`_clf_ctx` 取邻格放行字），提前改邻格字会让键对不上、组内格被误降。
             for col in out:
                 for rec in col.chars or []:
-                    if rec.admit and rec.char and not _codepoint_exempt(rec, ctx.book):
+                    if rec.admit and rec.char and not _codepoint_exempt(rec, ctx.book, p.codepoint_no_exempt):
                         rec.char = ctx.book.canonical_char(rec.char)
         if patch_missing:
             lanes: dict[str, int] = {}
@@ -2846,14 +2851,14 @@ class SeedAdmitStep(Step):
                                         n_code_fix=n_code_fix, n_code_mismatch=n_code_mismatch)}
 
 
-def _codepoint_exempt(rec, book) -> bool:
+def _codepoint_exempt(rec, book, no_exempt: tuple = ()) -> bool:
     """放行字落册码位的例外：这对字已有按刻形拆判的字组（`registry.SHAPE_GROUPS`，如 變𠮓 bian），
     码位归一只是兜底（「暂归一」），人裁的刻形、该组判出的刻形照录，不归一。
     vol04:197:7:3 人裁 變 被工作区 變→𠮓 改回 𠮓（A32 10-25 报），bian 组判出的 變 也一样被改回（A24 10-25）。"""
     tgt = book.canonical_char(rec.char)
     if tgt == rec.char:
         return False
-    gids = _shape_split(rec.char, tgt)
+    gids = _shape_split(rec.char, tgt) - frozenset(no_exempt)     # 书级 `codepoint_no_exempt`：这些拆判组的码位归一不留例外
     if not gids:
         return False
     if rec.channel == "human" or rec.provenance == "human":
