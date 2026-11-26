@@ -287,12 +287,62 @@ def _sorted_events(log) -> list:
     return sorted(iter_events_readonly(log), key=lambda e: (e.ts, e.batch, e.seq))
 
 
+# ── 删钉垫片 `pin_removed`（GM4 方案第九节，2026-11-26 定 A）───────────────────────────
+# manager 删钉只写钉状态流 `pin_state`（本机 `<feedback>/pins/<册>.state.jsonl`，只追加，一行一条）：
+# 每个 `pin_id` 取最后一条，`payload.v == "removed"` 的，它 `payload.events` 列的答案事件 cv 不再当钉用
+# （不进 human_chars、不进绑定表）；`expired`（仍照套）／`reactivated` 不删。没有这些文件时行为与原来逐字节同。
+# 钉状态和事件一样是数据、不进指纹：写了 removed 要从 seed_admit 起 force 重放。cv 改读编好的钉表后去掉。
+_PIN_STATE_MEMO: dict = {}
+
+
+def removed_pin_events(root) -> frozenset[str]:
+    """`<root>/pins/*.state.jsonl` 里最后状态为 removed 的钉所列答案事件 id。"""
+    d = Path(root) / "pins"
+    try:
+        files = sorted(d.glob("*.state.jsonl"))
+    except OSError:
+        return frozenset()
+    if not files:
+        return frozenset()
+    sig = tuple((f.name, f.stat().st_mtime_ns, f.stat().st_size) for f in files)
+    hit = _PIN_STATE_MEMO.get(str(d))
+    if hit and hit[0] == sig:
+        return hit[1]
+    last: dict[str, tuple[tuple, dict]] = {}
+    n = 0
+    for f in files:
+        for line in f.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            p = row.get("payload") if isinstance(row.get("payload"), dict) else row
+            pid = p.get("pin_id")
+            if not pid:
+                continue
+            n += 1
+            key = (str(p.get("at") or row.get("ts") or ""), n)      # 同一钉后到覆盖先到；同刻按文件顺序
+            if pid not in last or key >= last[pid][0]:
+                last[pid] = (key, p)
+    out = frozenset(str(x) for _, p in last.values() if p.get("v") == "removed" for x in (p.get("events") or ()))
+    _PIN_STATE_MEMO[str(d)] = (sig, out)
+    return out
+
+
+def _log_root(log):
+    r = getattr(log, "root", None)
+    if r is None:
+        from ..core.workspace import feedback_root
+        return feedback_root()
+    return r
+
+
 def _verdict_events(book: str, log, evs: list | None = None) -> dict[int, list]:
     """本书逐格裁决事件（confirm 类），按页分组、按时间排序。`evs`：已排好的 `_sorted_events(log)`。"""
     out: dict[int, list] = {}
+    gone = removed_pin_events(_log_root(log))
     for e in (evs if evs is not None else _sorted_events(log)):
-        if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_pin(e):
-            continue                  # 看图结论不进绑定表（overview#428）：绑定表只给人裁找回格
+        if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_pin(e) or e.id in gone:
+            continue                  # 看图结论不进绑定表（overview#428）：绑定表只给人裁找回格；删了的钉也不进
         pk = parse_cell_key(e.target.key)
         if pk is None or pk[0] != book:
             continue

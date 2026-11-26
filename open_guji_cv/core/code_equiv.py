@@ -618,6 +618,10 @@ _EVENT_LEVEL_1126 = ("feedback/events.py 分事件级别（CV0 2026-11-26，GM4 
                      "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。史記 104/106 首跑曾异：绑定表 fp_diff 随字块缓存先后变，"
                      "同一份旧代码重跑也给出同样结果，非本改动所致，复跑逐字节同。")
 
+_PIN_REMOVED_1126 = ("feedback/bindings.py 加删钉垫片 removed_pin_events（读 <feedback>/pins/*.state.jsonl，最后为 removed 的钉所列答案事件不进 "
+                     "human_chars／绑定表；GM4 方案第九节，CV0 2026-11-26），lookup.py 两处读者接上。没有钉状态文件时为空集，行为不变。"
+                     "seed_admit 在史記 02 25 页、殿本 vol28 13 页、全唐文 020 16 页上与 origin/dev 产物逐字节相同"
+                     "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。")
 _PIN_GEOM_1126 = ("row_segment 套整列钉子前按钉子记的列图几何底（manager column_basis.geom）换算（CV1 2026-11-26，CV0 批的钉子护栏）："
                   "没记 geom 的钉子（现有全部）照原坐标套、只写 stderr；几何一致照套。row_segment 在殿本 vol01 10 页"
                   "（30,32,48,88,89,105,117,129,179,182，其中 9 页带钉子）、全唐文 053 12 页（28,74,76,77,83,84,89,90,94,95,97,116，全带钉子）"
@@ -2733,6 +2737,14 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence='row_segment 在史記 42 册 cut-bench 40 页（--pages 2,3,7,14,17,18,25,27,33,34,38,40,43,46,54,55,59,64,66,69,70,73,78,79,81,82,'
                    '93,94,96,98,99,100,102,106,114,116,117,120,135,137）上与 origin/dev 3698522 产物逐字节相同（两开关关）；'
                    '新 code_dep impl.keben.boundary_net 经 SPLITS 合回 seg_overrides；scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn，2026-11-26（CV2）'),
+    Equiv(module="open_guji_cv.feedback.lookup",
+          new="d9003659b953296b8ecb06a7f4947c6aeb4253fc4c98298b15565cd015432c3e",
+          old="f92a02c93d76432954d1e021802af8faa4f900855e1de867ba3fd7b7613c9de2",
+          evidence=_PIN_REMOVED_1126),
+    Equiv(module="open_guji_cv.feedback.bindings",
+          new="91f0bfe636d6749888609af6a60e1cb4bfd8b976678afd0d65d2182b8445496d",
+          old="ddf0c55cd63fe58202633d1e664647a5435749994140cf6c4e744358275cceee",
+          evidence=_PIN_REMOVED_1126),
     # seed_admit solo_5b_scope（无参照放行收窄，缺省 any 不变；CV0 11-26，#1920）
     Equiv(module="open_guji_cv.steps.seed_admit",
           new="861f2eb9818bcbd7643164eb32921feb05a27a5801e97823003794331c08c878",
