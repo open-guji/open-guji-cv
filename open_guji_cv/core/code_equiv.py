@@ -604,7 +604,20 @@ _COLEND_THIRD_NEAR = ("impl/keben/column.py 双线版框下端第三道线：候
                       "与 #1891 同一条分支（two() 的 glued 且 n_layers>=2），别的书按构造逐字节不变，殿本靠 engine.FRAME_LAYER_REV=2 进 column_end 指纹判过期。"
                       "殿本实测（不靠登记）：vol03 全册 108 页对 #1891 版，下端再变 2 列（8:8、17:3，末字下横回来），其余同；vol02 夹具 1 端变（145:6 宁可留残线）。2026-11-25 CV1")
 
+_OUTER_SCALE_1126 = ("border_detect 加开关 outer_scale（CV1 2026-11-26，缺省关、关时不进参数 dump、外框探测各像素量乘 1.0 与原值逐位同）："
+                     "殿本 vol03 前 40 页（1–40）border_detect 与 origin/dev a08bff7 产物逐字节相同（scripts/code_equiv.py check）；"
+                     "另 layout-gold 79 页（殿本 vol01–10/30、脈經 01–06、全唐文 005/060/120/190、史記 05/20/40 的金标页）关着跑 border_detect 与 dev 逐页 json 全同。"
+                     "开了只动列距 >220px 的页（全唐文）。2026-11-26 CV1")
+
 ENTRIES: tuple[Equiv, ...] = (
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="49cd0268f8136c2778937cb96c9068380ec9b89059695ce23b3db13370fe1904",
+          old="3ae398ba0cfb5484d4e08e9be95bba628765633346bc784eaeb92bce984d3b78",
+          evidence=_OUTER_SCALE_1126),
+    Equiv(module="open_guji_cv.impl.keben.border",
+          new="34759d932d09ab73a0a3cca66dd67233f51ea553f72b9ab9a8d5634e51a5006c",
+          old="fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e",
+          evidence=_OUTER_SCALE_1126),
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
           old="7fa5464da6ca4c45382394b0ecc847e8b8495c806609e2505da4ef9b0c762ab5",

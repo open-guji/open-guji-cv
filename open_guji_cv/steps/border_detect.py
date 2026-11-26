@@ -465,6 +465,14 @@ class BorderDetectParams(BaseModel):
     `frame_layers: 2` 的边起作用，估位用册 `outer_gap`。layout-gold 79 页：偏差 >8px 的边 43→38，改善 19 处、回退 2 处（金标本身有歧义的页）。
     2026-11-25 起缺省开（用户定：没问题的开关尽量缺省开），开关都进参数 dump；不要就在册配置写 false。"""
 
+    outer_scale: bool = False
+    """外框探测按列距缩放（`impl/keben/border.detect_outer_borders` 的 `outer_scale`，2026-11-26 CV1）：外框探测的像素量
+    （搜索窗上限 78、墨条厚度上限 40、外延刹车、先验窗）是按殿本（列距约 185px）标的；全唐文大图（列距约 350px）外框粗条厚约
+    56px、离界行外延约 80~95px，压在窗边或被厚度上限挡掉，上下框判 none 或外延截在 78（046 p93、qtw005:48、qtw120:118）。
+    开了列距 >220px 的页按 列距/220 放大这些量，列距 ≤220 的页（殿本、脈經、史記正文）逐字节不变。
+    layout-gold 79 页：框型判对 287→289，殿本、史記 0 页变。缺省关、不进参数 dump（殿本产物不过期，用户 11-26 定殿本不动）；
+    要用在册配置写 `params: {border_detect: {outer_scale: true}}`。"""
+
     expected_cols_pages: dict[int, int] = {}
     """按页列数（2026-11-12，殿本 vol01 p100：图上 10 列、版框只探出 9 列，参校本质检）：`{页: 本页列数}`，覆盖册级 `expected_cols`。
     职名页、个别页列数与册级不同时用；一般同 `vline_overrides` 配用（给出本页全部竖线）。border_detect、border_detect_gate、
@@ -536,6 +544,8 @@ class BorderDetectParams(BaseModel):
             d.pop("bottom_lock_reslope", None)
         if isinstance(d, dict) and not self.top_edge_reslope:
             d.pop("top_edge_reslope", None)
+        if isinstance(d, dict) and not self.outer_scale:
+            d.pop("outer_scale", None)
         if isinstance(d, dict) and not self.expected_cols_pages:
             d.pop("expected_cols_pages", None)
         if isinstance(d, dict) and not self.vline_overrides:
@@ -648,6 +658,7 @@ class BorderDetectStep(Step):
                                   **({"inner_pull": True} if p.inner_pull else {}),
                                   **({"head_raise_notch": True} if p.head_raise_notch else {}),
                                   **({"head_raise_fit": True} if p.head_raise_fit else {}),
+                                  **({"outer_scale": True} if p.outer_scale else {}),
                                   **hint_kw, **lattice_kw, **bend_kw)
 
         res = _detect(cols)
