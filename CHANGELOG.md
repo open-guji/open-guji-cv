@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26）：`border_detect` 加开关 `outer_scale`（缺省关、不进参数 dump）：外框探测的像素量（搜索窗上限、墨条厚度上限、外延刹车、先验窗、条外纸带）按列距/220 放大，只对列距 >220px 的页（全唐文大图）起作用。全唐文外框粗条厚约 56px、外延离界行 80~95px，关着时压在殿本标的窗上限 78、或被厚度上限 40 挡掉，上下框判 none 或外延截在 78（046 p93）。layout-gold 79 页开着框型判对 287→289，殿本、史記 0 页变；关着 79 页逐页同。全唐文要用在册配置写 `params: {border_detect: {outer_scale: true}}`（书线定）。
+
 - PATCH（11-25，CV0「字块随包存 R2」第一步，产物与 23 步 code_hash 逐位不变，L0）：`RunContext.chain_fingerprint(步, 页)`＝该步及全部上游这一页 manifest 指纹的合哈希（跨机共享派生图的键）；`RunContext.materialize` 缓存不在时先问 `core.derived.PAGE_FETCHER`（只管 `char_patch`，由 manager 注册；产出它的那一步自己在跑时不问；同页只问一次；`GUJI_PATCH_FETCH=0` 关），取不到照旧现算；`ImageCache.put_bytes` 放取回的已编码图。`core/step.py`、`core/derived.py`、`products/cache.py` 不在任何 code_deps。
 - 重构（PATCH，产物逐字节不变、指纹不变，code_equiv.SPLITS 合回；CV4 整理 PR3c，Sheldon 11-23「深度整理」）：`steps/seed_admit.py`（5,284 行）拆出三块——`seed_admit_lanes`（整理本／无参照放行通道与降审护栏 26 项：rare_ref、solo_5b、follow_ref、edge_pair、review_lanes、p_ref …）、`seed_admit_shapes`（字形判官 8 遍：rr／wu／hou／part／pair_shape、stroke_veto、book_knn、near_knn）、`seed_admit_common`（各遍共用的常量、小工具与字块读取 `_page_patch`），主模块剩 Step 壳、主循环与其余各遍（3,352 行）。代码原样搬，只把 `_page_patch`／`_edge_pair_excluded` 改成经 `seed_admit_common` 模块属性调用（测试换字块读取改 `setattr(seed_admit_common, "_page_patch", …)`）；对外名字照旧从 `steps.seed_admit` import。
 

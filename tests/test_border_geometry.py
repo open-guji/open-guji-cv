@@ -457,6 +457,45 @@ def test_detect_outer_borders_rejects_when_ink_continues_beyond():
     assert abs(abs(r["top_outer_offset"]) - (40 + 6)) < 4      # 上边不受连累
 
 
+def _big_outer_page(gap=40, bar=56, pitch=350, n=10, top_y=600, bot_y=2600):
+    """全唐文那样的大图：列距 ~350px、外框粗条厚 ~56px，外延离内框线 gap+bar≈96px（> OUTER_GAP_MAX=78）。"""
+    w = int(pitch * (n - 1) + 600)
+    h = bot_y + 400
+    mask = np.zeros((h, w), dtype=np.float64)
+    xs_old = [300 + pitch * i for i in range(n)]
+    for x_old in xs_old:
+        mask[top_y:bot_y, x_old - 3:x_old + 4] = 1.0
+    mask[top_y:top_y + 8, :] = 1.0
+    mask[bot_y - 8:bot_y, :] = 1.0
+    x_in = xs_old[0]
+    mask[top_y:bot_y, x_in - gap - bar:x_in - gap] = 1.0
+    mask[top_y - gap - bar:top_y - gap, :] = 1.0
+    mask[bot_y + gap:bot_y + gap + bar, :] = 1.0
+    top = HLine(y_at_right=float(top_y + 4), slope=0.0, kind="top")
+    bottom = HLine(y_at_right=float(bot_y - 4), slope=0.0, kind="bottom")
+    verticals = [VLine(x_at_top=float((w - 1) - x), slope=0.0) for x in xs_old[::-1]]
+    return mask, top, bottom, verticals, w, h
+
+
+def test_detect_outer_borders_outer_scale_big_page():
+    """`outer_scale`（2026-11-26）：大图外框粗条超出殿本标的窗口与厚度上限，关着量不到双框；开了按列距放大后量到外延。"""
+    mask, top, bottom, verts, w, h = _big_outer_page()
+    off = detect_outer_borders(mask, top, bottom, verts, width=w, height=h)
+    assert off["top_frame_kind"] != "double" or abs(off["top_outer_offset"]) <= 78
+    on = detect_outer_borders(mask, top, bottom, verts, width=w, height=h, outer_scale=True)
+    assert on["v_outer_side"] == "left"
+    for k in ("v_outer_offset", "top_outer_offset", "bottom_outer_offset"):
+        assert abs(abs(on[k]) - (40 + 56 + 4)) < 8, (k, on[k])
+    assert on["top_frame_kind"] == on["bottom_frame_kind"] == "double"
+
+
+def test_detect_outer_borders_outer_scale_noop_on_small_pitch():
+    """列距 ≤ OUTER_REF_PITCH 的页（殿本、脈經、史記）开不开 `outer_scale` 结果全同。"""
+    mask, top, bottom, verts = _outer_page(gap=40)
+    assert (detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200)
+            == detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200, outer_scale=True))
+
+
 # ---------------------------------------------------------------- 界行折线
 
 from open_guji_cv.seg.polyline import fit_vlines_polyline, gutter_projection
