@@ -121,6 +121,7 @@
 ## [未发版]
 
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-26，GM4 方案第九节定 A）：删钉垫片 `pin_removed`：`feedback.bindings.removed_pin_events` 读 `<feedback>/pins/*.state.jsonl`（manager 钉状态流 `pin_state`，每个 `pin_id` 后到覆盖先到），最后为 `removed` 的钉，其 `payload.events` 列的答案事件不进 `human_chars`、不进绑定表（`expired`／`reactivated` 不删）。没有钉状态文件时行为不变。钉状态是数据、不进指纹：写了 removed 要从 `seed_admit` 起 force 重放。cv 改读编好的钉表后去掉。
+
 ## [0.9.6] - 2026-11-26
 
 补发（PATCH，L0）＝v0.9.5＋#1924（钉子护栏，CV0 11-26 批；dev 上已有 MINOR 改动，故走补发线）。指纹不变（code_equiv 登记）。配 manager ≥ v0.6.35（写钉子时记几何底 geom）。
