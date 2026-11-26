@@ -120,6 +120,7 @@
 
 ## [未发版]
 
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-26，GM2 分工）：页绑定盘上缓存（`cache/<册>/bindings`）键加算法哈希 `algo`（`bindings.py`、`anchor.py`、`anchor_backfill.py` 三文件 sha256 前 16 位）：换了这三处代码的 cv，旧绑定缓存不再命中、现算。防同一工作区换 cv 版本后沿用旧版算的绑定。
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-26，GM4 方案第九节定 A）：删钉垫片 `pin_removed`：`feedback.bindings.removed_pin_events` 读 `<feedback>/pins/*.state.jsonl`（manager 钉状态流 `pin_state`，每个 `pin_id` 后到覆盖先到），最后为 `removed` 的钉，其 `payload.events` 列的答案事件不进 `human_chars`、不进绑定表（`expired`／`reactivated` 不删）。没有钉状态文件时行为不变。钉状态是数据、不进指纹：写了 removed 要从 `seed_admit` 起 force 重放。cv 改读编好的钉表后去掉。
 
 ## [0.9.6] - 2026-11-26

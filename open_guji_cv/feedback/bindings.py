@@ -99,6 +99,27 @@ _MEMO: dict = {}
 _PAGE_MEMO: dict = {}    # (书, 产物库根, 页) → (cells_sha, 本页事件签名, rows)；提交一条裁决只让它那一页失效（GUJI-525）
 _VERSION = 8          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点；6：图像指纹优先、行加 fp_diff；7：缓存键加字块那一步的 sha、字块图验戳；8：缓存缺字块图现切、行加 why=no_patch）
 
+
+def _algo_hash() -> str:
+    """绑定算法的代码哈希（本模块＋anchor＋anchor_backfill 源码）：进缓存键（2026-11-26，GM2／CV0）。
+    `feedback/bindings/` 随中心库同步，别的机器、别的 cv 版本算的缓存只看 cells_sha＋事件签名＋_VERSION 就会被沿用；
+    加上它，算法一改缓存自动作废，不用记得手动加 _VERSION。"""
+    global _ALGO
+    if _ALGO is None:
+        import hashlib
+        h = hashlib.sha256()
+        here = Path(__file__).parent
+        for n in ("bindings.py", "anchor.py", "anchor_backfill.py"):
+            try:
+                h.update((here / n).read_bytes())
+            except OSError:
+                h.update(n.encode())
+        _ALGO = h.hexdigest()[:16]
+    return _ALGO
+
+
+_ALGO: str | None = None
+
 #: 字块图（`char_patch`）是哪一步切的：它的产物 sha 就是缓存图上记的戳（`engine._stamp_cache`）。
 PATCH_STEP = "cell_shrink"
 
@@ -662,7 +683,7 @@ def page_bindings(book: str, page: int, events: list, store=None, cache=None, gl
     if not refresh and f.exists():
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
-            if (d.get("v") == _VERSION and d.get("cells_sha") == cells_sha and d.get("sig") == sig
+            if (d.get("v") == _VERSION and d.get("algo") == _algo_hash() and d.get("cells_sha") == cells_sha and d.get("sig") == sig
                     and not any(r.get("why") == "no_patch" for r in d["rows"])):
                 return d["rows"]              # 带 no_patch 的行不信缓存：字块图可能已经有了
         except Exception:
@@ -675,7 +696,7 @@ def page_bindings(book: str, page: int, events: list, store=None, cache=None, gl
     # 绑定，直接 write_text 会让别的进程读到半个文件（读坏会被上面吞掉重算，但写本身会互相截断）。
     import os
     tmp = f.with_name(f"{f.stem}.tmp{os.getpid()}.json")
-    tmp.write_text(json.dumps({"v": _VERSION, "cells_sha": cells_sha, "sig": sig,
+    tmp.write_text(json.dumps({"v": _VERSION, "algo": _algo_hash(), "cells_sha": cells_sha, "sig": sig,
                                "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                                "rows": rows}, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, f)
