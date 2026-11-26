@@ -209,6 +209,7 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.vis_ruling_ctx_subclasses, ("vis_ruling_ctx_subclasses",)),
     (lambda p: not p.ruling_anchor_loose, ("ruling_anchor_loose",)),
     (lambda p: not p.ruling_by_u, ("ruling_by_u",)),
+    (lambda p: not p.codepoint_no_exempt, ("codepoint_no_exempt",)),
     (lambda p: not p.group_flow_ruling_first, ("group_flow_ruling_first",)),
     (lambda p: not p.p_ref_admit, ("p_ref_admit",)),
     (lambda p: (not p.p_ref_admit or p.p_ref_max_cov is None), ("p_ref_max_cov",)),
@@ -254,6 +255,7 @@ _DUMP_DROP: tuple = (
     (lambda p: p.consensus_lib_cov is None, ("consensus_lib_cov",)),
     (lambda p: p.ref_lib_5b_veto is None, ("ref_lib_5b_veto", "ref_lib_5b_veto_lead")),
     (lambda p: p.solo_5b_same_cov is None, ("solo_5b_same_cov",)),
+    (lambda p: p.solo_5b_scope == "any", ("solo_5b_scope",)),
     (lambda p: not p.replace_form_edge_exclude, ("replace_form_edge_exclude",)),
     (lambda p: not p.solo_coord_dissent, ("solo_coord_dissent",)),
     (lambda p: not p.lane_coord_blind_guard,
@@ -527,6 +529,9 @@ class SeedAdmitParams(BaseModel):
     开（`RulingStore._anchor_loose`）：同格同 cells_sha 同 ref 下，本组 `validate` 认的任意版本（减 `ver_equiv.yaml` 的 `void`，O 组仍按目标版本）、
     多条取最新、字不一致记 `ruling_conflict` 不放行；只收 high（fold 遍也是）；窗口改为前后 2 字至少一侧相同。
     窗口键、版本等价表照旧先查；在线问前查缓存（`RulingCache`）仍按精确键。开之前须 20 册强制锚点回放人裁真错 0。"""
+    codepoint_no_exempt: tuple = ()
+    """书级，缺省空、关时不进参数 dump、行为不变（史記 sui/guanm/yinv/can 统一归一，Sheldon 11-26）。列出的拆判字组 id：册 `codepoints:` 归一时
+    不再留「人裁／该组判出的刻形照录」的例外，各出口（match_ref／match_replace／human／字组）放行字都落到册指定码位。"""
     ruling_by_u: bool = False
     """裁定按字格永久编号 u 查（CV0 T3 2026-11-24，执行方案 https://claude.ai/artifact/NksDge9ZxaEyebAgnS8s8Q；书级，缺省关、关时不进参数 dump、行为不变；
     开的册 seed_admit 起往下过期，L1）。开：`_vis_ruling_pass` 与 fold 遍在窗口键、版本等价、格锚点都没中之后再查一档——
@@ -1073,6 +1078,15 @@ class SeedAdmitParams(BaseModel):
     cov 门槛降到这个值（2026-11-08，全唐文 002／003 姓氏韻編，形近字线；书级，缺省关，`None`＝关、不进 dump）。
     其余条件（5-b 作证、领先、可信刻例数、形近表／字组／硬疑问）照 `solo_5b_cov`。依据：front4 002／003 待审里
     cov 0.95–0.98、库判 same、5-b 同意、过其余条件的 1,703 格（张劉德崔孫鄭…442 种字）按字排图看，未见错放（1 格 費 存疑）。"""
+    solo_5b_scope: Literal["any", "no_ref"] = "any"
+    """`solo_5b_cov` 开着时放哪些格（2026-11-26，Sheldon 定参校本属性：无参照放行只在无参照页，CV0）。
+
+    - `any`（缺省，旧行为）：整格没有任何整理本对位的格都算，不管在哪一页；
+    - `no_ref`：只放①无参照页上的格——册配置 `reference_profile` 声明 `kind: none` 的页，或 `page_kinds.no_ref`
+      （`no_ref_pages`）的页；②有参校本的页上，坐标对位说参校本这一位是缺字（〓、图位，`GAP_CHARS`）的格。
+      有参校本的页上「一个对位字都没拿到」的格多是对位或切分出了事，只靠字形库放更险，留待审。
+      全唐文 main 包 8 册实数：none 页 7,513 格不变；有参校本页上 94 格（约 0.06%）改回待审（其中参校本标缺字的仍放）。
+    缺省 `any` 不进参数 dump，`params_hash` 不变。"""
     no_ref_pages: list[int | str] = []
     """无参校本页（册配置用 `page_kinds: {no_ref: [...]}` 写，不直接写这里）：参校本里本来就没有这段文字的页
     （脉经 01 林億序、06 牒文，2026-11-19 用户定）。这些页对不上参校本是常态、不是切分坏，按 `no_ref_params`
