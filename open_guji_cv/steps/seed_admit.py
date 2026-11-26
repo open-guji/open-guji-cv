@@ -1031,7 +1031,8 @@ class SeedAdmitStep(Step):
             d_s5 = _solo_5b_pass(p, out, mmap, amap, _opt(ctx, "rare_candidates", page),
                                  _coord_refs(ctx, page, coord_cache),
                                  _trusted_keben_counts(p.db_path),
-                                 mmap_raw=mmap_raw)
+                                 mmap_raw=mmap_raw,
+                                 lacuna_only=p.solo_5b_scope == "no_ref" and not _no_ref_page(ctx.book, p, page))
             n_auto += d_s5
             n_review -= d_s5
         if p.book_lanes:
@@ -1216,6 +1217,16 @@ def _trusted_keben_counts(db_path: str) -> dict[str, int]:
     _TRUSTED_COUNTS.clear()
     _TRUSTED_COUNTS[key] = out
     return out
+
+
+def _no_ref_page(book, p: "SeedAdmitParams", page: int) -> bool:
+    """本页是不是无参照页：册配置 `reference_profile` 声明 `kind: none`，或在 `no_ref_pages`（`page_kinds.no_ref`）里。
+    `solo_5b_scope: no_ref` 用。"""
+    prof = getattr(book, "reference_profile", None)
+    if prof is not None and prof.declared and prof.kind_of(page) == "none":
+        return True
+    from ..core.book import _expand_pages
+    return bool(p.no_ref_pages) and page in set(_expand_pages(list(p.no_ref_pages)))
 
 
 def no_ref_page_params(p: "SeedAdmitParams", page: int) -> "SeedAdmitParams":
