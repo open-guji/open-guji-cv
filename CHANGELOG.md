@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- 重构（PATCH，产物逐字节不变、指纹不变，code_equiv.SPLITS 合回；CV4 整理 PR3c，Sheldon 11-23「深度整理」）：`steps/seed_admit.py`（5,284 行）拆出三块——`seed_admit_lanes`（整理本／无参照放行通道与降审护栏 26 项：rare_ref、solo_5b、follow_ref、edge_pair、review_lanes、p_ref …）、`seed_admit_shapes`（字形判官 8 遍：rr／wu／hou／part／pair_shape、stroke_veto、book_knn、near_knn）、`seed_admit_common`（各遍共用的常量、小工具与字块读取 `_page_patch`），主模块剩 Step 壳、主循环与其余各遍（3,352 行）。代码原样搬，只把 `_page_patch`／`_edge_pair_excluded` 改成经 `seed_admit_common` 模块属性调用（测试换字块读取改 `setattr(seed_admit_common, "_page_patch", …)`）；对外名字照旧从 `steps.seed_admit` import。
+
 - MINOR（用户 2026-11-25 定「接进 2b、缺省开」；动 `column_band`，从 2b 起过期）：2b 新开关 `column_band.side_cut`（缺省开）：整列竖直墨量投影（只取上下边框之间、各让 60 行）认出框线，在框线内侧 15% 列宽内取第一个够低处、往里缩 2px 为左右切点，切点外整列抹白（在旧算法抹界行之上再抹）。**文字带 `band` 仍用旧算法的值**：2d 对带宽极敏感，史記 42 测试集用新带列全对 287→264（不缩 274），只抹边 287→284；全唐文 053 新带 324→325、只抹边 324→323。`seg/side_cut` 换成验证版（界行衰减到谷、第一个够低处、半开区间），`cut_gate` L2c 探针随之变；更正 L2c 唯一命中 053 p148c9 是误报（双线细内线）。CV2。
 - PATCH（W1 急修，产物逐字节不变，code_equiv 登记，L0）：`border._fit_head_raise`（head_raise_fit，v0.9.2 起缺省开）死循环——两邻列内框互吸、同值反复写，`while changed` 不结束（脈經 01 p67 单页卡 25 分钟以上，MJ 报）。改为值真变了才再来一轮，另加迭代上限 `HR_FIT_MAX_ROUNDS`×列数兜底。殿本 vol01／04、脈經 01／06 共 21 页逐字节同。CV1。
 

@@ -1,5 +1,6 @@
 """候𠋫 书级刻形判法（`groups.hou_shape`、`seed_admit._hou_shape_pass`）。"""
 from __future__ import annotations
+import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 
 import json
 
@@ -80,7 +81,7 @@ def test_pass_only_admitted_nonhuman(monkeypatch):
     object.__setattr__(p, "group_flow_hou_shape", "x")
     monkeypatch.setattr(H, "load", lambda path: {})
     monkeypatch.setattr(H, "judge", lambda img, m: {"char": "候", "why": "agree", "v": 0.3})
-    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
+    monkeypatch.setattr(_sac, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
     assert sa._hou_shape_pass(p, [C([hum, pend, adm, same, other])]) == 0
     assert hum.char == "𠋫" and "hou_shape" not in hum.evidence
     assert not pend.admit and pend.char == "𠋫" and "hou_shape" not in pend.evidence      # 待审不补放（可能是 侯）
@@ -151,7 +152,7 @@ def test_late_pass_only_unjudged(monkeypatch):
     object.__setattr__(p, "group_flow_hou_shape", "x")
     monkeypatch.setattr(H, "load", lambda path: {})
     monkeypatch.setattr(H, "judge", lambda img, m: {"char": "候", "why": "agree", "p": 0.999})
-    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
+    monkeypatch.setattr(_sac, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
     sa._hou_shape_pass(p, [C([judged, late])], only_unjudged=True)
     assert judged.char == "𠋫" and judged.evidence["hou_shape"]["char"] is None
     assert late.char == "候" and late.evidence["hou_shape"]["char"] == "候"
