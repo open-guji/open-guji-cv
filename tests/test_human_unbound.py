@@ -116,7 +116,7 @@ def test_human_chars_reports_lost(tmp_path, monkeypatch):
             "e3": {"status": "valid", "bound": _key(2)}}
     import open_guji_cv.feedback.events as events
     monkeypatch.setattr(events, "iter_events_readonly", lambda _log: evs)
-    monkeypatch.setattr(events, "counts_as_human", lambda e: True)
+    monkeypatch.setattr(events, "counts_as_pin", lambda e: True)
     monkeypatch.setattr(bindings, "book_bindings", lambda book, log=None: rows)
     lost: dict = {}
     out = lookup.human_chars(BOOK, log=log, stale={}, bind=True, lost=lost)
