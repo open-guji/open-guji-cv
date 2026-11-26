@@ -2739,7 +2739,12 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     # seed_admit 的参数类与参数表搬到 steps.seed_admit_params（CV4 整理 2026-11-23，纯搬家，殿本 vol28 16 页、全唐文 020 16 页、
     # 史記 02 18 页 seed_admit 产物与 dev b189b2e 逐字节相同）：两块都还是这一版时合回 seed_admit 一项，各书不过期。
     "open_guji_cv.steps.seed_admit": ("1f1f1fb43270438a7f7ae51c94fbf4f26b93ba7317a21bd05334211b1820663c", (
-        ("open_guji_cv.steps.seed_admit", "110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6"),
+        # 2026-11-26 CV4 PR3c：seed_admit.py 再拆出 common／lanes／shapes 三块（纯搬家＋字块读取改经模块属性调用，
+        # 殿本 vol28、全唐文 020、史記 02 共 50 页产物与 dev 逐字节相同），四块都还是这一版时照样合回旧 seed_admit 一项。
+        ("open_guji_cv.steps.seed_admit", "425f028ce7eeb0df7898611698cf8cfdcfa2a7ddf7a43829fe92c14b8120f20a"),
+        ("open_guji_cv.steps.seed_admit_common", "e9dcb6a9f748f479bec5b536784893a9db0297867ae0d23b750f9eacb05a3310"),
+        ("open_guji_cv.steps.seed_admit_lanes", "d372c3a9245e947aeb235335460dc5f193eef77371b1050c5af5ea3472041baa"),
+        ("open_guji_cv.steps.seed_admit_shapes", "ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77"),
         ("open_guji_cv.steps.seed_admit_params", "e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091"),
         # 书级放行通道钩子（缺省 None，CV4 2026-11-25）：书仓没覆盖时合回，各书指纹不变；全唐文 k13 覆盖后照常过期
         ("open_guji_cv.impl.keben.admit_lanes", "26976aeeb23db0ece76f341f7cefbc0c2a4e25fbed3faa4671bcace3f4672cac"))),
