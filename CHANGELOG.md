@@ -7,6 +7,11 @@
 
 ## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.113] - 2026-11-26
+
+史記线 PATCH（CV4 请，SJ 整书重算用）＝v0.7.112＋dev #1921（group_flow evidence.group.members 写入组内全部字）＋#1923 移植（seed_admit 书级 codepoint_no_exempt，缺省空、关时不进参数 dump；本线参数类仍在 seed_admit.py）。
+指纹变更：seed_admit 代码变，钉本线的册从 seed_admit 起过期（随史記整书重算）。本线 3 条老红（test_default_group_flow_has_no_codepoint_groups、test_p_ref_coord…、test_codepoint_groups_flow_only）v0.7.112 上同样红，非本版。
+
 ## [0.7.107] - 2026-11-25
 
 史記 patch 线：v0.7.103 ＋ 只改 `scripts/zhengli/republish.py`（不进任何 Step 的 code_hash，23 步指纹与 v0.7.103 全同，不用登 code_equiv）。① 出单导出改走 guji-manager 的 `guji_manager.output.guji_format_export`（同 dev），册有字格身份账时 char 每格带 `u`（v0.6），推 book-text 时 local_check 不再报标点／专名 u 对不上；没装 manager 才退回本线 `scripts/export_guji_format.py`。要 guji-manager ≥ 0.6.20（导出器配老 cv 不崩、带 u 的 char 保持 v0.6）。② 移植 dev 067f2229：出单后 `db sync` 缺省不推字形库（GUJI_DB_NO_GLYPH）。史記 012 实跑：012-r1 1 格 → 012-r2 3 格，book-text 0.1.1→0.1.2。（CV0 u T1，11-25）
