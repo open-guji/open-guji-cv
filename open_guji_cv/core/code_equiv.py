@@ -600,6 +600,10 @@ _COLEND_1891 = ("impl/keben/column.py 双线版框下端剥层（cv #1891，CV1�
                 "殿本实测（不靠登记）：cv v0.7.99 ± 本改动跑 vol03 全册 108 页 2a–2c，23 列下端变、看图全是末字下横回来（报告 ai-team "
                 "domain/CV/质检/列末剥框-1891-CV0评审/）。2026-11-25 CV0")
 
+_COLEND_THIRD_NEAR = ("impl/keben/column.py 双线版框下端第三道线：候选离 Step1 内框线 >10 行的也只认边距证据（CV1，CV0 复核 vol04 p207c6、vol05 p149c6 报）；"
+                      "与 #1891 同一条分支（two() 的 glued 且 n_layers>=2），别的书按构造逐字节不变，殿本靠 engine.FRAME_LAYER_REV=2 进 column_end 指纹判过期。"
+                      "殿本实测（不靠登记）：vol03 全册 108 页对 #1891 版，下端再变 2 列（8:8、17:3，末字下横回来），其余同；vol02 夹具 1 端变（145:6 宁可留残线）。2026-11-25 CV1")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -2654,6 +2658,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="94920dd2cee9eadd603976906505ea6efd04a61bc75be07d976c5b01b509fdee",
           old="44575183941b9f59f2bde80a4ed4f57056962bf3661ba454ddc915988ba0e562",
           evidence=_COLEND_1891),
+    Equiv(module="open_guji_cv.impl.keben.column",
+          new="118becc6bfab8f9549b62a8952190a273c5b9356c02848c4d10256c5f4312f1f",
+          old="94920dd2cee9eadd603976906505ea6efd04a61bc75be07d976c5b01b509fdee",
+          evidence=_COLEND_THIRD_NEAR),
 )
 
 
