@@ -3,6 +3,12 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+## [0.9.5] - 2026-11-26
+
+补发（PATCH，用户 11-26 定「发 patch 随时用」）＝v0.9.4＋#1899（字块按页取回接口，配 manager ≥ 含 #1013 的版本）。产物与各步 code_hash 逐位不变，各书不过期。
+
+- PATCH（11-25，CV0「字块随包存 R2」第一步，产物与 23 步 code_hash 逐位不变，L0）：`RunContext.chain_fingerprint(步, 页)`＝该步及全部上游这一页 manifest 指纹的合哈希（跨机共享派生图的键）；`RunContext.materialize` 缓存不在时先问 `core.derived.PAGE_FETCHER`（只管 `char_patch`，由 manager 注册；产出它的那一步自己在跑时不问；同页只问一次；`GUJI_PATCH_FETCH=0` 关），取不到照旧现算；`ImageCache.put_bytes` 放取回的已编码图。`core/step.py`、`core/derived.py`、`products/cache.py` 不在任何 code_deps。
+
 - PATCH（W1 急修，产物逐字节不变，code_equiv 登记，L0）：`border._fit_head_raise`（head_raise_fit，v0.9.2 起缺省开）死循环——两邻列内框互吸、同值反复写，`while changed` 不结束（脈經 01 p67 单页卡 25 分钟以上，MJ 报）。改为值真变了才再来一轮，另加迭代上限 `HR_FIT_MAX_ROUNDS`×列数兜底。殿本 vol01／04、脈經 01／06 共 21 页逐字节同。CV1。
 
 - PATCH（ZM→CV1 殿本列末「二／三」被判成「一」，11-25；改 `impl/keben/column.py::column_border_trim` 下端剥层，影响 `column_end` 起的产物，只在册配置 `frame_layers` 下端≥2 时走到）：下端外框＋内框剥完后再找的**第三道**线，改为只认边距证据（边距带满墨 ≥0.95，且比列内中位高 ≥0.3），除非它与上一道线隔着 ≥8 行白（vol02 的第三道虚线）；另外 Step1 说内框在某处而该处 ±10 行是白纸时、或候选起点在内框线外 30 行以远时，里面的墨一律当字（vol03 p64c1、vol05 p23c7）。殿本 vol03 全册 108 页比 dev：23 列变，全是末字下横被削回来，无内框残线退步；vol02 夹具 231 端 5 端变（都是旧深剥预警端，1 端 px 不变只改档位名）。上端同类（vol16 p164c3「三」首横离顶 9 行被当第一道框）本 PR 不修。
