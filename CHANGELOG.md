@@ -7,6 +7,11 @@
 
 ## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [0.7.114] - 2026-11-26
+
+史記线 PATCH（SJ 请，整书重算一次跑完）＝v0.7.113＋dev #1918 移植：row_segment 字间界线判官 `boundary_net`（书级，空＝关）与无先验格网违表容差 `layout_off_tol`（0＝关），模型 models/boundary_net_shiji_v1（模型表、出处已登）。本线已含 #1746、#1763、#1771、#1921、#1923；#1900 side_cut、vline_track／outer_bar 本线没有对应步骤，不移植（等于关）。
+指纹变更：row_segment code_deps 加 boundary_net，钉本线的册从 row_segment 起过期（随史記整书重算）。test_model_pack 一条老红（本机 models/stroke_evidence_v1 残留）v0.7.113 同样红。
+
 ## [0.7.113] - 2026-11-26
 
 史記线 PATCH（CV4 请，SJ 整书重算用）＝v0.7.112＋dev #1921（group_flow evidence.group.members 写入组内全部字）＋#1923 移植（seed_admit 书级 codepoint_no_exempt，缺省空、关时不进参数 dump；本线参数类仍在 seed_admit.py）。
