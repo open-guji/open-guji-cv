@@ -1845,6 +1845,11 @@ def copy_figs(export_dir: Path, d: Path, ch: str) -> int:
     if not src.exists():
         return 0
     shutil.copyfile(src, d / f"{ch}.fig.json")
+    try:        # 换过图源的书 cord 已换到网站页图坐标，fig.json 的框要跟 cord 走（F-OV-13；ZM 11-26 殿本 vol19）
+        from guji_manager.swap.booktext import sync_fig_file
+        sync_fig_file(d, ch)
+    except ImportError:
+        pass
     imgs = Path(export_dir) / "fig" / ch
     dst = d / "fig" / ch
     if dst.exists():
