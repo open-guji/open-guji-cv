@@ -2697,6 +2697,13 @@ ENTRIES: tuple[Equiv, ...] = (
           new="caba419a5cfc4ee8101abf72729b444f53f9b896680fe3398597a047c1d3fa1d",
           old="ddf0c55cd63fe58202633d1e664647a5435749994140cf6c4e744358275cceee",
           evidence=_EVENT_LEVEL_1126),
+    # row_segment 加 layout_off_tol（违表容差，缺省 0）、boundary_net（字间界线判官，缺省空）两个参数，关时都不进 dump、不调（CV2 11-26）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='40477ce13543567a5a3bd47dd936e7d9daafecdc1ee8928c7c30121dbf50d833',
+          old='27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee',
+          evidence='row_segment 在史記 42 册 cut-bench 40 页（--pages 2,3,7,14,17,18,25,27,33,34,38,40,43,46,54,55,59,64,66,69,70,73,78,79,81,82,'
+                   '93,94,96,98,99,100,102,106,114,116,117,120,135,137）上与 origin/dev 3698522 产物逐字节相同（两开关关）；'
+                   '新 code_dep impl.keben.boundary_net 经 SPLITS 合回 seg_overrides；scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn，2026-11-26（CV2）'),
 )
 
 
@@ -2820,6 +2827,12 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
         ("open_guji_cv.utils.han_ranges", "2feaa83bebcaffcb71ccdba148cc77183f402f45fbf1b116da4cddaff77aef8e"))),
     # （seed_admit 原有一条 seed_admit＋utils.pua_v2_codes 合回 af7627… 的登记：seed_admit 之后早已改过、不再生效，
     #  键与上面 2026-11-23 那条同名，dict 只能留一条，2026-11-23 CV4 删去。）
+    # 不是拆分、是 row_segment 新加了一个 code_dep（字间界线判官 impl.keben.boundary_net，`boundary_net` 参数缺省空、不调；
+    # CV2 2026-11-26）：seg_overrides 与 boundary_net 都还是这一版时合回 seg_overrides 一项，再由下面 seal_ink 那项合回。
+    # 必须排在 seal_ink 那项之前；之后哪块真改了照常过期
+    "open_guji_cv.feedback.seg_overrides": ("81f5eb066e4d8fca8df69f95ef375ffb3196ccd30e850a35c099ee9648733fd0", (
+        ("open_guji_cv.feedback.seg_overrides", "81f5eb066e4d8fca8df69f95ef375ffb3196ccd30e850a35c099ee9648733fd0"),
+        ("open_guji_cv.impl.keben.boundary_net", "fe93efc675386ed4fb74ecc92dd19be6f9d2949c07c342ad741b4bf1ddde5765"))),
     # 不是拆分、是 row_segment 新加了两个 code_dep（书级钩子 row_hooks，缺省三个钩子都是 None；人定切分读取入口
     # seg_overrides，「哪些人定屏蔽格位表」的规则在它里头；2026-11-12 A22《切分三方向》第 4、5 步）：
     # 三块都还是这一版时合回 seal_ink 一项，再由下一项合回 jiazhu_step。

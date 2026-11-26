@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV2 2026-11-26）：`row_segment` 加两个开关（缺省关、不进参数 dump）。`layout_off_tol`：无先验格网违表＋劈字只多 ≤tol、劈字／格高不匀／穿字严格更好时改选（全唐文 060:3:3 多出空格；053 册 L2 列全对 323→324、0 回退）。`boundary_net`／`boundary_net_p`：字间界线判官（新 `impl/keben/boundary_net`＋模型 `models/boundary_net_shiji_v1`），只重排全正文列内部低分切线、格数不变（史記 42 cut-lattice 线 789→808/874、错列修回 4、好列不坏）。史記 42 40 页 row_segment 逐字节同，新 code_dep 经 SPLITS 合回。
+
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-26，GM4 批量规则）：人裁事件分级 `events.event_level`（`payload.level` 优先；`actor=model` 没写 level 的按 9 个人授意批次认 human，其余 ai；看图结论/文意裁定/模型判断来源为 None）。新 `counts_as_pin`＝原 `counts_as_human` 口径（人裁或已放行 AI 钉），lookup/bindings/republish 改调它；`counts_as_human` 收紧为只认 human，只给统计评测用。史記 02、殿本 vol28、全唐文 020 共 54 页 seed_admit 逐字节同。
 
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26）：`border_detect` 加开关 `outer_scale`（缺省关、不进参数 dump）：外框探测的像素量（搜索窗上限、墨条厚度上限、外延刹车、先验窗、条外纸带）按列距/220 放大，只对列距 >220px 的页（全唐文大图）起作用。全唐文外框粗条厚约 56px、外延离界行 80~95px，关着时压在殿本标的窗上限 78、或被厚度上限 40 挡掉，上下框判 none 或外延截在 78（046 p93）。layout-gold 79 页开着框型判对 287→289，殿本、史記 0 页变；关着 79 页逐页同。全唐文要用在册配置写 `params: {border_detect: {outer_scale: true}}`（书线定）。

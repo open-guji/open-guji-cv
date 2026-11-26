@@ -610,6 +610,14 @@
    "owner": "96mid1ogzk"
   },
   {
+   "kind": "boundary_net",
+   "path": "models/boundary_net_shiji_v1/model.pt",
+   "size": 343525,
+   "sha256": "90ab270eabed749034af8eef24316a6d8df11840b51ed8b2c3314883b261bfbb",
+   "level": "book",
+   "owner": "988g3f0wsu"
+  },
+  {
    "kind": "glyph_cnn",
    "path": "models/glyph_cnn_r4/best.pt",
    "size": 19677074,
