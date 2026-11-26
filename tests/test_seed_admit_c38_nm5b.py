@@ -1,6 +1,7 @@
 """seed_admit `group_flow_pair_shape_nm_5b`（never_match 格 5-b 首位在这一对里也交两字刻形判），缺省关。
 （`solo_cal_5b_canon` 2026-11-24 随 solo_cal 搬进全唐文书仓 code/admit_lanes.py，测试在书仓。）"""
 from __future__ import annotations
+import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 
 from types import SimpleNamespace as NS
 
@@ -24,7 +25,7 @@ def _rec(cid, ch, guard, doubts):
 def _pair_run(monkeypatch, nm_5b):
     monkeypatch.setattr("open_guji_cv.groups.pair_shape.load", lambda path: {"chars": ["王", "玉"]})
     monkeypatch.setattr("open_guji_cv.groups.pair_shape.judge", lambda img, model: {"char": "王", "why": "agree", "score": 3.0})
-    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: object())
+    monkeypatch.setattr(_sac, "_page_patch", lambda *a, **k: object())
     recs = [_rec("001:1:1:1", "王", "never_match", ["库 unsure(cov=0.97)", "护栏:never_match"]),
             _rec("001:1:1:2", "王", "never_match", ["库 unsure(cov=0.97)", "护栏:never_match"])]
     out = [NS(col=1, chars=recs)]

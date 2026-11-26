@@ -1,7 +1,7 @@
 """2b 定字带左右边：竖直墨量投影找文字带两端，带外界行抹白。
 
-五小步拆分（2026-11-25，`doc/2-切字/五小步.md`）从 `column_warp` 里分出来的一步，算法一字未改
-（`impl.keben.column.band_strip` = `column_text_band` + `strip_column_rules`）。输入 2a 的去噪列图 `column_raw`，
+五小步拆分（2026-11-25，`doc/2-切字/五小步.md`）从 `column_warp` 里分出来的一步。左右切点缺省用 `seg.side_cut`
+（`side_cut`，2026-11-25 起：切点以外再抹白，文字带数值仍用旧算法）；关掉＝旧算法（`impl.keben.column.band_strip` = `column_text_band` + `strip_column_rules`）。输入 2a 的去噪列图 `column_raw`，
 输出每列文字带 `column_bands` 与界行抹白后的缓存列图 `column_banded`（尺寸不变，抹白而不是裁，列图坐标系不动）。
 """
 
@@ -13,6 +13,7 @@ from pydantic import BaseModel, model_serializer
 from ..core.spec import StepSpec, column_key, parse_key
 from ..core.step import RunContext, Step, register_step
 from ..impl.keben.column import band_strip
+from ..seg.side_cut import side_cut_points
 from ..products.kinds.columns import ColumnBandRec, PageBands, PageWindows
 
 #: `tight_rule_band`：内侧孤立窄条峰到这么高才当第二道线（写本「以」的左竖一条 240 行里峰 0.16~0.33）
@@ -33,6 +34,15 @@ class ColumnBandParams(BaseModel):
     起因：全唐文「十」的竖、「恪」的忄贴着界行，`strip_column_rules` 按 240 行横条判带，把它们当内框连界行一起抹白，
     Step4 拿到「亠」（001:121:1:6a、001:106:9:6a、014:108:3，台账 R033／R038）。"""
 
+    side_cut: bool = True
+    """左右切掉位置用新算法（`seg.side_cut`，2026-11-25 用户定、缺省开）：只取上下边框之间（各让 60 行）的行做竖直墨量
+    投影，认出框线后在框线内侧 15% 列宽内取第一个够低处、往里缩 2px，切点以外整列抹白（在旧算法抹界行的基础上再抹），
+    切点记在 `column_bands` 的 `cut`。**文字带 `band` 仍是旧算法的值**：2d 切字对字带宽度很敏感——史記 42 册测试集
+    带每边窄 3px 列全对 287→264、窄 1px 也 →274，把带的数值换回旧值、列图照用新抹的，切线就和原来一样（CV2 11-25）。
+    关＝完全旧行为。以旧算法当金标比 4 套书 1460 列，开 CV1 的 `vline_track`+`outer_bar` 后不一致 60 列，新算法多丢墨 6 列
+    （史記卷首页噪点 4、脉经 1 列笔尖）；已知短处：点线／双线里的细内线（墨占比 < 0.3）认不出（全唐文 053:87:6、
+    053:148:9），这种列靠旧算法那一遍抹。上下边框之间不足 200 行时只用旧算法。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump：没开的书 `params_hash` 不变。"""
@@ -44,6 +54,21 @@ class ColumnBandParams(BaseModel):
         return d
 
 
+def band_and_strip(p: ColumnBandParams, w, raw: np.ndarray
+                   ) -> tuple[tuple[int, int], tuple[int, int] | None, np.ndarray]:
+    """一列的文字带 `band`（半开，旧算法）、左右切点 `cut`（半开，`side_cut` 关或算不出为 None）与抹白后的列图。"""
+    den, band, no_rules = band_strip(raw, p.ink_threshold, **bar_kwargs(p))
+    cut = None
+    if p.side_cut:
+        cut = side_cut_points(den, w.border_top_in_column, w.border_bottom_in_column, p.ink_threshold)
+        if cut is not None:
+            no_rules = no_rules.copy()
+            no_rules[:, :cut[0]] = 255
+            no_rules[:, cut[1]:] = 255
+            cut = (int(cut[0]), int(cut[1]))
+    return (int(band[0]), int(band[1])), cut, no_rules
+
+
 def bar_kwargs(p: ColumnBandParams) -> dict:
     return {**({"bar_after_min_peak": TIGHT_INNER_BAR_PEAK, "first_valley": True} if p.tight_rule_band else {}),
             **({"inner_bar_span": True} if p.inner_bar_span else {})}
@@ -52,11 +77,12 @@ def bar_kwargs(p: ColumnBandParams) -> dict:
 @register_step
 class ColumnBandStep(Step):
     spec = StepSpec(
-        id="column_band", title="2b 定字带左右边（竖直墨量投影、抹界行）", version="1.0", unit="column",
+        id="column_band", title="2b 定字带左右边（竖直墨量投影、抹界行）", version="1.1", unit="column",
         consumes=("column_windows", "column_raw"),
         produces=("column_bands", "column_banded"),
         params=ColumnBandParams,
-        code_deps=("open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.impl.keben.column"),
+        code_deps=("open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.impl.keben.column",
+                   "open_guji_cv.seg.side_cut"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -66,9 +92,9 @@ class ColumnBandStep(Step):
         for w in wins.columns:
             key = column_key(page, w.col)
             raw = ctx.image("column_raw", key)
-            _den, band, no_rules = band_strip(raw, p.ink_threshold, **bar_kwargs(p))
+            band, _cut, no_rules = band_and_strip(p, w, raw)
             ctx.cache.put(ctx.book.id, "column_banded", key, no_rules)
-            recs.append(ColumnBandRec(col=w.col, band=(int(band[0]), int(band[1]))))
+            recs.append(ColumnBandRec(col=w.col, band=band))
         return {"column_bands": PageBands(page=page, columns=recs)}
 
     def render(self, ctx: RunContext, kind_id: str, key: str) -> np.ndarray:
@@ -76,5 +102,5 @@ class ColumnBandStep(Step):
         if col is None:
             raise ValueError(f"{kind_id} 的键必须带列号: {key}")
         p: ColumnBandParams = ctx.params_for(self)  # type: ignore[assignment]
-        _den, _band, no_rules = band_strip(ctx.image("column_raw", key), p.ink_threshold, **bar_kwargs(p))
-        return no_rules
+        w = next(c for c in ctx.product("column_windows", page).columns if c.col == col)
+        return band_and_strip(p, w, ctx.image("column_raw", key))[2]
