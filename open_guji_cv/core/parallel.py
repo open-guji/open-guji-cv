@@ -96,7 +96,7 @@ AUDITED: dict[str, ParallelAudit] = {
              "缓存在 step 上（`_decider`），打分只读；ai_evidence 按指纹读文件。warm_first：主进程先跑一页建 LM。"
              "在线大模型（enable_online_llm，缺省关）要写盘上缓存与调用日志、按次限流，开着时退回串行。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
     "row_segment": ParallelAudit(
-        mem_gb=1.0,
+        mem_gb=4.0,   # 2026-11-25：全唐文 001 大页实测单进程约 4 GB（执行机 cgroup 13.4 GB，4 进程 OOM，任务 #17580）；原登记 1.0 压不住
         note="run_page 只读本页 gate_manifest／column_windows／列图与册级人裁表（lookup，只读），"
              "U-Net 裁判是进程内单例（get_judge），每个 worker 各载一份；列图惰性再生写的是本页的键，"
              "改戳走 ImageCache 的锁。第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 26 s；worker 里 torch 1 线程（2026-10-20）。"),

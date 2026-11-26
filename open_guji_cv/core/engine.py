@@ -338,7 +338,8 @@ def _lib_store_token(font: dict) -> str:
 #: 双线版框下端剥层修订号（见 `_self_payload` 里 `frame_layer_rev` 一段）。改 `impl/keben/column.py` 里
 #: `frame_layers` 下端 ≥2 才走到的剥层判据、又登了 code_equiv 时 +1。
 #: 1：cv #1891，下端第三道线只认边距证据，末字「二／三」下横不再被当框剥掉（殿本 ZM 报，2026-11-25）。
-FRAME_LAYER_REV = 1
+#: 2：CV1 补 #1891，第三道候选离 Step1 内框线 >10 行的也只认边距证据（vol04 p207c6、vol05 p149c6 等末字下横离内框线 13 行白）。
+FRAME_LAYER_REV = 2
 
 
 def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False) -> dict:
