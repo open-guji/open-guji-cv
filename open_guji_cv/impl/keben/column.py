@@ -149,6 +149,9 @@ THIRD_MARGIN_T = 0.95
 #: 第三道候选与上一道线之间空白不到这么多行的，只认边距证据；空白够的（vol02 夹具里隔着 8~15 行白的第三道虚线）仍按老判据认。
 #: 殿本 vol03 内框线之下紧跟的是末字（隔 2~6 行，字横画粘着字身一路连下去），vol02 的第三道虚线与前一道隔 8~15 行。
 THIRD_GAP_MIN = 8
+#: 第三道候选起点离 Step1 内框线再远过这么多行的也只认边距证据（2026-11-25，CV0 复核 vol04 p207c6、vol05 p149c6）：
+#: 末字下横与内框线隔 13 行白，只靠 THIRD_GAP_MIN 放不过；它离 Step1 线 13~15 行，vol02 的第三道虚线离 Step1 线 2~7 行（仅 145:6 为 12，宁可留残线）。
+THIRD_NEAR_INNER = 10
 #: 下端**第三道**线（剥完内外两道之后第二次找）只认边距证据（2026-11-25，ZM 报殿本列末「二/三」被判成「一」）：
 #: 末字的下横（「二」「三」满宽粗横、前面隔白）跨度够 0.85，旧判据把它当第三道线剥掉（vol21 p130c2 剥 82 行、vol03 p64c1
 #: 剥 129 行，正常 43）。真框线横贯整列、在文字带外的边距里也有墨，字止于文字带；位置分不开（Step1 线常落在外框内沿，
@@ -317,7 +320,7 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             return None                          # 缓起：字的底边，不是线
         cols = np.where(ink2[j:k].any(axis=0))[0]
         extent = (cols[-1] - cols[0] + 1) / bw if len(cols) else 0.0
-        if margin_only and j - cut < THIRD_GAP_MIN:   # 第三道只认边距证据（见 THIRD_MARGIN_T 注）
+        if margin_only and (j - cut < THIRD_GAP_MIN or hint is None or j > hint + THIRD_NEAR_INNER):   # 第三道只认边距证据（见 THIRD_MARGIN_T 注）
             if m is not None and float(m[j:k].max()) >= THIRD_MARGIN_T and \
                     float(m[j:k].max()) - float(np.median(m)) >= LAYER2_MARGIN_RISE:
                 return k

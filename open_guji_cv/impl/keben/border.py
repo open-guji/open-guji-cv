@@ -385,6 +385,10 @@ def _top_bar_edge(curve: np.ndarray, lo: int) -> float | None:
     return _outer_edge(curve, lo, float(lo + min(peaks))) if peaks else None
 
 
+#: `_fit_head_raise` 迭代上限（每列几轮）：只在值真变了才再来一轮，这个上限只兜底来回跳的情形。
+HR_FIT_MAX_ROUNDS = 4
+
+
 def _fit_head_raise(out: list[HeadRaiseBorder], curves: list, text_cols: set[int],
                     g: _HRGeom) -> list[HeadRaiseBorder]:
     """抬头列认下以后校内框高度（`detect_head_raise(fit=True)`，2026-11-25，A21 版面基准）。
@@ -415,8 +419,10 @@ def _fit_head_raise(out: list[HeadRaiseBorder], curves: list, text_cols: set[int
             continue
         by_col[c] = HeadRaiseBorder(col=c, inner_y=float(oy + gap), outer_y=float(oy), estimated=True)
     changed = True
-    while changed:
+    rounds = 0
+    while changed and rounds < HR_FIT_MAX_ROUNDS * max(1, len(by_col)):
         changed = False
+        rounds += 1
         for c in sorted(by_col):
             b = by_col[c]
             cv = curves[c - 1] if 0 < c <= len(curves) else None
@@ -435,16 +441,20 @@ def _fit_head_raise(out: list[HeadRaiseBorder], curves: list, text_cols: set[int
                     if wd <= g.THIN_WD_MAX and (best is None or curve[ci] > best[1]):
                         best = (y, float(curve[ci]))
                 if best is not None:
-                    by_col[c] = HeadRaiseBorder(col=c, inner_y=best[0],
-                                                outer_y=best[0] - (r.inner_y - r.outer_y),
-                                                estimated=b.estimated or r.estimated)
-                    changed = True
+                    nb = HeadRaiseBorder(col=c, inner_y=best[0],
+                                         outer_y=best[0] - (r.inner_y - r.outer_y),
+                                         estimated=b.estimated or r.estimated)
+                    if nb != b:        # 原地不动的更新不算变（脈經 01 p67：两邻列互吸、同值反复写，死循环）
+                        by_col[c] = nb
+                        changed = True
                     break
                 oy = _top_bar_edge(curve, lo)
                 if oy is not None and abs(oy + gap - r.inner_y) <= 2 * HR_FIT_OUTER_DY:
                     # 细线淡到认不出，但本列最上一道粗框条跟邻列在同一高度（同一个抬头框）：内框按本页内外间距从框条推
-                    by_col[c] = HeadRaiseBorder(col=c, inner_y=float(oy + gap), outer_y=float(oy), estimated=True)
-                    changed = True
+                    nb = HeadRaiseBorder(col=c, inner_y=float(oy + gap), outer_y=float(oy), estimated=True)
+                    if nb != b:
+                        by_col[c] = nb
+                        changed = True
                     break
     return [by_col[c] for c in sorted(by_col)]
 
