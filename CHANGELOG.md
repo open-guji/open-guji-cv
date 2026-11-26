@@ -126,6 +126,10 @@
 
 - PATCH（11-25，CV0「字块随包存 R2」第一步，产物与 23 步 code_hash 逐位不变，L0）：`RunContext.chain_fingerprint(步, 页)`＝该步及全部上游这一页 manifest 指纹的合哈希（跨机共享派生图的键）；`RunContext.materialize` 缓存不在时先问 `core.derived.PAGE_FETCHER`（只管 `char_patch`，由 manager 注册；产出它的那一步自己在跑时不问；同页只问一次；`GUJI_PATCH_FETCH=0` 关），取不到照旧现算；`ImageCache.put_bytes` 放取回的已编码图。`core/step.py`、`core/derived.py`、`products/cache.py` 不在任何 code_deps。
 
+## [0.7.114] - 2026-11-26
+
+史記线 PATCH＝v0.7.113＋#1918 移植（boundary_net、layout_off_tol）。dev 已有，本节只记账。
+
 ## [0.7.113] - 2026-11-26
 
 史記线 PATCH＝v0.7.112＋#1921＋#1923 移植（codepoint_no_exempt）。dev 已有这两项，本节只记账。
