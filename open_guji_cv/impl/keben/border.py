@@ -760,6 +760,8 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
         for side, vi, sign in (("right", 0, -1.0), ("left", len(verticals) - 1, 1.0)):
             if outer_side in ("left", "right") and side != outer_side:
                 continue        # 按套书规则：靠版心一侧没有外框，不量
+            if (frame_layers or {}).get(side) == 1:
+                continue        # 册声明这一侧单线（四周單邊）：最外线就是版框，没有外框
             base = np.array([(width - 1) - verticals[vi].x_at(y) for y in ys])
             offs = np.arange(OUTER_GAP_MIN, gap_max + 1, 1.0) * sign
             prof = []
@@ -1999,7 +2001,10 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
             lattice_fallback=grid_lattice_fallback,
             **grid_thresholds(col_pitch, frame_height))
     else:
-        vlines_old = find_vertical_lines(mask, expected_count=expected_cols + 1)
+        # 册声明左／右＝1（四周單邊）：该侧最外线就是版框，不往里找内框（缺省空，逐位不变）
+        _ns = tuple(k for k in ("left", "right") if (frame_layers or {}).get(k) == 1)
+        vlines_old = find_vertical_lines(mask, expected_count=expected_cols + 1,
+                                         **({"no_snap": _ns} if _ns else {}))
         filled_old = [False] * len(vlines_old)
     # 上下边框曾经各 1.4s、并成 2 线程有收益；分块 BLAS 之后各只剩 0.17s，
     # 线程开销反而更大——跟窗口级线程池一起撤了，理由见 peak_line_search.py 顶部。
