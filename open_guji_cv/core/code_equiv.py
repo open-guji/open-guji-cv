@@ -560,6 +560,8 @@ _BY_U_1124 = ("裁定按字格永久编号 u 查 seed_admit.ruling_by_u（书级
               "（史記首轮 --jobs 4 p106 一页不同，同代码单跑两次、整 18 页复跑均相同，按并发偶发记）；"
               "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-24（CV0）")
 
+_LOOKUP_PAGES_1839 = ("cv #1839（dev 9dfcf8d1，11-25）：feedback.lookup.human_chars 加 pages 参数缺省 None，None 时走原调用 book_bindings(book, log)；"
+                      "seed_admit 调 human_chars 不传 pages，按构造逐字节同。只改签名与一行分支，CV0 11-25 补登（另一协调者报 seed_admit 指纹漂）。")
 _BY_U_CACHE_1125 = ("ruling_by_u 扩到字组文意在线问前查缓存（rulings.UMAP_SCOPE、RulingStore.get_by_u_ver、RulingCache.lookup 加 cell 参数缺省 None；"
                     "ctx_llm._entry 把 cell 传给 lookup、AnswerCache.lookup 加 cell 参数不用、命中 u 时 extra 记 ruling_key；seed_admit 只在 ruling_by_u 开时设本页 u，"
                     "关时走原分支；CV0 T3）：殿本 vol28 16 页、全唐文 020 16 页、史記 02 18 页（页号与产物包同 _BY_U_1124），"
@@ -2614,6 +2616,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="515edb292d4fb83c5decdc0465df9a61489c5a6769936f62bdcf68e5b97bbf84",
           old="f21db21d1b6240a5886a9b606c0e102dcffe883808ab5d7570c71141ca849b0f",
           evidence=_BY_U_CACHE_1125),
+    # human_chars pages 参数（#1839，CV0 补登 11-25）——dev 哈希
+    Equiv(module="open_guji_cv.feedback.lookup",
+          new="60a454a83f8d64eb04b9639ad7ee846929dfd82406e40a79c4eed7c0c79c5948",
+          old="f92a02c93d76432954d1e021802af8faa4f900855e1de867ba3fd7b7613c9de2",
+          evidence=_LOOKUP_PAGES_1839),
     # 冷缓存再生护栏（CV0 11-25）——dev 哈希
     Equiv(module="open_guji_cv.steps.column_warp",
           new="6b0b6c3c9e3a73899ebfc525dc14b321734194df0280e02d51a5018ce1ed8741",
@@ -2732,7 +2739,12 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     # seed_admit 的参数类与参数表搬到 steps.seed_admit_params（CV4 整理 2026-11-23，纯搬家，殿本 vol28 16 页、全唐文 020 16 页、
     # 史記 02 18 页 seed_admit 产物与 dev b189b2e 逐字节相同）：两块都还是这一版时合回 seed_admit 一项，各书不过期。
     "open_guji_cv.steps.seed_admit": ("1f1f1fb43270438a7f7ae51c94fbf4f26b93ba7317a21bd05334211b1820663c", (
-        ("open_guji_cv.steps.seed_admit", "110207be5504990642f6643c8ca608235f82e7d22c2e8f09a57fede22626b6d6"),
+        # 2026-11-26 CV4 PR3c：seed_admit.py 再拆出 common／lanes／shapes 三块（纯搬家＋字块读取改经模块属性调用，
+        # 殿本 vol28、全唐文 020、史記 02 共 50 页产物与 dev 逐字节相同），四块都还是这一版时照样合回旧 seed_admit 一项。
+        ("open_guji_cv.steps.seed_admit", "425f028ce7eeb0df7898611698cf8cfdcfa2a7ddf7a43829fe92c14b8120f20a"),
+        ("open_guji_cv.steps.seed_admit_common", "e9dcb6a9f748f479bec5b536784893a9db0297867ae0d23b750f9eacb05a3310"),
+        ("open_guji_cv.steps.seed_admit_lanes", "d372c3a9245e947aeb235335460dc5f193eef77371b1050c5af5ea3472041baa"),
+        ("open_guji_cv.steps.seed_admit_shapes", "ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77"),
         ("open_guji_cv.steps.seed_admit_params", "e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091"),
         # 书级放行通道钩子（缺省 None，CV4 2026-11-25）：书仓没覆盖时合回，各书指纹不变；全唐文 k13 覆盖后照常过期
         ("open_guji_cv.impl.keben.admit_lanes", "26976aeeb23db0ece76f341f7cefbc0c2a4e25fbed3faa4671bcace3f4672cac"))),

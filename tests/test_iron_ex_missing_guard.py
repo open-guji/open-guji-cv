@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """铁证放行遇对照刻例原图缺失 → 转待审（`seed_admit.iron_ex_missing_guard`，overview#554）：只收紧。自造数据。"""
 from __future__ import annotations
+import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 
 import open_guji_cv.steps  # noqa: F401
 import open_guji_cv.steps.seed_admit as sa
@@ -66,7 +67,7 @@ def test_real_iron_decide_collects_only_cache_misses(tmp_path, monkeypatch):
         def match(self, *a, **k):
             return _Match()
 
-    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: np.zeros((20, 20), np.uint8))
+    monkeypatch.setattr(_sac, "_page_patch", lambda *a, **k: np.zeros((20, 20), np.uint8))
     monkeypatch.setattr(nm, "normalize_patch", lambda img, **k: img)
     seen = {}
 

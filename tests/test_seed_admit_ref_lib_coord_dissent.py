@@ -7,6 +7,7 @@
 摆法照抄 `test_seed_admit_ref_lib_diff_guard.py` 与 `test_seed_admit_solo_replace_0928.py`。
 """
 from __future__ import annotations
+import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 
 import open_guji_cv.steps  # noqa: F401
 from helpers import make_book, make_ctx, page_match, write_product
@@ -75,7 +76,7 @@ def test_replace_form_lib_not_excluded_still_swaps(tmp_path, monkeypatch):
 
 def test_replace_form_lib_excluded_keeps_align(tmp_path, monkeypatch):
     import open_guji_cv.steps.seed_admit as sa
-    monkeypatch.setattr(sa, "_edge_pair_excluded", lambda a, b: {a, b} == {"既", "旣"})
+    monkeypatch.setattr(_sac, "_edge_pair_excluded", lambda a, b: {a, b} == {"既", "旣"})
     kw = dict(cands=[("既", 0.97), ("當", 0.90)], align_char="旣", align_op="replace")
     r = _run(tmp_path, monkeypatch, **kw, params={"replace_form": "lib"})
     assert r.char == "既"                                     # 开关关：照旧换库形
