@@ -36,7 +36,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 CV = HERE.parents[1]
 sys.path.insert(0, str(HERE))
-import republish as rp  # noqa: E402
+import release_support as rp  # noqa: E402
 
 GUJI = [sys.executable, "-m", "open_guji_cv.cli_v2"]
 SHARED = ("corpus", "references", "layout", "groups")
