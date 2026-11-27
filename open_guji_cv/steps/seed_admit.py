@@ -295,7 +295,7 @@ class SeedAdmitStep(Step):
         from ..utils.jiazhu_order import sort_by_reading
         from ..variant_ledger import BookLedger
         p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
-        p = no_ref_page_params(p, page)
+        p = no_ref_page_params(p, page, ctx.book)
         vmap = VariantMap.load(p.variants or None)
         if p.semantic_extra:
             vmap = _ExtraSemanticMap(vmap, _parse_semantic_extra(p.semantic_extra))
@@ -1229,12 +1229,12 @@ def _no_ref_page(book, p: "SeedAdmitParams", page: int) -> bool:
     return bool(p.no_ref_pages) and page in set(_expand_pages(list(p.no_ref_pages)))
 
 
-def no_ref_page_params(p: "SeedAdmitParams", page: int) -> "SeedAdmitParams":
-    """无参校本页（`no_ref_pages`）上把 `no_ref_params` 叠到本步参数上；别的页、或没配，原样返回同一个对象。"""
-    if not p.no_ref_pages or not p.no_ref_params:
+def no_ref_page_params(p: "SeedAdmitParams", page: int, book=None) -> "SeedAdmitParams":
+    """无参照页（册配置 `reference_profile` 声明 `kind: none`，或 `no_ref_pages`／`page_kinds.no_ref`）上把 `no_ref_params`
+    叠到本步参数上；别的页、或没配，原样返回同一个对象。两种写法同一口径（同 `_no_ref_page`，参校本 bug 修 CV0 11-27）。"""
+    if not p.no_ref_params:
         return p
-    from ..core.book import _expand_pages
-    if page not in set(_expand_pages(list(p.no_ref_pages))):
+    if not _no_ref_page(book, p, page):
         return p
     bad = [k for k in p.no_ref_params if k not in type(p).model_fields or k.startswith("no_ref_")]
     if bad:

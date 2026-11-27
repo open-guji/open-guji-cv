@@ -1092,8 +1092,9 @@ class SeedAdmitParams(BaseModel):
     （脉经 01 林億序、06 牒文，2026-11-19 用户定）。这些页对不上参校本是常态、不是切分坏，按 `no_ref_params`
     换一套放行参数。写法同页号（整数或 "5-7"）。空＝没有这类页（不进 dump）。"""
     no_ref_params: dict = {}
-    """`no_ref_pages` 上换用的 seed_admit 参数（书级），如 `{solo_5b_cov: 0.95, solo_5b_min_n: 1}`：只在这些页
-    叠在本步参数上，别的页不变。键须是本步参数名（不许再嵌 `no_ref_*`）。空＝不换（不进 dump）。"""
+    """无参照页上换用的 seed_admit 参数（书级），如 `{solo_5b_cov: 0.95, solo_5b_min_n: 1}`：只在这些页
+    叠在本步参数上，别的页不变。无参照页＝`no_ref_pages`（`page_kinds.no_ref`）或册配置 `reference_profile` 声明
+    `kind: none` 的页（11-27 起两种写法同一口径）。键须是本步参数名（不许再嵌 `no_ref_*`）。空＝不换（不进 dump）。"""
     book_lanes: dict = {}
     """书级无参照补放通道的取值（2026-11-24 CV4，Sheldon 定）：交给书仓 `code/` 覆盖的钩子 `impl/keben/admit_lanes.noref_lanes`，
     cv 不解释其中的键，原样进参数指纹；`data`（路径表，相对数据目录）是通道要读的数据文件，内容哈希进 `book_lanes_fingerprint`。
