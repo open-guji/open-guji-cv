@@ -680,6 +680,9 @@ _LEGACY_BAND_1127 = ("旧产物包重放（CV4 算法待办 #13）：column_end 
                      "与 v0.7.112 现算逐像素同；全唐文 020 main 包（cv0.7.104-…-k11，inner_bar_span）12 页 108 列图＋2064 字块与 v0.7.104 同。2026-11-27（CV2）")
 
 
+_SEG_BOX_1127 = ('seed_admit 字框几何闸 seg_box_check（CV2，缺省空、不进参数 dump；空时 _seg_box_pass 不调，seed_admit_lanes 只多常量与新函数 seg_box_defects／_seg_box_pass）：朱楓林集 01 册 6 页（3,10,25,50,86,104，rev-001-r0 包 cv0.9.6 当上游）seed_admit 与 origin/dev fde00a0 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-27（CV2，MBJ 碎格放行成「一」）')
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.steps.column_end",
           new="5ff011688402af99e9afecfe4bb381016b1c892805a7b93f5de3c80d59d9af33",
@@ -2846,6 +2849,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="dcfb3042cc0706190cf659355b14e8de16e63f28f6163282b2b5fb85cd8e4634",
           old="7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97",
           evidence=_NOREF_UNIFY_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='40700ebd73f8c72fc7ed2842606345bb30fed8ee5c7bc884b623dc3bef0f98ca',
+          old='4c1df66c210c3ccef9acb3e7b1fab4491a3bbfe02a77adcc5e039b6ee7ca92e8',
+          evidence=_SEG_BOX_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit_params',
+          new='21dac7395856fdfb4777801d1973a37e1a3c5c905b15b2e20f2fd71ba009f610',
+          old='5f8dd48c565d4f7660a9d464c2aabcb59181767362c140e9c1823d74c6579a49',
+          evidence=_SEG_BOX_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit_lanes',
+          new='7327c59b4abbbced958a46c98bcfd8db75c16d7379b4ae5e4bf8f83a536f1fc5',
+          old='98fdf5949dc19daa7d1e913c39e02a2d6a9f5fc3683d8d9586957b882317aac0',
+          evidence=_SEG_BOX_1127),
 )
 
 
