@@ -98,7 +98,9 @@ class CutGateParams(BaseModel):
     #: L2c 自检（2026-11-25，用户定）：当前左/右切点比「框内缘之后最少墨处」（`side_cut_points`，算时忽略上下
     #: 边框前后各 `cut_probe_margin` 行）更靠里超过此像素数 → 拒收 `cut_too_inward`。0 = 关。
     #: 标定：全唐文 053 360 列、脉经 420 列、殿本 vol01 360 列，切点与最少墨处的偏差分位 99% 均 ≤0，
-    #: 超 6px 只有全唐文 053 p148c9 左侧一列（30px，切进字里）；10 留足余量。
+    #: 超 6px 只有全唐文 053 p148c9 左侧一列（30px）；10 留足余量。**更正（11-25 看大图）**：p148c9 是误报——
+    #: 那是双线里的细内线（墨 0.24），探针认不出，旧切点切在细线里侧反而对。`band` 仍是旧算法的值（`column_band.side_cut`
+    #: 只多抹切点以外），本项照旧比 `band` 与探针。
     cut_inward_max_px: float = 10.0
     cut_probe_margin: int = 60
 
@@ -131,6 +133,9 @@ class CutGateStep(Step):
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: CutGateParams = ctx.params_for(self)  # type: ignore[assignment]
         geom: GateManifest = ctx.product("column_geometry", page)
+        cells = ctx.product("cells", page) if ctx.has_product("cells", page) else None
+        remapped = {cc.col for cc in (cells.columns if cells is not None else [])
+                    if "manual_cells_remapped" in (cc.flags or [])}
         wins: PageWindows = merged_windows(ctx, page)
         cols = wins.columns
         gcols = {g.col: g for g in geom.columns}
@@ -273,6 +278,9 @@ class CutGateStep(Step):
                 flags.append("frame_residue：" + "、".join(
                     f"{end}端残留满宽段 {run} 行" for end, run in residue)
                     + f"（≥{p.frame_residue_min_run} 行判为版框没削干净，flag 不算错）")
+            if c.col in remapped:
+                # 人钉的格按列图几何变化换算过（row_segment 1.54 起，v0.9.6 钉子护栏），只记不拦，口径同 row_segment_gate
+                flags.append("manual_cells_remapped：人钉的格按列图几何变化换算到新列图，位移超过 3px，待人核")
             if p.tier == "gold":
                 reasons.append("human_verdict：金标准入尚未接入（P2）")
             if c.col in table_cols and c.col in non_body and non_body[c.col][0] == "table":

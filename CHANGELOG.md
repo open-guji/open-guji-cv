@@ -3,18 +3,22 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
-## [0.9.6] - 2026-11-26
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26，CV0 定）：刻本链出口闸 `cut_gate` 也认 row_segment 列旗 `manual_cells_remapped`（钉子按列图几何换算、位移 >3px），列级 flags 记「待人核」，只记不拦，口径同 row_segment_gate；manager ≥ v0.6.38 按它出 S05 待审卡。
 
-补发（PATCH，L0）＝v0.9.5＋#1924（钉子护栏，CV0 11-26 批；dev 上已有 MINOR 改动，故走补发线）。指纹不变（code_equiv 登记）。配 manager ≥ v0.6.35（写钉子时记几何底 geom）。
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26，CV0 批的钉子护栏第二步）：`row_segment` 套整列钉子（manual-cells）前比钉子写入时记的列图几何底（manager v0.6.35 `column_basis.geom`）：一致照套；不一致经旧／新 `ColumnMapper` 把格框经原图换到新列图，角点最大位移 >3px 的列打 `manual_cells_remapped`，出口闸（row_segment_gate）记旗「待人核」。没记 geom 的老钉子照原坐标套、只在日志提示。开关登记表 outer_bar 记「直线页可能被记成三段，人钉切格的书慎开」。缘由：全唐文 031–060 outer_bar 让列图挪 10–32px，钉子照旧坐标套切偏。
+- PATCH（缺省 `any` 产物逐字节不变，待 code_equiv 登记，L0；书上开 `no_ref` 为 D 档，只动 `seed_admit`；CV0 2026-11-26，Sheldon 定）：`seed_admit` 加 `solo_5b_scope: any|no_ref`。`no_ref`：无参照放行 `match_solo_5b` 只放①`reference_profile` 声明 `kind: none` 或 `page_kinds.no_ref` 的页、②有参校本页上坐标对位为缺字（〓／▣）的位；有参校本页上一个对位字都没拿到的格留待审（全唐文 main 包 8 册实数：有参校本页 94 格受影响，none 页 7,513 格不变）。缺省不进参数 dump。
 
-- PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26）：`row_segment` 套整列钉子（manual-cells）前比钉子写入时记的列图几何底（manager v0.6.35 `column_basis.geom`）：一致照套；不一致经旧／新 `ColumnMapper` 把格框经原图换到新列图，角点最大位移 >3px 的列打 `manual_cells_remapped`，出口闸（row_segment_gate）记旗「待人核」。没记 geom 的老钉子照原坐标套、只在日志提示。开关登记表 outer_bar 记「直线页可能被记成三段，人钉切格的书慎开」。缘由：全唐文 031–060 outer_bar 让列图挪 10–32px，钉子照旧坐标套切偏。
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV2 2026-11-26）：`row_segment` 加两个开关（缺省关、不进参数 dump）。`layout_off_tol`：无先验格网违表＋劈字只多 ≤tol、劈字／格高不匀／穿字严格更好时改选（全唐文 060:3:3 多出空格；053 册 L2 列全对 323→324、0 回退）。`boundary_net`／`boundary_net_p`：字间界线判官（新 `impl/keben/boundary_net`＋模型 `models/boundary_net_shiji_v1`），只重排全正文列内部低分切线、格数不变（史記 42 cut-lattice 线 789→808/874、错列修回 4、好列不坏）。史記 42 40 页 row_segment 逐字节同，新 code_dep 经 SPLITS 合回。
 
-## [0.9.5] - 2026-11-26
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-26，GM4 批量规则）：人裁事件分级 `events.event_level`（`payload.level` 优先；`actor=model` 没写 level 的按 9 个人授意批次认 human，其余 ai；看图结论/文意裁定/模型判断来源为 None）。新 `counts_as_pin`＝原 `counts_as_human` 口径（人裁或已放行 AI 钉），lookup/bindings/republish 改调它；`counts_as_human` 收紧为只认 human，只给统计评测用。史記 02、殿本 vol28、全唐文 020 共 54 页 seed_admit 逐字节同。
 
-补发（PATCH，用户 11-26 定「发 patch 随时用」）＝v0.9.4＋#1899（字块按页取回接口，配 manager ≥ 含 #1013 的版本）。产物与各步 code_hash 逐位不变，各书不过期。
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26）：`border_detect` 加开关 `outer_scale`（缺省关、不进参数 dump）：外框探测的像素量（搜索窗上限、墨条厚度上限、外延刹车、先验窗、条外纸带）按列距/220 放大，只对列距 >220px 的页（全唐文大图）起作用。全唐文外框粗条厚约 56px、外延离界行 80~95px，关着时压在殿本标的窗上限 78、或被厚度上限 40 挡掉，上下框判 none 或外延截在 78（046 p93）。layout-gold 79 页开着框型判对 287→289，殿本、史記 0 页变；关着 79 页逐页同。全唐文要用在册配置写 `params: {border_detect: {outer_scale: true}}`（书线定）。
 
-- PATCH（11-25，CV0「字块随包存 R2」第一步，产物与 23 步 code_hash 逐位不变，L0）：`RunContext.chain_fingerprint(步, 页)`＝该步及全部上游这一页 manifest 指纹的合哈希（跨机共享派生图的键）；`RunContext.materialize` 缓存不在时先问 `core.derived.PAGE_FETCHER`（只管 `char_patch`，由 manager 注册；产出它的那一步自己在跑时不问；同页只问一次；`GUJI_PATCH_FETCH=0` 关），取不到照旧现算；`ImageCache.put_bytes` 放取回的已编码图。`core/step.py`、`core/derived.py`、`products/cache.py` 不在任何 code_deps。
+- PATCH（指纹换算，产物不变，L0；CV4 11-26，QTW 全唐文 004–030 改钉 k13）：`engine._collapse_splits` 合回后的那一项按旧名记，后面的 SPLITS 条目能把它当一块再合；新 SPLITS 条目把全唐文书仓 k13 的 `guji_book.quantangwen.admit_lanes`（这一版）记成 cv 缺省 `impl.keben.admit_lanes`——没写 `book_lanes` 的册不调钩子，产物同 k11；写了的册参数指纹本就跟着变。效果：全唐文 k11→k13 各步指纹全同（改前 seed_admit 会过期）；殿本、史記、脉经书仓与无书仓、全唐文 k6／k8／k9／k10 各步指纹改前改后全同（27 步逐一比对）。
 
+- 重构（PATCH，产物逐字节不变、指纹不变，code_equiv.SPLITS 合回；CV4 整理 PR3c，Sheldon 11-23「深度整理」）：`steps/seed_admit.py`（5,284 行）拆出三块——`seed_admit_lanes`（整理本／无参照放行通道与降审护栏 26 项：rare_ref、solo_5b、follow_ref、edge_pair、review_lanes、p_ref …）、`seed_admit_shapes`（字形判官 8 遍：rr／wu／hou／part／pair_shape、stroke_veto、book_knn、near_knn）、`seed_admit_common`（各遍共用的常量、小工具与字块读取 `_page_patch`），主模块剩 Step 壳、主循环与其余各遍（3,352 行）。代码原样搬，只把 `_page_patch`／`_edge_pair_excluded` 改成经 `seed_admit_common` 模块属性调用（测试换字块读取改 `setattr(seed_admit_common, "_page_patch", …)`）；对外名字照旧从 `steps.seed_admit` import。
+
+- MINOR（用户 2026-11-25 定「接进 2b、缺省开」；动 `column_band`，从 2b 起过期）：2b 新开关 `column_band.side_cut`（缺省开）：整列竖直墨量投影（只取上下边框之间、各让 60 行）认出框线，在框线内侧 15% 列宽内取第一个够低处、往里缩 2px 为左右切点，切点外整列抹白（在旧算法抹界行之上再抹）。**文字带 `band` 仍用旧算法的值**：2d 对带宽极敏感，史記 42 测试集用新带列全对 287→264（不缩 274），只抹边 287→284；全唐文 053 新带 324→325、只抹边 324→323。`seg/side_cut` 换成验证版（界行衰减到谷、第一个够低处、半开区间），`cut_gate` L2c 探针随之变；更正 L2c 唯一命中 053 p148c9 是误报（双线细内线）。CV2。
 - PATCH（W1 急修，产物逐字节不变，code_equiv 登记，L0）：`border._fit_head_raise`（head_raise_fit，v0.9.2 起缺省开）死循环——两邻列内框互吸、同值反复写，`while changed` 不结束（脈經 01 p67 单页卡 25 分钟以上，MJ 报）。改为值真变了才再来一轮，另加迭代上限 `HR_FIT_MAX_ROUNDS`×列数兜底。殿本 vol01／04、脈經 01／06 共 21 页逐字节同。CV1。
 
 - PATCH（ZM→CV1 殿本列末「二／三」被判成「一」，11-25；改 `impl/keben/column.py::column_border_trim` 下端剥层，影响 `column_end` 起的产物，只在册配置 `frame_layers` 下端≥2 时走到）：下端外框＋内框剥完后再找的**第三道**线，改为只认边距证据（边距带满墨 ≥0.95，且比列内中位高 ≥0.3），除非它与上一道线隔着 ≥8 行白（vol02 的第三道虚线）；另外 Step1 说内框在某处而该处 ±10 行是白纸时、或候选起点在内框线外 30 行以远时，里面的墨一律当字（vol03 p64c1、vol05 p23c7）。殿本 vol03 全册 108 页比 dev：23 列变，全是末字下横被削回来，无内框残线退步；vol02 夹具 231 端 5 端变（都是旧深剥预警端，1 端 px 不变只改档位名）。上端同类（vol16 p164c3「三」首横离顶 9 行被当第一道框）本 PR 不修。
@@ -117,6 +121,34 @@
 - 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时殿本 vol30、全唐文 020、史記 42 逐字节同，登 code_equiv `_FREE_SEAM_1117`。建议值 0.35。
 
 ## [未发版]
+
+## [0.9.7] - 2026-11-27
+
+从 dev 切（脉经 01 按用户 11-27 定用最新改动重跑）：v0.9.6 之外带上 dev 已合的 #1899、#1900（2b side_cut 缺省开）、#1911、#1914、#1918（boundary_net、layout_off_tol 缺省关）、#1919、#1920（solo_5b_scope）、#1921、#1923、#1930、#1932、#1933。
+指纹变更：对 v0.9.6，column_band、cut_gate（#1900 side_cut 缺省开）、seed_admit 起过期；不要的书写 params.column_band.side_cut: false 可免 column_band 过期。底库 b35 不变。
+
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-26，GM2 分工）：页绑定盘上缓存（`cache/<册>/bindings`）键加算法哈希 `algo`（`bindings.py`、`anchor.py`、`anchor_backfill.py` 三文件 sha256 前 16 位）：换了这三处代码的 cv，旧绑定缓存不再命中、现算。防同一工作区换 cv 版本后沿用旧版算的绑定。
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-26，GM4 方案第九节定 A）：删钉垫片 `pin_removed`：`feedback.bindings.removed_pin_events` 读 `<feedback>/pins/*.state.jsonl`（manager 钉状态流 `pin_state`，每个 `pin_id` 后到覆盖先到），最后为 `removed` 的钉，其 `payload.events` 列的答案事件不进 `human_chars`、不进绑定表（`expired`／`reactivated` 不删）。没有钉状态文件时行为不变。钉状态是数据、不进指纹：写了 removed 要从 `seed_admit` 起 force 重放。cv 改读编好的钉表后去掉。
+
+## [0.9.6] - 2026-11-26
+
+补发（PATCH，L0）＝v0.9.5＋#1924（钉子护栏，CV0 11-26 批；dev 上已有 MINOR 改动，故走补发线）。指纹不变（code_equiv 登记）。配 manager ≥ v0.6.35（写钉子时记几何底 geom）。
+
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26）：`row_segment` 套整列钉子（manual-cells）前比钉子写入时记的列图几何底（manager v0.6.35 `column_basis.geom`）：一致照套；不一致经旧／新 `ColumnMapper` 把格框经原图换到新列图，角点最大位移 >3px 的列打 `manual_cells_remapped`，出口闸（row_segment_gate）记旗「待人核」。没记 geom 的老钉子照原坐标套、只在日志提示。开关登记表 outer_bar 记「直线页可能被记成三段，人钉切格的书慎开」。缘由：全唐文 031–060 outer_bar 让列图挪 10–32px，钉子照旧坐标套切偏。
+
+## [0.9.5] - 2026-11-26
+
+补发（PATCH，用户 11-26 定「发 patch 随时用」）＝v0.9.4＋#1899（字块按页取回接口，配 manager ≥ 含 #1013 的版本）。产物与各步 code_hash 逐位不变，各书不过期。
+
+- PATCH（11-25，CV0「字块随包存 R2」第一步，产物与 23 步 code_hash 逐位不变，L0）：`RunContext.chain_fingerprint(步, 页)`＝该步及全部上游这一页 manifest 指纹的合哈希（跨机共享派生图的键）；`RunContext.materialize` 缓存不在时先问 `core.derived.PAGE_FETCHER`（只管 `char_patch`，由 manager 注册；产出它的那一步自己在跑时不问；同页只问一次；`GUJI_PATCH_FETCH=0` 关），取不到照旧现算；`ImageCache.put_bytes` 放取回的已编码图。`core/step.py`、`core/derived.py`、`products/cache.py` 不在任何 code_deps。
+
+## [0.7.114] - 2026-11-26
+
+史記线 PATCH＝v0.7.113＋#1918 移植（boundary_net、layout_off_tol）。dev 已有，本节只记账。
+
+## [0.7.113] - 2026-11-26
+
+史記线 PATCH＝v0.7.112＋#1921＋#1923 移植（codepoint_no_exempt）。dev 已有这两项，本节只记账。
 
 ## [0.9.4] - 2026-11-26
 

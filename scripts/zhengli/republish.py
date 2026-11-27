@@ -1258,7 +1258,7 @@ def bind_check(products: Path, book: str) -> dict:
     import datetime as dt
     from collections import defaultdict
     from guji_manager.exp.rough_bench import _split_key
-    from open_guji_cv.feedback.events import EventLog, counts_as_human, iter_events_readonly
+    from open_guji_cv.feedback.events import EventLog, counts_as_pin, iter_events_readonly
     from open_guji_cv.products.store import ProductStore
     sys.path.insert(0, str(HERE))
     from pending_route import deciding, overridden_ids
@@ -1273,7 +1273,7 @@ def bind_check(products: Path, book: str) -> dict:
     by_page: dict[int, list] = defaultdict(list)
     mine = []
     for e in sorted(iter_events_readonly(EventLog()), key=lambda e: (e.ts, e.batch, e.seq)):
-        if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_human(e):
+        if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_pin(e):
             continue
         if not deciding({"kind": e.kind, "payload": e.payload or {}}):
             continue
@@ -1845,6 +1845,11 @@ def copy_figs(export_dir: Path, d: Path, ch: str) -> int:
     if not src.exists():
         return 0
     shutil.copyfile(src, d / f"{ch}.fig.json")
+    try:        # 换过图源的书 cord 已换到网站页图坐标，fig.json 的框要跟 cord 走（F-OV-13；ZM 11-26 殿本 vol19）
+        from guji_manager.swap.booktext import sync_fig_file
+        sync_fig_file(d, ch)
+    except ImportError:
+        pass
     imgs = Path(export_dir) / "fig" / ch
     dst = d / "fig" / ch
     if dst.exists():

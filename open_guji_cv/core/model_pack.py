@@ -78,6 +78,10 @@ KINDS: tuple[Kind, ...] = (
     # 目录名带版本，换权重或索引出 `_v2`，不动 `_v1`
     Kind("stroke_evidence", "repo", "models/stroke_evidence_v*/*", "global", "global",
          ("rare_candidates",), "合成数据训的笔画检测（net.pt）＋GlyphWiki 展开的 9.8 万字骨架索引（skel.npz、skel_forms.json）"),
+    # 2c 字间界线判官（`impl/keben/boundary_net.py`，row_segment `boundary_net` 参数，缺省关）：只重排正文列内部切线。
+    # 目录名带书与版本，重训出 `_v2`，不动 `_v1`
+    Kind("boundary_net", "repo", "models/boundary_net_shiji_v*/model.pt", "book", SHIJI,
+         ("row_segment",), "史記 20–41 册生产切分（含人钉）当银标训的字间界线二分类 CNN"),
     # 字组 IDS 切分 U-Net：原先算在语料底库（config/groups/<组>/），11-04 挪进模型系统
     Kind("ids_unet", "repo", "config/groups/*/unet.npz", "book", DIANBEN,
          ("seed_admit",), "殿本本组人标切线训的三段切分 U-Net（纯 numpy）"),
