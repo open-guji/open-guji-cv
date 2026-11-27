@@ -45,7 +45,7 @@
 - `eval_row_boundaries.py`：Step3 格线位置 vs 人工金标：逐像素误差（char-segmentation/row-boundaries）。
 - `eval_seam.py`：切缝墨率：格线是不是切在字上（char-segmentation/seam）。
 - `eval_side_rule.py`：评测侧边界行残余剥离（char-segmentation/side-rule）。
-- `eval_step7_replay.py`：Step7（seed_admit）放行判定 · 人裁事件回放评测（只读，不写任何事件 / 产物 / 库）。
+- `eval_step7_replay.py`：Step7（seed_admit）放行判定 · 裁定事件回放评测（只读，不写任何事件 / 产物 / 库）。
 - `eval_struct_heads.py`：Step A（结构头 + 槽位部件头）的验收：在 oov_bench 上量三件事。
 - `eval_struct_rerank.py`：M0 零训练结构重排的验收：在 oov_bench 上量「开 / 关」的 top-1 / top-5 / top-10。
 - `eval_t4_variant.py`：T4 变体形模板：在四庫「shape≠reading」异体分歧冻结子集上报 GW 开关前后的 top-1/5/10。
@@ -162,7 +162,7 @@
 - `backfill_anchors.py`：老裁决补锚：给没有锚的逐格裁决事件写一份持久补锚档（设计见 `feedback/anchor_backfill.py` 模块头）。
 - `bench_font_glyphs.py`：字体字形 vs 刻本字形：分来源的匹配力实测。
 - `book_lib_auto.py`：机器高可信格进书级库（`source: auto`），与人裁刻例分开记、可整批撤回（H 道，2026-09-27 全唐文 #64）。
-- `book_lib_sync.py`：书级字形库增量回收：人裁事件 → 本书自有库（H 道，2026-09-27 全唐文 #64 起）。**可重复跑、幂等**。
+- `book_lib_sync.py`：书级字形库增量回收：裁定事件 → 本书自有库（H 道，2026-09-27 全唐文 #64 起）。**可重复跑、幂等**。
 - `canonicalize_glyph_db.py`：把 GlyphDB（output/glyph.db）里的实例真源统一成 canonical 格式。
 - `canonicalize_glyph_store.py`：把 glyph_store/patches/ 一次性迁移到 canonical 统一格式。
 - `check_grid_offpage.py`：普查：行网格是否跑出页面（跑出去的格必然装不下字，还会挤歪真字）。
@@ -177,7 +177,7 @@
 - `evict_v1_conflict_human_reading_errors.py`：v1 重键 `conflict_human` 里「v1 把字形记成了读法」的例子：撤 v1 实例（不动人裁）。
 - `find_border_lines.py`：投影峰匹配找版框线：批量跑竖直界行/边框 + 上下边框，画到图上，出报告页。
 - `freeze_bottom_offset_gold.py`：把 `border-detection/bottom-offset` 的 68 条人工金标转成**绝对页面坐标**并冻结。
-- `harvest_shadow_review.py`：把「影子≠现字」审查页（Artifact）上的人裁收回来，写成人裁事件。幂等。
+- `harvest_shadow_review.py`：把「影子≠现字」审查页（Artifact）上的人裁收回来，写成裁定事件。幂等。
 - `ia_download_zongmu.py`：下载武英殿刻本《钦定四库全书总目》全套扫描（Internet Archive）。全书 99 册两段编号，`--vols 11-20` 按册号选，缺省取 `_tif.zip`（与现有原图逐像素一致）。
 - `ingest_cutline_flip_verdicts.py`：切分裁决台（A/B 盲裁）的裁决 → `char-segmentation/touching-cuts` 金标。
 - `kage_render_glyphwiki.py`：把 GlyphWiki 的 KAGE 字形离线渲染成位图——给「Unicode 未收字」造模板的原型。
@@ -204,7 +204,7 @@
 - `report_intrusions.py`：版面线侵入全书扫描 → 回流上游（G2 行列识别 / G3 字符网格）的证据报告。
 - `research_split_scan.py`：调查脚本：全册扫描 _split_touching 的工作面（P2 #12 曲线切分前置量面）。
 - `reshift_cutline_gold.py`：切线金标坐标整体平移：Step2 列窗上界变了，把金标搬到当前坐标系。
-- `resync_human_verdicts.py`：把字形库里的人裁记录对齐到**最新**人裁事件：改判被幂等闸挡住的，撤旧进新。
+- `resync_human_verdicts.py`：把字形库里的人裁记录对齐到**最新**裁定事件：改判被幂等闸挡住的，撤旧进新。
 - `round_check.py`：一轮审阅的体检（命令行外壳）。判据与阈值在 `open_guji_cv/eval/round_check.py`。
 - `run_llm_context_eval.py`：一条命令：出题 → 调外部大模型 API → 算分 → 出报告。
 - `sample_live.py`：无偏 rand 抽样 + **现场提取**（不依赖 phase4 产物，免整册重建）。
@@ -216,7 +216,7 @@
 - `shadow_gate_train.py`：训练影子放行闸的模型文件（带元数据 + 指纹）。
 - `siku_volume_extract.py`：四庫總目整册标点层（A4）＋实体层（A5）流水线。逻辑在 `open_guji_cv/render/siku_extract.py`。
 - `snapshot_recognize_profile.py`：recognize-profile 全量样本巡检（**脚本，不是 pytest 测试**）。
-- `stat_verdict_evidence.py`：只读统计：各书现有人裁事件里带 anchor / bbox / 图像指纹 / 产物版本的比例。
+- `stat_verdict_evidence.py`：只读统计：各书现有裁定事件里带 anchor / bbox / 图像指纹 / 产物版本的比例。
 - `struct_gold_residual.py`：结构金标：把 300 张卡按「模型预测 vs IDS 表全部拆法」分三类，只把真有分歧的留给人裁。
 - `survey_review_queue.py`：人审队列普查：谁在队列里、为什么、哪路信号对、哪条新通道能吃掉多少。
 - `test_vol02_extract.py`：四库总目第二册 (vol02) 标点、分段与实体链接抽取测试脚本。

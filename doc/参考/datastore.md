@@ -216,9 +216,9 @@ export GUJI_DATA_BRANCH=$B                            # 之后本 shell 里一�
 guji db pull -w <工作区>                              # 拉到 $GUJI_DATA_HOME/exp__GUJI-…/<工作区>/，重建该分支自己的 glyph.db
 #   …照常跑 cv：products 也落在该分支的数据目录里，不碰工作区的 products/ 和 glyph.db…
 guji db sync -w <工作区>                              # 推到实验分支（新图进实验桶）
-guji db diff -w <工作区>                              # 与 main 逐文件比：哪些文件不同、只在一边有、哪些人裁事件只在实验分支上
+guji db diff -w <工作区>                              # 与 main 逐文件比：哪些文件不同、只在一边有、哪些裁定事件只在实验分支上
 unset GUJI_DATA_BRANCH
-guji db import --from $B -w <工作区> --dry-run        # 人裁事件导回 main（要正式令牌）；--events ids.txt 只导挑出的
+guji db import --from $B -w <工作区> --dry-run        # 裁定事件导回 main（要正式令牌）；--events ids.txt 只导挑出的
 guji db branch delete $B                              # 用完就删（Neon 免费档整个项目最多 10 个分支）
 ```
 
@@ -232,7 +232,7 @@ guji db branch delete $B                              # 用完就删（Neon 免�
 - **比较** `guji db diff -w <工作区> [--branch $B] [--against main] [--show N]`：只读两边的 `source_files` 与图清单（不下载内容）：
   `changed`（两边都有、sha 不同，带两边行数）、`only_in_branch`、`only_in_against`、`events_only_in_branch`（即 import 会导的）。
   分开以后 main 也可能有新写入，所以报的是「现在不同的」，不分是谁改的。产物（products）的对比用 `guji exp report` 或直接比两个 products 目录。
-- **导回正式库**：只有显式的路，不整分支合并。人裁事件用 `guji db import`（经 Worker、按 id 幂等，要正式令牌）；
+- **导回正式库**：只有显式的路，不整分支合并。裁定事件用 `guji db import`（经 Worker、按 id 幂等，要正式令牌）；
   别的文件（册 yaml、配置、台账）把实验分支数据目录里要的那几个文件拷到 main 的数据目录，再在 main 上 `guji db sync`，留正常的 push 记录。
 - 实验分支的写入在 `imports`／`changes` 里照样留痕（`stats.branch`），开删分支记 Workers Logs。
 
@@ -282,7 +282,7 @@ build-base 第一次新开 `corpus-base`、再出新版旧版还在、普通 pus
 ### 共享刻例库（2026-10-19 起，共享方案 S5）
 
 - **出新版**：`guji glyphlib build -w <来源书工作区> --name glyphlib-<族>-v<N> [--min-confirm 2] [--per-char 3] [--note …]`。
-  从来源书的字形库真源与人裁事件里挑：人裁过（`label_status='human'`）、在至少 `--min-confirm` 个不同批次确认过
+  从来源书的字形库真源与裁定事件里挑：人裁过（`label_status='human'`）、在至少 `--min-confirm` 个不同批次确认过
   （`confirm` 的 `v=confirm` 且字形一致，或 `cell_review` 选了这个字）、体检没标异常、不是近似字，每字最多 `--per-char` 张
   （确认批次多的优先）。门槛 sheldon 10-19 定为「确认两次」（缺省值）。
 - **现有版本**：`glyphlib-qkp-v1`（殿本 `siku-zongmu` 出，1,076 例、827 字，10-19 推进中心库 rev 8296）。

@@ -1,6 +1,6 @@
 # Step7（seed_admit）放行判定 · 云端人裁回放评测
 
-2026-09-30 M2 道。回答「Step7 放行判定没有独立金标、只能复用人裁事件回放——云端能不能用 guji-workspace 的
+2026-09-30 M2 道。回答「Step7 放行判定没有独立金标、只能复用裁定事件回放——云端能不能用 guji-workspace 的
 `feedback/events` 人裁历史构造一个只读回放评测」。
 
 **结论先说**：能做、已做出来（`scripts/eval_step7_replay.py`，只读），但**这套回放在现有事件上量不出放行精度**——
@@ -12,7 +12,7 @@
 | 输入 | 来源 | 说明 |
 |---|---|---|
 | Step7 产物 `seed_admit/p*.json` | guji-workspace 孤儿分支 `products-snap/vol01-20260927`（`cloud-…-32b9c2b.tar.zst`，Step1–7 全书）；vol02 只有老快照 `products-snap/vol02-20260927`（cd04496，Step2 修复前）| 每格一条：`admit` / `channel` / `char` / `provenance` / `doubts` / `evidence` |
-| 人裁事件 | `<ws>/feedback/events/<book>-*.jsonl` | 取 `target.step=seed_admit ∧ unit=cell ∧ kind∈{confirm,verdict} ∧ actor=user`；同一格取 `(ts, batch, seq)` 最大的一条；`actor=model` 只计数不当真值 |
+| 裁定事件 | `<ws>/feedback/events/<book>-*.jsonl` | 取 `target.step=seed_admit ∧ unit=cell ∧ kind∈{confirm,verdict} ∧ actor=user`；同一格取 `(ts, batch, seq)` 最大的一条；`actor=model` 只计数不当真值 |
 | 异体等价 | `VariantMap.semantic` | 放行字与人裁字「语义同」不算错（忠于刻本字形方针） |
 
 解快照：`zstandard` 解 `cloud-*.tar.zst`（云端没有 `zstd` 命令，`uv pip install zstandard`），

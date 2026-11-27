@@ -206,26 +206,33 @@ def _fetch_votes(q: dict, tok: str) -> list[dict]:
             return items
 
 
-def old_rev_votes(ws: Path, text_id: str, rev: str) -> tuple[list[dict], str]:
-    """旧 rev 上的全部精校票，**两种记法都读**（11-13 第五册 005-r13 的 25 票因只查一种而漏落）：
+#: 「各格独立」口径下票账的 rev 占位：票只按条目认（`?items=1`），不再分哪一版单；`latest_votes` 要求 rev 相符，
+#: 这里给每张票盖同一个占位。清理计划 v2 第二节：没有 rev／批次概念。
+CURRENT = "current"
+
+
+def old_rev_votes(ws: Path, text_id: str, rev: str | None, chapter: str | None = None) -> tuple[list[dict], str]:
+    """一章的全部精校票，**两种记法都读**（11-13 第五册 005-r13 的 25 票因只查一种而漏落）：
     ① 按单版记的票（`?rev=`，旧网站）；② 按条目记的票（`?items=1`，新网站，11-10 起），按条目换成该册现在的格号、rev 记成 `rev`。
+    **`rev=None` 是各格独立口径**（发布闸用）：只读②（按条目的票），不分哪一版单，票上的 rev 记成 `CURRENT`，要给 `chapter`。
     有 CELLREVIEW_TOKEN 就直接读网站 KV（刚投的票每日同步还没并进中心库），否则读数据目录里每日同步存下的
     `feedback/lists/web/<书>/<rev>.jsonl` 与 `items.jsonl`。**没有令牌又没有快照 → 停**（以前当成「0 票」静默放行）。
     返回 (票, 来源)。"""
     tok = os.environ.get("CELLREVIEW_TOKEN")
-    chap = rev.split("-r")[0]
+    chap = chapter or (rev or "").split("-r")[0]
+    tag = rev or CURRENT
     if tok:
-        by_rev = _fetch_votes({"rev": rev, "book": text_id}, tok)
+        by_rev = _fetch_votes({"rev": rev, "book": text_id}, tok) if rev else []
         raw_items = _fetch_votes({"items": "1", "book": text_id}, tok)
         where = "网站 KV"
     else:
         wd = data_dir(ws) / "feedback" / "lists" / "web" / text_id
         f, fi = wd / f"{rev}.jsonl", wd / "items.jsonl"
-        if not f.exists() and not fi.exists():
-            sys.exit(f"✗ 读不到旧单 {rev} 的票：没设 CELLREVIEW_TOKEN，数据目录也没有 {f} 和 {fi}。"
-                     "先 guji db pull（或设令牌直读网站），别当成「0 票」往下走。")
+        if not (rev and f.exists()) and not fi.exists():
+            sys.exit(f"✗ 读不到{'旧单 ' + rev if rev else '这章'}的票：没设 CELLREVIEW_TOKEN，数据目录也没有 {fi}"
+                     + (f" 和 {f}" if rev else "") + "。先 guji db pull（或设令牌直读网站），别当成「0 票」往下走。")
         rd = lambda p: [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()] if p.exists() else []
-        by_rev, raw_items = rd(f), rd(fi)
+        by_rev, raw_items = (rd(f) if rev else []), rd(fi)
         where = "中心库快照（每日同步之后的票看不到，设 CELLREVIEW_TOKEN 读 KV）"
     out = list(by_rev)
     n_item = 0
@@ -238,9 +245,9 @@ def old_rev_votes(ws: Path, text_id: str, rev: str) -> tuple[list[dict], str]:
             it = store.items.get(v.get("item") or "")
             if it is None:
                 continue
-            out.append({**v, "a": it["cell"], "rev": rev, "item": it["id"]})
+            out.append({**v, "a": it["cell"], "rev": tag, "item": it["id"]})
             n_item += 1
-    return out, f"{where}：按单版 {len(by_rev)} 票＋按条目 {n_item} 票"
+    return out, f"{where}：" + (f"按单版 {len(by_rev)} 票＋" if rev else "") + f"按条目 {n_item} 票"
 
 
 #: 单子还没记 `source_rev` 的时代（v0.5.29 之前）出的单，出单时刻早于这一刻的，在换过图源的册上一律算旧图上出的。
@@ -483,7 +490,7 @@ def _vote_cell(v: dict) -> str:
 def ledger_md(led: dict) -> str:
     c = led["counts"]
     ok = "账平" if sum(c.values()) == led["votes"] else "账不平"
-    s = (f"票账 {led['rev']}：有效 {led['votes']} 格 = 写入 {c['写入']} ＋ 一致 {c['与已有人裁一致']} ＋ 看不出 {c['看不出']}"
+    s = (f"票账{'（各格独立）' if led['rev'] == CURRENT else ' ' + str(led['rev'])}：有效 {led['votes']} 格 = 写入 {c['写入']} ＋ 一致 {c['与已有人裁一致']} ＋ 看不出 {c['看不出']}"
          f" ＋ 挂起 {c['挂起']} ＋ 未落 {c['未落']}" + (f" ＋ 无法对位 {c['无法对位']}" if "无法对位" in c else "") + f"（{ok}）")
     if led.get("predates"):
         s += f"\n  ⓘ 旧单出在换图源之前：{led['predates']}；旧格号经迁移事件" + \
@@ -1195,8 +1202,9 @@ def wait_publish(since: str, timeout_s: int = 1800, poll_s: int = 20) -> str | N
     return None
 
 
-def smoke(text_id: str, chapter: str, rev: str, tries: int = 10, wait_s: int = 60) -> list[str]:
-    """读者侧冒烟：线上单 rev 是新的、单上引用的每张图都取得到（CDN 刚清，旧单可能还要一会儿才换掉）。返回问题列表。
+def smoke(text_id: str, chapter: str, rev: str | None = None, tries: int = 10, wait_s: int = 60) -> list[str]:
+    """读者侧冒烟：单上引用的每张图都取得到（CDN 刚清，旧单可能还要一会儿才换掉）；给了 `rev` 还要线上单就是这一版
+    （整张换单流程用），`rev=None` 不看版本（各格独立口径，发布闸用）。返回问题列表。
 
     最多等约 10 分钟：册006 r5（10-24）发布跑完后新图 403 了 3 分钟以上，过一会儿全是 200（CDN 生效慢）。"""
     import time
@@ -1207,7 +1215,7 @@ def smoke(text_id: str, chapter: str, rev: str, tries: int = 10, wait_s: int = 6
             doc = json.loads(body)
         except Exception as e:  # noqa: BLE001
             doc, bad = {}, [f"取不到线上单：{e}"]
-        if doc and doc.get("rev") != rev:
+        if doc and rev and doc.get("rev") != rev:
             bad = [f"线上单还是 {doc.get('rev')}，不是 {rev}"]
         elif doc:
             for name in sorted(sprite_pub.refs(doc)):
