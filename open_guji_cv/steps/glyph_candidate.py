@@ -119,7 +119,8 @@ class GlyphCandidateStep(Step):
         consumes=("char_index", "char_patch"), produces=("glyph_candidate",),
         params=GlyphCandidateParams,
         needs=("model",),
-        code_deps=("open_guji_cv.clustering.cnn_candidates", "open_guji_cv.clustering.emb_pack"),
+        code_deps=("open_guji_cv.clustering.cnn_candidates", "open_guji_cv.clustering.emb_pack",
+                   "open_guji_cv.clustering.normalize", "open_guji_cv.hanzi.db"),
         enabled_by="enabled",
     )
 
