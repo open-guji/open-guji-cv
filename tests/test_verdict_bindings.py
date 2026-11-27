@@ -173,3 +173,21 @@ def test_rebind_library_shapes_keeps_relabel_after_void(monkeypatch):
     assert "v:1:1:1" not in B.rebind_library_shapes("v", lib)         # 不传改标时刻：旧行为
     early = {"v:1:1:1": "2026-11-09T00:00:00+00:00"}
     assert "v:1:1:1" not in B.rebind_library_shapes("v", lib, relabeled_at=early)   # 改标早于作废：作废
+
+
+def test_missing_manifest_entry_does_not_validate_old_unanchored(monkeypatch):
+    """manifest 查不到这一页（底包缺行）：现行切分起始时间未知，不能当 0——否则无框旧人裁
+    被当成裁于现行切分之后、原格号照用（史記 03 册 #17918，CV0 2026-11-27）。"""
+    import open_guji_cv.report.slots as slots
+    cur = _cells({(1, 5, ""): (0, 400, 100, 500)})
+    store = NS(read=lambda *a, **k: cur, read_prev=lambda *a, **k: None,
+               manifest=lambda *a, **k: {}, step_dir=lambda *a, **k: __import__("pathlib").Path("/nonexistent/x"))
+    monkeypatch.setattr(slots, "cells_step", lambda b: "row_segment")
+    monkeypatch.setattr("open_guji_cv.products.alt_view.alt_cols_of", lambda *a, **k: None)
+    vers = B._cells_versions("v", 1, store)
+    assert vers[-1][0] == "current" and vers[-1][1] == float("inf")
+    monkeypatch.setattr(B, "_cells_versions", lambda *a, **k: vers)
+    monkeypatch.setattr(B, "_similar", lambda *a, **k: None)
+    rows = B.compute_page("v", 1, [_ev("v:1:1:5", 1, None, ts="2026-09-10T00:00:00Z")],
+                          store=object(), cache=NS(get=lambda *a, **k: None), glyph_db=None)
+    assert rows[0]["status"] == "unanchored" and B.usable(rows[0]) is None

@@ -65,6 +65,7 @@ X2 实测切分重算后同一块像素上的格已经改成完整字，裁决�
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import datetime
 from pathlib import Path
@@ -156,6 +157,9 @@ def page_state(book: str, page: int, store, cells_from: str | None = None) -> tu
     return cells, store.sha(book, PATCH_STEP, key)
 
 
+_NO_TS_WARNED: set[tuple[str, int]] = set()
+
+
 def _cells_versions(book: str, page: int, store) -> list[tuple[str, float, float, object]]:
     """[(标签, 起, 止, PageCells)]，按「止」升序。现行版 起=manifest 时间、止=∞；上一版、备份版 起=-∞。"""
     from ..core.spec import page_key
@@ -165,7 +169,19 @@ def _cells_versions(book: str, page: int, store) -> list[tuple[str, float, float
     out = []
     cur = store.read(book, step, key, CELLS_KIND)
     ent = store.manifest(book, step).get(key)
-    cur_ts = float(ent.ts) if ent is not None else 0.0
+    # manifest 里查不到这一页（底包只带产物、manifest 缺行或被截）：不知道现行切分何时生成。
+    # 以前当 0（「一直就是这版」）——无框旧人裁就被当成裁于现行切分之后，原格号照用、
+    # 补锚也取现行格（史記 03 册 #17918 落错 16 格，CV0 2026-11-27）。改为当作「刚切」：
+    # 现行版不给旧裁决补锚，无框旧人裁回待审（宁可重看不可错用）。
+    if ent is not None:
+        cur_ts = float(ent.ts)
+    else:
+        cur_ts = float("inf")
+        if cur is not None and (book, page) not in _NO_TS_WARNED:
+            _NO_TS_WARNED.add((book, page))
+            logging.getLogger(__name__).warning(
+                "bindings(%s:%d)：%s manifest 没有这一页，现行切分起始时间未知，无框旧人裁按待审处理",
+                book, page, step)
     prev = store.read_prev(book, step, key, CELLS_KIND)
     if prev is not None:
         born = _first_written(store.manifest(book, step).path, key, store.prev_sha(book, step, key))
