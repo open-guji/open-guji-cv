@@ -1581,9 +1581,11 @@ def _obar_line(mask01: np.ndarray, v: VLine, yt: float, yb: float, w: int, sgn: 
 
 
 def refit_outer_by_bar(mask: np.ndarray, top: HLine, bottom: HLine, verticals: list[VLine], w: int, h: int,
-                       outer_side: str | None = None) -> tuple[list[VLine], int]:
+                       outer_side: str | None = None, skip_sides: tuple = ()) -> tuple[list[VLine], int]:
     """最外两条竖线按「先粗条、后细线」重定位（见 OBAR_*）。返回 (新线表, 换了几条)。换了的线是三段格式；
-    调用方负责把整页统一成三段。`outer_side`（册配置 side_frame）给了就只做那一侧。"""
+    调用方负责把整页统一成三段。`outer_side`（册配置 side_frame）给了就只做那一侧。
+    `skip_sides`（含 "left"／"right"，册声明 frame_layers 该侧=1，四周單邊）：该侧不做——粗条本身就是版框，
+    朝里没有细内框，不能按「粗条内沿 − 间距」补一条（朱楓林集 01 册 p87）。"""
     n = len(verticals)
     if n < 4:
         return verticals, 0
@@ -1591,6 +1593,8 @@ def refit_outer_by_bar(mask: np.ndarray, top: HLine, bottom: HLine, verticals: l
     out, changed = list(verticals), 0
     for vi, sgn, side in ((0, 1, "right"), (n - 1, -1, "left")):
         if outer_side in ("left", "right") and side != outer_side:
+            continue
+        if side in skip_sides:
             continue
         v = verticals[vi]
         xc = v.x_at(h / 2.0)
@@ -1848,7 +1852,8 @@ def refit_vlines_by_track(mask: np.ndarray, top: HLine, bottom: HLine, verticals
 def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLine,
                     straight: list[VLine], w: int, h: int, vline_polyline: bool,
                     bend_w80_med: float | None = None, outer_bar: bool = False,
-                    outer_side: str | None = None, vline_track: bool = False, gray: np.ndarray | None = None):
+                    outer_side: str | None = None, vline_track: bool = False, gray: np.ndarray | None = None,
+                    single_sides: tuple = ()):
     """直线竖线 → 本页最终竖线：弯页整页换三段折线（先量 w80 再决定，直线页原样通过），再按横带证据重定位
     （见 SNAP_*），换了线的页统一成三段格式。要在 top/bottom 之后，折点 y 取自这条线跟上下版框的交点。
     返回 (verticals, segments, w80_med, w80_max, snapped)。`detect_borders` 与列宽重拟合后的
@@ -1858,7 +1863,8 @@ def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLin
     verticals, snapped = snap_verticals_to_evidence(binm, top, bottom, verticals, w, h,
                                                     straight=list(straight))
     if outer_bar:                  # 缺省关不走，与加参数前一模一样
-        verticals, n_bar = refit_outer_by_bar(mask, top, bottom, verticals, w, h, outer_side=outer_side)
+        verticals, n_bar = refit_outer_by_bar(mask, top, bottom, verticals, w, h, outer_side=outer_side,
+                                                  skip_sides=single_sides)
         snapped += n_bar
     if vline_track:                # 缺省关不走
         verticals, n_trk = refit_vlines_by_track(mask, top, bottom, verticals, w, h, gray=gray)
@@ -1992,6 +1998,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     """
     h, w = gray.shape[:2]
     mask = (gray < ink_threshold).astype(np.float64)
+    # 册声明左／右＝1（四周單邊）：该侧最外线就是版框，不往里找内框、不按粗条补内框（缺省空，逐位不变）
+    _ns = tuple(k for k in ("left", "right") if (frame_layers or {}).get(k) == 1)
 
     if column_grid:
         # 阈值按本书的列距/框高换算；两个先验都不给时 grid_thresholds 原样返回
@@ -2001,8 +2009,6 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
             lattice_fallback=grid_lattice_fallback,
             **grid_thresholds(col_pitch, frame_height))
     else:
-        # 册声明左／右＝1（四周單邊）：该侧最外线就是版框，不往里找内框（缺省空，逐位不变）
-        _ns = tuple(k for k in ("left", "right") if (frame_layers or {}).get(k) == 1)
         vlines_old = find_vertical_lines(mask, expected_count=expected_cols + 1,
                                          **({"no_snap": _ns} if _ns else {}))
         filled_old = [False] * len(vlines_old)
@@ -2050,6 +2056,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     verticals, vseg, w80_med, w80_max, vlines_snapped = _bend_verticals(
         mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline, bend_w80_med,
         **({"outer_bar": True, "outer_side": outer_side} if outer_bar else {}),
+        **({"single_sides": _ns} if _ns else {}),
         **({"vline_track": True, "gray": gray} if vline_track else {}))
     fit_kw = {"fit": True} if head_raise_fit else {}
     head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend,
