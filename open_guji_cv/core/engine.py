@@ -614,6 +614,49 @@ class Engine:
             return STALE, entry        # 显式失效（人裁落定等），见 ManifestEntry.invalidated
         return (FRESH if entry.fingerprint == fp else STALE), entry
 
+    #: 册改名标记（guji-manager `ops/rename_volume`，11-27 用户定老书 cv 册名「只改、不重跑」）：
+    #: `<产物根>/<册>/_renamed.json` 记着改写前后的产物 sha 对照表。
+    RENAME_MARKER = "_renamed.json"
+
+    def _rename_inverse(self) -> dict[str, str]:
+        """改名标记里的对照表反过来：改写后 sha → 改写前 sha。没改过名 → 空表。"""
+        inv = getattr(self, "_rename_inv", None)
+        if inv is None:
+            inv = {}
+            mk = Path(self.store.root) / self.book.id / self.RENAME_MARKER
+            if mk.exists():
+                try:
+                    inv = {v: k for k, v in (json.loads(mk.read_text(encoding="utf-8")).get("shamap") or {}).items()}
+                except (OSError, ValueError):
+                    inv = {}
+            self._rename_inv = inv
+        return inv
+
+    def rename_only(self, step: Step, page: int, entry: ManifestEntry | None, code_ok: bool = False) -> bool:
+        """这一页过期只因册改名改写了上游产物：把现在的上游 sha 按改名对照表换回改写前的，指纹与条目逐位相同。
+        代码、参数、册配置有任何一样变了都对不上，照常过期。只给 `status` 用（`run` 照旧按指纹重跑）。
+        `code_ok`（同 `_page_status_row`）：换回后上游与条目记的相同、参数没变、产物记着正式版 cv_version，
+        代码或版本另外变了也算（就是「改名」＋「在跑它的那个版本下新鲜」两条叠加）。"""
+        inv = self._rename_inverse()
+        if not inv or entry is None or entry.invalidated:
+            return False
+        _, ups, ph = self.fingerprint(step, page)
+        if not ups:
+            return False
+        old = {k: inv.get(v, v) for k, v in ups.items()}
+        if old == ups:
+            return False
+        payload = {**_self_payload(step, self.book, ph), "upstream": old}
+        tok = ref_profile_token(step, self.book, page)
+        if tok:
+            payload["ref_profile"] = tok
+        if hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24] == entry.fingerprint:
+            return True
+        now = book_dep_values(step, self.book)
+        return (code_ok and (entry.upstream or {}) == old and entry.params_hash == ph
+                and (now is None or entry.book is None or entry.book == now)
+                and bool(_FORMAL_CV.match(entry.cv_version or "")))
+
     def stale_reason(self, step: Step, page: int, entry: ManifestEntry | None) -> str | None:
         """指纹对不上时说清是哪一样变了（#174）。按能分辨的粒度报：显式失效 > 册配置
         （`book_deps` 值，只有记过 `entry.book` 的条目才分得出）> 参数 > 上游产物 > 代码/版本。
@@ -711,9 +754,13 @@ class Engine:
         n_drift = 0
         reasons: dict[str, int] = {}
         code_only = 0
+        renamed = 0
         cv_versions: dict[str, int] = {}
         for pg in pages:
             st, entry = self.page_status(step, pg)
+            if st == STALE and self.rename_only(step, pg, entry, code_ok):
+                st = FRESH
+                renamed += 1
             if (code_ok and st == STALE and entry is not None and not entry.invalidated
                     and _FORMAL_CV.match(entry.cv_version or "")
                     and self.stale_reason(step, pg, entry) == "代码或版本变了"):
@@ -739,6 +786,8 @@ class Engine:
                             "elapsed": entry.elapsed if entry else None,
                             "error": entry.error if entry else None}
         row = {"counts": counts, "pages": per_page, "drift": n_drift, "stale_reasons": reasons}
+        if renamed:
+            row["rename_only"] = renamed          # 只因册改名改写了上游产物而过期、按新鲜算的页数
         if code_only:
             row["code_only"] = code_only
             row["cv_versions"] = cv_versions

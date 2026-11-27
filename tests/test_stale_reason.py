@@ -227,3 +227,49 @@ def test_status_corpus_and_code_both_changed(corpus_world):
         m.put(dataclasses.replace(e, self_hash="0" * 24))
     st = _eng(dataclasses.replace(book, corpus=7), pl, store, cache).status()
     assert st["steps"]["t_sr_gate"]["stale_reasons"] == {"代码或版本变了；语料钉也变了：corpus 6→7": 2}
+
+
+def _fake_rename(store, book_id="tsr", step="t_sr_gate", period=181.0):
+    """模拟 manager ops/rename_volume：改写上游产物页（sha 变），条目 sha256 换新，写改名标记。"""
+    import hashlib
+    import json
+    shamap = {}
+    m = store.manifest(book_id, step)
+    for key in ("p0001", "p0002"):
+        p = store.path(book_id, step, key)
+        old = hashlib.sha256(p.read_bytes()).hexdigest()
+        d = json.loads(p.read_text(encoding="utf-8"))
+        d["t_sr_per"]["period"] = period
+        p.write_text(json.dumps(d, sort_keys=True), encoding="utf-8")
+        new = hashlib.sha256(p.read_bytes()).hexdigest()
+        shamap[old] = new
+        m.put(dataclasses.replace(m.get(key), sha256=new))
+    (store.root / book_id / "_renamed.json").write_text(json.dumps({"from": "x", "to": book_id, "shamap": shamap}))
+    return shamap
+
+
+def test_status_rename_only_counts_as_fresh(world):
+    """11-27 老书册名「只改、不重跑」：下游只因改名改写了上游产物而过期，status 当新鲜，记 rename_only。"""
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    store.path("tsr", "t_sr_gate", "p0001")           # 确认产物在
+    import json
+    if "t_sr_per" not in json.loads(store.path("tsr", "t_sr_gate", "p0001").read_text(encoding="utf-8")):
+        pytest.skip("产物文件布局变了")
+    _fake_rename(store)
+    st = _eng(book, pl, store, cache).status()
+    assert st["steps"]["t_sr_down"]["counts"][FRESH] == 2
+    assert st["steps"]["t_sr_down"]["rename_only"] == 2
+    # 没有改名标记：照实报「上游产物变了」
+    (store.root / "tsr" / "_renamed.json").unlink()
+    st = _eng(book, pl, store, cache).status()
+    assert st["steps"]["t_sr_down"]["stale_reasons"] == {"上游产物变了": 2}
+
+
+def test_status_rename_only_still_flags_param_change(world):
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    _fake_rename(store)
+    st = _eng(book, pl, store, cache, params={"t_sr_down": {"gain": 2.0}}).status(code_ok=True)
+    assert st["steps"]["t_sr_down"]["counts"][STALE] == 2
+    assert "rename_only" not in st["steps"]["t_sr_down"]
