@@ -3,7 +3,7 @@
 | 档 | 是什么 |
 |---|---|
 | [guji_page_v0.2.md](guji_page_v0.2.md) | 每字带坐标的页面文本格式 guji-page（现行 v0.2；v0、v0.1 留档） |
-| [人裁事件规范.md](人裁事件规范.md) | 人裁事件（`feedback/events/`、`feedback/vision/`、中心库 `events` 表）的信封、单位键、各 kind 的 payload、排序覆盖、锚与重切漂移、已知问题；机读 schema `formats/guji_feedback_event_v1.schema.json`，体检 `guji events lint` |
+| [裁定事件规范.md](裁定事件规范.md)（原「人裁事件规范」，[旧名跳转](人裁事件规范.md)） | 裁定事件（`feedback/events/`、`feedback/vision/`、中心库 `events` 表）的信封、单位键、各 kind 的 payload、排序覆盖、锚与重切漂移、已知问题；机读 schema `formats/guji_feedback_event_v1.schema.json`，体检 `guji events lint` |
 | [缺页.md](缺页.md) | 缺页：册 yaml `gaps:`（只按图片页号记缺在哪张图之后）与导出的 `NNN.gaps.json`、Step9 稿注记、网站显示 |
 | [norm_layer_proposal.md](norm_layer_proposal.md) | 规范层（异体 → 通行字）方案调研 |
 | `F*_handoff.md` | F1／F2 道交接记录 |
