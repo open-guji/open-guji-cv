@@ -672,7 +672,23 @@ _DASH_ROW_1127 = ("cell_shrink 新开关 end_dash_row（缺省关，extractor.st
                   "cell_shrink 与 origin/dev f48a746 产物逐字节相同；scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn，2026-11-27（CV2）")
 
 
+_LEGACY_BAND_1127 = ("旧产物包重放（CV4 算法待办 #13）：column_end 读不到 2b column_bands 且 column_windows 带拆步前的 band 时，"
+                     "经 column_band.legacy_strip 按拆步前 clean_column 前半在内存里现算（不带 side_cut、不写包、不进缓存）；"
+                     "有 column_bands 的正常流程只多一次 has_product 判断。正常流程：全唐文 053 新包（cv0.9.4-…-qtw053-ms6-a2）20 页"
+                     "（2,4,12,18,28,45,49,63,75,76,77,81,83,87,89,92,94,95,98,99）column_band、column_end 与 origin/dev 43d439d 产物逐字节相同"
+                     "（scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn）。旧包重放：史記 42 main 包（cv0.7.112-…-k27）12 页 96 列图＋2496 字块"
+                     "与 v0.7.112 现算逐像素同；全唐文 020 main 包（cv0.7.104-…-k11，inner_bar_span）12 页 108 列图＋2064 字块与 v0.7.104 同。2026-11-27（CV2）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
+    Equiv(module="open_guji_cv.steps.column_end",
+          new="5ff011688402af99e9afecfe4bb381016b1c892805a7b93f5de3c80d59d9af33",
+          old="52cc8c91c4dde6974a4983fc034368ff9fc95a6d3cabec344f18366b4c263522",
+          evidence=_LEGACY_BAND_1127),
+    Equiv(module="open_guji_cv.steps.column_band",
+          new="f4771c07d631207bbde36ca444e5e29afe6246440354416198c33387d4266ba1",
+          old="dd6c40980a9be9078ee3592d323b12f878d7e1a3d367259950ff8fbd3b886043",
+          evidence=_LEGACY_BAND_1127),
     Equiv(module="open_guji_cv.steps.cell_shrink",
           new="bf5f8a8a1722c32dead433b707813368d99ceb8980b582b92ec26a5bd802043d",
           old="d7914794283cc70fa547e6dc003a410dda62e962684123b63eccfcce169d975c",

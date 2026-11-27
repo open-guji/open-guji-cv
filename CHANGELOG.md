@@ -3,6 +3,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV2 2026-11-27，CV4 算法待办 #13）：拆步前的旧产物包（各书钉 0.7.x 线的 main 包）没有 `column_bands`，现行 cv 再生 `column_image`／`char_patch` 时 `column_end` 报上游缺失、`seed_admit` 整页 PatchUnavailable。现在 `column_end` 读不到 2b 产物且 `column_windows` 带旧 `band` 时，经 `column_band.legacy_strip` 按拆步前 `clean_column` 前半在内存里现算（不带 `side_cut`，不写包、不进缓存），文字带用包里记的值；新包缺 2b 照旧报错。史記 42（v0.7.112 包）、全唐文 020（v0.7.104 包）各 12 页列图＋字块与包的原版本逐像素同。
+
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26，CV0 定）：刻本链出口闸 `cut_gate` 也认 row_segment 列旗 `manual_cells_remapped`（钉子按列图几何换算、位移 >3px），列级 flags 记「待人核」，只记不拦，口径同 row_segment_gate；manager ≥ v0.6.38 按它出 S05 待审卡。
 
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26，CV0 批的钉子护栏第二步）：`row_segment` 套整列钉子（manual-cells）前比钉子写入时记的列图几何底（manager v0.6.35 `column_basis.geom`）：一致照套；不一致经旧／新 `ColumnMapper` 把格框经原图换到新列图，角点最大位移 >3px 的列打 `manual_cells_remapped`，出口闸（row_segment_gate）记旗「待人核」。没记 geom 的老钉子照原坐标套、只在日志提示。开关登记表 outer_bar 记「直线页可能被记成三段，人钉切格的书慎开」。缘由：全唐文 031–060 outer_bar 让列图挪 10–32px，钉子照旧坐标套切偏。
