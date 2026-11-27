@@ -119,21 +119,55 @@ Actor = Literal["user", "model", "align"]
 MODEL_JUDGMENT_SOURCES = frozenset({"vision", "llm", "knn_infer", "auto"})
 
 
-def counts_as_human(e) -> bool:
-    """这条事件能不能**当人裁用**（进字形库、算已裁、human_chars 认、进绑定表）。
+#: 2026-11-26（GM4 批量规则，用户 11-25 定「尽量批量处理」）：`actor="model"` 而没写 `payload.level` 的老事件里，
+#: 这 9 个批次（按批次名 `~` 前的部分认）是人授意的重写／重绑，字是人定的，算 human；其余 `actor="model"` 算 ai。
+#: 以后新写的事件在 `payload.level` 里写明级别（human／ai），不再靠批次名。与 guji-manager `feedback.levels`、
+#: 中心库 `events.level` 虚拟列（guji-workspace-data#37）是同一张表，改要三处一起改。
+HUMAN_MODEL_BATCHES = frozenset({
+    "H-mojibake-fix-20260927", "r74-v01", "r77-重绑", "r79-v01", "SJ-ry-rebind-1120", "SJ-sheldon-1123",
+    "SJ-L1取消归一-human24", "SJ-v02-rebind-1124", "SJ-歲暫歸一-1125",
+})
+EVENT_LEVELS = ("human", "ai")
+
+
+def event_level(e) -> str | None:
+    """这条事件的**级别**：`"human"`（人裁）、`"ai"`（模型写的、已放行的钉）、None（不算钉：看图结论、
+    文意裁定、`payload.source` 是模型判断来源的）。
+
+    先认 `payload.level`；没有的：`actor` 不是 model 的算 human，是 model 的按批次名查
+    `HUMAN_MODEL_BATCHES`（在表里算 human，其余算 ai）。"""
+    if getattr(e, "kind", None) in ("vision_check", "ctx_ruling"):
+        return None
+    p = getattr(e, "payload", None) or {}
+    if p.get("source") in MODEL_JUDGMENT_SOURCES:
+        return None
+    lv = p.get("level")
+    if lv in EVENT_LEVELS:
+        return lv
+    if getattr(e, "actor", None) != "model":
+        return "human"
+    return "human" if str(getattr(e, "batch", "") or "").split("~", 1)[0] in HUMAN_MODEL_BATCHES else "ai"
+
+
+def counts_as_pin(e) -> bool:
+    """这条事件能不能**当钉用**（进字形库、算已裁、human_chars 认、进绑定表）：人裁或已放行的 AI 钉。
 
     看图结论（`kind="vision_check"`，或任何 `payload.source="vision"` 的事件）一律不算——模型判的
-    可能有错，不能和人亲裁混在一起。
+    可能有错，不能和人亲裁混在一起。`source="auto"`（`scripts/book_lib_auto.py` 的机器高可信刻例）
+    2026-11-05 起也不算：它们只是刻例来源记账，当钉的话会进绑定表，按格号绑，重切后挪格就把别处的字
+    压上去（全唐文 r11 约 45 格）。新的「模型判断」来源要排除时加进 `MODEL_JUDGMENT_SOURCES`。
 
-    ⚠️ **不按 `actor="model"` 一刀切**：`events/` 里早有两类 `actor="model"` 的 confirm，语义各有
-    来路，不能跟着改：①人裁的**机械更正**（`scripts/glyph_codepoint_unify.py` 码位统一、
-    `scripts/mojibake_census.py` 乱码还原）——它们压的就是人裁本身，不认的话旧码位／乱码那条人裁
-    会原样复活；②`source="auto"`（`scripts/book_lib_auto.py` 的机器高可信刻例）2026-11-05 起也不算人裁：它们只是
-    刻例来源记账，刻例由 admit_instance 直接进库、replay 本就跳过；当人裁的话会进绑定表，按格号绑，
-    重切后挪格就把别处的字压上去（全唐文 r11 约 45 格）。新的「模型判断」来源要排除时加进 `MODEL_JUDGMENT_SOURCES`。"""
-    if getattr(e, "kind", None) in ("vision_check", "ctx_ruling"):
-        return False
-    return (getattr(e, "payload", None) or {}).get("source") not in MODEL_JUDGMENT_SOURCES
+    2026-11-26 前这就是 `counts_as_human` 的口径；那时 `events/` 里 `actor="model"` 的 confirm
+    （文意多路、码位统一、乱码还原、错锚修复…约 5,100 条）都当人裁。现在分出级别（`event_level`），
+    但**会改产物的读者一律用本函数**，产物与改前逐字节相同：AI 钉照旧放行（GM4：文本不动、老账不回头重审）；
+    「人裁压过后写的 AI」等书线复核完 AI 盖过人裁的 25 格再做。"""
+    return event_level(e) is not None
+
+
+def counts_as_human(e) -> bool:
+    """这条事件是不是**人裁**（严格，`event_level == "human"`）。只给统计、评测这类「人裁有多少、
+    准不准」的读者用；会改产物的读者用 `counts_as_pin`。"""
+    return event_level(e) == "human"
 
 
 class EventTarget(BaseModel):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """整理一册书：执行脚本（runbook v2 的机器化）。只用标准库，装好 venv 之前也能跑 `env` 步。
 
-用法（详见 doc/runbook/整理一册书.md）：
+用法（详见 doc/archive/runbook/整理一册书.md）：
   python scripts/zhengli/zl.py plan   --book vol05 --ws <ws>            # 看还剩哪些步
   python scripts/zhengli/zl.py run    --book vol05 --ws <ws> --bg       # 从头/断点续跑到第一个要人的闸
   python scripts/zhengli/zl.py run    --book vol05 --ws <ws> --only audit
@@ -870,12 +870,7 @@ def st_export(ctx):
     ctx.st["text_version"] = tv
     num = chapter_no(ctx)
     out = ctx.reports / "_export"
-    # 装了 guji-manager 就走它的导出器（char 带 u，同 republish.export_entry）；没装才用 cv 自带脚本
-    has_mgr = subprocess.run([ctx.venv_py, "-c", "import importlib.util,sys;"
-                              "sys.exit(0 if importlib.util.find_spec('guji_manager.output.guji_format_export') else 1)"],
-                             capture_output=True).returncode == 0
-    entry = ["-m", "guji_manager.output.guji_format_export"] if has_mgr else ["scripts/export_guji_format.py"]
-    cmd = [ctx.venv_py, *entry, "--products", products_dir(ctx), "--book", ctx.book, "--chapter", num,
+    cmd = [ctx.venv_py, "-m", "guji_manager.output.guji_format_export", "--products", products_dir(ctx), "--book", ctx.book, "--chapter", num,
            "--out", out, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
     meta = CV / f"doc/formats/samples/guji_format_v0.1/meta_{ctx.book}.json"
     if meta.exists():

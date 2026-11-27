@@ -109,6 +109,13 @@ def test_link_runs_does_not_bridge_two_in_a_row():
     assert set(jz.link_runs(ents)) == set()               # 防桥接自我扩散
 
 
+def test_link_runs_cc_min_is_book_level():
+    """噪点段否决门槛可按书调（`row_segment.jiazhu_cc_min`，2026-11-18 A22 U3）：脉经小字单字最大连通体 200–600px。"""
+    small = [(i, (92.0, 300.0)) for i in range(3, 6)]
+    assert jz.link_runs(small) == {}                              # 缺省 500：当噪点
+    assert set(jz.link_runs(small, cc_min=200)) == {3, 4, 5}      # 书级 200：认成段
+
+
 def test_link_runs_vetoes_noise_run_by_median_strength():
     """纸面碎点段 span/缝/均衡全能骗过，只有连通体结构分得开。"""
     noise = [(i, (92.0, 300.0)) for i in range(3, 10)]
@@ -336,3 +343,19 @@ def test_link_runs_matches_production_on_same_input():
     ]
     for ents in cases:
         assert jz.link_runs(ents) == flag_jiazhu_runs(ents)
+
+
+def test_gap_center_span_t_rejects_wide_left_right_char():
+    """字宽的书（脉经）：左右结构正文字跨度约 0.8 列距、中缝够宽，缺省 0.75 当成双行；调到 0.82 就不认。"""
+    p = _blank()
+    _box(p, 20, 80, 15, 95)            # 左部件（月）
+    _box(p, 90, 165, 15, 95)           # 右部件（市），跨度 145/185≈0.78
+    assert jz.gap_center(p, ref_w=W) is not None
+    assert jz.gap_center(p, ref_w=W, span_t=0.82) is None
+    assert jz.gap_center(_jiazhu_patch(seam=92), ref_w=W, span_t=0.82) is not None
+
+
+def test_row_segment_jiazhu_span_t_dropped_from_dump_when_default():
+    from open_guji_cv.steps.row_segment import RowSegmentParams
+    assert "jiazhu_span_t" not in RowSegmentParams().model_dump()
+    assert RowSegmentParams(jiazhu_span_t=0.82).model_dump()["jiazhu_span_t"] == 0.82

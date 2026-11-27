@@ -3,8 +3,8 @@ from open_guji_cv.steps.seed_admit import SeedAdmitParams, ref_lib_coord_decide
 
 
 def test_default_off_and_not_dumped():
-    d = SeedAdmitParams().model_dump()
-    assert not any(k.startswith("ref_lib_coord") for k in d)
+    d = SeedAdmitParams(ref_lib_coord_dissent=False).model_dump(mode="json", context={"hash": True})
+    assert not any(k.startswith("ref_lib_coord") for k in d)   # ref_lib_coord_dissent 2026-11-25 起缺省开，这里关掉
     on = SeedAdmitParams(ref_lib_coord=True).model_dump()
     assert on["ref_lib_coord"] is True and on["ref_lib_coord_cov"] == 0.96
 

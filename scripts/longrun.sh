@@ -3,7 +3,7 @@
 # 解决的事：云端容器空闲会被回收——磁盘保留、后台进程全死。会话一被叫醒，一条命令让没跑完的长任务从断点接着跑，
 #           已完成的步骤不重算、已完成的页由 guji 自己的指纹跳过。
 #
-# 用法（一页版见 doc/longrun.md）：
+# 用法（一页版见 doc/参考/longrun.md）：
 #   bash scripts/longrun.sh start  <job文件> [名字] [--env VAR1,VAR2]   起任务（后台；已在跑／已完成则只报告，不重起）
 #   bash scripts/longrun.sh resume [名字|--all]                         被叫醒后就这一条：没跑完且 runner 不在的任务，从断点续
 #   bash scripts/longrun.sh status [名字]                               看进度：状态、当前步、已完成步数、日志最后一条进度行

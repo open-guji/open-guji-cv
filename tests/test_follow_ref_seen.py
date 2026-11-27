@@ -21,7 +21,7 @@ def test_admit_despite_near_form_and_abstain():
 
 
 def test_hard_doubts_block():
-    for dd in ("occluded", "group_flow_disagree", "ctx_garble_run", "护栏:x"):
+    for dd in ("occluded", "group_flow_disagree", "ctx_garble_shape", "护栏:x"):
         assert _d(doubts=[dd]) is None
 
 

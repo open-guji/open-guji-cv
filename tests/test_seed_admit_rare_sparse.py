@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 import open_guji_cv.steps  # noqa: F401
+from open_guji_cv.steps.seed_admit_params import _CONSTANTS
 from open_guji_cv.core.engine import params_hash
 from open_guji_cv.steps import seed_admit as sa
 from open_guji_cv.steps.seed_admit import SeedAdmitParams, rare_sparse_decide
@@ -51,7 +52,8 @@ def test_decide_variant_rare_codepoint():
 
 def test_default_off_not_in_hash():
     assert SeedAdmitParams().rare_ref_sparse is False
-    assert params_hash(SeedAdmitParams()) == params_hash(SeedAdmitParams(rare_ref_sparse_lead=0.05))
+    with pytest.raises(ValueError, match="已退役"):                 # 2026-11-24 起收成常量
+        SeedAdmitParams(rare_ref_sparse_lead=0.05)
     assert params_hash(SeedAdmitParams()) != params_hash(SeedAdmitParams(rare_ref_sparse=True))
 
 
@@ -62,11 +64,12 @@ def test_pass_coord_unanchored_low_cov(tmp_path, monkeypatch):
     kw = dict(rare=["奴", "姒", "奻"], cands=(("努", 0.88),), align=None, coord="奴")
     off = _run(tmp_path / "a", monkeypatch, params={"patch_missing": "skip"}, **kw)
     assert not off.admit
-    on = _run(tmp_path / "b", monkeypatch, params={"rare_ref_sparse": True, "rare_ref_sparse_lead": 0.005, "patch_missing": "skip"}, **kw)
+    monkeypatch.setitem(_CONSTANTS, "rare_ref_sparse_lead", 0.005)
+    on = _run(tmp_path / "b", monkeypatch, params={"rare_ref_sparse": True, "patch_missing": "skip"}, **kw)
     assert on.admit and on.char == "奴" and on.channel == "rare_ref"
     assert on.evidence["rare_ref"]["via"] == "sparse_coord" and on.evidence["rare_ref"]["n_lib"] == 0
     monkeypatch.setattr(sa, "_keben_counts", lambda _p: {"奴": 5})
-    many = _run(tmp_path / "c", monkeypatch, params={"rare_ref_sparse": True, "rare_ref_sparse_lead": 0.005, "patch_missing": "skip"}, **kw)
+    many = _run(tmp_path / "c", monkeypatch, params={"rare_ref_sparse": True, "patch_missing": "skip"}, **kw)
     assert not many.admit
 
 

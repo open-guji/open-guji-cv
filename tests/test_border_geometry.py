@@ -6,6 +6,7 @@ from open_guji_cv.impl.keben.border import (
     _vline_to_new,
     detect_borders,
     detect_head_raise,
+    notch_top,
     detect_outer_borders,
 )
 from open_guji_cv.seg.frame_types import HLine, VLine
@@ -318,6 +319,54 @@ def test_detect_head_raise_scale_keeps_plain_page_clean():
     assert detect_head_raise(mask, top, verts, width=1000, scale=0.7) == []
 
 
+def _notch_page(w=1000, h=800, n_cols=9, border_top=400, notch=(3, 4), inner_y=280, outer_y=244):
+    """抬头列占多数的页：只有 `notch` 那几列在主版框（border_top）下，其余列都抬头到 inner_y。
+    主上框若被认在抬头框的内框线上（inner_y），没抬头的列就是框上的缺口。"""
+    mask = np.zeros((h, w), dtype=np.float64)
+    xs_old = np.linspace(80, w - 80, n_cols + 1)
+    n = n_cols
+    raised = [c for c in range(1, n + 1) if c not in notch]
+    for x_old in xs_old:
+        mask[inner_y:, int(x_old) - 2:int(x_old) + 3] = 1.0
+    nx0, nx1 = int(xs_old[n - max(notch)]), int(xs_old[n - min(notch) + 1])
+    mask[border_top:border_top + 5, nx0:nx1] = 1.0              # 缺口列的主上框（内）
+    mask[border_top - 34:border_top - 16, nx0:nx1] = 1.0        # 外框粗条
+    mask[inner_y:border_top + 3, nx0 + 3:nx0 + 3 + 5] = 0.0     # 缺口里没有界行：两侧是抬头框的墙
+    mask[inner_y:border_top + 3, nx1 - 8:nx1 - 3] = 0.0
+    for blk in ([c for c in raised if c < min(notch)], [c for c in raised if c > max(notch)]):
+        _paint_raised_box(mask, xs_old, cols=blk, inner_y=inner_y, outer_y=outer_y,
+                          border_top=border_top, outer_thickness=18)
+    wrong_top = HLine(y_at_right=float(inner_y), slope=0.0, kind="top")
+    verticals = [VLine(x_at_top=float((w - 1) - x), slope=0.0) for x in xs_old[::-1]]
+    return mask, wrong_top, verticals
+
+
+def test_notch_top_moves_main_top_down_to_notch_and_finds_raised_columns():
+    """vol24 p27、vol28 p9 型：主上框认在抬头框内框上 → 挪到缺口列的框条内沿，其余列全认成抬头。"""
+    mask, top, verts = _notch_page()
+    got = notch_top(mask, top, verts, width=1000)
+    assert got is not None
+    new_top, hr = got
+    assert abs(new_top.y_at(0.0) - 402) <= 3
+    assert sorted(b.col for b in hr) == [1, 2, 5, 6, 7, 8, 9]
+    assert all(abs(b.inner_y - 280) <= 4 for b in hr)
+
+
+def test_notch_top_leaves_plain_page_alone():
+    """普通页：主上框横穿每一列，没有缺口。"""
+    mask, top, verts, _ = _blank_head_raise_page()
+    assert notch_top(mask, top, verts, width=1000) is None
+
+
+def test_notch_top_ignores_blank_column_inside_frame():
+    """普通页的空列（框里白、下面才有字）：主上框横穿它，不是缺口（vol95 p199、vol60 p61 型）。"""
+    mask, top, verts, xs = _blank_head_raise_page()
+    n = len(xs) - 1
+    x0, x1 = int(xs[n - 9]), int(xs[n - 8])
+    mask[560:600, x0 + 10:x1 - 10] = 1.0          # 第 9 列离主框 160px 处才有一道粗墨
+    assert notch_top(mask, top, verts, width=1000) is None
+
+
 def test_hr_geom_scale_one_is_module_constants():
     """scale=1.0 时取的就是模块常数原值（int，不经乘法），旧图产物逐位不变。"""
     from open_guji_cv.impl.keben import border as bg
@@ -406,6 +455,45 @@ def test_detect_outer_borders_rejects_when_ink_continues_beyond():
     r = detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200)
     assert r["bottom_outer_offset"] is None
     assert abs(abs(r["top_outer_offset"]) - (40 + 6)) < 4      # 上边不受连累
+
+
+def _big_outer_page(gap=40, bar=56, pitch=350, n=10, top_y=600, bot_y=2600):
+    """全唐文那样的大图：列距 ~350px、外框粗条厚 ~56px，外延离内框线 gap+bar≈96px（> OUTER_GAP_MAX=78）。"""
+    w = int(pitch * (n - 1) + 600)
+    h = bot_y + 400
+    mask = np.zeros((h, w), dtype=np.float64)
+    xs_old = [300 + pitch * i for i in range(n)]
+    for x_old in xs_old:
+        mask[top_y:bot_y, x_old - 3:x_old + 4] = 1.0
+    mask[top_y:top_y + 8, :] = 1.0
+    mask[bot_y - 8:bot_y, :] = 1.0
+    x_in = xs_old[0]
+    mask[top_y:bot_y, x_in - gap - bar:x_in - gap] = 1.0
+    mask[top_y - gap - bar:top_y - gap, :] = 1.0
+    mask[bot_y + gap:bot_y + gap + bar, :] = 1.0
+    top = HLine(y_at_right=float(top_y + 4), slope=0.0, kind="top")
+    bottom = HLine(y_at_right=float(bot_y - 4), slope=0.0, kind="bottom")
+    verticals = [VLine(x_at_top=float((w - 1) - x), slope=0.0) for x in xs_old[::-1]]
+    return mask, top, bottom, verticals, w, h
+
+
+def test_detect_outer_borders_outer_scale_big_page():
+    """`outer_scale`（2026-11-26）：大图外框粗条超出殿本标的窗口与厚度上限，关着量不到双框；开了按列距放大后量到外延。"""
+    mask, top, bottom, verts, w, h = _big_outer_page()
+    off = detect_outer_borders(mask, top, bottom, verts, width=w, height=h)
+    assert off["top_frame_kind"] != "double" or abs(off["top_outer_offset"]) <= 78
+    on = detect_outer_borders(mask, top, bottom, verts, width=w, height=h, outer_scale=True)
+    assert on["v_outer_side"] == "left"
+    for k in ("v_outer_offset", "top_outer_offset", "bottom_outer_offset"):
+        assert abs(abs(on[k]) - (40 + 56 + 4)) < 8, (k, on[k])
+    assert on["top_frame_kind"] == on["bottom_frame_kind"] == "double"
+
+
+def test_detect_outer_borders_outer_scale_noop_on_small_pitch():
+    """列距 ≤ OUTER_REF_PITCH 的页（殿本、脈經、史記）开不开 `outer_scale` 结果全同。"""
+    mask, top, bottom, verts = _outer_page(gap=40)
+    assert (detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200)
+            == detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200, outer_scale=True))
 
 
 # ---------------------------------------------------------------- 界行折线
@@ -509,3 +597,64 @@ def test_row_windows_drops_rows_outside_image():
     assert rows.min() >= 0 and rows.max() < h
     assert win.shape == (len(rows), 2 * BEND_SEARCH + 1)
     assert (win.sum(axis=1) == 1).all()
+
+
+def _faint_inner_with_char_top(mask, xs, col, inner_y, char_y):
+    """本列抬头框内细线印淡（只留约 20% 墨），线下有一道像字头的横笔。"""
+    n = len(xs) - 1
+    x0, x1 = int(xs[n - col]) + 6, int(xs[n - col + 1]) - 6
+    mask[inner_y - 1:inner_y + 2, x0:x1] = 0.0
+    mask[inner_y - 1:inner_y + 2, x0:x1:5] = 1.0
+    mask[char_y - 1:char_y + 2, x0 + 20:x1 - 20] = 1.0
+
+
+def test_head_raise_fit_snaps_faint_inner_to_neighbour_line():
+    """同一抬头框里一列内细线印淡、认到字头上（殿本 vol01 p30 c6、vol04 p6 c5）：开 fit 后对齐邻列那条线；缺省不变。"""
+    border_top = 400
+    mask, top, verts, xs = _blank_head_raise_page(border_top=border_top)
+    _paint_raised_box(mask, xs, cols=[4, 5, 6], inner_y=285, outer_y=249,
+                      border_top=border_top, outer_thickness=16)
+    _faint_inner_with_char_top(mask, xs, 5, 285, 300)
+    plain = {r.col: r.inner_y for r in detect_head_raise(mask, top, verts, width=1000)}
+    assert abs(plain[5] - 300) <= 3                       # 缺省：认在字头上（现状）
+    got = {r.col: r for r in detect_head_raise(mask, top, verts, width=1000, fit=True)}
+    assert sorted(got) == [4, 5, 6]
+    assert abs(got[5].inner_y - 285) <= 3
+    assert abs(got[4].inner_y - 285) <= 3 and abs(got[6].inner_y - 285) <= 3
+
+
+def test_head_raise_fit_leaves_double_raise_alone():
+    """双抬挨着单抬：单抬列在双抬内框高度是框外白纸，fit 不能把它拉上去。"""
+    border_top = 400
+    mask, top, verts, xs = _blank_head_raise_page(border_top=border_top)
+    _paint_raised_box(mask, xs, cols=[4], inner_y=200, outer_y=164,
+                      border_top=border_top, outer_thickness=16)
+    _paint_raised_box(mask, xs, cols=[5], inner_y=300, outer_y=264,
+                      border_top=border_top, outer_thickness=16)
+    a = {r.col: r.inner_y for r in detect_head_raise(mask, top, verts, width=1000)}
+    b = {r.col: r.inner_y for r in detect_head_raise(mask, top, verts, width=1000, fit=True)}
+    assert a == b
+
+
+def test_fit_head_raise_terminates_on_noop_update():
+    """`_fit_head_raise` 不许死循环（脈經 01 p67，v0.9.2）：本列按粗框条＋间距推出的内框仍比邻列低出
+    HR_FIT_TOL 以上时，下一轮又推到同一个值——原先每轮都置 changed，while 永不结束。"""
+    import threading
+    import numpy as np
+    from open_guji_cv.impl.keben import border as bg
+    from open_guji_cv.seg.frame_types import HeadRaiseBorder
+
+    g = bg._HRGeom(1.0)
+    curve = np.zeros(200)
+    curve[60:70] = 0.9                                   # 一道粗框条，外延 59.5；59.5 + 38 = 97.5
+    out = [HeadRaiseBorder(col=1, inner_y=88.0, outer_y=50.0),
+           HeadRaiseBorder(col=2, inner_y=120.0, outer_y=82.0)]
+    res = {}
+    th = threading.Thread(target=lambda: res.setdefault("r", bg._fit_head_raise(out, [None, (curve, 0)], set(), g)),
+                          daemon=True)
+    th.start()
+    th.join(timeout=10)
+    assert not th.is_alive(), "_fit_head_raise 死循环"
+    r = {b.col: b for b in res["r"]}
+    assert r[2].inner_y == 97.5 and r[2].estimated
+    assert r[1].inner_y == 88.0
