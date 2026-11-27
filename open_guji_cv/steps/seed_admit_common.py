@@ -142,7 +142,9 @@ _LANE_HARD = frozenset({"context_blank_cell", "context_tall_cell", "form_open", 
                         # 坐标对位与现役对位不一致拦下的 ref_lib 格（`ref_lib_coord_dissent`）：同理
                         "ref_lib_coord_dissent",
                         # 坐标对位与 match_solo 系放行字不一致拦下的格（`solo_coord_dissent`）：同理
-                        "solo_coord_dissent"})
+                        "solo_coord_dissent",
+                        # match_solo 系的刻例就在本页本列（`solo_self_exemplar`）：同理
+                        "solo_self_exemplar"})
 
 
 #: R1/R4 另外不碰的：context 乱码护栏拦下过格的**整列**（overview#427：列切窄、整列字块是
