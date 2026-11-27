@@ -666,7 +666,21 @@ _NOREF_UNIFY_1127 = ("seed_admit.no_ref_params 也认 reference_profile none 页
                      "text/state/geom 全不变，只 1 列切分不同（上游 row_segment 跨机差异，两边上游代码相同），该列 1 格送审→放行，其余 seed_admit 逐格同。"
                      "GUJI_CORPUS_DRIFT=warn；哈希按合入时 origin/dev 重算。")
 
+_DASH_ROW_1127 = ("cell_shrink 新开关 end_dash_row（缺省关，extractor.strip_dash_row 只在开时调；关时 grid 不带键、参数 dump 不变）："
+                  "史記 42 册 32 页（cut-bench，--pages 2,3,14,17,18,25,27,34,38,40,43,46,54,55,59,66,69,70,78,79,81,82,93,96,98,99,100,102,106,114,117,135）、"
+                  "全唐文 053 册 29 页（2,4,12,18,28,45,49,63,75,76,77,81,83,87,89,92,94,95,98,99,104,116,118,128,140,146,148,154,159）"
+                  "cell_shrink 与 origin/dev f48a746 产物逐字节相同；scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn，2026-11-27（CV2）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="bf5f8a8a1722c32dead433b707813368d99ceb8980b582b92ec26a5bd802043d",
+          old="d7914794283cc70fa547e6dc003a410dda62e962684123b63eccfcce169d975c",
+          evidence=_DASH_ROW_1127),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="61d9212188fe065ac2aabb018237338420f3895095092aed2f6dbfe00f6056dc",
+          old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
+          evidence=_DASH_ROW_1127),
     Equiv(module="open_guji_cv.gates.cut_gate",
           new="925a3ee71711731992ffa1a26abe8f1444c23cf679f84ced22508507aa578938",
           old="f91957b70ddd5e767f5361d6f1c0fb33ffe433f9c3e92a03ffbd447df3404065",
