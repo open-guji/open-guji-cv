@@ -114,6 +114,29 @@ class Codepoint(Method):
         return GroupVerdict(None, why="abstain:no_codepoint", via=self.name)
 
 
+# —— 近字形小模型的校准概率（第三步 3b → 收尾 `glyph_analyzer`；Sheldon 2026-11-26 定：形近含义不同的字，按字形置信度够高才放行，不够高的走文意） ——
+
+@dataclass(frozen=True)
+class NearP(Method):
+    """读第三步收尾给的组内各字校准概率 p（`FlowConfig.near_p[格 id] = {字: p}`）：组内最高 p ≥ 本组门槛
+    （`FlowConfig.near_p_min[组]`）→ 给这个字（置信度 p）；不够高、没有 p（3b 没触发）→ 待定，交给后面的文意方法。
+    只对**含义不同**的形近字用（官宫）；异体（宮 p 为 None，记 same_as 宫）不参与。书没配 `near_p_min` 的组 `flow.decide` 根本不跑它。"""
+    name: str = "near_p"
+    kind = "model"
+
+    def _run(self, inp):
+        thr = (getattr(inp.cfg, "near_p_min", None) or {}).get(inp.group)
+        ps = ((getattr(inp.cfg, "near_p", None) or {}).get(inp.cell_id) or {})
+        pm = {c: float(p) for c, p in ps.items() if c in inp.members and p is not None}
+        if thr is None or not pm:
+            return GroupVerdict(None, why="abstain:no_p", via=self.name)
+        ch = max(pm, key=lambda c: pm[c])
+        extra = {"p": {c: round(v, 4) for c, v in sorted(pm.items(), key=lambda kv: -kv[1])}}
+        if pm[ch] < thr:
+            return GroupVerdict(None, conf=pm[ch], why="abstain:low_p", via=self.name, extra=extra)
+        return GroupVerdict(ch, conf=pm[ch], why="agree", via=self.name, extra=extra)
+
+
 # —— 2 字频 ——
 
 @dataclass(frozen=True)
@@ -612,6 +635,7 @@ ZY_STROKES = Custom("zy_strokes", fn=zy_strokes, patch=True)
 IDS = Ids()
 HOG = HogRidge()
 CODEPOINT = Codepoint()
+NEAR_P = NearP()
 
 
 def hog_or_crop(region: tuple | None) -> Method:
