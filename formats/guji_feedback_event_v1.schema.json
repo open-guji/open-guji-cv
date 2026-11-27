@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://open-guji.org/schema/feedback-event/v1.json",
   "title": "guji 人裁事件（feedback event）v1",
-  "description": "feedback/events/<batch>.jsonl 与 feedback/vision/<batch>.jsonl 的一行。规范正文：doc/formats/裁定事件规范.md。代码真源：open_guji_cv/feedback/events.py（Event）。本 schema 描述**线上格式**：老数据（2026-09 起）全部能过；带 'normative' 字样的约束只对新写入要求，lint（guji events lint）报。",
+  "description": "feedback/events/<batch>.jsonl 与 feedback/vision/<batch>.jsonl 的一行。规范正文：doc/formats/裁定事件规范.md（§4.1 来源三字段 payload.level／by／channel）。代码真源：open_guji_cv/feedback/events.py（Event）。本 schema 描述**线上格式**：老数据（2026-09 起）全部能过；带 'normative' 字样的约束只对新写入要求，lint（guji events lint）报。",
   "type": "object",
   "required": ["id", "ts", "batch", "seq", "kind", "target"],
   "additionalProperties": false,
@@ -33,7 +33,17 @@
       "description": "传输层粗分类。recrop/not_a_char/relabel/skip/damaged/mark/flag/split/merge/note 没有写入口（not_a_char/skip/damaged 实走 confirm + payload.v），新代码不许写。"
     },
     "target": {"$ref": "#/$defs/target"},
-    "payload": {"type": "object", "default": {}},
+    "payload": {
+      "type": "object", "default": {},
+      "properties": {
+        "level": {"enum": ["human", "ai", "machine"],
+                  "description": "裁定事件的来源级别：这个字**是谁判的**。human=人看图定的；ai=AI 判、人没逐格看；machine=规则自动补的（不算钉）。新写的 confirm 必写（2026-11-27 起 EventLog.append 缺了告警，改必填见规范 §4.1）；老事件没有，按 events.event_level 推。"},
+        "by": {"type": "string", "minLength": 1,
+               "description": "具体是谁判的：人的账号（网站 email）、模型名（claude-…）、脚本名。新写的 confirm 必写；与 `reviewer`（谁点的按钮）独立。"},
+        "channel": {"enum": ["console", "web_vote", "opinion", "script", "llm", "vision"],
+                    "description": "从哪条路进来：console 控制台裁决台；web_vote 网站精校页票落的裁定；opinion 粗校公众意见经 H 道看图；script 各书线脚本；llm 大模型文意；vision 看图。新写的 confirm 必写。"}
+      }
+    },
     "source_format": {"type": ["string", "null"],
                       "description": "server=控制台直连写入；verdicts/seed/seg/marks=从旧格式收割；null=脚本直写（H 道更正、看图导入等）。"},
     "reviewer": {"type": ["string", "null"],

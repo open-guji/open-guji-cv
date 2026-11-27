@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -129,12 +130,42 @@ HUMAN_MODEL_BATCHES = frozenset({
 })
 EVENT_LEVELS = ("human", "ai")
 
+#: 裁定事件的**来源三字段**（2026-11-27，用户定「裁定事件要能区分来源」；规范见 `doc/formats/裁定事件规范.md` §4.1）：
+#: `payload.level`（这个字是谁判的：human／ai／machine）、`payload.by`（具体是谁：人的账号、模型名、脚本名）、
+#: `payload.channel`（从哪条路进来）。缺省按旧规则推（`event_level`），新写的要写全；`EventLog.append` 缺了只告警不拒。
+#: 2026-11-27 起 `machine` 也是合法的 `payload.level`：规则自动补的，**不算钉**（`event_level` 给 None）。
+PROVENANCE_LEVELS = ("human", "ai", "machine")
+PROVENANCE_CHANNELS = ("console", "web_vote", "opinion", "script", "llm", "vision")
+PROVENANCE_FIELDS = ("level", "by", "channel")
+
+_log = logging.getLogger(__name__)
+
+
+def is_ruling_event(e) -> bool:
+    """要带来源三字段的事件：对一个字格下了定字结论的（`kind=confirm`，单位是格）。切线、版框这类几何裁决、
+    复核台的 collate_*、体检的 glyph_audit 暂不要求（2.4 再定要不要扩）。"""
+    t = getattr(e, "target", None)
+    return getattr(e, "kind", None) == "confirm" and getattr(t, "unit", None) == "cell"
+
+
+def missing_provenance(e) -> list[str]:
+    """这条事件缺哪几个来源字段（空列表＝齐了或不要求）。取值不在枚举里的也算缺。"""
+    if not is_ruling_event(e):
+        return []
+    p = getattr(e, "payload", None) or {}
+    out = [k for k in PROVENANCE_FIELDS if not p.get(k)]
+    if p.get("level") and p["level"] not in PROVENANCE_LEVELS and "level" not in out:
+        out.append("level")
+    if p.get("channel") and p["channel"] not in PROVENANCE_CHANNELS and "channel" not in out:
+        out.append("channel")
+    return out
+
 
 def event_level(e) -> str | None:
     """这条事件的**级别**：`"human"`（人裁）、`"ai"`（模型写的、已放行的钉）、None（不算钉：看图结论、
     文意裁定、`payload.source` 是模型判断来源的）。
 
-    先认 `payload.level`；没有的：`actor` 不是 model 的算 human，是 model 的按批次名查
+    先认 `payload.level`（`machine` 给 None）；没有的：`actor` 不是 model 的算 human，是 model 的按批次名查
     `HUMAN_MODEL_BATCHES`（在表里算 human，其余算 ai）。"""
     if getattr(e, "kind", None) in ("vision_check", "ctx_ruling"):
         return None
@@ -144,6 +175,8 @@ def event_level(e) -> str | None:
     lv = p.get("level")
     if lv in EVENT_LEVELS:
         return lv
+    if lv == "machine":      # 规则自动补的：不算钉（同中心库 `events.level` 的 machine，Worker 落定条件只认 human／ai）
+        return None
     if getattr(e, "actor", None) != "model":
         return "human"
     return "human" if str(getattr(e, "batch", "") or "").split("~", 1)[0] in HUMAN_MODEL_BATCHES else "ai"
@@ -278,6 +311,8 @@ class EventLog:
         self.root = Path(root) if root else default_feedback_root()
         #: 最近一次读各批时，因换图源页表 rev 不符没采信的条数：{批: {册: 条数}}
         self.dropped: dict[str, dict[str, int]] = {}
+        #: 最近一次 `append` 里缺来源三字段的裁定事件数（只告警不拒，见 `missing_provenance`）
+        self.provenance_missing = 0
 
     # ── 路径 ─────────────────────────────────────────────────────────
     @property
@@ -336,6 +371,7 @@ class EventLog:
         if bad:
             detail = "; ".join(f"{eid}: {f}={v!r}" for eid, f, v in bad)
             raise BadRequest(f"字形字段不合法（不是单字，也不是合法多码位），拒绝写入：{detail}")
+        self._warn_provenance(events)
         gate = self._rev_gate()  # 换图源（GUJI-748 §六）：切过的册，锚里页表 rev 不符的事件不许写
         stale = [e for e in events if not gate.admits(e.kind, _target_dict(e.target))]
         if stale:
@@ -373,6 +409,19 @@ class EventLog:
                         next_seq = max(next_seq, e.seq + 1)
                         n += 1
         return n
+
+    def _warn_provenance(self, events: list[Event]) -> None:
+        """裁定事件缺 `payload.level／by／channel` 只告警不拒（2026-11-27，计划 1.6；改必填是 2.4）。
+        一次 append 只打一行：缺几条、缺哪些字段、哪几批。"""
+        lack = [(e, m) for e in events if (m := missing_provenance(e))]
+        self.provenance_missing = len(lack)
+        if not lack:
+            return
+        fields = sorted({f for _, m in lack for f in m}, key=PROVENANCE_FIELDS.index)
+        batches = sorted({e.batch for e, _ in lack})
+        _log.warning("裁定事件缺来源字段 %s：%d 条（批次 %s%s）。新写的 confirm 请在 payload 写明 level／by／channel，"
+                     "见 doc/formats/裁定事件规范.md §4.1", "／".join(fields), len(lack), "、".join(batches[:3]),
+                     "…" if len(batches) > 3 else "")
 
     def compact(self, batch: str, dry_run: bool = False) -> dict:
         """同一 target.key 的重复裁决只留**最后一条**（用户 2026-09-16）。
