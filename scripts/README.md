@@ -222,6 +222,7 @@
 - `test_vol02_extract.py`：四库总目第二册 (vol02) 标点、分段与实体链接抽取测试脚本。
 - `track_review_rate.py`：人审率台账：每册每次重跑记一行，用来 track「审得越多、后面越省」到底有多快。
 - `train_font_cnn.py`：**单字体** CNN：一套字体一个模型，用时多模型各出候选再比较。
+- `train_boundary_net.py`：字间界线判官（`row_segment.boundary_net`）出样本、训练、留出册验证；银标＝本书已跑完的 row_segment 产物（见 doc/2-切字/字间判官.md）。
 - `train_glyph_cnn.py`：拆字识别 v2：学到的特征。小 CNN + 部件多标签辅助头 + 字体合成补类。
 - `upload_wikisource.py`：把 `guji output export wikisource`（guji-manager）出的逐页 wikitext 上传到 zh.wikisource `Page:` 页。
 - `verify_cloud_glyphdb.py`：云端字形库重建通道体检（Step5a-库验通道，2026-09-09）。

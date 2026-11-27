@@ -21,7 +21,7 @@ def test_keben_stage_members():
     pl = load_pipeline("keben_body_v2")
     assert pl.stages["layout"] == ["page_survey", "invert_detect", "border_detect", "seal_detect"]
     assert pl.stages["cut"] == ["column_warp", "column_band", "column_end", "column_geometry", "row_segment", "cell_shrink"]
-    assert pl.stages["read"] == ["glyph_match", "rare_candidates"]
+    assert pl.stages["read"] == ["glyph_match", "glyph_near", "rare_candidates", "glyph_analyzer"]
     assert pl.stages["decide"] == ["align_ref", "context_decide", "seed_admit"]
     assert pl.stage_of("align_ref") == "decide"   # 整理本对位归 4 定字（2026-11-22 用户定）
     assert pl.stage_of("cell_shrink") == "cut"
@@ -32,8 +32,8 @@ def test_slice_by_stage_name():
     pl = load_pipeline("keben_body_v2")
     assert pl.slice("cut", "cut") == ["column_warp", "column_band", "column_end", "column_geometry", "row_segment", "cell_shrink"]
     assert pl.slice("layout", "cut")[-1] == "cell_shrink"
-    assert pl.slice("read", None) == ["glyph_match", "rare_candidates", "align_ref", "context_decide", "seed_admit"]
-    assert pl.slice("row_segment", "read")[-1] == "rare_candidates"   # 步骤 id 与大步名可混用
+    assert pl.slice("read", None) == ["glyph_match", "glyph_near", "rare_candidates", "glyph_analyzer", "align_ref", "context_decide", "seed_admit"]
+    assert pl.slice("row_segment", "read")[-1] == "glyph_analyzer"   # 步骤 id 与大步名可混用
 
 
 def test_step_claimed_by_two_stages_rejected():
