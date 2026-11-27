@@ -135,6 +135,11 @@
 - PATCH（L0：`glyph_analyzer` 缺省关、尚无册跑过）：`glyph_analyzer` 的 `code_deps` 补 `clustering.sim_cnn`（`match_algo` 用它解析 `sim_model` 拼证据里的算法名），过 manager 指纹覆盖守卫 `test_code_deps_coverage`（CV0 2026-11-27，GM3 报）。
 - PATCH（新步骤缺省关，现役各步 code_hash 不变；CV3 2026-11-27，Sheldon 11-26 定的第三步重构第一块）：3 识字加 3b `glyph_near`（形近字组分析：书配置 `glyph_near.groups` 里登记的字组被 3a 触发时，按组登记的方法给组内各字新分＋证据，不定字）与收尾 `glyph_analyzer`（汇总成每格 `cands`〔字＋校准后 p＋各小步证据〕与 `p_map`，第三步不判放行）。第一个方法 `cnn_small`：殿本 宫／宮／官 小 CNN（ZM 训，按册号 % 5 取留出折，`models/glyph_near_gong`，已登记模型表、传 R2；calib.json 用 7447 格留出概率保序标定）。框架：`StepSpec.enabled_by`（参数为假就跳过的可选步骤）、骨架 `finals:`（大步收尾，必须是本大步最后一步，`Pipeline.final_of`）。殿本 vol02 49 格经步骤复核与训练留出概率最大差 0.0195、0.5 两侧一致 49/49。
 
+## [0.9.9] - 2026-11-27
+
+补发（PATCH，L0）＝v0.9.8＋#1922（cherry-pick cc426f1，四周單邊版框，MBJ 要用；dev 上 #1922 条目见上文）。对 v0.9.8 各步 code_hash 全同（border、seg.lines 按本线哈希登 code_equiv `_SINGLE_SIDES_1127`）；底库 b35 不变；不需 manager 配套。
+`frame_layers` 在 border_detect 的 book_deps 里：写了左右=1 的册从 border_detect 起过期，没写的不变。
+
 ## [0.9.8] - 2026-11-27
 
 补发（PATCH，L0）＝v0.9.7＋#1956（cherry-pick b42592c，朱楓林集 MBJ 要用；dev 上 #1956 条目见上文）。对 v0.9.7 各步 code_hash 全同（seed_admit 三模块按本线哈希登 code_equiv `_SEG_BOX_1127`）；底库 b35 不变；不需 manager 配套。
