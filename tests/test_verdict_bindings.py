@@ -191,3 +191,31 @@ def test_missing_manifest_entry_does_not_validate_old_unanchored(monkeypatch):
     rows = B.compute_page("v", 1, [_ev("v:1:1:5", 1, None, ts="2026-09-10T00:00:00Z")],
                           store=object(), cache=NS(get=lambda *a, **k: None), glyph_db=None)
     assert rows[0]["status"] == "unanchored" and B.usable(rows[0]) is None
+
+
+def test_cut_ends_after_follows_manifest_history():
+    h = [(10.0, "a"), (20.0, "a"), (30.0, "b"), (40.0, "b")]
+    assert B._cut_ends_after(h, 15.0) == 30.0          # 当时是 a，30 换成 b
+    assert B._cut_ends_after(h, 35.0) == float("inf")  # 当时是 b，没再换
+    assert B._cut_ends_after(h, 5.0) == 10.0           # 早于全部记录：不知道当时哪版，取头一条
+    assert B._cut_ends_after([], 5.0) == float("-inf")
+
+
+class _GDB:
+    def __init__(self, updated):
+        self.updated = updated
+
+    def execute(self, *a):
+        return NS(fetchone=lambda: (b"png", self.updated))
+
+
+def test_library_image_written_after_cut_change_is_not_a_witness():
+    """库里人裁实例的图是换切分之后才写进去的（回库／补放）：按原格号从新切分切的，比现格等于自己比自己，
+    不能拿来给无框旧人裁作证（史記 03 #17918／#17967，CV0 2026-11-27）。"""
+    ev = _ev("v:1:1:5", 1, None, ts="2026-10-29T00:00:00Z")
+    hist = [(B._ts("2026-10-01T00:00:00Z"), "old"), (B._ts("2026-11-17T00:00:00Z"), "new")]
+    late = B._legacy_anchor(ev, "v", 1, 1, 5, "", [], _GDB("2026-11-26T20:00:00+00:00"), hist=hist)
+    assert late is None
+    early = B._legacy_anchor(ev, "v", 1, 1, 5, "", [], _GDB("2026-10-30T00:00:00+00:00"), hist=hist)
+    assert early is not None and early["content_png"] == b"png"
+    assert B._legacy_anchor(ev, "v", 1, 1, 5, "", [], _GDB("2026-10-30T00:00:00+00:00"), hist=[]) is None
