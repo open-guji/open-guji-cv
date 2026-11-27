@@ -272,6 +272,7 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.group_flow_lift_ref_veto, ("group_flow_lift_ref_veto",)),
     (lambda p: not p.group_flow_lift_shape_ref, ("group_flow_lift_shape_ref",)),
     (lambda p: not p.group_flow_ref_alias, ("group_flow_ref_alias",)),
+    (lambda p: not p.group_flow_near_p, ("group_flow_near_p",)),
     (lambda p: not p.group_flow_hou_shape_late, ("group_flow_hou_shape_late",)),
     (lambda p: p.reference_trust == 'none', ("reference_trust",)),
     (lambda p: not p.ref_topk_follow, ("ref_topk_follow",)),
@@ -554,6 +555,10 @@ class SeedAdmitParams(BaseModel):
     """书级：这几组补放（lift）时，整理本对位字（现役对位缺格时用坐标对位字）是组里另一个字、与组给的字不同 → 不放，留人审
     （`group_flow_ref_dissent`；只降不放）。起因（2026-11-03 史記文淵閣本）：山由出 sy 整字 HOG 的模板来自殿本，史記写本山常被判成出
     （标签山的格里判出 143、判山 27），第 6 轮 06:93:4:1a、alt_cut 02:20:6:2b 山被放成出。空＝不启用（不进参数 dump）。"""
+    group_flow_near_p: dict[str, float] = Field(default_factory=dict)
+    """书级（Sheldon 2026-11-26）：形近含义不同的字组读第三步收尾（`glyph_analyzer`）给的组内各字校准概率 p，`{"guan": 0.98}`＝组内最高 p ≥ 0.98
+    才由字形放行，不够高的照旧交文意（`groups.methods.NearP`；组的方法数组里有 `near_p` 的才用，现在只有 官宫宮 guan）。方法与文意都有答案且不同 → 送审；
+    复核时放行字与它的字不同 → 降审（只降不改字）。门槛按人核格定，不用现行文本当真值。空＝不启用（缺省，不进参数 dump、不读 `glyph_analyzer`）。"""
     group_flow_ref_alias: dict[str, str] = Field(default_factory=dict)
     """书级（全唐文 11-20，sheldon「整理本作 間 的格不再挡本书刻的 閒」）：字组流程里整理本字（及坐标对位字）先按这张表换掉再判，
     `{"間": "閒"}`＝本书只刻 閒、整理本的 間 来自殿本模板，不当 ref_dissent。只影响字组流程（`groups.flow`），不改对位产物与其他通道。

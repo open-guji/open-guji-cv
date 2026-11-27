@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .methods import BARS, CODEPOINT, CTX, KGC_CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, SS_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
+from .methods import BARS, CODEPOINT, CTX, NEAR_P, KGC_CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, SS_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
 
 
 @dataclass(frozen=True)
@@ -698,7 +698,7 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((CTX,), review=True, families=fam, form_methods=(FORM_TOP1,)), overlaps=ov,
+        flow=FlowSpec((NEAR_P, CTX) if gid == "guan" else (CTX,), review=True, families=fam, form_methods=(FORM_TOP1,)), overlaps=ov,
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
        for gid, name, fam, ov, note in (
            ("yz", "予子", (), ("zy",), "予＝賜予、予奪、我；子＝孔子、國子、君子。與 于千子干 zy 共用「子」，分差内有 予 的格归本组。"),
