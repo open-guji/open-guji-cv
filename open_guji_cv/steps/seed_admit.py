@@ -433,6 +433,11 @@ class SeedAdmitParams(BaseModel):
     只收符号；遮挡（印章）格、排除名单格、人裁格不动；对位没说空格（整理本这一位有字）的不放。空＝关（不进 dump）。"""
     symbol_ref_blank_cov: float = 0.97
     """`symbol_ref_blank` 的库 cov 下限（库对这个符号的匹配度；本书圈号实测 0.977–0.999）。"""
+    symbol_ref_blank_from: str = ""
+    """书级，缺省空（关，不进参数 dump，行为不变）。`symbol_ref_blank` 再放宽一档：本格字（`rec.char`）在这串字里（如 `口囗□日四`，圈号 ○ 的图被误判成它们）、
+    库首位也在这串字里、库前三名里有 `symbol_ref_blank` 的符号且 cov ≥ 门槛、与库首位 cov 差 ≤ 0.03、整理本此位空（或 `symbol_ref_gap` 放宽后无对位）→ 放行为该符号。
+    起因：史記 17/40/41 册约 14 格 ○ 被判口（GUJI-777，SJ 11-27）。遮挡、人裁、排除名单照旧不动；证据 lane 记 `from`。**没做单圈形状检测**（本通道拿不到字块图），
+    靠「整理本此位空＋库前三含○＋cov 近」收口；日／目误报风险由这三条挡。需 `symbol_ref_blank` 非空才生效。（史記线移植 dev #1953）"""
     symbol_ref_gap: bool = False
     """`symbol_ref_blank` 放宽到「整理本这里没字」（坐标对位没有这一位的条目，`coord.get(id) is None`，不是空格 `""`；
     A24 第 5 轮，长期计划线程转 SJ 史記 r9：ref_gap 里 17 格库首位是 ○、cov 0.92–0.999）。需 `symbol_ref_blank` 非空才生效。
@@ -1485,6 +1490,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.symbol_ref_blank:
             d.pop("symbol_ref_blank", None)
             d.pop("symbol_ref_blank_cov", None)
+        if isinstance(d, dict) and not (self.symbol_ref_blank and self.symbol_ref_blank_from):
+            d.pop("symbol_ref_blank_from", None)
         if isinstance(d, dict) and not self.textlayer_ref_gap:
             for k in ("textlayer_ref_gap", "textlayer_ref_area_min", "textlayer_ref_page_min", "textlayer_ref_min_pairs",
                       "textlayer_ref_near_guard", "textlayer_ref_allow_pua", "textlayer_ref_gap_fingerprint"):
@@ -3951,10 +3958,14 @@ def _evict_review_pass(ctx: RunContext, page: int, out: list, cells: dict) -> in
 _LIB_CHANNELS = ("match_", "dual", "iron")
 
 
+_SRB_FROM_MAX_GAP = 0.03   # symbol_ref_blank_from：○ 与库首位（口囗□日四）的 cov 差上限（SJ 17/40/41 册实测 0.003–0.02）
+
+
 def _symbol_ref_blank_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: dict) -> int:
     """符号字块遇整理本空格位（`symbol_ref_blank`）：库首位是册里点名的符号、cov 够、对位说此位是空格 → 放行为该符号（升）。
     → 新放行格数。放在 `symbol_review` 之后，把它降下去的那批圈号接回来。"""
     syms = frozenset(p.symbol_ref_blank)
+    frm = frozenset(p.symbol_ref_blank_from)
     n = 0
     for col in out:
         col_cov = sum(1 for r in col.chars or [] if coord.get(r.id) is not None) if p.symbol_ref_gap else 0
@@ -3968,17 +3979,30 @@ def _symbol_ref_blank_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: d
             gap = c0 is None and p.symbol_ref_gap and col_cov >= p.symbol_ref_gap_min_col
             if c0 != "" and not gap:
                 continue
-            if rec.char and rec.char not in syms:
+            from_ok = bool(rec.char) and rec.char not in syms and rec.char in frm
+            if rec.char and rec.char not in syms and not from_ok:
                 continue
             m = mmap.get(rec.id)
             cands = list(getattr(m, "candidates", None) or [])
-            if not cands or cands[0][0] not in syms or float(cands[0][1]) < (p.symbol_ref_gap_cov if gap else p.symbol_ref_blank_cov):
-                continue
-            sym, cov = cands[0][0], float(cands[0][1])
+            thr = p.symbol_ref_gap_cov if gap else p.symbol_ref_blank_cov
+            if from_ok:
+                # `symbol_ref_blank_from`：本格字被误判成 口囗□日四（圈号 ○ 的图），库首位也是它、○ 在库前三名、cov 够、与首位差不超过 _SRB_FROM_MAX_GAP
+                top3 = cands[:3]
+                if not top3 or top3[0][0] not in frm or float(top3[0][1]) < thr - _SRB_FROM_MAX_GAP:
+                    continue
+                hit = next(((c, float(v)) for c, v in top3 if c in syms and float(v) >= thr and float(top3[0][1]) - float(v) <= _SRB_FROM_MAX_GAP), None)
+                if hit is None:
+                    continue
+                sym, cov = hit
+            else:
+                if not cands or cands[0][0] not in syms or float(cands[0][1]) < thr:
+                    continue
+                sym, cov = cands[0][0], float(cands[0][1])
             _demote(rec, "symbol_ref_blank")
             ev = dict(rec.evidence or {})
             ev["lane"] = {"lane": "symbol_ref_blank", "lib": sym, "cov": round(cov, 4),
-                          "prev_doubts": list(rec.doubts or []), **({"via": "gap"} if gap else {})}
+                          "prev_doubts": list(rec.doubts or []), **({"via": "gap"} if gap else {}),
+                          **({"from": rec.char} if from_ok else {})}
             ev.pop("symbol", None)
             rec.evidence = ev
             rec.admit, rec.channel, rec.provenance, rec.char = True, "symbol_ref_blank", "match", sym

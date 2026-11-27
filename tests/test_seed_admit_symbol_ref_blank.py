@@ -48,3 +48,23 @@ def test_leaves_alone():
 def test_off_by_default_and_not_in_dump():
     assert "symbol_ref_blank" not in SeedAdmitParams(db_path="x").model_dump()
     assert SeedAdmitParams(db_path="x", symbol_ref_blank="○").model_dump()["symbol_ref_blank_cov"] == 0.97
+
+
+# —— symbol_ref_blank_from（GUJI-777，史記 17/40/41 册 ○ 被判口）——
+
+def test_from_admits_circle_misread_as_kou():
+    kw = dict(symbol_ref_blank_from="口囗□日四")
+    n, r = _run({1: {"char": "口"}}, {1: [("口", 0.975), ("○", 0.970), ("日", 0.9)]}, {1: ""}, **kw)
+    assert n == 1 and (r[1].admit, r[1].channel, r[1].char) == (True, "symbol_ref_blank", "○")
+    assert r[1].evidence["lane"]["from"] == "口"
+
+
+def test_from_default_off_and_guards():
+    cells, lib = {1: {"char": "口"}}, {1: [("口", 0.975), ("○", 0.970)]}
+    assert _run(cells, lib, {1: ""})[0] == 0                                          # 缺省关
+    kw = dict(symbol_ref_blank_from="口囗□日四")
+    assert _run(cells, lib, {1: "口"}, **kw)[0] == 0                                  # 整理本此位有字
+    assert _run(cells, {1: [("口", 0.975), ("日", 0.9), ("四", 0.89), ("○", 0.97)]}, {1: ""}, **kw)[0] == 0   # ○ 不在前三
+    assert _run(cells, {1: [("口", 0.995), ("○", 0.96)]}, {1: ""}, **kw)[0] == 0      # 差超 0.03／cov 不够
+    assert _run({1: {"char": "白"}}, lib, {1: ""}, **kw)[0] == 0                      # 本格字不在集合
+    assert _run({1: {"char": "口", "provenance": "human"}}, lib, {1: ""}, **kw)[0] == 0   # 人裁不动
