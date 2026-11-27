@@ -122,6 +122,13 @@
 
 ## [未发版]
 
+## [0.9.9] - 2026-11-27
+
+补发（PATCH，L0）＝v0.9.8＋#1922（cherry-pick cc426f1，四周單邊版框，明别集 MBJ 要用）。对 v0.9.8 各步 code_hash 全同（border、seg.lines 按本线哈希登 code_equiv）；底库 b35 不变；不需 manager 配套。
+重跑起点：`frame_layers` 在 border_detect 的 book_deps 里，册配置写上左右=1 即从 border_detect 起过期；已写过左右=1、又在 v0.9.8 及以前跑过的册要 force 从 border_detect 重放；没写的册不过期、产物不变。
+
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-27）：版面 `frame_layers` 左／右写 1（四周單邊）时该侧跳过 `refit_outer_by_bar`、outer_bar 补内框，`find_vertical_lines` 加 `no_snap`，`detect_outer_borders` 不量竖直外框；没写左右的册走原路径。
+
 ## [0.9.8] - 2026-11-27
 
 补发（PATCH，L0）＝v0.9.7＋#1956（cherry-pick b42592c，朱楓林集 MBJ 报）。对 v0.9.7 各步 code_hash 全同（seed_admit 三模块按本线哈希登 code_equiv）；底库 b35 不变；不需 manager 配套。
