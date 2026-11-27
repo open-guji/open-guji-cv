@@ -257,6 +257,9 @@ _DUMP_DROP: tuple = (
     (lambda p: p.solo_5b_cov is None, ("solo_5b_cov", "solo_5b_gap", "solo_5b_min_n")),
     (lambda p: not p.no_ref_pages, ("no_ref_pages",)),
     (lambda p: not p.no_ref_params, ("no_ref_params",)),
+    (lambda p: not p.trust_from_accuracy, ("trust_from_accuracy",)),
+    (lambda p: not p.ref_accuracy, ("ref_accuracy",)),
+    (lambda p: not p.ref_variants_off, ("ref_variants_off",)),
     (lambda p: p.consensus_lib_cov is None, ("consensus_lib_cov",)),
     (lambda p: p.ref_lib_5b_veto is None, ("ref_lib_5b_veto", "ref_lib_5b_veto_lead")),
     (lambda p: p.solo_5b_same_cov is None, ("solo_5b_same_cov",)),
@@ -1141,6 +1144,20 @@ class SeedAdmitParams(BaseModel):
     """无参照页上换用的 seed_admit 参数（书级），如 `{solo_5b_cov: 0.95, solo_5b_min_n: 1}`：只在这些页
     叠在本步参数上，别的页不变。无参照页＝`no_ref_pages`（`page_kinds.no_ref`）或册配置 `reference_profile` 声明
     `kind: none` 的页（11-27 起两种写法同一口径）。键须是本步参数名（不许再嵌 `no_ref_*`）。空＝不换（不进 dump）。"""
+    trust_from_accuracy: bool = False
+    """按参校本准确度分档推信任档（书级，2026-11-27 CV0，Sheldon「四维＋准确度分档」；缺省关、关时不进 dump，行为逐字节不变）。
+    开了以后每页看这页参照的 `accuracy`（册配置 `references[].accuracy`，`reference_profile` 段上可压低）：
+
+    - `very_high` → `reference_trust: very_high`；`high` → `reference_trust: high`；`mid` → `ref_lib_coord: true`；
+      `low`／未标／无参照页 → 不动（照册里写的）。
+    - 只往上推不往下拉：册里已写了更高的 `reference_trust`／`ref_lib_coord` 就照旧（要压低就把 `accuracy` 标低）。
+    - 参校本 `script: trad|simp`（异体已归一、码位不跟刻本）的页：关 `follow_ref_variants`（含 `reference_trust` 带的那一项）、
+      `edge_pair_to: ref` 退回 `freq`——这种参校本的码位不能照录。
+    门槛（very_high ≥ 99.9%、high ≥ 99.5%、mid ≥ 98%，与最终定字一致率）与实测见 `doc/design/参校本四维与准确度分档.md`。"""
+    ref_accuracy: str = ""
+    """自动填（`trust_from_accuracy` 开时）：本册 `references[]` 的 accuracy/script 与段上压低的摘要，进指纹——标改了本步过期。"""
+    ref_variants_off: bool = False
+    """逐页派生（`trust_from_accuracy` 开、本页参校本 `script: trad|simp`）：关掉照录参校本异体。册里别直接写（不进 dump 时等于关）。"""
     book_lanes: dict = {}
     """书级无参照补放通道的取值（2026-11-24 CV4，Sheldon 定）：交给书仓 `code/` 覆盖的钩子 `impl/keben/admit_lanes.noref_lanes`，
     cv 不解释其中的键，原样进参数指纹；`data`（路径表，相对数据目录）是通道要读的数据文件，内容哈希进 `book_lanes_fingerprint`。
@@ -1542,6 +1559,8 @@ class SeedAdmitParams(BaseModel):
         return frozenset(self.group_flow_lift_shape_ref) | (frozenset(REFERENCE_TRUST_LIFT_SHAPE_GROUPS) if self._rt_on("lift_shape_ref") else frozenset())
 
     def _follow_variants(self) -> bool:
+        if self.ref_variants_off:
+            return False
         return self.follow_ref_variants or self._rt_on("follow_ref_variants")
 
     @model_serializer(mode="wrap")

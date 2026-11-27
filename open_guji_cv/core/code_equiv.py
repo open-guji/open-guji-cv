@@ -666,6 +666,11 @@ _NOREF_UNIFY_1127 = ("seed_admit.no_ref_params 也认 reference_profile none 页
                      "text/state/geom 全不变，只 1 列切分不同（上游 row_segment 跨机差异，两边上游代码相同），该列 1 格送审→放行，其余 seed_admit 逐格同。"
                      "GUJI_CORPUS_DRIFT=warn；哈希按合入时 origin/dev 重算。")
 
+_REF_ACC_1127 = ("seed_admit 新开关 trust_from_accuracy（缺省关；CV0 2026-11-27，参校本四维＋准确度分档）：关时 book_params 与 accuracy_page_params "
+                  "原样返回同一对象，_follow_variants 只在 ref_variants_off（逐页派生，缺省 False）时变；三个新键关时都由 _DUMP_DROP 去掉，"
+                  "参数 dump 与 params_hash 不变（tests/test_ref_accuracy.py::test_switch_off_unchanged）。ref_profile 只加读法与校验，不在 code_deps。"
+                  "哈希按合入时 origin/dev 重算。")
+
 _DASH_ROW_1127 = ("cell_shrink 新开关 end_dash_row（缺省关，extractor.strip_dash_row 只在开时调；关时 grid 不带键、参数 dump 不变）："
                   "史記 42 册 32 页（cut-bench，--pages 2,3,14,17,18,25,27,34,38,40,43,46,54,55,59,66,69,70,78,79,81,82,93,96,98,99,100,102,106,114,117,135）、"
                   "全唐文 053 册 29 页（2,4,12,18,28,45,49,63,75,76,77,81,83,87,89,92,94,95,98,99,104,116,118,128,140,146,148,154,159）"
@@ -2884,6 +2889,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='064dc3aa396b925df392691ca745a40a59d3c1ca3ba519e0d6b3e260cc560098',
           old='9d2e7a4bd695f98fbc8941e1a25174273081ae059f09a23da082284fb33c0c48',
           evidence=_TRK_CLIP_1127),
+    # 参校本准确度分档 trust_from_accuracy（缺省关，CV0 11-27）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="051f9ed901ddff23f089c634f94f315c96cf117b84af634ed1b6c80ff721c75a",
+          old="40700ebd73f8c72fc7ed2842606345bb30fed8ee5c7bc884b623dc3bef0f98ca",
+          evidence=_REF_ACC_1127),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="81f54a4eb44c0617d592e1e1c4656e7204e6d6461c15845c9d31bdac3065632a",
+          old="21dac7395856fdfb4777801d1973a37e1a3c5c905b15b2e20f2fd71ba009f610",
+          evidence=_REF_ACC_1127),
 )
 
 
