@@ -638,6 +638,12 @@ class SeedAdmitStep(Step):
                     ok=ok, channel=channel, align_char=align_char,
                     match_char=r.char, verdict=r.verdict,
                     candidates=list(r.candidates))
+                # note_lexicon 只定「读法」（哪个字），形（刻本刻的是异体里的哪一个）看库：库首位与短语字同义、字面不同时，
+                # 取库首位的形（异体看刻形，Sheldon 11-24 复核殿本 𨽾→𨽻 6 格：库首位 𨽾 cov 0.97，短语写的是 𨽻）
+                if (ok and channel == "note_lexicon" and p.note_lexicon_lib_form and r.candidates and char
+                        and r.candidates[0][0] != char and r.candidates[0][0] not in NEAR_FORM_CHARS
+                        and vm_here.semantic(r.candidates[0][0]) == vm_here.semantic(char)):
+                    char = r.candidates[0][0]
                 if channel == "split_ref":
                     # 己/已/巳：刻本三字刻法常不分，库 top1 定不了是哪个字，先取整理本字；
                     # 页末 `group_flow`（jys 组）再按文意复核。

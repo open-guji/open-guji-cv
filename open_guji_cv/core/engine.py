@@ -11,7 +11,9 @@ import importlib
 import inspect
 import json
 import multiprocessing
+import os
 import re
+import sys
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -935,6 +937,7 @@ class Engine:
                 report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
             except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整轮
                 elapsed = time.time() - t0
+                _trace_page_error(step, pg)
                 err = f"{type(e).__name__}: {e}"
                 if sp is not None:
                     sp.page(pg, "failed", elapsed, rec.to_dict(), ov)
@@ -1086,6 +1089,7 @@ class Engine:
                 with _perf.page_scope(rec):
                     prods, err = step.run_page(self.ctx, first), None
             except Exception as e:  # noqa: BLE001
+                _trace_page_error(step, first)
                 prods, err = None, f"{type(e).__name__}: {e}"
             detail = rec.to_dict()
             detail["warm_first"] = True
@@ -1256,6 +1260,14 @@ def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
     _worker_ctx._params_memo = {}         # worker 只跑这一步：参数每进程构造一次（同 `Engine._run_one_step`）
 
 
+def _trace_page_error(step, page) -> None:
+    """设了环境变量 GUJI_TRACE_PAGE_ERRORS=1 时，把一页失败的完整 traceback 打到 stderr（缺省不打，日志里只有一行错因）。"""
+    if os.environ.get("GUJI_TRACE_PAGE_ERRORS"):
+        import traceback
+        print(f"--- {getattr(step, 'id', step)} p{page} traceback ---", file=sys.stderr)
+        traceback.print_exc()
+
+
 def _parallel_worker(page: int) -> tuple[int, dict | None, str | None, float, dict]:
     """`_run_one_step_parallel` 的子进程体：用 `_parallel_worker_init` 建好的
     进程级 ctx/step，只算不写盘。模块级函数（不是方法）——`ProcessPoolExecutor`
@@ -1267,4 +1279,5 @@ def _parallel_worker(page: int) -> tuple[int, dict | None, str | None, float, di
             products = _worker_step.run_page(_worker_ctx, page)
         return page, products, None, time.time() - t0, rec.to_dict()
     except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整批
+        _trace_page_error(_worker_step, page)
         return page, None, f"{type(e).__name__}: {e}", time.time() - t0, rec.to_dict()
