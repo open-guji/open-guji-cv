@@ -461,8 +461,12 @@ class Engine:
           （`real_proto`），每次导出字形库都会让它整册过期重算。审字卡上的「查候选」走
           `/api/rare` 现算，不读这一步的产物。
 
+        - 声明了 `StepSpec.enabled_by` 的步骤：那个参数字段为假就跳过（2026-11-27，3b glyph_near／收尾 glyph_analyzer 缺省关）。
+
         只跳过执行，不改 pipeline 拓扑，下游本来就处理得了「这一路证据没有」。"""
-        out = list(steps)
+        out = [s for s in steps
+               if not STEPS[s].spec.enabled_by
+               or getattr(self.ctx.params_for(STEPS[s]), STEPS[s].spec.enabled_by, None)]
         if "rare_candidates" in out and not rare_candidates_consumed(
                 self.pipeline.steps, lambda sid: self.ctx.params_for(STEPS[sid]), self.book):
             out = [s for s in out if s != "rare_candidates"]
