@@ -435,10 +435,17 @@ class EventLog:
         from ..core.event_files import RevGate, sibling_books_dir
         return RevGate(sibling_books_dir(self.root / "events") if books_dir is _UNSET else books_dir)
 
+    def _aliases(self, gate) -> dict[str, str]:
+        """册旧名 → 新名（`core.volume_alias`，册 yaml 的 `aliases`；11-27 册号位数统一）。没写就是空表。"""
+        from ..core.volume_alias import alias_map
+        return alias_map(gate.books_dir)
+
     def _gate(self, batch: str, evs: list[Event]) -> list[Event]:
         """换图源的页表 rev 判据（`core.event_files.RevGate`）。丢掉的条数按批记在 `self.dropped`，
-        给 `guji db status`、落票命令打印「N 条因页表 rev 不符不采信」用，不静默。"""
+        给 `guji db status`、落票命令打印「N 条因页表 rev 不符不采信」用，不静默。
+        判之前先把册旧名换成新名（`_alias_events`），下游只看到新名。"""
         gate = self._rev_gate()
+        evs = _alias_events(evs, self._aliases(gate))
         out = [e for e in evs if gate.admits(e.kind, _target_dict(e.target))]
         if gate.dropped:
             self.dropped[batch] = dict(gate.dropped)
@@ -485,14 +492,15 @@ class EventLog:
         上一次问过的每一册当时的 rev：这回同一个 yaml 目录、问过的每一册 rev 都没变，结果必然逐条相同，直接用；
         有一册变了（换图源刚切了 yaml）就整批重判。rev 本身按 yaml 的 (mtime, 大小) 缓存，问一遍只 stat。"""
         gate = self._rev_gate(books_dir)
+        amap = self._aliases(gate)
         memo = hit[2]
-        if (memo is not None and memo[0] == gate.books_dir
+        if (memo is not None and memo[0] == gate.books_dir and memo[4] == amap
                 and all(gate.rev(b) == r for b, r in memo[1].items())):
             out, dropped = memo[2], memo[3]
         else:
-            out = [e for e in hit[1] if gate.admits(e.kind, _target_dict(e.target))]
+            out = [e for e in _alias_events(hit[1], amap) if gate.admits(e.kind, _target_dict(e.target))]
             dropped = dict(gate.dropped)
-            hit[2] = (gate.books_dir, dict(gate._rev), out, dropped)
+            hit[2] = (gate.books_dir, dict(gate._rev), out, dropped, amap)
         if dropped:
             self.dropped[batch] = dict(dropped)
         else:
@@ -580,6 +588,23 @@ class EventLog:
         done = self.consumed_ids(consumer)
         evs = sorted(self.read(batch) if batch else self.iter_all(), key=replay_key)
         return [e for e in evs if e.id not in done]
+
+
+def _alias_events(evs: list[Event], amap: dict[str, str]) -> list[Event]:
+    """册旧名换新名：要换的事件给一份改过的拷贝（缓存里的原对象不动），其余原样。没有旧名表原样返回。"""
+    if not amap:
+        return evs
+    from ..core.volume_alias import alias_event_dict
+    out = []
+    for e in evs:
+        d = {"target": e.target.model_dump(), "payload": e.payload}
+        d2 = alias_event_dict(d, amap)
+        if d2 is d:
+            out.append(e)
+        else:
+            out.append(e.model_copy(update={"target": EventTarget.model_validate(d2["target"]),
+                                            "payload": d2["payload"]}))
+    return out
 
 
 def iter_events_readonly(log) -> "Iterator[Event]":
