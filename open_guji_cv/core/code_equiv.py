@@ -660,6 +660,12 @@ _SINGLE_SIDES_1127 = ("版面 frame_layers 左右=1（四周單邊，朱楓林�
                       "2026-11-27（CV1，cv #1922，CV0 审口径）")
 
 
+_NOREF_UNIFY_1127 = ("seed_admit.no_ref_params 也认 reference_profile none 页（no_ref_page_params 改用 _no_ref_page；CV0 2026-11-27，参校本 bug）。"
+                     "中心库现行只有脉经配 no_ref_params，脉经没有 profile none 页，其余书 no_ref_params 空即原样返回。"
+                     "脉经 01 border_detect→seed_admit 整册（任务库 #18053 dev 7e46ae7 对 #18054 分支，两台执行机）68 页 11,361 格："
+                     "text/state/geom 全不变，只 1 列切分不同（上游 row_segment 跨机差异，两边上游代码相同），该列 1 格送审→放行，其余 seed_admit 逐格同。"
+                     "GUJI_CORPUS_DRIFT=warn；哈希按合入时 origin/dev 重算。")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.gates.cut_gate",
           new="925a3ee71711731992ffa1a26abe8f1444c23cf679f84ced22508507aa578938",
@@ -2801,6 +2807,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='4aaaa5b2df2c51a5a3b02eb4c268834f15dd8c9cdc4d1ef8d9d1df21a3ad3f72',
           old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
           evidence=_SINGLE_SIDES_1127),
+    # no_ref_params 也认 reference_profile none 页（CV0 11-27，#1943）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="b95f18d4a1d742afafc71664256d243255a08ff9efcdab03ccfdf78c690ffbf6",
+          old="861f2eb9818bcbd7643164eb32921feb05a27a5801e97823003794331c08c878",
+          evidence=_NOREF_UNIFY_1127),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="dcfb3042cc0706190cf659355b14e8de16e63f28f6163282b2b5fb85cd8e4634",
+          old="7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97",
+          evidence=_NOREF_UNIFY_1127),
 )
 
 
