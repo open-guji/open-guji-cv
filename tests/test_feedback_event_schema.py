@@ -116,3 +116,58 @@ def test_event_level_batches():
     assert counts_as_pin(a) and not counts_as_human(a)
     assert counts_as_pin(ev("x", actor="user")) and counts_as_human(ev("x", actor="user"))
     assert not counts_as_pin(ev("x", source="auto"))
+
+
+# ── 裁定事件来源三字段（2026-11-27，计划 1.6）────────────────────────────────
+
+def _prov(**p):
+    return make_event("b-prov", 1, "confirm", EventTarget(step="seed_admit", unit="cell", key="vol02:5:8:14"),
+                      {"v": "confirm", "shape": "甲", **p}, ts="2026-11-27T00:00:00Z")
+
+
+def test_missing_provenance_reports_fields():
+    from open_guji_cv.feedback.events import missing_provenance
+    assert missing_provenance(_prov()) == ["level", "by", "channel"]
+    assert missing_provenance(_prov(level="human", by="a@b.c", channel="console")) == []
+    assert missing_provenance(_prov(level="human", by="a@b.c")) == ["channel"]
+    assert missing_provenance(_prov(level="robot", by="x", channel="console")) == ["level"]
+    assert missing_provenance(_prov(level="ai", by="x", channel="fax")) == ["channel"]
+    cut = make_event("b", 1, "cutline", EventTarget(step="row_segment", unit="boundary", key="vol02:5:8:14"), {"y": 1})
+    assert missing_provenance(cut) == []        # 只对格上的 confirm 要求
+
+
+def test_append_warns_but_does_not_reject_missing_provenance(tmp_path, caplog):
+    import logging
+    log = EventLog(tmp_path / "feedback")
+    with caplog.at_level(logging.WARNING, logger="open_guji_cv.feedback.events"):
+        n = log.append([_prov()])
+    assert n == 1 and log.provenance_missing == 1
+    assert any("缺来源字段" in r.message for r in caplog.records)
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="open_guji_cv.feedback.events"):
+        log.append([make_event("b-prov2", 1, "confirm", EventTarget(step="seed_admit", unit="cell", key="vol02:5:8:15"),
+                               {"v": "confirm", "shape": "乙", "level": "human", "by": "a@b.c", "channel": "console"})])
+    assert log.provenance_missing == 0 and not caplog.records
+
+
+def test_machine_level_is_not_a_pin():
+    from open_guji_cv.feedback.events import counts_as_human, counts_as_pin, event_level
+    e = _prov(level="machine", by="auto_admit", channel="script")
+    assert event_level(e) is None and not counts_as_pin(e) and not counts_as_human(e)
+    assert event_level(_prov(level="ai", by="claude-x", channel="llm")) == "ai"
+
+
+def test_schema_accepts_and_checks_provenance_fields(tmp_path):
+    import pytest
+    pytest.importorskip("jsonschema")
+    from pathlib import Path
+    from jsonschema import Draft202012Validator
+    schema = json.loads((Path(__file__).resolve().parents[1] / "formats" /
+                         "guji_feedback_event_v1.schema.json").read_text(encoding="utf-8"))
+    v = Draft202012Validator(schema)
+    row = _prov(level="ai", by="claude-x", channel="llm").model_dump(mode="json")
+    assert not list(v.iter_errors(row))
+    for bad in ({"level": "robot"}, {"channel": "fax"}, {"by": ""}):
+        r = _prov(level="ai", by="claude-x", channel="llm").model_dump(mode="json")
+        r["payload"].update(bad)
+        assert list(v.iter_errors(r)), bad
