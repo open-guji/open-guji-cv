@@ -912,6 +912,14 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
                cwd=CV, env=env).returncode:
             # 10-21 殿本重发时这步静默出了 0 格相似字，单子照发，网站卡片上相似字全没了；现在出不来就停
             sys.exit("✗ guji audit alt 没出相似字（见上面的原因）；确实要出没有相似字的单子加 --no-alt")
+    notes_f = data_dir(ws) / "feedback" / "notes" / f"{book}.jsonl"
+    if cards.exists() and not a.no_alt and notes_f.exists():
+        # 点校 AI 摘要（notes，按（册，u）对位）挂到卡上，pending_fields 才会写出 ai／ctx／dnote／dout／refs（QTW 11-27：031 的 9 条没进单）
+        tmp = cards.with_name(cards.name + ".dian")
+        if run([py, "-m", "guji_manager.review.dian_attach", cards, notes_f, tmp], cwd=CV, env=env).returncode == 0:
+            tmp.replace(cards)
+        else:
+            print("⚠ 点校 AI 摘要没挂上（guji_manager.review.dian_attach 失败）：单子照出，没有 ai 对象；事后 guji land 可补", file=sys.stderr)
     seg_flags = out / "seg_selfcheck.tsv"
     seg_flags.unlink(missing_ok=True)             # 每次出单现算，不复用旧表（格号会变）
     if not getattr(a, "no_seg_selfcheck", False) and seg_selfcheck_on(text_id):
