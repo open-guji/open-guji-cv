@@ -196,6 +196,7 @@ _DUMP_DROP_HASH: tuple = (
 )
 
 _DUMP_DROP: tuple = (
+    (lambda p: not p.solo_self_exemplar, ("solo_self_exemplar",)),
     (lambda p: not p.book_lanes, ("book_lanes", "book_lanes_fingerprint")),
     (lambda p: not p.symbol_review, ("symbol_min_human",)),
     (lambda p: p.rare_ref_coord_min_cov == _RARE_REF_COORD_MIN_COV, ("rare_ref_coord_min_cov",)),
@@ -992,6 +993,11 @@ class SeedAdmitParams(BaseModel):
     """note_lexicon 通道放行的字：库首位与短语字语义同、字面不同时，取库首位的形（刻形），不取短语写的形。
     起因：殿本 large 基线 𨽾→𨽻 6 格（vol02:134、vol04:16/46/48/58/81 的夹注），库首位 𨽾 cov 0.97–0.98，短语表写 𨽻，
     Sheldon 11-24 复核金标是 𨽾。缺省开（2026-11-27 CV4）；关时逐字节同旧行为、不进指纹。"""
+    solo_self_exemplar: bool = False
+    """match_solo 系放行前看库判 same 的刻例（matched_id）在哪：就在本页本列（册／页／列同、格号不论）→ 不放行，记 doubt
+    `solo_self_exemplar` 落人审。起因：殿本 vol01:88:6:9b 管→總、vol02:150:3:14 鶴→號，刻例都在本页本列相邻格。
+    **缺省关**（2026-11-27 CV4 评估后没开）：库里不分刻例是不是人裁的，脉经 01 第 11、12 页（目录页，列里人裁刻例很多）
+    开了会把 17 个本来放对的格送审，殿本 vol01 多送 1 格；要开须先让它只认非人裁刻例。关时逐字节同旧行为、不进指纹。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
     variant_graph_fingerprint: str = ""

@@ -573,6 +573,10 @@ class SeedAdmitStep(Step):
                       and _solo_coord_dissented(r, vm_here, _coord_refs(ctx, page, coord_cache))):
                     ok, channel = False, None
                     doubts.append("solo_coord_dissent")
+                elif (ok and p.solo_self_exemplar and channel in _SOLO_CHANNELS
+                      and _same_column_exemplar(r.id, getattr(r, "matched_id", None))):
+                    ok, channel = False, None
+                    doubts.append("solo_self_exemplar")
                 # 异体等价只经间接路径成立的撤回（`variant_indirect_guard`）。库形取
                 # 这几条通道自己比的那个字：match_ref 库 same 时是 r.char，其余是 cov 最高的候选。
                 if (ok and align_char and r.candidates
@@ -823,7 +827,7 @@ class SeedAdmitStep(Step):
                 # 增格，一个已有的格都不会变——这是这次转正验证的判据，也是「先不进库」
                 # 那种谨慎口子该配的谨慎版本：铁证闸更擅长的「揪出 dual/match_ref 语义对
                 # 但字形错的位」（王/玉 那类）这次先不做，只扩覆盖率，不动存量判决。
-                if not ok and iron_ctx is not None:
+                if not ok and iron_ctx is not None and "solo_self_exemplar" not in doubts:
                     ex_miss: list[str] = []
                     iron_char = soft_patch(r.id, "iron", _iron_decide, ctx, page, cc.col, r,
                                            iron_ctx, iron_scale, iron_ns,
@@ -2783,6 +2787,21 @@ def _solo_ctx_vetoed(dec, cands, vmap, thresh: float) -> bool:
 
 
 _SOLO_COORD_NUMS = frozenset("一二三四五六七八九十廿卅")
+
+
+def _same_column_exemplar(cell_id: str, matched_id) -> bool:
+    """`solo_self_exemplar`：库里判 same 所凭的那条刻例就在**本页本列**（格号可以不同）。没有整理本背书（match_solo 系）时，
+    这种「同一列自己的刻例」多半是前一轮切分里这一格（或邻格）自己存进库的，换切分后格号错位，自己跟自己比出 cov 0.999
+    （殿本 vol01:88:6:9b 管→總：刻例 vol01:88:6:6b；vol02:150:3:14 鶴→號：刻例 vol02:150:3:13）。刻例号形如
+    `v2:vol01:88:6:6b`／`v2~r2~vol02~145~5~7a`，取末四段 册／页／列／格。"""
+    import re
+    if not matched_id:
+        return False
+    a = re.split(r"[:~]", str(matched_id))
+    b = str(cell_id).split(":")
+    if len(a) < 4 or len(b) < 4:
+        return False
+    return a[-4] == b[-4] and a[-3] == b[-3] and a[-2] == b[-2]
 
 
 def _solo_coord_dissented(r, vmap, coord: dict) -> bool:
