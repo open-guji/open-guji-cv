@@ -647,6 +647,14 @@ _CUTGATE_REMAP_1126 = ("cut_gate（刻本链出口闸）也认 row_segment 列�
                        "（30,32,48,88,89,105,117,129,179,182）、全唐文 053 12 页（28,74,76,77,83,84,89,90,94,95,97,116）与 origin/dev 产物"
                        "逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
 
+_SINGLE_SIDES_1127 = ("版面 frame_layers 左右=1（四周單邊，朱楓林集）：该侧跳过 refit_outer_by_bar、find_vertical_lines 加 no_snap（缺省空）、"
+                      "detect_outer_borders 不量竖直外框；没写左右的册走原路径。scripts/code_equiv.py check 对 dev 7c5b894 逐字节相同，"
+                      "border_detect、border_detect_gate（随 border_detect）、column_warp、column_end 四步：殿本 vol01 8 页（1,8,30,40,100,132,149,188）、"
+                      "全唐文 053 8 页（1,2,3,20,50,80,120,150）、脈經 01 6 页（1,4,20,40,47,60）、史記文淵閣 05 8 页（1,3,8,28,58,73,90,94），"
+                      "共 4 册 30 页 ×4 步全同；另 79 页金标原图 detect_borders JSON sha256 逐页相同；中心库 402 个册配置无册写 frame_layers 左右；"
+                      "2026-11-27（CV1，cv #1922，CV0 审口径）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.gates.cut_gate",
           new="925a3ee71711731992ffa1a26abe8f1444c23cf679f84ced22508507aa578938",
@@ -2775,6 +2783,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97",
           old="d9af94abb75fb9557ab425514532c9506ac1274ae3ceb0c47c50ce78b817c9c6",
           evidence=_SOLO5B_SCOPE_1126),
+    # 四周單邊：frame_layers 左右=1（CV1 11-27，cv #1922）
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='9d2e7a4bd695f98fbc8941e1a25174273081ae059f09a23da082284fb33c0c48',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_SINGLE_SIDES_1127),
+    Equiv(module='open_guji_cv.seg.lines',
+          new='4aaaa5b2df2c51a5a3b02eb4c268834f15dd8c9cdc4d1ef8d9d1df21a3ad3f72',
+          old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
+          evidence=_SINGLE_SIDES_1127),
 )
 
 
