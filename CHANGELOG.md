@@ -153,6 +153,11 @@
 
 - PATCH（11-25，CV0「字块随包存 R2」第一步，产物与 23 步 code_hash 逐位不变，L0）：`RunContext.chain_fingerprint(步, 页)`＝该步及全部上游这一页 manifest 指纹的合哈希（跨机共享派生图的键）；`RunContext.materialize` 缓存不在时先问 `core.derived.PAGE_FETCHER`（只管 `char_patch`，由 manager 注册；产出它的那一步自己在跑时不问；同页只问一次；`GUJI_PATCH_FETCH=0` 关），取不到照旧现算；`ImageCache.put_bytes` 放取回的已编码图。`core/step.py`、`core/derived.py`、`products/cache.py` 不在任何 code_deps。
 
+## [0.7.115] - 2026-11-27
+
+史記线 PATCH（SJ 请，GUJI-777）＝v0.7.112＋dev #1953 移植：seed_admit 书级 `symbol_ref_blank_from`（圈号 ○ 被误判成 口囗□日四、整理本此位空、库前三含 ○ 且 cov 与首位差 ≤ 0.03 时放行为 ○；缺省空＝关，关时不进参数 dump）。**不含** v0.7.113／v0.7.114 的 #1921、#1923、boundary_net（那两版的整书重算已取消，本版直接接 v0.7.112）。
+指纹变更：只 seed_admit 代码变，钉 v0.7.112／v0.7.103 的册改钉本版后从 seed_admit 起过期；SJ 只对 17/40/41 册相关页做页级 seed_admit 回放，不整册重跑。本线 2 条老红（test_default_group_flow_has_no_codepoint_groups、test_p_ref_coord_takes_coord_ref_only_when_no_text_label）v0.7.112 上同样红，非本版。
+
 ## [0.7.114] - 2026-11-26
 
 史記线 PATCH＝v0.7.113＋#1918 移植（boundary_net、layout_off_tol）。dev 已有，本节只记账。
