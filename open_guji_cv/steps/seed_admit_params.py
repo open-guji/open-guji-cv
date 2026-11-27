@@ -196,6 +196,7 @@ _DUMP_DROP_HASH: tuple = (
 )
 
 _DUMP_DROP: tuple = (
+    (lambda p: not p.solo_self_exemplar, ("solo_self_exemplar",)),
     (lambda p: not p.book_lanes, ("book_lanes", "book_lanes_fingerprint")),
     (lambda p: not p.symbol_review, ("symbol_min_human",)),
     (lambda p: p.rare_ref_coord_min_cov == _RARE_REF_COORD_MIN_COV, ("rare_ref_coord_min_cov",)),
@@ -243,6 +244,7 @@ _DUMP_DROP: tuple = (
     (lambda p: p.ruling_glyph_min_score is None and p.ruling_glyph_min_margin is None,
      ("ruling_glyph_min_score", "ruling_glyph_min_margin")),
     (lambda p: not p.symbol_ref_blank, ("symbol_ref_blank", "symbol_ref_blank_cov")),
+    (lambda p: not (p.symbol_ref_blank and p.symbol_ref_blank_from), ("symbol_ref_blank_from",)),
     (lambda p: not (p.symbol_ref_blank and p.symbol_ref_gap),
      ("symbol_ref_gap", "symbol_ref_gap_cov", "symbol_ref_gap_min_col")),
     (lambda p: not p.shadow_veto, ("shadow_conf", "shadow_veto_variant_abstain")),
@@ -688,6 +690,11 @@ class SeedAdmitParams(BaseModel):
     只收符号；遮挡（印章）格、排除名单格、人裁格不动；对位没说空格（整理本这一位有字）的不放。空＝关（不进 dump）。"""
     symbol_ref_blank_cov: float = 0.97
     """`symbol_ref_blank` 的库 cov 下限（库对这个符号的匹配度；本书圈号实测 0.977–0.999）。"""
+    symbol_ref_blank_from: str = ""
+    """书级，缺省空（关，不进参数 dump，行为不变）。`symbol_ref_blank` 再放宽一档：本格字（`rec.char`）在这串字里（如 `口囗□日四`，圈号 ○ 的图被误判成它们）、
+    库首位也在这串字里、库前三名里有 `symbol_ref_blank` 的符号且 cov ≥ 门槛、与库首位 cov 差 ≤ 0.03、整理本此位空（或 `symbol_ref_gap` 放宽后无对位）→ 放行为该符号。
+    起因：史記 17/40/41 册约 14 格 ○ 被判口（GUJI-777，SJ 11-27）。遮挡、人裁、排除名单照旧不动；证据 lane 记 `from`。**没做单圈形状检测**（本通道拿不到字块图），
+    靠「整理本此位空＋库前三含○＋cov 近」收口；日／目误报风险由这三条挡。需 `symbol_ref_blank` 非空才生效。"""
     symbol_ref_gap: bool = False
     """`symbol_ref_blank` 放宽到「整理本这里没字」（坐标对位没有这一位的条目，`coord.get(id) is None`，不是空格 `""`；
     A24 第 5 轮，长期计划线程转 SJ 史記 r9：ref_gap 里 17 格库首位是 ○、cov 0.92–0.999）。需 `symbol_ref_blank` 非空才生效。
@@ -992,6 +999,11 @@ class SeedAdmitParams(BaseModel):
     """note_lexicon 通道放行的字：库首位与短语字语义同、字面不同时，取库首位的形（刻形），不取短语写的形。
     起因：殿本 large 基线 𨽾→𨽻 6 格（vol02:134、vol04:16/46/48/58/81 的夹注），库首位 𨽾 cov 0.97–0.98，短语表写 𨽻，
     Sheldon 11-24 复核金标是 𨽾。缺省开（2026-11-27 CV4）；关时逐字节同旧行为、不进指纹。"""
+    solo_self_exemplar: bool = False
+    """match_solo 系放行前看库判 same 的刻例（matched_id）在哪：就在本页本列（册／页／列同、格号不论）→ 不放行，记 doubt
+    `solo_self_exemplar` 落人审。起因：殿本 vol01:88:6:9b 管→總、vol02:150:3:14 鶴→號，刻例都在本页本列相邻格。
+    **缺省关**（2026-11-27 CV4 评估后没开）：库里不分刻例是不是人裁的，脉经 01 第 11、12 页（目录页，列里人裁刻例很多）
+    开了会把 17 个本来放对的格送审，殿本 vol01 多送 1 格；要开须先让它只认非人裁刻例。关时逐字节同旧行为、不进指纹。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
     variant_graph_fingerprint: str = ""

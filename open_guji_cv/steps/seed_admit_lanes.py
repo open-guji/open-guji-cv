@@ -412,10 +412,14 @@ def _evict_review_pass(ctx: RunContext, page: int, out: list, cells: dict) -> in
     return n
 
 
+_SRB_FROM_MAX_GAP = 0.03   # symbol_ref_blank_from：○ 与库首位（口囗□日四）的 cov 差上限（SJ 17/40/41 册实测 0.003–0.02）
+
+
 def _symbol_ref_blank_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: dict) -> int:
     """符号字块遇整理本空格位（`symbol_ref_blank`）：库首位是册里点名的符号、cov 够、对位说此位是空格 → 放行为该符号（升）。
     → 新放行格数。放在 `symbol_review` 之后，把它降下去的那批圈号接回来。"""
     syms = frozenset(p.symbol_ref_blank)
+    frm = frozenset(p.symbol_ref_blank_from)
     n = 0
     for col in out:
         col_cov = sum(1 for r in col.chars or [] if coord.get(r.id) is not None) if p.symbol_ref_gap else 0
@@ -429,17 +433,30 @@ def _symbol_ref_blank_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: d
             gap = c0 is None and p.symbol_ref_gap and col_cov >= p.symbol_ref_gap_min_col
             if c0 != "" and not gap:
                 continue
-            if rec.char and rec.char not in syms:
+            from_ok = bool(rec.char) and rec.char not in syms and rec.char in frm
+            if rec.char and rec.char not in syms and not from_ok:
                 continue
             m = mmap.get(rec.id)
             cands = list(getattr(m, "candidates", None) or [])
-            if not cands or cands[0][0] not in syms or float(cands[0][1]) < (p.symbol_ref_gap_cov if gap else p.symbol_ref_blank_cov):
-                continue
-            sym, cov = cands[0][0], float(cands[0][1])
+            thr = p.symbol_ref_gap_cov if gap else p.symbol_ref_blank_cov
+            if from_ok:
+                # `symbol_ref_blank_from`：本格字被误判成 口囗□日四（圈号 ○ 的图），库首位也是它、○ 在库前三名、cov 够、与首位差不超过 _SRB_FROM_MAX_GAP
+                top3 = cands[:3]
+                if not top3 or top3[0][0] not in frm or float(top3[0][1]) < thr - _SRB_FROM_MAX_GAP:
+                    continue
+                hit = next(((c, float(v)) for c, v in top3 if c in syms and float(v) >= thr and float(top3[0][1]) - float(v) <= _SRB_FROM_MAX_GAP), None)
+                if hit is None:
+                    continue
+                sym, cov = hit
+            else:
+                if not cands or cands[0][0] not in syms or float(cands[0][1]) < thr:
+                    continue
+                sym, cov = cands[0][0], float(cands[0][1])
             _demote(rec, "symbol_ref_blank")
             ev = dict(rec.evidence or {})
             ev["lane"] = {"lane": "symbol_ref_blank", "lib": sym, "cov": round(cov, 4),
-                          "prev_doubts": list(rec.doubts or []), **({"via": "gap"} if gap else {})}
+                          "prev_doubts": list(rec.doubts or []), **({"via": "gap"} if gap else {}),
+                          **({"from": rec.char} if from_ok else {})}
             ev.pop("symbol", None)
             rec.evidence = ev
             rec.admit, rec.channel, rec.provenance, rec.char = True, "symbol_ref_blank", "match", sym

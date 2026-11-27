@@ -97,6 +97,15 @@ class ColumnBandStep(Step):
             recs.append(ColumnBandRec(col=w.col, band=band))
         return {"column_bands": PageBands(page=page, columns=recs)}
 
+    def legacy_strip(self, ctx: RunContext, raw: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """旧包重放（CV4 算法待办 #13，2026-11-27）：拆步前旧产物包（各书钉 0.7.x 线的 main 包）没有 `column_bands`，
+        2c `column_end` 现算列图时经这里按拆步前 `column_warp` 的 `clean_column` 前半算 `(去噪图, 界行抹白后的图)`，
+        只在内存里，不写包、不进 `column_banded` 缓存。本步现行参数（写本 `tight_rule_band`、全唐文 `inner_bar_span`）照用，
+        `side_cut`（拆分后 #1900 才加、缺省开）不用——旧包的列图与格坐标都是没有它时出的。"""
+        p: ColumnBandParams = ctx.params_for(self)  # type: ignore[assignment]
+        denoised, _band, no_rules = band_strip(raw, p.ink_threshold, **bar_kwargs(p))
+        return denoised, no_rules
+
     def render(self, ctx: RunContext, kind_id: str, key: str) -> np.ndarray:
         page, col, _ = parse_key(key)
         if col is None:

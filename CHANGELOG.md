@@ -4,6 +4,7 @@
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
 - 脚本（不进任何 Step 指纹；GM2 2026-11-27，CV0 采纳执行方建议）：`scripts/rerun_prep.sh` 切 cv 改走 `safe_checkout`：遇「未跟踪文件会被覆盖／删除」只处理 git 报出的那几个文件，先带时间戳备份到工作区外（缺省 `~/.guji-jobs/checkout-bak/<UTC 时间>-<pid>/<仓名>/`），再移走、重切，备份路径打进准备日志；不整仓 clean，清单里有仓外／已跟踪／不存在的路径就一个都不动。执行方取 dev 上的准备脚本，合进 dev 即生效。规则同 guji-manager `jobs/safe_checkout.py`。
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV2 2026-11-27，CV4 算法待办 #13）：拆步前的旧产物包（各书钉 0.7.x 线的 main 包）没有 `column_bands`，现行 cv 再生 `column_image`／`char_patch` 时 `column_end` 报上游缺失、`seed_admit` 整页 PatchUnavailable。现在 `column_end` 读不到 2b 产物且 `column_windows` 带旧 `band` 时，经 `column_band.legacy_strip` 按拆步前 `clean_column` 前半在内存里现算（不带 `side_cut`，不写包、不进缓存），文字带用包里记的值；新包缺 2b 照旧报错。史記 42（v0.7.112 包）、全唐文 020（v0.7.104 包）各 12 页列图＋字块与包的原版本逐像素同。
 
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26，CV0 定）：刻本链出口闸 `cut_gate` 也认 row_segment 列旗 `manual_cells_remapped`（钉子按列图几何换算、位移 >3px），列级 flags 记「待人核」，只记不拦，口径同 row_segment_gate；manager ≥ v0.6.38 按它出 S05 待审卡。
 
@@ -152,6 +153,11 @@
 补发（PATCH，用户 11-26 定「发 patch 随时用」）＝v0.9.4＋#1899（字块按页取回接口，配 manager ≥ 含 #1013 的版本）。产物与各步 code_hash 逐位不变，各书不过期。
 
 - PATCH（11-25，CV0「字块随包存 R2」第一步，产物与 23 步 code_hash 逐位不变，L0）：`RunContext.chain_fingerprint(步, 页)`＝该步及全部上游这一页 manifest 指纹的合哈希（跨机共享派生图的键）；`RunContext.materialize` 缓存不在时先问 `core.derived.PAGE_FETCHER`（只管 `char_patch`，由 manager 注册；产出它的那一步自己在跑时不问；同页只问一次；`GUJI_PATCH_FETCH=0` 关），取不到照旧现算；`ImageCache.put_bytes` 放取回的已编码图。`core/step.py`、`core/derived.py`、`products/cache.py` 不在任何 code_deps。
+
+## [0.7.115] - 2026-11-27
+
+史記线 PATCH（SJ 请，GUJI-777）＝v0.7.112＋dev #1953 移植：seed_admit 书级 `symbol_ref_blank_from`（圈号 ○ 被误判成 口囗□日四、整理本此位空、库前三含 ○ 且 cov 与首位差 ≤ 0.03 时放行为 ○；缺省空＝关，关时不进参数 dump）。**不含** v0.7.113／v0.7.114 的 #1921、#1923、boundary_net（那两版的整书重算已取消，本版直接接 v0.7.112）。
+指纹变更：只 seed_admit 代码变，钉 v0.7.112／v0.7.103 的册改钉本版后从 seed_admit 起过期；SJ 只对 17/40/41 册相关页做页级 seed_admit 回放，不整册重跑。本线 2 条老红（test_default_group_flow_has_no_codepoint_groups、test_p_ref_coord_takes_coord_ref_only_when_no_text_label）v0.7.112 上同样红，非本版。
 
 ## [0.7.114] - 2026-11-26
 
