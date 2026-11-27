@@ -659,6 +659,11 @@ _SINGLE_SIDES_1127 = ("版面 frame_layers 左右=1（四周單邊，朱楓林�
                       "2026-11-27（CV1，cv #1922，CV0 审口径）。v0.9.9 patch 线（v0.9.8＋#1922 cherry-pick，改动同 dev）按本线哈希另登，CV0 2026-11-27")
 
 
+_TRK_CLIP_1127 = ("vline_track 淡线兜底 _trk_gray_line 取行号只封上界（np.minimum(…, h-1)）：原先行号 ≥ 页高必抛 IndexError、该页失败，"
+                  "没抛错的页行号都 < 页高，min 是恒等，产物逐字节同（负行号照旧）。汉书 26 册 13 页（1,2,3,4,6,20,50,80,110,140,165,175 对 v0.9.9 border_detect 逐字节同；"
+                  "p5 原 120px 窄条由报错改为跑通）；单测 test_gray_fallback_page_shorter_than_frame。2026-11-27（CV0，WYG #18261）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.gates.cut_gate",
           new="925a3ee71711731992ffa1a26abe8f1444c23cf679f84ced22508507aa578938",
@@ -2808,6 +2813,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='4aaaa5b2df2c51a5a3b02eb4c268834f15dd8c9cdc4d1ef8d9d1df21a3ad3f72',
           old='97407131a39ae521fcb4777bbe2fbefd56a8e978e73a4acdd579e13992bf703d',
           evidence=_SINGLE_SIDES_1127),
+    # vline_track 淡线兜底封上界（CV0 11-27，汉书 26 p5）
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='064dc3aa396b925df392691ca745a40a59d3c1ca3ba519e0d6b3e260cc560098',
+          old='9d2e7a4bd695f98fbc8941e1a25174273081ae059f09a23da082284fb33c0c48',
+          evidence=_TRK_CLIP_1127),
 )
 
 
