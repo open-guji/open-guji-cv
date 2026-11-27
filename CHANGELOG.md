@@ -124,6 +124,7 @@
 
 ## [未发版]
 
+- PATCH（指纹变更：seed_admit 起过期，`feedback.bindings` 在其 code_deps；CV0 2026-11-27）：绑定给无框旧人裁补锚时，字形库里同格号人裁实例的图只有在「裁决当时那版切分被换掉」之前写进库才当旁证（看切分步 manifest 历史）；之后才写进去的（回库、补放、重切刷新）是按原格号从新切分切的，与现格比等于自己比自己——史記 03 册 #17918／#17967 因此把 16／360 格旧人裁照原格号采信。另：manifest 查不到这一页时现行切分起始时间不再当 0（当作刚切）。`_VERSION` 9。code_equiv：殿本 vol28 13 页、全唐文 020 16 页逐字节相同；史記 02 25 页中 10 页不同（15 格 human→机器字，均为上述情形）。
 - PATCH（L0：`glyph_analyzer` 缺省关、尚无册跑过）：`glyph_analyzer` 的 `code_deps` 补 `clustering.sim_cnn`（`match_algo` 用它解析 `sim_model` 拼证据里的算法名），过 manager 指纹覆盖守卫 `test_code_deps_coverage`（CV0 2026-11-27，GM3 报）。
 - PATCH（新步骤缺省关，现役各步 code_hash 不变；CV3 2026-11-27，Sheldon 11-26 定的第三步重构第一块）：3 识字加 3b `glyph_near`（形近字组分析：书配置 `glyph_near.groups` 里登记的字组被 3a 触发时，按组登记的方法给组内各字新分＋证据，不定字）与收尾 `glyph_analyzer`（汇总成每格 `cands`〔字＋校准后 p＋各小步证据〕与 `p_map`，第三步不判放行）。第一个方法 `cnn_small`：殿本 宫／宮／官 小 CNN（ZM 训，按册号 % 5 取留出折，`models/glyph_near_gong`，已登记模型表、传 R2；calib.json 用 7447 格留出概率保序标定）。框架：`StepSpec.enabled_by`（参数为假就跳过的可选步骤）、骨架 `finals:`（大步收尾，必须是本大步最后一步，`Pipeline.final_of`）。殿本 vol02 49 格经步骤复核与训练留出概率最大差 0.0195、0.5 两侧一致 49/49。
 
