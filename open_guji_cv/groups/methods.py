@@ -119,7 +119,7 @@ class Codepoint(Method):
 @dataclass(frozen=True)
 class NearP(Method):
     """读第三步收尾给的组内各字校准概率 p（`FlowConfig.near_p[格 id] = {字: p}`）：组内最高 p ≥ 本组门槛
-    （`FlowConfig.near_p_min[组]`）→ 给这个字（置信度 p）；不够高、没有 p（3b 没触发）→ 待定，交给后面的文意方法。
+    （`FlowConfig.near_p_min[组]`，数或 {字: 数}）→ 给这个字（置信度 p）；不够高、没有 p（3b 没触发）→ 待定，交给后面的文意方法。
     只对**含义不同**的形近字用（官宫）；异体（宮 p 为 None，记 same_as 宫）不参与。书没配 `near_p_min` 的组 `flow.decide` 根本不跑它。"""
     name: str = "near_p"
     kind = "model"
@@ -132,6 +132,8 @@ class NearP(Method):
             return GroupVerdict(None, why="abstain:no_p", via=self.name)
         ch = max(pm, key=lambda c: pm[c])
         extra = {"p": {c: round(v, 4) for c, v in sorted(pm.items(), key=lambda kv: -kv[1])}}
+        if isinstance(thr, dict):          # 按字给门槛：{"宫": 0.955, "官": 0.999}；"*" 是没列的字（缺省不放）
+            thr = thr.get(ch, thr.get("*", 2.0))
         if pm[ch] < thr:
             return GroupVerdict(None, conf=pm[ch], why="abstain:low_p", via=self.name, extra=extra)
         return GroupVerdict(ch, conf=pm[ch], why="agree", via=self.name, extra=extra)

@@ -2226,7 +2226,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      tolerate_extra={g: str(v) for g, v in p.group_flow_tolerate_extra.items()},
                      lift_shape_ref=p._rt_lift_shape_ref(),
                      ref_alias=dict(p.group_flow_ref_alias),
-                     near_p_min={g: float(v) for g, v in p.group_flow_near_p.items()},
+                     near_p_min={g: ({c: float(x) for c, x in v.items()} if isinstance(v, dict) else float(v)) for g, v in p.group_flow_near_p.items()},
                      near_p=_near_p_map(p, ctx, page),
                      ref_free_groups=frozenset(p.group_flow_ref_free),
                      dissent_keep_form=True, same_writing_keep=frozenset(p.group_flow_same_writing_keep), review_fix_agree=frozenset(p.group_flow_review_fix_agree),
