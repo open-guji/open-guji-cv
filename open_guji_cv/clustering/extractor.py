@@ -1243,6 +1243,69 @@ def strip_frame_debris(patch: np.ndarray, cell_top: float,
     return out
 
 
+
+# ── 列端虚线行（cell_shrink.end_dash_row，CV2 2026-11-27）────
+# 写本（史記文淵閣本）内框细线印成一串短划，整页拟不出内线的页（史記 42 册 32 页里下框 10 页）列端格逐格剥：
+# 短划又薄又扁，单个与字身分离的剥得掉，但 ①两三段连成一截、墨过 DEBRIS_AREA 又高过 DEBRIS_H 的留下；
+# ②字的勾越过虚线往下伸时，短划与字身纵向重叠、算不出「缝」，整排留下。紧框就横着拉宽去圈短划
+# （cut-frame 金标 42:43:5「宗」、42:27:5「事」）。这里认「一排」：端区里不碰字身的薄片，纵向中心对齐成一行，
+# 够多、够宽、够扁，就整排抹白。灬的四点高 0.17–0.20 格高、不扁，进不来；字底一横碰着字身或独占一行不成排。
+DASH_ROW_ZONE = 0.25       # 端区：格界外侧往里这么多格高
+DASH_ROW_MAX_H = 0.07      # 短划高至多这么多格高
+DASH_ROW_ALIGN = 0.03      # 同一排：纵向中心离排中位数不过这么多格高
+DASH_ROW_MIN_N = 3         # 一排至少这么多块
+DASH_ROW_MIN_FLAT = 2      # 其中至少这么多块是扁的（宽 ≥ DASH_ROW_FLAT × 高）
+DASH_ROW_FLAT = 1.8
+DASH_ROW_SPAN = 0.3        # 一排横跨至少图块宽的这么多
+DASH_ROW_TOUCH = 2         # 离字身（最大连通体）不到这么多像素算碰着，不动
+
+
+def strip_dash_row(patch: np.ndarray, cell_top: float, cell_bot: float, cell_h: float,
+                   bottom: bool = True) -> np.ndarray:
+    """列尾（`bottom`）／列首格端区里成排的虚线短划抹白（见上）。认不出一排就原样返回。"""
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, st, cen = cv2.connectedComponentsWithStats(binary, 8)
+    if n <= DASH_ROW_MIN_N:
+        return patch
+    main = int(np.argmax(st[1:, 4])) + 1
+    near_main = cv2.dilate((lab == main).astype(np.uint8), np.ones((2 * DASH_ROW_TOUCH + 1,) * 2, np.uint8)) > 0
+    zone = DASH_ROW_ZONE * cell_h
+    cand = []
+    for k in range(1, n):
+        if k == main:
+            continue
+        y, hh, ww = int(st[k, 1]), int(st[k, 3]), int(st[k, 2])
+        if hh > DASH_ROW_MAX_H * cell_h:
+            continue
+        if bottom and y + hh < cell_bot - zone or not bottom and y > cell_top + zone:
+            continue
+        if (near_main & (lab == k)).any():
+            continue
+        cand.append(k)
+    if len(cand) < DASH_ROW_MIN_N:
+        return patch
+    tol = DASH_ROW_ALIGN * cell_h
+    best: list[int] = []
+    for k in cand:              # 每块当排心试一次，取最多的一排
+        row = [j for j in cand if abs(cen[j][1] - cen[k][1]) <= tol]
+        if len(row) > len(best):
+            best = row
+    if len(best) < DASH_ROW_MIN_N:
+        return patch
+    med = float(np.median([cen[j][1] for j in best]))
+    best = [j for j in cand if abs(cen[j][1] - med) <= tol]
+    flat = sum(int(st[j, 2]) >= DASH_ROW_FLAT * int(st[j, 3]) for j in best)
+    x0 = min(int(st[j, 0]) for j in best); x1 = max(int(st[j, 0] + st[j, 2]) for j in best)
+    if flat < DASH_ROW_MIN_FLAT or x1 - x0 < DASH_ROW_SPAN * patch.shape[1]:
+        return patch
+    # 这一排得在字身墨的外侧：列尾在字身下半、列首在上半（字中腰的一排点画不是框线）
+    my0, my1 = int(st[main, 1]), int(st[main, 1] + st[main, 3])
+    if bottom and med < (my0 + my1) / 2.0 or not bottom and med > (my0 + my1) / 2.0:
+        return patch
+    out = patch.copy()
+    out[np.isin(lab, best)] = 255
+    return out
+
 # ── 版框断段剥离（2026-08-25，用户问「还有没有别的办法」）────
 # 曲线切边之后仍剩下一类框渣：版框横线被字挡断后留在字**左右两侧**的
 # 断段。它们与字身垂直位置重叠，所以曲线路径（必须走在字身之下）够不
@@ -3362,6 +3425,8 @@ class CharExtractor:
                     out_p = patch.copy()
                     for a, b in parts:
                         sub_p = np.ascontiguousarray(patch[:, a:b])
+                        if gmeta.get("end_dash_row") and idx in (tail_cell, head_cell):
+                            sub_p = strip_dash_row(sub_p, ltop - y0, lbot - y0, cell_h_ref, bottom=idx == tail_cell)
                         if inner_end:
                             ie = gmeta.get("inner_edges") or {}
                             sub_p = strip_frame_debris(
