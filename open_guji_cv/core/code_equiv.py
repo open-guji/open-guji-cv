@@ -2861,6 +2861,19 @@ ENTRIES: tuple[Equiv, ...] = (
           new='7327c59b4abbbced958a46c98bcfd8db75c16d7379b4ae5e4bf8f83a536f1fc5',
           old='98fdf5949dc19daa7d1e913c39e02a2d6a9f5fc3683d8d9586957b882317aac0',
           evidence=_SEG_BOX_1127),
+    # v0.9.8 patch 线（v0.9.7＋#1956）本线哈希，CV0 2026-11-27
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='bb399d901451c923a4d5c094d82275904cfc835d8739e89a4245d80e55056739',
+          old='861f2eb9818bcbd7643164eb32921feb05a27a5801e97823003794331c08c878',
+          evidence=_SEG_BOX_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit_params',
+          new='a983e51c2790877a16253d180a7f45afcdf402b0c2d832a1d393a7203c7f1236',
+          old='7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97',
+          evidence=_SEG_BOX_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit_lanes',
+          new='5af58a0512ba501d499d21c67aeabb225f19d1e4b2a242bcb51afc6b7f7e34c0',
+          old='edbe250857b9aedf78278c6dd78c00f34c92fe711591293980f9ea70d419139c',
+          evidence=_SEG_BOX_1127),
 )
 
 
