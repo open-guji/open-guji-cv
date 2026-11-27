@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- 脚本（不进指纹，只加注释与文档；待审单清理 1.7）：`scripts/zhengli/republish.py`、`proof_cycle.py`、`auto_cycle.py` 文件头标 DEPRECATED（整张换单已被 `guji land` 取代）；调用方清单与退役条件见 `doc/design/整张换单脚本退役清单.md`。**未删**：guji-manager 的 `online_lists`（标 main 后自动重出）和 `swap run` 仍在调用。
 - 修复（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-27，汉书 WYG #18261）：`border_detect` vline_track 淡线兜底 `_trk_gray_line` 取行号只封上界，页图比下框矮（汉书 26 册 p4/p5 是合扫拆坏的 120px 窄条）时不再抛 `IndexError: index 120 is out of bounds`。v0.9.2 起 vline_track 缺省开即有此错。
 
 - PATCH（缺省关，产物逐字节不变，seed_admit 三模块 code_equiv 登记；CV2 2026-11-27，朱楓林集 MBJ 报）：①册 yaml 顶层 `chars_per_line_pages` 按页每列字数（如序页 `{"2-9": 14}`），border_detect／column_geometry／column_gate／row_segment／row_segment_gate／cut_gate 一处认（`core/step` 注册处换 `ctx.book.chars_per_line`，步代码不动）；写了表的册这几步指纹加 `cpl_pages`，没写的册不变。②`seed_admit.seg_box_check`（按书挑 sliver／frame_line／speck／split_pair／tall，`[all]` 全开）：碎格、框线扁条、墨点、一字劈两框、过高框退回待审，doubt `seg_defect`（待审原因 seg_defect）。
