@@ -74,6 +74,10 @@ KINDS: tuple[Kind, ...] = (
     # 目录名带版本 `glyph_sim_base_v<N>`：重训（并进新书）出下一个目录，旧目录不动，钉着旧版的书不受影响
     Kind("glyph_sim_base", "repo", "models/glyph_sim_base_v*/*", "global", "global",
          ("glyph_match",), "多书合训的 5a 相似度 CNN 通用底座（model.pt）＋通用校准表（calib.json，对没见过的书取保守）"),
+    # 3b 形近字组分析（`steps/glyph_near.py`，`groups/near_methods.py`）：每组一个目录，书配置 `glyph_near.groups.<组>.methods`
+    # 指过来。宫／宮／官 小 CNN 是殿本现行文本按册 5 折训的（ZM 2026-11-26），calib.json 用 5 折留出概率标定
+    Kind("glyph_near_gong", "repo", "models/glyph_near_gong/*", "book", DIANBEN,
+         ("glyph_near", "glyph_analyzer"), "殿本宫／官二分类小 CNN（fold0–4.pt，按册号 % 5 取留出折）＋校准表（calib.json）＋model.json"),
     # 5b 笔画证据（`clustering/stroke_evidence.py`，`font.stroke_evidence` 开关）：不认字的笔画检测网络＋标准骨架索引。
     # 目录名带版本，换权重或索引出 `_v2`，不动 `_v1`
     Kind("stroke_evidence", "repo", "models/stroke_evidence_v*/*", "global", "global",

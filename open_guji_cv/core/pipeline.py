@@ -67,6 +67,13 @@ class Pipeline:
     #: 四大步（2026-11-22）：大步名 → 本管线里属于它的步骤 id（按管线顺序）。只是分组，不进指纹；
     #: `slice()` 的起止可以写大步名。由骨架 `stages:` 展开（`expand_stages`）。
     stages: dict[str, list[str]] = field(default_factory=dict)
+    #: 大步收尾（2026-11-27 用户定）：大步名 → 收尾步骤 id。由骨架 `finals:` 来，只收本管线里有的；
+    #: 收尾必须是该大步的最后一步（`expand_finals` 校验），在本大步其他步骤之后、下一大步之前跑。
+    finals: dict[str, str] = field(default_factory=dict)
+
+    def final_of(self, stage: str) -> str | None:
+        """大步 `stage` 的收尾步骤 id；没有给 None。"""
+        return self.finals.get(stage)
 
     # ── 图 ───────────────────────────────────────────────────────────
     def gate_of(self, sid: str):
@@ -280,6 +287,22 @@ def expand_stages(chain: dict, skeleton: dict, steps: list[str]) -> dict[str, li
     return out
 
 
+def expand_finals(skeleton: dict, stages: dict[str, list[str]]) -> dict[str, str]:
+    """骨架 `finals:`（大步名 → 收尾步骤 id）→ 本管线里有的那些收尾。收尾不是该大步最后一步就报错。"""
+    out: dict[str, str] = {}
+    for stage, sid in (skeleton.get("finals") or {}).items():
+        stage, sid = str(stage), str(sid)
+        if stage not in (skeleton.get("stages") or {}):
+            raise ValueError(f"骨架 finals: 里的 {stage!r} 不是大步")
+        members = stages.get(stage) or []
+        if sid not in members:
+            continue                          # 这条链没有这个收尾（如 recognition 槽为空的链）
+        if members[-1] != sid:
+            raise ValueError(f"大步 {stage} 的收尾 {sid} 必须是该大步的最后一步，实际最后一步是 {members[-1]}")
+        out[stage] = sid
+    return out
+
+
 def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
     import open_guji_cv.steps  # noqa: F401  —— 触发 Step 注册
 
@@ -290,6 +313,7 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
     from .yaml_cache import load_yaml_cached
     d = load_yaml_cached(path)
     stages: dict[str, list[str]] = {}
+    finals: dict[str, str] = {}
     if "slots" in d:                  # 链 yaml 只写槽位，步骤顺序由骨架展开
         if "steps" in d:
             raise ValueError(f"pipeline {pid}: slots: 和 steps: 不能同时写")
@@ -299,6 +323,7 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
         skeleton = load_yaml_cached(sk_path)
         d = {**d, "steps": expand_slots(d, skeleton, pid)}
         stages = expand_stages(d, skeleton, d["steps"])
+        finals = expand_finals(skeleton, stages)
     params_raw = d.get("params") or {}
     if not isinstance(params_raw, dict) or any(not isinstance(v, dict) for v in params_raw.values()):
         raise ValueError(f"pipeline {pid} 的 params: 必须是 {{step_id: {{字段: 值}}}}")
@@ -308,7 +333,7 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
         selector=d.get("selector") or {}, needs=d.get("needs") or {},
         notes=d.get("notes", ""),
         params={str(k): dict(v) for k, v in params_raw.items()},
-        stages=stages,
+        stages=stages, finals=finals,
     )
     p.validate()
     for sid in p.params:
