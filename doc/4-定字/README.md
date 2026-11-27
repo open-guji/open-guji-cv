@@ -6,7 +6,7 @@
 |---|---|---|
 | 4a 整理本对位 | `align_ref` | 整理本（参校文本）与字格逐字对位，给每格整理本说的字（要语料；不读字块图，2026-11-22 起从 3 识字移来） |
 | 4b 上下文 | `context_decide` | 在候选里按上下文重排、门槛化定字（要语料） |
-| 4c 放行 | `seed_admit` | 每格：自动放行（带通道）或落人审（带 `pending_reason`）；进库走人裁事件 |
+| 4c 放行 | `seed_admit` | 每格：自动放行（带通道）或落人审（带 `pending_reason`）；进库走裁定事件 |
 
 - 各步的输入输出、参数缺省值：[步骤与产物.md](步骤与产物.md)（从代码生成）。
 - 待审原因的取值：[../design/待审原因PendingReason.md](../design/待审原因PendingReason.md)。
@@ -16,4 +16,4 @@
 - 字格永久编号 u（裁定按 u 查、书级 `seed_admit.ruling_by_u`、人裁绑定与字形库键）：[../参考/字格永久编号u.md](../参考/字格永久编号u.md)。
 - 相关设计：[14-准确率优先-Step6与Step7重设计](../design/14-准确率优先-Step6与Step7重设计.md)、[降人审漏斗-管线侧对照](../design/降人审漏斗-管线侧对照.md)、[15-人裁锚定与重切后重绑定](../design/15-人裁锚定与重切后重绑定.md)。
 
-原第 8 步（人裁事件回流、入库）和第 9 步（排版输出）已移到 guji-manager：入库归它的第二步 `pipeline`，排版输出归第五步 `output`（`guji output export md|format|wikisource|reflow`、`guji output collation-report`）。第 9 步的代码（导出、对勘、体检表）在 cv v0.9.0 整个搬进 manager `guji_manager/output/`；cv 只留字位流 `report/slots.py` 和整理本 `report/witness.py`，`feedback/` 留作库函数给 manager 调。
+原第 8 步（裁定事件回流、入库）和第 9 步（排版输出）已移到 guji-manager：入库归它的第二步 `pipeline`，排版输出归第五步 `output`（`guji output export md|format|wikisource|reflow`、`guji output collation-report`）。第 9 步的代码（导出、对勘、体检表）在 cv v0.9.0 整个搬进 manager `guji_manager/output/`；cv 只留字位流 `report/slots.py` 和整理本 `report/witness.py`，`feedback/` 留作库函数给 manager 调。

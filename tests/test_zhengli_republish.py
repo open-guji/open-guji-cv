@@ -672,6 +672,31 @@ def test_old_rev_votes_reads_both_modes_and_refuses_when_nothing(tmp_path, monke
     assert "按条目 1 票" in src
 
 
+def test_current_votes_are_per_cell_without_rev(tmp_path, monkeypatch):
+    """发布闸 G0（各格独立）：rev=None 只读按条目的票，不看单版票，票上盖 CURRENT；票账照样能平。"""
+    monkeypatch.delenv("CELLREVIEW_TOKEN", raising=False)
+    monkeypatch.setattr(rp, "data_dir", lambda ws: tmp_path)
+    wd = tmp_path / "feedback" / "lists" / "web" / "bk"
+    wd.mkdir(parents=True)
+    itemv = {"book": "bk", "vol": "005", "rev": "005-r1", "item": "pi_x", "a": "9:9:9", "choice": "char", "char": "乙", "voter": "u1", "ts": 2}
+    (wd / "items.jsonl").write_text(json.dumps(itemv) + "\n", encoding="utf-8")
+    from guji_manager.review import pending_items as P
+    monkeypatch.setattr(P.ItemStore, "open", classmethod(lambda cls, d, t, c: type("S", (), {"items": {"pi_x": {"id": "pi_x", "cell": "2:2:2"}}})()))
+    votes, src = rp.old_rev_votes(tmp_path, "bk", None, "005")
+    assert [(v["a"], v["rev"]) for v in votes] == [("2:2:2", rp.CURRENT)] and "按条目 1 票" in src
+    led = rp.ticket_ledger(tmp_path, "vol06", "bk", rp.CURRENT, votes)
+    assert sum(led["counts"].values()) == led["votes"] == 1 and "各格独立" in rp.ledger_md(led)
+
+
+def test_smoke_without_rev_does_not_compare_version(monkeypatch):
+    """发布闸 G3c：rev=None 只看单子取得到、图取得到，不要求线上单是哪一版。"""
+    monkeypatch.setattr(rp, "_http", lambda url: (200, json.dumps({"rev": "whatever", "cells": []})))
+    monkeypatch.setattr(rp.sprite_pub, "refs", lambda doc: {"a.webp"})
+    monkeypatch.setattr(rp, "_img_ok", lambda url: 200)
+    assert rp.smoke("bk", "001", tries=1) == []
+    assert rp.smoke("bk", "001", "001-r9", tries=1) and "不是 001-r9" in rp.smoke("bk", "001", "001-r9", tries=1)[0]
+
+
 def test_fetch_votes_retries_connection_reset(monkeypatch):
     """读网站票断连要退避重试（11-16 多次 ConnectionResetError 挡住出单）。"""
     import io

@@ -12,7 +12,7 @@
                共享   语料、参照本、格位表、字组配置被别处更新——冻结时记一笔即可，不算失败（close-check 1a 同理）。
              退出码：0 没变；2 只有共享输入变；1 本册输入变。
   run        1.0 检查按标准顺序一次跑完（只读，不写中心库、不打 tag），全过就停在「请用户点头」：
-               1 输入锁（check-pin）  2 G0 票账（线上单）  3 G1 线上单待审清零
+               1 输入锁（check-pin）  2 G0 票账（按格，不分单版）  3 G1 线上单待审清零
                4 G3 close-check（终校档，用钉住的引擎跑）  5 G3b/G3c 读者侧冒烟（线上单与图）
                6 出口动作里冻结前就能核的项（exit-check E3 E4 E10 E11）
              报告写 `<工作区>/reports/<册>/_release/<时刻>/1.0检查.md` 与 `result.json`。用户点头之后：
@@ -164,9 +164,9 @@ def cmd_run(a) -> int:
     # 2 G0 票账
     online = rp.proofing_path(ws, text_id, chapter)
     sheet = json.loads(online.read_text(encoding="utf-8")) if online.exists() else {"cells": []}
-    rev = sheet.get("rev")
-    votes, src = rp.old_rev_votes(ws, text_id, rev) if rev else ([], "无线上单")
-    led = rp.ticket_ledger(ws, book, text_id, rev, votes, a.held and [ln.split("\t")[0] for ln in
+    # 各格独立（清理计划 v2）：票只按条目认、不分哪一版单；单子在不在只影响 G1／G3c 的说明
+    votes, src = rp.old_rev_votes(ws, text_id, None, chapter)
+    led = rp.ticket_ledger(ws, book, text_id, rp.CURRENT, votes, a.held and [ln.split("\t")[0] for ln in
                                                                     Path(a.held).read_text(encoding="utf-8").splitlines()[1:] if ln.strip()])
     gates.append(gate("G0", "票账", not led["counts"]["未落"], rp.ledger_md(led) + f"（{src}）"))
 
@@ -175,7 +175,7 @@ def cmd_run(a) -> int:
     n_cells = sum(len(col.get("cells") or []) for pg in json.loads((text_dir / f"{chapter}.char.json").read_text(encoding="utf-8"))["pages"]
                   for col in pg.get("columns") or [])
     gates.append(gate("G1", "线上单待审清零", not pend,
-                      f"线上单 {rev} 待审（未人审）{len(pend)} 格" + (f"（{'、'.join(c['cell'] for c in pend[:10])}）" if pend else "")
+                      f"线上单待审（未人审）{len(pend)} 格" + (f"（{'、'.join(c['cell'] for c in pend[:10])}）" if pend else "")
                       + f"；全册 {n_cells} 格"))
 
     # 4 G3 close-check（钉住的引擎）
@@ -190,7 +190,7 @@ def cmd_run(a) -> int:
                       ("不过：" + "、".join(bad[:12]) if bad else "全过") if cc is not None else f"没跑成：{(p.stderr or p.stdout)[-300:]}"))
 
     # 5 G3b/G3c 读者侧
-    sm = rp.smoke(text_id, chapter, rev, tries=1) if rev else ["没有线上单"]
+    sm = rp.smoke(text_id, chapter, tries=1) if online.exists() else ["没有线上单"]
     gates.append(gate("G3c", "读者侧：线上单与图取得到", not sm, "全部 200" if not sm else "；".join(sm[:8])))
 
     # 6 出口动作里冻结前能核的
@@ -204,9 +204,9 @@ def cmd_run(a) -> int:
                       "；".join(f"{x['id']} {'✓' if x['ok'] else '✗' if x['ok'] is False else '—'} {x.get('detail', '')[:80]}" for x in pre)))
 
     ok = all(g["ok"] is not False for g in gates) and all(g["ok"] is not None for g in gates if g["id"] in ("G0", "G1", "G3"))
-    res = {"book": book, "rev": rev, "ok": ok, "gates": gates, "out": str(out)}
+    res = {"book": book, "ok": ok, "gates": gates, "out": str(out)}
     (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
-    md = [f"# {book} 1.0 检查（线上单 {rev}）", "", "| 门 | 项 | 结果 | 说明 |", "|---|---|---|---|"]
+    md = [f"# {book} 1.0 检查", "", "| 门 | 项 | 结果 | 说明 |", "|---|---|---|---|"]
     md += [f"| {g['id']} | {g['name']} | {'✓' if g['ok'] else '✗' if g['ok'] is False else '—'} | {g['detail']} |" for g in gates]
     md += ["", "**全过：请用户点头冻结 1.0**（之后 `guji freeze register --execute`、book-text 1.0 PR、合并后 exit-check 全项）"
            if ok else "**有门不过：不冻结。** 达不到标准的书退回 A31／A30，或回精校再走一轮。"]
