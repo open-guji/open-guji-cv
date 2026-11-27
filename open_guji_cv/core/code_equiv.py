@@ -683,6 +683,11 @@ _LEGACY_BAND_1127 = ("旧产物包重放（CV4 算法待办 #13）：column_end 
 _SEG_BOX_1127 = ('seed_admit 字框几何闸 seg_box_check（CV2，缺省空、不进参数 dump；空时 _seg_box_pass 不调，seed_admit_lanes 只多常量与新函数 seg_box_defects／_seg_box_pass）：朱楓林集 01 册 6 页（3,10,25,50,86,104，rev-001-r0 包 cv0.9.6 当上游）seed_admit 与 origin/dev fde00a0 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-27（CV2，MBJ 碎格放行成「一」）')
 
 
+_TRK_CLIP_1127 = ("vline_track 淡线兜底 _trk_gray_line 取行号只封上界（np.minimum(…, h-1)）：原先行号 ≥ 页高必抛 IndexError、该页失败，"
+                  "没抛错的页行号都 < 页高，min 是恒等，产物逐字节同（负行号照旧）。汉书 26 册 13 页（1,2,3,4,6,20,50,80,110,140,165,175 对 v0.9.9 border_detect 逐字节同；"
+                  "p5 原 120px 窄条由报错改为跑通）；单测 test_gray_fallback_page_shorter_than_frame。2026-11-27（CV0，WYG #18261）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.steps.column_end",
           new="5ff011688402af99e9afecfe4bb381016b1c892805a7b93f5de3c80d59d9af33",
@@ -2874,6 +2879,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='5af58a0512ba501d499d21c67aeabb225f19d1e4b2a242bcb51afc6b7f7e34c0',
           old='edbe250857b9aedf78278c6dd78c00f34c92fe711591293980f9ea70d419139c',
           evidence=_SEG_BOX_1127),
+    # vline_track 淡线兜底封上界（CV0 11-27，汉书 26 p5）
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='064dc3aa396b925df392691ca745a40a59d3c1ca3ba519e0d6b3e260cc560098',
+          old='9d2e7a4bd695f98fbc8941e1a25174273081ae059f09a23da082284fb33c0c48',
+          evidence=_TRK_CLIP_1127),
 )
 
 
