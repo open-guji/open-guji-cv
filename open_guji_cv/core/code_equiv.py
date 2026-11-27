@@ -618,7 +618,53 @@ _EVENT_LEVEL_1126 = ("feedback/events.py 分事件级别（CV0 2026-11-26，GM4 
                      "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。史記 104/106 首跑曾异：绑定表 fp_diff 随字块缓存先后变，"
                      "同一份旧代码重跑也给出同样结果，非本改动所致，复跑逐字节同。")
 
+_BIND_CACHE_ALGO_1126 = ("feedback/bindings.py 页绑定盘上缓存键加算法哈希（bindings/anchor/anchor_backfill 三文件 sha256 前 16 位），"
+                         "改算法后旧缓存不再命中；只影响缓存命中，不改绑定结果（GM2／CV0 2026-11-26）。"
+                         "seed_admit 在史記 02 25 页、殿本 vol28 13 页、全唐文 020 16 页上与 origin/dev 产物逐字节相同"
+                         "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。")
+_PIN_REMOVED_1126 = ("feedback/bindings.py 加删钉垫片 removed_pin_events（读 <feedback>/pins/*.state.jsonl，最后为 removed 的钉所列答案事件不进 "
+                     "human_chars／绑定表；GM4 方案第九节，CV0 2026-11-26），lookup.py 两处读者接上。没有钉状态文件时为空集，行为不变。"
+                     "seed_admit 在史記 02 25 页、殿本 vol28 13 页、全唐文 020 16 页上与 origin/dev 产物逐字节相同"
+                     "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。")
+_PIN_GEOM_1126 = ("row_segment 套整列钉子前按钉子记的列图几何底（manager column_basis.geom）换算（CV1 2026-11-26，CV0 批的钉子护栏）："
+                  "没记 geom 的钉子（现有全部）照原坐标套、只写 stderr；几何一致照套。row_segment 在殿本 vol01 10 页"
+                  "（30,32,48,88,89,105,117,129,179,182，其中 9 页带钉子）、全唐文 053 12 页（28,74,76,77,83,84,89,90,94,95,97,116，全带钉子）"
+                  "与 origin/dev 7c5b894 产物逐字节相同；row_segment_gate 只在列旗有 manual_cells_remapped 时多记一条旗，"
+                  "cell_shrink→cut_gate 在 053 同 12 页逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
+_SOLO5B_SCOPE_1126 = ("seed_admit 加 solo_5b_scope 参数（any|no_ref，缺省 any 不进 dump、不改行为；CV0 2026-11-26，Sheldon 定）。"
+                      "缺省下 border_detect→seed_admit 整册与 dev 7c5b894 逐格相同：全唐文 030 194 页 30,205 格（任务库 #17835 对 #17836）、"
+                      "殿本 vol28 192 页 28,815 格（#17838 对 #17839），cells/text/state/geom 全不变，GUJI_CORPUS_DRIFT=warn。"
+                      "登记哈希按合入时的 origin/dev 重算（改动同一处）。")
+
+_PIN_GEOM_096 = ("row_segment 套整列钉子前按钉子记的列图几何底（manager column_basis.geom）换算（CV1 2026-11-26，CV0 批的钉子护栏，"
+                 "v0.9.6 补发线＝v0.9.5＋#1924）：没记 geom 的钉子（现有全部）照原坐标套、只写 stderr；几何一致照套。"
+                 "row_segment 在殿本 vol01 10 页（30,32,48,88,89,105,117,129,179,182，其中 9 页带钉子）、全唐文 053 12 页"
+                 "（28,74,76,77,83,84,89,90,94,95,97,116，全带钉子）与 origin/main 04c7e75（v0.9.5）产物逐字节相同；"
+                 "cell_shrink→cut_gate 在 053 同 12 页逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
+
+_CUTGATE_REMAP_1126 = ("cut_gate（刻本链出口闸）也认 row_segment 列旗 manual_cells_remapped，只记旗不拦，口径同 row_segment_gate"
+                       "（CV1 2026-11-26，CV0 定）。现有产物没有列带这个旗，按构造逐字节同：cell_shrink→cut_gate 在殿本 vol01 10 页"
+                       "（30,32,48,88,89,105,117,129,179,182）、全唐文 053 12 页（28,74,76,77,83,84,89,90,94,95,97,116）与 origin/dev 产物"
+                       "逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
+
 ENTRIES: tuple[Equiv, ...] = (
+    Equiv(module="open_guji_cv.gates.cut_gate",
+          new="925a3ee71711731992ffa1a26abe8f1444c23cf679f84ced22508507aa578938",
+          old="f91957b70ddd5e767f5361d6f1c0fb33ffe433f9c3e92a03ffbd447df3404065",
+          evidence=_CUTGATE_REMAP_1126),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="cf886dc57c42f8be18f36935ae07dabe11b8dd48b6a322316479873aa4679111",
+          old="27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee",
+          evidence=_PIN_GEOM_096),
+    # row_segment_gate 补发线与 dev 同一哈希，已由 _PIN_GEOM_1126 那条登记
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="f4812f0b455a1f3cfb40fe24a6a844d5c7ddbf9b5708842ad327c3a2a1baa690",
+          old="27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee",
+          evidence=_PIN_GEOM_1126),
+    Equiv(module="open_guji_cv.gates.row_segment_gate",
+          new="ec5c8b2501b409c620dd1890a16ea13adf9761551b0c1fbdc143f0c860e72bd3",
+          old="60b2f74610de83d13c681021d618b1e0523e35e93cd48675bfad1dbce1813ce8",
+          evidence=_PIN_GEOM_1126),
     Equiv(module="open_guji_cv.steps.border_detect",
           new="49cd0268f8136c2778937cb96c9068380ec9b89059695ce23b3db13370fe1904",
           old="3ae398ba0cfb5484d4e08e9be95bba628765633346bc784eaeb92bce984d3b78",
@@ -2704,6 +2750,31 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence='row_segment 在史記 42 册 cut-bench 40 页（--pages 2,3,7,14,17,18,25,27,33,34,38,40,43,46,54,55,59,64,66,69,70,73,78,79,81,82,'
                    '93,94,96,98,99,100,102,106,114,116,117,120,135,137）上与 origin/dev 3698522 产物逐字节相同（两开关关）；'
                    '新 code_dep impl.keben.boundary_net 经 SPLITS 合回 seg_overrides；scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn，2026-11-26（CV2）'),
+    Equiv(module="open_guji_cv.feedback.lookup",
+          new="d9003659b953296b8ecb06a7f4947c6aeb4253fc4c98298b15565cd015432c3e",
+          old="f92a02c93d76432954d1e021802af8faa4f900855e1de867ba3fd7b7613c9de2",
+          evidence=_PIN_REMOVED_1126),
+    Equiv(module="open_guji_cv.feedback.bindings",
+          new="91f0bfe636d6749888609af6a60e1cb4bfd8b976678afd0d65d2182b8445496d",
+          old="ddf0c55cd63fe58202633d1e664647a5435749994140cf6c4e744358275cceee",
+          evidence=_PIN_REMOVED_1126),
+    Equiv(module="open_guji_cv.feedback.bindings",
+          new="2249d6f8568e0bd1b60d70ecc5922080002444baf834703f2bd6da5573c897be",
+          old="ddf0c55cd63fe58202633d1e664647a5435749994140cf6c4e744358275cceee",
+          evidence=_BIND_CACHE_ALGO_1126),
+    # seed_admit solo_5b_scope（无参照放行收窄，缺省 any 不变；CV0 11-26，#1920）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="861f2eb9818bcbd7643164eb32921feb05a27a5801e97823003794331c08c878",
+          old="c487fdb201dae03c2adbc8e352c0fa66be368b2a4c5ba0ba2db89cad72400633",
+          evidence=_SOLO5B_SCOPE_1126),
+    Equiv(module="open_guji_cv.steps.seed_admit_lanes",
+          new="edbe250857b9aedf78278c6dd78c00f34c92fe711591293980f9ea70d419139c",
+          old="d372c3a9245e947aeb235335460dc5f193eef77371b1050c5af5ea3472041baa",
+          evidence=_SOLO5B_SCOPE_1126),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97",
+          old="d9af94abb75fb9557ab425514532c9506ac1274ae3ceb0c47c50ce78b817c9c6",
+          evidence=_SOLO5B_SCOPE_1126),
 )
 
 
