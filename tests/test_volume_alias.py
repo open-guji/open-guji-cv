@@ -13,7 +13,7 @@ AMAP = {"vol01": "01", "bxgb": "1"}
 def test_rename_key_forms():
     assert rename_key("vol01:22:5:4", AMAP) == "01:22:5:4"
     assert rename_key("vol01/50:7:21", AMAP) == "01/50:7:21"
-    assert rename_key("v2:vol01:102:1:3", AMAP) == "v2:01:102:1:3"
+    assert rename_key("v2:vol01:102:1:3", AMAP) == "v2:vol01:102:1:3"   # 实例 id 不换
     assert rename_key("cols:vol01:171", AMAP) == "cols:01:171"
     assert rename_key("colborder:vol01:47:2:top", AMAP) == "colborder:01:47:2:top"
     assert rename_key("bxgb:3:1", AMAP) == "1:3:1"
@@ -28,7 +28,8 @@ def test_numeric_alias_does_not_touch_page_segment():
     amap = {"01": "1"}
     assert rename_key("1:01:3:4", amap) == "1:01:3:4"
     assert rename_key("01:12:3:4", amap) == "1:12:3:4"
-    assert rename_key("v2:01:12:3:4", amap) == "v2:1:12:3:4"
+    assert rename_key("v2:01:12:3:4", amap) == "v2:01:12:3:4"
+    assert rename_key("cols:01:171", amap) == "cols:1:171"
 
 
 def test_alias_event_dict_fields_and_no_copy_when_clean():
@@ -37,7 +38,7 @@ def test_alias_event_dict_fields_and_no_copy_when_clean():
          "book": "vol01"}
     out = alias_event_dict(e, AMAP)
     assert out["target"] == {"book": "01", "key": "01:22:5:4", "step": "s"}
-    assert out["payload"] == {"cell": "01:22:5:4", "instance_id": "v2:01:22:5:4", "note": "vol01"}
+    assert out["payload"] == {"cell": "01:22:5:4", "instance_id": "v2:vol01:22:5:4", "note": "vol01"}
     assert out["book"] == "01" and out["id"] == "vol01-x-1" and out["batch"] == "vol01-x"
     assert e["target"]["book"] == "vol01"                       # 不改入参
     clean = {"target": {"book": "05", "key": "05:1:1:1"}, "payload": {}}
