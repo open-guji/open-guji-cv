@@ -46,6 +46,17 @@ def test_unconfigured_book_unchanged(tmp_path, monkeypatch, top, variant):
     assert not r.admit and "context_vs_ref" in r.doubts
 
 
+def test_switch_off_restores_old(tmp_path, monkeypatch):
+    r = _run(tmp_path, monkeypatch, top="卷", align="巻", codepoints={"巻": "卷"},
+             params={"codepoint_semantic": False})
+    assert not r.admit and "context_vs_ref" in r.doubts
+
+
+def test_default_params_dump_unchanged():
+    assert "codepoint_semantic" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(codepoint_semantic=False).model_dump()["codepoint_semantic"] is False
+
+
 def test_other_char_still_blocked(tmp_path, monkeypatch):
     r = _run(tmp_path, monkeypatch, top="卷", align="券", codepoints={"巻": "卷"})
     assert not r.admit

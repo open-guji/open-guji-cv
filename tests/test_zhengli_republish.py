@@ -51,9 +51,6 @@ def _setup(tmp_path):
     online.parent.mkdir(parents=True)
     online.write_text(json.dumps({"rev": "006-r2", "cells": [{"cell": c, "review": "pending"} for c in
                                                              ("1:1:1", "1:1:2", "1:1:9")]}), encoding="utf-8")
-    web0 = ws / "feedback" / "lists" / "web" / "abc123"           # 旧单 0 票：同步下来的是空快照（读不到快照会停）
-    web0.mkdir(parents=True, exist_ok=True)
-    (web0 / "006-r2.jsonl").write_text("", encoding="utf-8")
     ev = ws / "feedback" / "events"
     ev.mkdir(parents=True)
     ev.joinpath("a.jsonl").write_text(json.dumps({"kind": "confirm", "ts": "2026-10-20T00:00:00Z",
@@ -83,7 +80,7 @@ def test_prep_then_push(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit):                                                             # 不给 --yes 不推
         rp.main(["push", "--book", "vol06", "-w", str(ws), "--rev", "006-r3"])
     monkeypatch.setattr(rp, "run", lambda cmd, **kw: None)                                      # 台账脚本另有测试
-    assert rp.main(["push", "--book", "vol06", "-w", str(ws), "--rev", "006-r3", "--yes", "--no-sync"]) == 0
+    assert rp.main(["push", "--book", "vol06", "-w", str(ws), "--rev", "006-r3", "--yes"]) == 0
     assert json.loads(online.read_text(encoding="utf-8"))["rev"] == "006-r3"
     assert (out / "online.006-r2.pending.json").exists()
     assert "book-text" in capsys.readouterr().out
@@ -98,7 +95,7 @@ def test_push_refuses_while_old_votes_unlanded(tmp_path, monkeypatch):
     assert rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export),
                     "--no-alt", "--no-sprite", "--cv-commit", "abc1234"]) == 0
     web = ws / "feedback" / "lists" / "web" / "abc123" / "006-r2.jsonl"
-    web.parent.mkdir(parents=True, exist_ok=True)
+    web.parent.mkdir(parents=True)
     vote = lambda a, choice, ch="": {"book": "abc123", "rev": "006-r2", "a": a, "choice": choice, "char": ch, "voter": "u1", "ts": 1}
     web.write_text("\n".join(json.dumps(v) for v in (
         vote("1:1:3", "char", "甲"),          # 已有人裁：落了
@@ -106,7 +103,7 @@ def test_push_refuses_while_old_votes_unlanded(tmp_path, monkeypatch):
         vote("1:1:2", "char", "乙"),          # 没落
     )) + "\n", encoding="utf-8")
     monkeypatch.setattr(rp, "run", lambda cmd, **kw: None)
-    push = ["push", "--book", "vol06", "-w", str(ws), "--rev", "006-r3", "--yes", "--no-sync"]
+    push = ["push", "--book", "vol06", "-w", str(ws), "--rev", "006-r3", "--yes"]
     with pytest.raises(SystemExit, match="1:1:2"):
         rp.main(push)
     assert json.loads(online.read_text(encoding="utf-8"))["rev"] == "006-r2"                  # 门在动任何东西之前
@@ -408,12 +405,9 @@ def test_add_anchor_reasons(tmp_path):
     rp.add_anchor_reasons(pend, tmp_path, None, "001")                                    # 没给 book-text：不动
     assert len(json.loads(pend.read_text(encoding="utf-8"))["cells"]) == 1
     rp.add_anchor_reasons(pend, tmp_path, tmp_path, "001")
-    doc = json.loads(pend.read_text(encoding="utf-8"))
-    cells = {c["cell"]: c for c in doc["cells"]}
-    # 只因标点要重挂的格（字没问题）放 anchor_cells[]，不混进判字用的 cells[]（11-13）
-    assert list(cells) == ["1:1:1"] and cells["1:1:1"]["pending_reason"] == "group_abstain"
-    side = {c["cell"]: c for c in doc["anchor_cells"]}
-    assert side["1:1:3"]["pending_reason"] == "anchor_miss" and side["1:1:3"]["src"] == "closeout_anchor"
+    cells = {c["cell"]: c for c in json.loads(pend.read_text(encoding="utf-8"))["cells"]}
+    assert cells["1:1:3"]["pending_reason"] == "anchor_miss" and cells["1:1:3"]["src"] == "closeout_anchor"
+    assert cells["1:1:1"]["pending_reason"] == "group_abstain"
 
 
 def test_closeout_derive_after_text_push(tmp_path, monkeypatch, capsys):
@@ -558,215 +552,3 @@ def test_add_del_chars_route_to_cellmap(tmp_path, monkeypatch):
     monkeypatch.setattr(rp, "_bump_book_text_cellmap", lambda r, plan, note, base: "cellmap")
     plan = {"text_id": "x", "chapter": "001", "export_dir": str(ex)}
     assert rp.bump_book_text(repo, plan, "t") == "cellmap"
-
-
-def test_sheet_gate_blocks_false_overturn(capsys):
-    """出单门（11-13）：失效老人裁当「被推翻」、改判前后同字、锚点格混进判字单，都不让上线。
-    机器无字（□）推翻人裁 11-19 起只提示、照常上单（sheldon：以新包为准，manager sheet_audit WARN）。"""
-    pytest.importorskip("guji_manager.review.sheet_audit")
-    ws = Path("/nonexistent-ws")
-    good = {"cells": [{"cell": "1:1:1", "pending_reason": "hard_pair"}], "anchor_cells": [{"cell": "9:1:1", "src": "closeout_anchor"}]}
-    a = type("A", (), {})()
-    rp.sheet_gate(good, ws, "vol06", a)                       # 通过，不退出
-    empty = {"cells": [{"cell": "1:4:7", "recheck": True, "pending_reason": "machine_changed",
-                        "note": "机器改判「卷」→「□」，推翻人裁，请核"}]}
-    rp.sheet_gate(empty, ws, "vol06", a)                      # 只提示，不退出
-    assert "overturn_empty" in capsys.readouterr().out
-    bad = {"cells": [{"cell": "1:4:7", "recheck": True, "pending_reason": "machine_changed",
-                      "note": "机器改判「卷」→「卷」，推翻人裁，请核"}]}
-    with pytest.raises(SystemExit) as e:
-        rp.sheet_gate(bad, ws, "vol06", a)
-    assert "单子体检不过" in str(e.value)
-    a.ack_sheet_audit = "测试放行"
-    rp.sheet_gate(bad, ws, "vol06", a)                        # 写明原因可放行
-
-
-def test_need_source_images_stops_without_raw(monkeypatch):
-    """原图不在：绑定会把老人裁大片判成 unanchored 悄悄丢掉，出单前必须停（11-13 vol04）。"""
-    import open_guji_cv.core.book as bookmod
-
-    class FakeBook:
-        def __init__(self, pages):
-            self._p = pages
-
-        def all_pages(self):
-            return self._p
-
-    monkeypatch.setattr(bookmod, "load_book", lambda b: FakeBook([]))
-    with pytest.raises(SystemExit) as e:
-        rp.need_source_images("vol04")
-    assert "guji source pull vol04" in str(e.value)
-    monkeypatch.setattr(bookmod, "load_book", lambda b: FakeBook([1, 2]))
-    rp.need_source_images("vol04")
-
-
-def test_http_sends_referer(monkeypatch):
-    seen = {}
-
-    class R:
-        status = 200
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def read(self):
-            return b""
-
-    import urllib.request
-
-    def fake(req, timeout=0):
-        seen.update(req.headers)
-        return R()
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
-    rp._http("https://data.openguji.com/x", method="HEAD")
-    assert seen.get("Referer") == "https://www.openguji.com/"
-
-
-def test_img_ok_uses_ranged_get_not_head(monkeypatch):
-    """冒烟查图用 GET＋Range: bytes=0-0（CDN 新对象 HEAD 403、GET 200），206 也算到。"""
-    seen = []
-
-    class R:
-        status = 206
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def read(self):
-            return b"x"
-
-    import urllib.request
-
-    def fake(req, timeout=0):
-        seen.append((req.get_method(), req.headers.get("Range")))
-        return R()
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
-    assert rp._img_ok("https://data.openguji.com/proof/x/001/a.webp") == 200
-    assert seen == [("GET", "bytes=0-0")]
-
-
-def test_old_rev_votes_reads_both_modes_and_refuses_when_nothing(tmp_path, monkeypatch):
-    """11-13 第五册 005-r13 的 25 票漏落：只查一种记法、读不到又当 0 票。现在两种都读，读不到就停。"""
-    monkeypatch.delenv("CELLREVIEW_TOKEN", raising=False)
-    monkeypatch.setattr(rp, "data_dir", lambda ws: tmp_path)
-    with pytest.raises(SystemExit):
-        rp.old_rev_votes(tmp_path, "bk", "005-r13")
-    wd = tmp_path / "feedback" / "lists" / "web" / "bk"
-    wd.mkdir(parents=True)
-    byrev = {"book": "bk", "rev": "005-r13", "a": "1:1:1", "choice": "char", "char": "甲", "voter": "u1", "ts": 1}
-    itemv = {"book": "bk", "vol": "005", "rev": "005-r17", "item": "pi_x", "a": "9:9:9", "choice": "char", "char": "乙", "voter": "u1", "ts": 2}
-    (wd / "005-r13.jsonl").write_text(json.dumps(byrev) + "\n", encoding="utf-8")
-    (wd / "items.jsonl").write_text(json.dumps(itemv) + "\n" + json.dumps({**itemv, "item": "pi_lost"}) + "\n", encoding="utf-8")
-    from guji_manager.review import pending_items as P
-    monkeypatch.setattr(P.ItemStore, "open", classmethod(lambda cls, d, t, c: type("S", (), {"items": {"pi_x": {"id": "pi_x", "cell": "2:2:2"}}})()))
-    votes, src = rp.old_rev_votes(tmp_path, "bk", "005-r13")
-    assert sorted((v["a"], v["rev"]) for v in votes) == [("1:1:1", "005-r13"), ("2:2:2", "005-r13")]
-    assert "按条目 1 票" in src
-
-
-def test_fetch_votes_retries_connection_reset(monkeypatch):
-    """读网站票断连要退避重试（11-16 多次 ConnectionResetError 挡住出单）。"""
-    import io
-    import urllib.request
-    calls = []
-
-    class _Resp(io.BytesIO):
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    def fake_urlopen(req, timeout=60):
-        calls.append(1)
-        if len(calls) < 3:
-            raise ConnectionResetError("reset")
-        return _Resp(json.dumps({"success": True, "items": [{"id": "a"}], "hasMore": False}).encode())
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr("time.sleep", lambda s: None)
-    assert rp._fetch_votes({"rev": "x"}, "tok") == [{"id": "a"}]
-    assert len(calls) == 3
-
-
-@pytest.mark.parametrize("cmd,extra", [("push", ["--rev", "006-r3"]), ("add-alt", []), ("edit-cell", []),
-                                       ("add-cell", ["--cell", "1:1:1"]), ("add-sprites", ["--export-dir", "x"])])
-def test_sync_is_default_and_no_sync_opts_out(cmd, extra, monkeypatch):
-    """11-17 起写回数据目录后缺省就推库并发站（殿本 019-r10 忘了 --sync 漏发）；--no-sync 只写本机；旧的 --sync 照收。"""
-    import sys
-    import types
-    monkeypatch.setitem(sys.modules, "ensure_manager", types.SimpleNamespace(ensure=lambda: None))
-    seen = []
-    fn = {"push": "cmd_push", "add-alt": "cmd_add_alt", "edit-cell": "cmd_edit_cell",
-          "add-cell": "cmd_add_cell", "add-sprites": "cmd_add_sprites"}[cmd]
-    monkeypatch.setattr(rp, fn, lambda a: seen.append(a.sync) or 0)
-    base = [cmd, "--book", "vol06", "-w", "ws", "--yes", *extra]
-    rp.main(base)
-    rp.main(base + ["--sync"])
-    rp.main(base + ["--no-sync"])
-    assert seen == [True, True, False]
-
-
-def _tab(rev, pages, from_rev=None, H=None):
-    return {"rev": rev, "pages": [{"page": p, "sha256": s, **({"from_rev": {"rev": from_rev, "H": H}} if from_rev else {})}
-                                  for p, s in pages]}
-
-
-def test_same_pixels_relabel_only_is_not_predates(tmp_path):
-    """殿本 r003→r004 只把 staged 转 final（sha、页号不变，H 单位阵）：r3 上出的旧单不算换源前（ZM 11-18 vol37/43/55…）。"""
-    I = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    tabs = {3: _tab(3, [(1, "a"), (2, "b")], 2, [[1.4, 0, 0], [0, 1.4, 0], [0, 0, 1]]),
-            4: _tab(4, [(1, "a"), (2, "b")], 3, I)}
-    assert rp.same_pixels(tmp_path, "vol37", 3, 4, read=tabs.__getitem__)
-    tabs[4]["pages"][1]["sha256"] = "c"                       # 换了像素
-    assert not rp.same_pixels(tmp_path, "vol37", 3, 4, read=tabs.__getitem__)
-    tabs[4]["pages"][1]["sha256"] = "b"
-    tabs[4]["pages"][1]["from_rev"]["H"] = [[1.4, 0, 0], [0, 1.4, 0], [0, 0, 1]]   # H 不是单位阵
-    assert not rp.same_pixels(tmp_path, "vol37", 3, 4, read=tabs.__getitem__)
-    assert not rp.same_pixels(tmp_path, "vol37", 2, 4, read=lambda r: (_ for _ in ()).throw(FileNotFoundError(r)))
-
-
-def test_figure_ruling_counts_as_landed():
-    """图形票／认不出的字票落成的 confirm v=figure 人裁，票账算已落（ZM 11-19 vol20）；vision 来源不算；普通定字仍走 deciding。"""
-    assert rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "alt": "篆字"}})
-    assert rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "unk": "无法识别"}})
-    assert not rp.figure_ruling({"kind": "confirm", "payload": {"v": "figure", "source": "vision"}})
-    assert not rp.figure_ruling({"kind": "confirm", "payload": {"v": "confirm", "shape": "甲"}})
-
-
-def test_no_cell_sprite_writes_site_boxes(tmp_path, monkeypatch):
-    """--no-cell-sprite（11-20）：不出格图，单上每格补网站坐标 box（已有的不动），没相似字不出 assets。"""
-    doc = {"rev": "r9", "cells": [{"cell": "1:1:1", "c": "日"}, {"cell": "1:1:2", "c": "曰", "box": [1, 2, 3, 4]},
-                                  {"cell": "1:1:3", "c": "人"}]}
-    pub = tmp_path / "001.pending.json"
-    pub.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
-    monkeypatch.setattr(rp, "site_boxes", lambda cord: {"1:1:1": [10, 20, 30, 40], "1:1:2": [9, 9, 9, 9]})
-    final = rp.no_cell_sprite(pub, tmp_path / "x.cord.json", tmp_path / "sp", "001", "python")
-    out = json.loads(final.read_text(encoding="utf-8"))
-    assert [c.get("box") for c in out["cells"]] == [[10, 20, 30, 40], [1, 2, 3, 4], None]
-    assert not (tmp_path / "sp" / "assets.json").exists()
-
-
-def test_gone_cells_not_blocking(tmp_path):
-    """重切后票投的格没了（vol24 27:7:-1 抬头极小框被 #1747 切没）：改记无法对位，不拦；还在的格照旧未落。"""
-    exp = tmp_path / "export"
-    exp.mkdir()
-    (exp / "024.char.json").write_text(json.dumps({"pages": [{"page": 11, "columns": [{"col": 6, "cells": [
-        {"a": "11:6:4", "c": "之"}]}]}]}), encoding="utf-8")
-    out = tmp_path / "pub"
-    out.mkdir()
-    (out / "plan.json").write_text(json.dumps({"export_dir": str(exp), "chapter": "024"}), encoding="utf-8")
-    led = {"rows": {"未落": [{"a": "11:6:4", "choice": "char"}, {"a": "27:7:-1", "choice": "none"}]},
-           "counts": {"未落": 2}}
-    assert rp.gone_cells(led, rp.new_cells(out)) == 1
-    assert [v["a"] for v in led["rows"]["未落"]] == ["11:6:4"]
-    assert led["rows"]["无法对位"][0]["a"] == "27:7:-1" and led["counts"] == {"未落": 1, "无法对位": 1}
-    assert rp.new_cells(tmp_path / "nope") is None

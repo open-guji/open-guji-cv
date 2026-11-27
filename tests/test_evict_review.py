@@ -56,6 +56,10 @@ def _run(tmp_path, monkeypatch, params, cells):
     return {r.slot: r for cc in page.columns for r in cc.chars}, page
 
 
+def test_default_on():
+    assert SeedAdmitParams().evict_review is True
+
+
 def test_no_events_changes_nothing(tmp_path, monkeypatch):
     r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(), {})
     assert all(x.admit for x in r.values())
@@ -69,3 +73,7 @@ def test_evicted_cell_demoted(tmp_path, monkeypatch):
     assert x.evidence["seg_kind"] == "evict_review" and x.evidence["demoted_from"]["by"] == "evict_review"
     assert r[1].admit and r[3].admit and page.n_review >= 1
 
+
+def test_switch_off(tmp_path, monkeypatch):
+    r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(evict_review=False), {_key(2): {"char": "水", "event": "e1"}})
+    assert all(x.admit for x in r.values())

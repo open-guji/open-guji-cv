@@ -1,12 +1,9 @@
 ---
 name: review-artifact
-description: 研究、评测用的一次性人裁样本页（挑错例、验金标、扩测试集、查库里的坏数据）。整理一册书的第二步人审（切分归因、字形入库、码位、形近字对、整列抽查、收口单等）不用本 skill，一律用 guji-manager 的 `guji pipeline review-pages build <页型>`。出「给人裁一批样本」的交互网页（Artifact）——卡片式、手机能点、裁决用颜色标出来、**点完自动存回页面本身**，事后一条命令把结果收回来。用户说「出个审查页」「让我审一批」「做个标注页面」「把这些发给我看/裁」「人工确认一下」，或者你自己需要人来裁样本（挑错例、验金标、扩测试集、查库里的坏数据）时，都用这个 skill，不要从零手写 HTML——从零写十有八九会漏掉自存，人裁完一小时结果丢了。
+description: 出「给人裁一批样本」的交互网页（Artifact）——卡片式、手机能点、裁决用颜色标出来、**点完自动存回页面本身**，事后一条命令把结果收回来。用户说「出个审查页」「让我审一批」「做个标注页面」「把这些发给我看/裁」「人工确认一下」，或者你自己需要人来裁样本（挑错例、验金标、扩测试集、查库里的坏数据）时，都用这个 skill，不要从零手写 HTML——从零写十有八九会漏掉自存，人裁完一小时结果丢了。
 ---
 
 # 人裁审查页（review-artifact）
-
-> **先分清用哪套（11-23 GM2 加）**：整理一册书的人审页（第二步三层迭代：切分归因 `seg_cause`、字形快速入库 `char_grid`／`char_card`、码位 `codepoint`、字对白名单 `pair_whitelist`、形近字 `near_pair`、库内刻例 `lib_audit`、金标 `gold_sample`、整列抽查 `col_check`、收口单 `closeout` 等）**一律用 guji-manager 的模板库**：`guji pipeline review-pages list` 看页型，`build <页型>` 出页，结果用各自的 `*-apply`／`expand` 收回（见 guji-manager Wiki「人审页模板」，用户 11-05 定，不再手写一次性页）。缺页型就给 manager 加模板，找 GM2。
-> 本 skill 只用于不进整理流程的研究、评测样本裁决（CV 各线的金标、错例、基准）。
 
 人裁是这类项目里最贵的一种资源：一次五十张卡，用户在手机上点二十分钟。
 **这二十分钟的产出必须自动回到你手里。** 靠「点完复制粘贴给我」会掉链子——
@@ -29,7 +26,7 @@ python $S/harvest_verdicts.py read_back.html -o verdicts.jsonl   # 4. 收回
 开关**，漏了页面就只能存在人家浏览器本地：
 
 ```
-Artifact(file_path="your.html", title="…裁决台", icon="review",
+Artifact(file_path="your.html", title="…裁决台", favicon="🔎",
          capabilities={"artifact": {}})
 ```
 

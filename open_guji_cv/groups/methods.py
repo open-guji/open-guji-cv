@@ -34,8 +34,6 @@
 """
 from __future__ import annotations
 
-import os
-
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -300,9 +298,6 @@ class Chain(Method):
 
     def _run(self, inp):
         v = GroupVerdict(None, why="abstain:empty", via=self.name)
-        first, rf_ask = self._ruling_first(inp)
-        if first is not None:
-            return first
         for s in self.steps:
             if hasattr(s, "applies") and not s.applies(inp):
                 continue
@@ -320,28 +315,7 @@ class Chain(Method):
                 break
         if any(isinstance(s, CtxOnline) for s in self.steps) and not _skip_half(inp):
             v = self._panel(v, inp)
-        if rf_ask and v.char is not None and v.via == "ctx:ctx_l2":
-            # ruling_first 的组：L2 小头给的字也记下这一问，导出待裁清单交对话按文意核（`feedback.llm_queue`，`ask_rf`）
-            v = GroupVerdict(v.char, conf=v.conf, why=v.why, via=v.via, extra={**v.extra, "ask": rf_ask, "ask_rf": True})
         return v
-
-    def _ruling_first(self, inp) -> tuple:
-        """`FlowConfig.ruling_first`：本组先查裁定库（对话裁定），命中就照裁定给字（留痕 `ruling_first`）。只在管线不调 API
-        （缺省，`GUJI_LLM_ONLINE` 未设成 1）时生效：L3 是只读裁定库，先查不花钱。
-        → (结论, None)；没命中 → (None, 这一问的 ask)，照常走各层（L2 小头给字时把 ask 记上，见 `_run`）；名单外 → (None, None)。"""
-        from .ctx_llm import ENV_ONLINE
-        if inp.group not in (getattr(inp.cfg, "ruling_first", None) or ()) or _skip_half(inp):
-            return None, None
-        if os.environ.get(ENV_ONLINE) == "1":
-            # 只给只读裁定库用：在线模式下先查就等于组内每格先打一次 API（总览审 #1526 ①），在线时这项不生效
-            return None, None
-        for s in self.steps:
-            if isinstance(s, CtxOnline) and s.applies(inp):
-                v = _out(s.run_after(inp, GroupVerdict(None, why="abstain:empty")))
-                if v.char is None:
-                    return None, v.extra.get("ask")
-                return GroupVerdict(v.char, conf=v.conf, why=v.why, via=v.via, extra={**v.extra, "ruling_first": True}), None
-        return None, None
 
     def _panel(self, v: GroupVerdict, inp) -> GroupVerdict:
         """L3 二审小组收尾（A24 2026-11-01，`ctx_llm.panel_verdict`）：前面各层的结论没有确认、又碰到分歧时，让几个强模型高 effort 独立读一遍。

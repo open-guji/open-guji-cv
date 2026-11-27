@@ -55,13 +55,13 @@ from ..core.spec import GateLevel, GateSpec, StepSpec, column_key
 from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.columns import PageWindows
-from ..steps._colview import merged_windows
 from ..products.kinds.gate import GateColumn, GateManifest
 from ..impl.keben import jiazhu_split
 from ..impl.keben.column_pair_merge import has_pair_merged
 
 from ..core.book import _expand_pages
-from ..impl.keben.row_boundaries import estimate_shared_period, row_ink_projection
+from ..impl.keben.row_boundaries import (PERIOD_WINDOW_LO, estimate_shared_period,
+                                    row_ink_projection)
 
 #: 半文半表页点名的表格列的拒因前缀（`ColumnGateParams.table_cols`）；下游统计按它把这些列记成表格列
 TABLE_COLUMN_REJECT = "table_column"
@@ -146,10 +146,6 @@ CONTRACT = [
 
 class ColumnGateParams(BaseModel):
     expected_cols: int | None = None    # None = Book.expected_cols
-    expected_cols_pages: dict[int, int] = {}
-    """按页列数（2026-11-12，殿本 vol01 p100：图上 10 列、版框只探出 9 列，参校本质检）：`{页: 本页列数}`，覆盖册级 `expected_cols`。
-    职名页、个别页列数与册级不同时用；一般同 `vline_overrides` 配用（给出本页全部竖线）。border_detect、border_detect_gate、
-    column_gate 三处都要写同一张表。缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
     count_mode: str = "exact"           # exact：列数必须等于版式列数 | detected：列数由 Step1 探出，只要求 ≥1（现代链）
     width_tol: float = 0.15
     side_floor_max: float = 0.045
@@ -195,6 +191,11 @@ class ColumnGateParams(BaseModel):
     #: （vol01 p196 估出 80px＝115×0.7，真值≈115），Step3 拿它当格距「弹性 DP 无解」，整列 0 格。
     #: 写法同 `row_segment.roster_pages`：`params: {column_gate: {period_prior_pages: [196]}}`。
     period_prior_pages: list[int | str] = []
+    #: **页级周期贴窗口下界时回落书级先验**（Ethan 10-15 的 column_gate_period_edge 补丁）。
+    #: 缺省关，关时不进参数指纹、产物逐字节不变。开了以后估值 ≤ int(period_prior×PERIOD_WINDOW_LO)+1
+    #: 的页改用 `period_prior`。四庫基线上命中 vol01 23 页（22 页职名页几何不变）、vol03 p57/58、
+    #: vol06 p150、vol07 p91；草稿册重跑时用，冻结册不要开（会改 period 值让下游过期）。
+    period_edge_fallback: bool = False
     #: **页级周期偏离书级先验太多时回落先验**（2026-10-21，殿本 vol04 p127 c3 整列格线错半格）。
     #: 正文页的格高是版式常量：殿本 vol04/05/09 正文页的估值都在先验 ±5% 以内。偏出 ±这么多的页，
     #: 估值是被卷末大印、整页空白带偏的（vol04 p127/128/220 估 89–95、vol05 p188 102、vol09 p162 99.5，
@@ -216,8 +217,8 @@ class ColumnGateParams(BaseModel):
         if isinstance(d, dict):
             if not self.period_prior_pages:
                 d.pop("period_prior_pages", None)
-            if not self.expected_cols_pages:
-                d.pop("expected_cols_pages", None)
+            if not self.period_edge_fallback:
+                d.pop("period_edge_fallback", None)
             if not self.table_cols:
                 d.pop("table_cols", None)
         return d
@@ -228,11 +229,11 @@ class ColumnGateStep(Step):
     spec = StepSpec(
         id="column_gate", title="Step2→3 交接闸", version="1.12", unit="column",   # 1.12：页级周期偏离书级先验超过 period_prior_tol 回落先验
         consumes=("column_windows", "column_image", "border_detect_gate_manifest"),
-        optional_consumes=("line_index", "column_bands", "column_ends"),
+        optional_consumes=("line_index",),
         produces=("gate_manifest",),
         params=ColumnGateParams,
         code_deps=("open_guji_cv.impl.keben.row_boundaries", "open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.impl.keben.column",
-                   "open_guji_cv.impl.keben.column_pair_merge", "open_guji_cv.steps._colview"),
+                   "open_guji_cv.impl.keben.column_pair_merge"),
         # `period_prior` 既派生自相关窗口、又是空栏页兜底值；`expected_cols` /
         # `chars_per_line` 是参数为 None 时的取值来源——都影响输出，必须进指纹
         book_deps=("period_prior", "expected_cols", "chars_per_line"),
@@ -240,9 +241,9 @@ class ColumnGateStep(Step):
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: ColumnGateParams = ctx.params_for(self)  # type: ignore[assignment]
-        expected = p.expected_cols_pages.get(page) or p.expected_cols or ctx.book.expected_cols
+        expected = p.expected_cols or ctx.book.expected_cols
         expected_slots = p.chars_per_line or ctx.book.chars_per_line
-        wins: PageWindows = merged_windows(ctx, page)
+        wins: PageWindows = ctx.product("column_windows", page)
         cols = wins.columns
         # **量文字带宽（`band`），不量整列图宽（`warped_size[0]`）**（2026-09-18 修）。
         # 后者含两侧 padding，一列紧贴一条界行时 padding 被撑大、总宽虚高，闸却拿这个
@@ -353,8 +354,17 @@ class ColumnGateStep(Step):
                 try:
                     period = period_est = round(float(estimate_shared_period(
                         projs, borders, dst_ws, period_prior=ctx.book.period_prior)), 2)
+                    # 窗口边缘卡死（GUJI-364）：自相关最大值落在窗口下界，说明真峰在窗外或
+                    # 本页字稀，估值不可信。开关开着时回落书级先验。
                     prior = ctx.book.period_prior
-                    if p.period_prior_tol and prior and abs(period / prior - 1) > p.period_prior_tol:
+                    if (p.period_edge_fallback and prior
+                            and period <= int(prior * PERIOD_WINDOW_LO) + 1):
+                        period = float(prior)
+                        period_from_prior = True
+                        page_flags.append(
+                            f"period_fallback：页级周期估值贴窗口下界（{period_est:g}px），"
+                            f"已用书级先验 {period:g}px 兜底")
+                    elif p.period_prior_tol and prior and abs(period / prior - 1) > p.period_prior_tol:
                         period = float(prior)
                         period_from_prior = True
                         page_flags.append(
@@ -665,6 +675,7 @@ COLUMN_GATE_SPEC = GateSpec(
                   desc="人裁金标准入（P2 未接，tier=gate 时不生效）", name="human_verdict"),
     ),
 )
+attach_gate("column_warp", COLUMN_GATE_SPEC)
 # 现代印刷链的 Step2（column_crop）出口挂同一道闸：产物种类相同，判据里列数比对由
 # `count_mode=detected`（modern_body.yaml 的 params）放开。
 attach_gate("column_crop", COLUMN_GATE_SPEC)

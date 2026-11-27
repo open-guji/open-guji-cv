@@ -69,7 +69,6 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import jiazhu_split
-from ...seg import seam as _seam
 
 #: 空白格的**下界**（× period）。空白格代表「这里本该有个字、但它是空的」，
 #: 所以它的高度应当接近一格；此前只给了上界 1.25·period，没有下界，于是 DP 可以
@@ -514,21 +513,6 @@ class RowBoundaryResult:
     bottom_bar_y: float | None = None
     """列图里 `border_bottom` 之上认出的下版框线上沿（`find_bottom_frame_bar`）；
     认出来了 DP 的下界就是它，没认出来为 None（下界照旧用 `border_bottom`）。"""
-    row_split_extra: int = 0
-    """书级 `row_split`（雙行小注按小字分行）让本列比大字格网多出的格数；0＝没切过（`boundaries` 就是物理格线）。"""
-
-
-#: 列旗：书级 `jiazhu_step.row_split` 切过的列（后接 +N＝多出的格号数）。Step3 写、闸3 认，见 `row_split_extra`。
-ROW_SPLIT_FLAG = "jiazhu_row_split"
-
-
-def row_split_extra(flags) -> int:
-    """列旗里 `row_split` 多出的格号数（没切过为 0）。"""
-    for f in flags or ():
-        if f.startswith(ROW_SPLIT_FLAG):
-            num = f[len(ROW_SPLIT_FLAG):].split("：", 1)[0]
-            return int(num) if num.lstrip("+-").isdigit() else 0
-    return 0
 
 
 _PAIR_MEMO: "dict[tuple, dict]" = {}
@@ -1652,84 +1636,12 @@ def _dash_only(ink: np.ndarray, period: float, band_w: float, h_frac: float, w_f
     return (ys.max() - ys.min() + 1) <= h_frac * period and (xs.max() - xs.min() + 1) <= w_frac * band_w
 
 
-def _closed_box_glyph(ink: np.ndarray, frame: np.ndarray) -> bool:
-    """「曰」「日」「口」「目」这类闭口方框字（2026-11-16）：左右两侧各有一条长竖，
-    两竖之间 ≥2 道横贯的横画——框角只有一侧的竖，不会同时两侧都有又夹着横档。"""
-    h, w = ink.shape[:2]
-    cs = frame.sum(axis=0) >= 0.4 * h
-    xs = np.nonzero(cs)[0]
-    left = xs[xs < 0.5 * w]
-    right = xs[xs >= 0.5 * w]
-    if left.size == 0 or right.size == 0:
-        return False
-    xa, xb = int(left.max()) + 1, int(right.min())
-    if xb - xa < 0.2 * w:
-        return False
-    cov = ink[:, xa:xb].mean(axis=1) >= 0.7
-    runs, prev = 0, -99
-    for y in np.nonzero(cov)[0]:
-        if y - prev > 3:
-            runs += 1
-        prev = y
-    return runs >= 2
-
-
-STACK_BAR_W = (0.3, 0.85)   # 数字「二」「三」的横画：宽占 period 的这个范围（末列窗口比字宽得多，不能按格宽比；版框的上下边宽过窗口，不在内）
-
-
-def _stacked_bars(ink: np.ndarray, frame: np.ndarray, period: float) -> bool:
-    """「二」「三」：去掉长竖后剩 ≥2 道又薄又不满宽的分离横画（2026-11-17）。框角只有一道边，双边框的两道边是满宽的；
-    这类格贴着版框竖线时（末列），横画端点落进框线邻域，被 `_frame_only` 当框角整格判空（殿本 vol68 230:9 的「二」、
-    vol63 116:9 的「三」，格数少于整理本字数）。"""
-    import cv2
-    h, w = ink.shape[:2]
-    rest = ink & (1 - cv2.dilate(frame, np.ones((5, 5), np.uint8)))
-    n, _lab, st, _ = cv2.connectedComponentsWithStats(rest.astype(np.uint8), connectivity=8)
-    bars = [i for i in range(1, n)
-            if st[i, cv2.CC_STAT_AREA] >= 20 and st[i, cv2.CC_STAT_HEIGHT] < FRAME_THIN_H * period
-            and STACK_BAR_W[0] * period <= st[i, cv2.CC_STAT_WIDTH] <= STACK_BAR_W[1] * period]
-    return len(bars) >= 2
-
-
-THIN_YI_MIN_INK = 0.004   # 「一」救回：格内墨占比至少这么多（再低是纸上污点）
-THIN_YI_W = 0.35          # ……且有一块「横向补 0.12 period 断口后」宽 ≥ 这么多 period、高 ≤ 0.25 period 的横条
-THIN_YI_CENTER = 0.25     # ……条的中心离格窗中线不超过窗宽的这个比例（版框边在窗边，不居中）
-
-
-def _thin_bar(ink: np.ndarray, period: float, max_w: float | None = None, mid_band: tuple[float, float] | None = None) -> bool:
-    """这一格的墨是不是一道居中的细横（「一」）。笔画又细又断，连通域只剩碎段，改看墨的整体外包：
-    横向跨度 ≥ THIN_YI_W·period、纵向跨度 ≤ 0.25·period、中心居中。"""
-    h, w = ink.shape[:2]
-    if h < 10 or w < 10:
-        return False
-    ys, xs = np.nonzero(ink)
-    if len(xs) == 0:
-        return False
-    # 去掉离群的零星点：按行/列至少 2 个墨点的范围算外包
-    rows = np.nonzero(ink.sum(1) >= 2)[0]
-    cols = np.nonzero(ink.sum(0) >= 1)[0]
-    if len(rows) == 0:
-        return False
-    bh = rows[-1] - rows[0] + 1
-    bw = cols[-1] - cols[0] + 1
-    cx = (cols[0] + cols[-1]) / 2.0
-    if max_w is not None and bw > max_w * w:       # 满宽的横是框线，不是字
-        return False
-    if mid_band is not None:                       # 贴格上下沿的横是版框线（列尾格顶上那一道），「一」居格中
-        cy = (rows[0] + rows[-1]) / 2.0 / h
-        if not (mid_band[0] <= cy <= mid_band[1]):
-            return False
-    return bool(bw >= THIN_YI_W * period and bh <= 0.25 * period and abs(cx - w / 2.0) <= THIN_YI_CENTER * w)
-
-
 def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio: float) -> bool:
     """这一格的墨是不是只有框线（2026-09-26）：必须有跨格长竖穿过；去掉它（连同贴着它的几像素）
     后剩下的要么够不上 `min_ink_ratio`，要么只剩又矮又不宽的细横（框的上下边）。"""
     import cv2
     h, w = ink.shape[:2]
     if h < 10 or w < 10 or not frame.any():
-        return False
-    if _closed_box_glyph(ink, frame) or _stacked_bars(ink, frame, period):
         return False
     rest = ink & (1 - cv2.dilate(frame, np.ones((5, 5), np.uint8)))
     if float(rest.mean()) < min_ink_ratio:
@@ -1869,7 +1781,6 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     grid_bounds: "Sequence[float] | None" = None,
                     jiazhu_rows: bool = False,
                     free_split=None,
-                    row_split=None,
                     grid_end_fit: bool = False,
                     snap_cut: float = 0.0,
                     snap_gap_ok=None,
@@ -1879,13 +1790,6 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     cut_white_row: float = 0.0,
                     cut_glyph_line: float = 0.0,
                     straight_seam_ink: bool = False,
-                    adopt_rel: float = 0.0,
-                    jiazhu_cc_min: float = jiazhu_split.CC_MIN,
-                    jiazhu_span_t: float = jiazhu_split.SPAN_T,
-                    grid_adjust=None,
-                    jiazhu_heads=None,
-                    half_a_left=None,
-                    jiazhu_pair_ok=None,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1975,12 +1879,6 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       调它，签名 `(ink_col, n, long_sub, cxi, top, bot, anchor) -> {sub: 格线} | None`：多出的那个字归段尾格墨多的那行，
       短的那行在自己墨的范围里少切一格，格号照「本行第几字」从段首数，段尾那格只发长的那行；返回 None 照旧两行都切 n 格。
       缺省 None＝不调（2026-11-10 起实现在史記书仓 `code/jiazhu_step.py`，原 `_free_split`）。
-    - `row_split`（要 `jiazhu_rows`；书级代码 `jiazhu_step.row_split`，脉经写本小字比大字矮，2026-11-19 GUJI-774）：
-      雙行小注段每行调一次，签名 `(ink, top, bot, n_grid, period) -> [格线…] | None`，`ink` 是这一行（a＝缝右、b＝缝左）
-      的二值墨（整列高），返回从 top 到 bot 的 k+1 条格线＝这一行切 k 个字，**k 可以多于段占的大字格数 n_grid**。
-      两行都返回 None 就照旧；只一行返回时另一行照旧切 n_grid 格。段内格号照「本行第几字」从段首数，段占
-      max(a 行字数, b 行字数) 个格号，段后各格格号整体顺延；`boundaries` 也换成逻辑格线（段内 m 格均分段高），
-      `pos`／`slot`／`boundaries` 三者对得上，下游照常按格号认。缺省 None＝不调，别的书逐字节不变。
     - `snap_cut`（书级，2026-11-13，史記写本字距不匀）：格线定下后（等距格网落缝、DP 格网、下版框之后，人钉切线之前），
       还劈着字的格线按墨块切割量在 ±`snap_cut` 格内补挪（`snap_by_cut`；等距格网以名义格线为中心，DP 格网以 DP 格线为中心）；
       0＝关（缺省）。`cut_gap_guard`（格高倍数，0＝关）：切点选定后（规则、U-Net 改选、扩池自动改选之后，人裁不动），
@@ -2000,18 +1898,11 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       护栏 `_white_row_ok`：被劈的块整块归它墨多的那边，别的单字大小的块不换边（挡字内白缝：二、三、言的亠下）；
       换边的墨上下跨 ≥`GAP_DOWN_SPAN` 格也不挪。
       `straight_seam_ink`：直线候选的 `seam_ink` 记真墨（原来写死 0，只是记录，选线不看它；史記核查工具拿它当「池里有零墨线」）。
-    - `grid_adjust`／`jiazhu_heads`／`half_a_left`／`jiazhu_pair_ok`（书级钩子 `impl/keben/row_hooks`，2026-11-12／13）：
-      缺省 None＝不调。`grid_adjust` 在 `grid_bounds` 落缝前改格线；`jiazhu_heads` 在段端收编前补认段头；`half_a_left` 给只有
-      一半有字的夹注格定右半左缘；`jiazhu_pair_ok` 判一格是不是真并排两字。签名与用法见 `row_hooks` 模块头。
     - `cut_glyph_line`（格高倍数，0＝关；2026-11-17，史記 r79 ①类上下字交错）：最后一道（`cut_white_row` 之后；人裁不动）。
       选中那条仍劈开单字大小的连通块时，被劈的块按 `_settle_side` 整块归离它近的那边（看两边别的墨离它多远），别的块按
       墨多的那边；逐列取「上格墨最低行之下、下格墨最高行之上」离原线最近的 y（±这么多格高内、不越过上格顶下格底往里
       `FREE_SEAM_MARGIN`，不限坡度），kind `glyph_line`，`chosen_by="glyph"`。离两边一样近时按墨多的那边（少的那边
       ≤`GLYPH_LINE_MAJ`）；仍拿不准、被劈块高过 `GLYPH_LINE_TALL` 格（两字粘成一块）、某列上下墨重叠，都不动。
-    - `jiazhu_cc_min`（px，缺省 `jiazhu_split.CC_MIN`；2026-11-18 A22 U3）：雙行小注段噪点否决门槛，书级 `row_segment.jiazhu_cc_min`。
-    - `jiazhu_span_t`（缺省 `jiazhu_split.SPAN_T`；2026-11-19 MJ）：雙行小注单格判据的墨跨度/列距下限，书级 `row_segment.jiazhu_span_t`。
-    - `adopt_rel`（倍数，0＝关；2026-11-18，脉经）：L3 扩池后绝对门槛没有可选候选、现选分歧 ≥ `ADOPT_REL_MIN` 时，
-      取分歧 ≤ min(`ADOPT_REL_CAP`, adopt_rel×现选分歧) 的扩池候选（干净格线仍只换不穿墨的），见 `_adopt_expanded`。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -2042,8 +1933,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     if grid_bounds is not None:
         if len(grid_bounds) != n_slots + 1:
             raise ValueError(f"grid_bounds 要 {n_slots + 1} 条格线，给了 {len(grid_bounds)}")
-        gb = grid_bounds if grid_adjust is None else grid_adjust(row_proj, grid_bounds, period, dst_w)
-        snapped = snap_to_gaps(row_proj, gb, period)
+        snapped = snap_to_gaps(row_proj, grid_bounds, period)
         if grid_end_fit:
             snapped = fit_grid_end(row_proj, snapped, period, border_bottom, dst_w)
         result = RowBoundaryResult(boundaries=snapped, blank_intervals=[], valleys=[], period=period)
@@ -2084,7 +1974,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         # 还劈着字的格线按墨块切割量补挪（等距格网以名义格线、DP 格网以 DP 格线为中心 ±snap_cut 格）；在人钉切线之前，钉子照旧赢
         from ...seg.seam import cut_cost_sides
         sides = cut_cost_sides(col_gray[:, x_lo:x_hi] < ink_threshold, max_h=SNAP_CUT_MAX_H * period)
-        center = gb if grid_bounds is not None else bounds
+        center = grid_bounds if grid_bounds is not None else bounds
         gap_ok = snap_gap_ok
         if gap_ok is None and cut_judge is not None:
             # 整字护栏（2026-11-13）：U-Net 归属裁判看上下两格整个窗口，挪后不比原位更不像两个整字才许挪（字内白缝不当字缝）
@@ -2160,17 +2050,6 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if _dash_only(col_ink[y0i:y1i], period, float(x_hi - x_lo), h_frac, w_frac):
                 nonblank.discard(pos)
 
-    # 列中间两个有字格夹着的空白格里，墨量虽不到 `min_ink_ratio`、却是一道居中的细横——「一」字
-    # （笔画又细又断，墨比 0.006–0.011，殿本 10 列因此格数少一，用户 2026-11-18 格高异常根因）。
-    for k in range(1, n_slots - 1):
-        pos = k + 1
-        if pos in nonblank or inks[pos] < THIN_YI_MIN_INK or (pos - 1) not in nonblank or (pos + 1) not in nonblank:
-            continue
-        y0i = max(0, min(h, int(round(bounds[k]))))
-        y1i = max(0, min(h, int(round(bounds[k + 1]))))
-        if _thin_bar(col_ink[y0i:y1i], period):
-            nonblank.add(pos)
-
     runs: dict[int, float] = {}
     tail_a: set[int] = set()
     solo: dict[int, float] = {}
@@ -2179,25 +2058,21 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     if detect_jiazhu:
         ruler = float(ref_w) if ref_w else float(dst_w)
         entries = [
-            (p, jiazhu_split.gap_center(patches[p], ruler, ink_threshold, span_t=jiazhu_span_t)
+            (p, jiazhu_split.gap_center(patches[p], ruler, ink_threshold)
                 if p in nonblank else None)
             for p in sorted(patches)
         ]
-        runs = jiazhu_split.link_runs(entries, cc_min=jiazhu_cc_min)
+        runs = jiazhu_split.link_runs(entries)
         # 人指认的雙行小注：不看判据，从中间拆（见 `forced_jiazhu` 说明）。**必须在 `adopt_run_tails`
         # 之前并进 runs**：紧随其后的奇数字末行（右半单字）才会被当段尾收成 `jiazhu_a`，而不是自成單行小注。
         for pos in sorted(nonblank):
             if forced_jiazhu and _pos_to_slot(pos, n_raised) in forced_jiazhu and pos not in runs:
                 cx_forced = jiazhu_split.forced_split_center(patches[pos], ink_threshold)
-                if cx_forced is not None and (jiazhu_pair_ok is None
-                                              or jiazhu_pair_ok(patches[pos], ink_threshold, forced=True)):
+                if cx_forced is not None:
                     runs[pos] = cx_forced
         # 列中间立着一条细竖线（界行墨）= 两列正文被当成了一列（Step1 列切错，vol03 p49c3 / p107c4），
         # 不是夹注列：段端收编不做，免得把两列正文的一行行收成「小注」（用户 09-29 实审点出 49:3:15–16）。
         # 只是护栏，不改 link_runs 自己认下的段；Step1 切对之后这道闸自然不触发。
-        if jiazhu_heads is not None and not _mid_rule_line(col_ink):
-            runs.update(jiazhu_heads(entries, runs, patches, eligible=nonblank, ink_threshold=ink_threshold,
-                                     ruler=ruler))
         if not _mid_rule_line(col_ink):
             runs, tail_a = jiazhu_split.adopt_run_tails(
                 runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
@@ -2207,10 +2082,6 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         for pos in main_pos:
             runs.pop(pos, None)
             tail_a.discard(pos)
-        if jiazhu_pair_ok is not None:      # 书级：不是并排两字的格从段里摘掉（段尾收编的右半单字不查）
-            for pos in [q for q in runs if q not in tail_a]:
-                if not jiazhu_pair_ok(patches[pos], ink_threshold, forced=False):
-                    runs.pop(pos, None)
         # 表说只有一半有字的夹注格：并进段（缝取段的中位数），发格时只发墨多的一半
         if half_notes and runs:
             cx_mid = float(np.median(list(runs.values())))
@@ -2246,7 +2117,6 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     # 另一行被拦腰切（史記 02:12:6「州上洛縣」）。格号不变，只是 a、b 的 y0/y1 可以不同。
     side_y: dict[tuple[int, str], tuple[float, float]] = {}
     half_side: dict[int, str] = {}       # free_split：段尾单半格发哪一半
-    split_groups: dict[int, tuple[list[int], int, dict[str, list[float]]]] = {}   # row_split：段首 pos → (段, 缝, {sub: 格线})
     if jiazhu_rows and runs:
         from ...seg.seam import fit_row_cuts
         ink_col = col_gray[:, x_lo:x_hi] < ink_threshold
@@ -2258,26 +2128,6 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             else:
                 groups.append([p_])
         for g in groups:
-            if row_split is not None and not (tail_a & set(g)) and not (one_half & set(g)):
-                cxi = int(round(float(np.median([runs[p_] for p_ in g]))))
-                if cxi >= 4 and x_hi - x_lo - cxi >= 4:
-                    top_f, bot_f = float(bounds[g[0] - 1]), float(bounds[g[-1]])
-                    by_sub: dict[str, list[float]] = {}
-                    for sub, xs, xe in (("a", cxi, x_hi - x_lo), ("b", 0, cxi)):
-                        cuts = row_split(ink_col[:, xs:xe], top_f, bot_f, len(g), period)
-                        if cuts is not None and len(cuts) >= 2:
-                            by_sub[sub] = [float(y) for y in cuts]
-                    if by_sub:
-                        for sub, xs, xe in (("a", cxi, x_hi - x_lo), ("b", 0, cxi)):
-                            if sub in by_sub:
-                                continue
-                            rows = ink_col[:, xs:xe].sum(axis=1) / float(xe - xs)
-                            cuts = fit_row_cuts(rows, int(round(top_f)), int(round(bot_f)), len(g),
-                                                anchor=[float(bounds[p_ - 1]) for p_ in g] + [bot_f])
-                            by_sub[sub] = ([float(y) for y in cuts] if cuts is not None
-                                           else [float(bounds[p_ - 1]) for p_ in g] + [bot_f])
-                        split_groups[g[0]] = (g, cxi, by_sub)
-                        continue
             if len(g) < 2:
                 continue
             cxi = int(round(float(np.median([runs[p_] for p_ in g]))))
@@ -2305,38 +2155,10 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     side_y[(p_, sub)] = (cuts[i_], cuts[i_ + 1])
 
     cells: list[Cell] = []
-    in_split = {p_ for g_, _c, _s in split_groups.values() for p_ in g_}
-    shift = 0                            # row_split：段后格号顺延量
-    new_bounds = [float(bounds[0])]      # row_split：逻辑格线（段内 m 格均分）
     for k in range(n_slots):
         pos = k + 1
-        if pos in split_groups:
-            g, cxi, by_sub = split_groups[pos]
-            m = max(len(c_) - 1 for c_ in by_sub.values())
-            top_f, bot_f = float(bounds[g[0] - 1]), float(bounds[g[-1]])
-            raised = top_f < border_top - raise_tol
-            cx = float(x_lo + cxi)
-            for i_ in range(m):
-                slot_i = _pos_to_slot(pos + shift + i_, n_raised)
-                for sub, kind, xs, xe in (("a", "jiazhu_a", cxi, x_hi - x_lo), ("b", "jiazhu_b", 0, cxi)):
-                    cuts = by_sub[sub]
-                    if i_ >= len(cuts) - 1:
-                        continue
-                    hy0, hy1 = cuts[i_], cuts[i_ + 1]
-                    half = col_gray[int(round(hy0)):int(round(hy1)), x_lo + xs:x_lo + xe]
-                    if int((half < ink_threshold).sum()) < jiazhu_split.HALF_MIN_INK:
-                        continue
-                    cells.append(Cell(slot=slot_i, y0=hy0, y1=hy1, x0=float(x_lo + xs), x1=float(x_lo + xe),
-                                      kind=kind, gap_center=cx, raised=raised,
-                                      ink_ratio=round(_ink_ratio(half, ink_threshold), 4)))
-                new_bounds.append(top_f + (bot_f - top_f) * (i_ + 1) / m)
-            shift += m - len(g)
-            continue
-        if pos in in_split:
-            continue
-        slot = _pos_to_slot(pos + shift, n_raised)
+        slot = _pos_to_slot(pos, n_raised)
         y0, y1 = float(bounds[k]), float(bounds[k + 1])
-        new_bounds.append(y1)
         raised = y0 < border_top - raise_tol   # 纯几何量，跟 kind 判定分开算
         if pos in solo:
             # 單行小注：一格只发一个 Cell，占 [小注左缘, x_hi]，sub 为 None。
@@ -2362,12 +2184,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if pos in half_side:
                 sides = tuple(t for t in sides if t[0] == "jiazhu_" + half_side[pos])
             elif pos in one_half:
-                x0a = half_a_left(patches[pos], cxi, ink_threshold) if half_a_left is not None else None
-                if x0a is not None:
-                    # 缝也挪到放宽后的左缘：下游（cell_shrink 的 jiazhu_cx）按缝裁右半
-                    sides, cx = (("jiazhu_a", x0a, x_hi - x_lo),), float(x_lo + x0a)
-                else:
-                    sides = (max(sides, key=lambda t: int((patches[pos][:, t[1]:t[2]] < ink_threshold).sum())),)
+                sides = (max(sides, key=lambda t: int((patches[pos][:, t[1]:t[2]] < ink_threshold).sum())),)
             for kind, xs, xe in sides:
                 if kind == "jiazhu_b" and pos in tail_a and pos not in one_half:
                     continue
@@ -2387,12 +2204,6 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         kind = "blank" if pos not in nonblank else "char"
         cells.append(Cell(slot=slot, y0=y0, y1=y1, x0=float(x_lo), x1=float(x_hi),
                           kind=kind, raised=raised, ink_ratio=round(inks[pos], 4)))
-    if split_groups:
-        # row_split 改了格数：格线换成逻辑格线，后面的折线切分、下游按格号认都照它
-        bounds = new_bounds
-        result.boundaries = new_bounds
-        result.row_split_extra = shift
-        n_slots = len(new_bounds) - 1
 
     for i, c in enumerate(reading_order(cells), start=1):
         c.order = i
@@ -2526,8 +2337,6 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             ok = [i for i in range(n_old, len(cands))
                   if cands[i].dis_unet is not None and cands[i].dis_unet <= ADOPT_DIS
                   and cands[i].seam_ink <= ink_cap]
-            if not ok and adopt_rel > 0:
-                return _adopt_rel_pick(cands, n_old, dis_chosen, ink_cap, adopt_rel)
             if not ok:
                 return None
             return max(ok, key=lambda i: (cands[i].agree or 0.0, -cands[i].seam_ink))
@@ -2709,20 +2518,6 @@ GAP_CORRIDOR_Q = 10   # 白走廊取逐列白段长的这个百分位（容几�
 GAP_INK_COLS = 0.02   # 切线压墨的列数 > max(2, 内容宽 × 这么多) 就不算在白缝里
 
 
-def _adopt_rel_pick(cands, n_old: int, dis_chosen: int, ink_cap: int, adopt_rel: float) -> int | None:
-    """`adopt_rel` 相对改选（segment_column 文档；2026-11-18 脉经）：现选分歧 ≥ `ADOPT_REL_MIN` 时，扩池候选（下标 ≥ `n_old`）里
-    分歧 ≤ min(`ADOPT_REL_CAP`, adopt_rel×现选分歧) 的取分歧最小的那条（同分取穿墨少的）；`ink_cap` 为 0（干净格线）时只认不穿墨的。
-    没有返回 None。"""
-    from ...seg.cut_select import ADOPT_REL_CAP, ADOPT_REL_MIN
-    if adopt_rel <= 0 or dis_chosen < ADOPT_REL_MIN:
-        return None
-    cap = min(ADOPT_REL_CAP, adopt_rel * dis_chosen)
-    ok = [i for i in range(n_old, len(cands))
-          if cands[i].dis_unet is not None and cands[i].dis_unet <= cap
-          and (ink_cap > 0 or cands[i].seam_ink <= 0)]
-    return min(ok, key=lambda i: (cands[i].dis_unet, cands[i].seam_ink)) if ok else None
-
-
 def _gap_corridor(ink_bin: np.ndarray, ys, y_line: float, cap: int, clean: bool = False) -> float:
     """一条切线（`ys`：逐列 y，None＝直线 `y_line`）的白走廊宽：每列从切线那一行往上下数连续白像素（各至多 `cap` 行），
     取逐列白段长的 `GAP_CORRIDOR_Q` 百分位。直线落在整行白的字缝里≈字缝宽；贴着笔画绕的折线、字内两笔之间的窄缝都小。
@@ -2779,15 +2574,14 @@ def _gap_guard(cands, chosen: int, chosen_by: str, ink_bin: np.ndarray, y_line: 
     return best, "gap"
 
 
-# 劈字判据与换线护栏在 `seg/seam`（split_blobs／blobs_keep_sides，2026-11-18 A22 U2 抽出，常数原值）
-FREE_SEAM_FRAC = _seam.SPLIT_FRAC
-FREE_SEAM_EXT = _seam.SPLIT_EXT
-FREE_SEAM_HMAX = _seam.SPLIT_HMAX
-FREE_SEAM_MIN_AREA = _seam.SPLIT_MIN_AREA
+FREE_SEAM_FRAC = 0.2        # 劈字判据：被劈连通块两边各至少占这么多面积
+FREE_SEAM_EXT = 0.25        # 同上：两边各伸出至少这么多格高
+FREE_SEAM_HMAX = 1.3        # 高过这么多格高的连通块不算单字（版框残段、两字以上粘连），不管
+FREE_SEAM_MIN_AREA = 0.015  # 小于这么多格高² 的墨点不管
 FREE_SEAM_ZERO = 2          # 折线穿墨 ≤ 这么多像素算不穿墨（容毛边、霉点）
 FREE_SEAM_KEEP = 0.5        # 找不到零墨路时：穿墨 ≤ 原线这么多倍、且不再劈原来那块，才换
 FREE_SEAM_MARGIN = 0.25     # 折线不越过上格顶、下格底往里这么多格高
-FREE_SEAM_SIDE = _seam.SIDE_TOL  # 被劈的块换线后另一边至多留这么多（面积比）
+FREE_SEAM_SIDE = 0.05       # 被劈的块换线后另一边至多留这么多（面积比）
 
 
 def _line_ys(ys, y_line: float, w: int) -> np.ndarray:
@@ -2798,8 +2592,27 @@ def _line_ys(ys, y_line: float, w: int) -> np.ndarray:
 
 
 def _split_glyphs(lab: np.ndarray, stats: np.ndarray, yv: np.ndarray, period: float) -> set[int]:
-    """切线 `yv` 劈开的单字大小连通块（`seg.seam.split_blobs`）。"""
-    return _seam.split_blobs(lab, stats, yv, period)
+    """切线 `yv`（逐列 y，行 < y 属上格）劈开的单字大小连通块（两边各 ≥`FREE_SEAM_FRAC` 面积、各伸出 ≥`FREE_SEAM_EXT` 格高）。"""
+    h, w = lab.shape
+    xs = np.arange(w)
+    ids = set(np.unique(lab[np.clip(yv, 0, h - 1), xs]).tolist()) | set(np.unique(lab[np.clip(yv - 1, 0, h - 1), xs]).tolist())
+    ids.discard(0)
+    out: set[int] = set()
+    min_a = FREE_SEAM_MIN_AREA * period * period
+    for i in ids:
+        x, y, cw, ch, a = (int(v) for v in stats[i])
+        if a < min_a or ch > FREE_SEAM_HMAX * period:
+            continue
+        comp = lab[y:y + ch, x:x + cw] == i
+        up = comp & (np.arange(y, y + ch)[:, None] < yv[x:x + cw][None, :])
+        dn = comp & ~up
+        nu, nd = int(up.sum()), int(dn.sum())
+        if min(nu, nd) < FREE_SEAM_FRAC * a:
+            continue
+        ru, rd = np.nonzero(up.any(1))[0], np.nonzero(dn.any(1))[0]
+        if ru[-1] - ru[0] + 1 >= FREE_SEAM_EXT * period and rd[-1] - rd[0] + 1 >= FREE_SEAM_EXT * period:
+            out.add(int(i))
+    return out
 
 
 def _free_seam_path(ink_bin: np.ndarray, lo: int, hi: int, y_line: float) -> tuple[int, np.ndarray] | None:
@@ -2873,7 +2686,22 @@ def _free_seam_keeps_sides(lab: np.ndarray, stats: np.ndarray, cur: np.ndarray, 
     史記 42 册 14 处看图：墨大半在上格的 6 处（或/在、滅/詩、城/范 戈钩，子/峻 钩，十/篇 竖尾，無/字）全对；墨大半在下格的
     8 处对错各半（通/共 零墨路走进甬与辶之间、整个辶给了下字，急/政 心给了下字，穆/清、以/次），分不开，不做。
     U-Net 一致率也分不开（两类换线后都掉 0.07–0.15），只记不拦。"""
-    return _seam.blobs_keep_sides(lab, stats, cur, new, split, period, split_to="up")
+    h, w = lab.shape
+    lo, hi = int(max(0, min(cur.min(), new.min()) - 1)), int(min(h, max(cur.max(), new.max()) + 1))
+    min_a = FREE_SEAM_MIN_AREA * period * period
+    ids = set(np.unique(lab[lo:hi]).tolist()) - {0}
+    for i in ids:
+        x, y, cw, ch, a = (int(v) for v in stats[i])
+        comp = lab[y:y + ch, x:x + cw] == i
+        rows = np.arange(y, y + ch)[:, None]
+        up0 = int((comp & (rows < cur[x:x + cw][None, :])).sum()) / a
+        up1 = int((comp & (rows < new[x:x + cw][None, :])).sum()) / a
+        if i in split:
+            if up0 < 0.5 or up1 < 1 - FREE_SEAM_SIDE:
+                return False
+        elif a >= min_a and (up0 >= 0.5) != (up1 >= 0.5):
+            return False
+    return True
 
 
 GAP_DOWN_SPAN = 0.35   # `cut_gap_keep_glyph`：换线后从上格划给下格的墨，上下跨这么多格高就不换
@@ -2948,7 +2776,22 @@ def _white_row_ok(lab: np.ndarray, stats: np.ndarray, cur: np.ndarray, new: np.n
                   period: float) -> bool:
     """`cut_white_row` 护栏：被原线劈开的块整块（≥ 1−`FREE_SEAM_SIDE`）归它原来墨多的那边；别的单字大小的块不换边
     （墨大半从一边挪到另一边）。挡字内白缝：线挪进「二」两横之间、「言」亠下面，上横／亠会整块换到上格。"""
-    return _seam.blobs_keep_sides(lab, stats, cur, new, split, period, split_to="major")
+    h, w = lab.shape
+    lo, hi = int(max(0, min(cur.min(), new.min()) - 1)), int(min(h, max(cur.max(), new.max()) + 1))
+    min_a = FREE_SEAM_MIN_AREA * period * period
+    ids = set(np.unique(lab[lo:hi]).tolist()) - {0}
+    for i in ids:
+        x, y, cw, ch, a = (int(v) for v in stats[i])
+        comp = lab[y:y + ch, x:x + cw] == i
+        rows = np.arange(y, y + ch)[:, None]
+        up0 = int((comp & (rows < cur[x:x + cw][None, :])).sum()) / a
+        up1 = int((comp & (rows < new[x:x + cw][None, :])).sum()) / a
+        if i in split:
+            if (up1 if up0 >= 0.5 else 1 - up1) < 1 - FREE_SEAM_SIDE:
+                return False
+        elif a >= min_a and (up0 >= 0.5) != (up1 >= 0.5):
+            return False
+    return True
 
 
 SETTLE_NEAR = 0.05      # `cut_glyph_line`：被劈块离两边别的墨的距离差不到这么多格高，拿不准归哪边，不动

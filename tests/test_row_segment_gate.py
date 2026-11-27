@@ -45,7 +45,7 @@ def _chain(tmp_path, monkeypatch, *, gap: int = 14, through: str = "row_segment"
     ctx.store.write(ctx.book.id, "border_detect_gate", f"p{PAGE:04d}",
                     {"border_detect_gate_manifest": make_gate1(
                         PAGE, n_cols=NCOLS, expected_cols=NCOLS)})
-    steps = ["column_warp", "column_band", "column_end", "column_geometry", "column_gate", "row_segment", "row_segment_gate"]
+    steps = ["column_warp", "column_gate", "row_segment", "row_segment_gate"]
     return ctx, run_steps(ctx, PAGE, steps[:steps.index(through) + 1])
 
 
@@ -55,13 +55,11 @@ def _regate(ctx, cells: PageCells):
     return STEPS["row_segment_gate"].run_page(ctx, PAGE)["row_segment_gate_manifest"]
 
 
-def test_gate_registered_and_now_runs_inside_cut_gate():
-    """闸3 不再挂在 row_segment 出口（2026-11-25）：层次并进最后调用的 cut_gate，Step 本身仍注册、被它调用。"""
+def test_gate_registered_and_attached_to_row_segment():
+    """闸3已挂在 row_segment 出口——补闸3的最基本前提。"""
     assert "row_segment_gate" in STEPS
-    assert STEPS["row_segment"].spec.gate is None
-    gate = STEPS["cell_shrink"].spec.gate
-    assert gate is not None and gate.id == "cut_gate"
-    assert {lv.name for lv in gate.levels} >= {"slot_count", "dp_no_solution", "column_count", "column_width"}
+    gate = STEPS["row_segment"].spec.gate
+    assert gate is not None and gate.id == "row_segment_gate"
 
 
 def test_clean_cuts_are_admitted_without_flags(tmp_path, monkeypatch):

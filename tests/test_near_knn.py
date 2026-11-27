@@ -1,5 +1,4 @@
 """形近护栏格书级刻形近邻（`groups.near_knn`）：候选限定、全库同意、护栏、float16 打包。数据全在测试里造。"""
-import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 import json
 
 import cv2
@@ -94,7 +93,7 @@ def test_witness3_knn_veto(tmp_path, monkeypatch):
     path.write_text(json.dumps(_model(skip_chars=["一"]), ensure_ascii=False), encoding="utf-8")
     near_knn.load.cache_clear()
     p = SimpleNamespace(group_flow_near_knn=str(path))
-    monkeypatch.setattr(_sac, "_page_patch", lambda ctx, page, col, slot, sub: box(0))
+    monkeypatch.setattr(sa, "_page_patch", lambda ctx, page, col, slot, sub: box(0))
     veto = sa._witness3_knn_veto_fn(p, None, 1)
     rec = SimpleNamespace(slot=1, sub=None)
     v = veto(1, rec, "口", "十")                      # 图是 口＝库首位，整理本说 十 → 否决
@@ -103,7 +102,7 @@ def test_witness3_knn_veto(tmp_path, monkeypatch):
     assert veto(1, rec, "口", "一") is None           # skip_chars
     def boom(*a):
         raise sa.PatchUnavailable("x")
-    monkeypatch.setattr(_sac, "_page_patch", boom)
+    monkeypatch.setattr(sa, "_page_patch", boom)
     assert veto(1, rec, "口", "十") is None           # 取不到字块 fail-open
 
 
@@ -114,7 +113,7 @@ def test_near_knn_gap(tmp_path, monkeypatch):
     path = tmp_path / "near_knn.json"
     path.write_text(json.dumps(_model(), ensure_ascii=False), encoding="utf-8")
     near_knn.load.cache_clear()
-    monkeypatch.setattr(_sac, "_page_patch", lambda ctx, page, col, slot, sub: box(0))
+    monkeypatch.setattr(sa, "_page_patch", lambda ctx, page, col, slot, sub: box(0))
 
     def run(gap, ref):
         r = NS(id="c1", char="十", admit=False, provenance="match", channel=None, evidence={}, doubts=["lib_unsure"],

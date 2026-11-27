@@ -23,6 +23,13 @@ def _page(h=1200, w=900, text=True):
                "top_frame_kind": "double", "bottom_frame_kind": "double"}
 
 
+def test_params_off_dump_unchanged():
+    d = BorderDetectGateParams().model_dump(mode="json")
+    assert not any(k.startswith("pagetype_model") for k in d)
+    on = BorderDetectGateParams(pagetype_model=True).model_dump(mode="json")
+    assert on["pagetype_model"] is True and on["pagetype_model_fingerprint"]
+
+
 def test_manifest_none_not_in_dump():
     m = BorderDetectGateManifest(page=1, admitted=True, n_cols=9, expected_cols=9)
     assert "pagetype_model" not in m.model_dump(mode="json")
@@ -46,8 +53,8 @@ def test_signals_empty_columns_counted():
 
 def test_model_roundtrip_and_gate_abstain(tmp_path):
     pytest.importorskip("sklearn")
-    pd = pytest.importorskip("pandas")               # 同属 [shadow] extra；只装 sklearn 的环境跳过
     from sklearn.ensemble import HistGradientBoostingClassifier
+    import pandas as pd
     from open_guji_cv.pagetype_model.gate import PageTypeGate
     from open_guji_cv.pagetype_model.model import file_fingerprint, load_model, save_model
     g1, b1 = _page(); g0, b0 = _page(text=False)

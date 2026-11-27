@@ -19,6 +19,10 @@ class _Merge:
         return self._m.get(c, c)
 
 
+def test_default_on():
+    assert SeedAdmitParams().iron_coord_guard is True
+
+
 def test_blocks_real_cases():
     for iron, ref in [("木", "水"), ("宫", "官"), ("子", "予"), ("人", "代"), ("木", "本")]:
         assert _iron_coord_dissent(iron, ref, _Ident()), (iron, ref)

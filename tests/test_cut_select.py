@@ -508,25 +508,3 @@ def test_move_keeps_glyphs_real_unet_three():
     img = _three_and_next()
     assert not move_keeps_glyphs(judge, img, 10, 110, 124, 89, 20, 240)
     assert move_keeps_glyphs(judge, img, 10, 110, 89, 124, 20, 240)
-
-
-def test_to_canvas_scale_cap_shrinks_small_window():
-    """cut_judge_scale（MJ 11-18）：窗口比画布小时缩放上限照样生效，返回的 s 就是上限；缺省 1.0 原样。"""
-    from open_guji_cv.seg.cut_select import CANVAS_H, CANVAS_W, _to_canvas, scale_suffix
-    g = np.full((200, 150), 255, np.uint8)
-    g[50:150, 40:110] = 0
-    img, s = _to_canvas(g)
-    assert s == 1.0 and img.shape == (CANVAS_H, CANVAS_W)
-    img7, s7 = _to_canvas(g, scale=0.7)
-    assert s7 == 0.7 and img7.shape == (CANVAS_H, CANVAS_W)
-    assert int((img7 < 128).sum()) < int((img < 128).sum())
-    assert scale_suffix(1.0) == "" and scale_suffix(0.7) == ":s0.7"
-
-
-def test_cut_judge_scale_range():
-    import pytest
-    from open_guji_cv.steps.row_segment import RowSegmentParams
-    assert RowSegmentParams(cut_judge_scale=0.7).cut_judge_scale == 0.7
-    for bad in (0.3, 1.2, 0):
-        with pytest.raises(Exception):
-            RowSegmentParams(cut_judge_scale=bad)

@@ -92,11 +92,11 @@ def test_book_params_overrides_step_default(tmp_path, monkeypatch):
 def test_caller_override_wins_over_book_params(tmp_path, monkeypatch):
     """调用方已经把这个字段改成非默认值（模拟 Engine 解析过管线 yaml/CLI
     `--params` 之后传进 `ctx.params`）：书 yaml 的配置不会覆盖它。"""
-    book = make_book("tbook", params={"seed_admit": {"rare_ref_coord_min_cov": 0.95}})
+    book = make_book("tbook", params={"seed_admit": {"context_margin": 0.90}})
     ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
-    ctx.params["seed_admit"] = SeedAdmitParams(rare_ref_coord_min_cov=0.55)
+    ctx.params["seed_admit"] = SeedAdmitParams(context_margin=0.55)
     got = ctx.params_for(STEPS["seed_admit"])
-    assert got.rare_ref_coord_min_cov == 0.55, "调用方覆盖被书 yaml 盖掉了，优先级反了"
+    assert got.context_margin == 0.55, "调用方覆盖被书 yaml 盖掉了，优先级反了"
 
 
 def test_book_params_does_not_affect_other_steps(tmp_path, monkeypatch):
@@ -118,11 +118,11 @@ def test_caller_value_equal_to_default_is_overridden_by_book_params(tmp_path, mo
     两者都只看值是否等于默认。本测试只用来**钉住现状**——将来换成更精确的机制
     （比如看 `model_fields_set`）时，这条要一起改，不是期望行为。
     """
-    book = make_book("tbook", params={"seed_admit": {"rare_ref_coord_min_cov": 0.95}})
+    book = make_book("tbook", params={"seed_admit": {"context_margin": 0.90}})
     ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
     ctx.params["seed_admit"] = SeedAdmitParams()
     got = ctx.params_for(STEPS["seed_admit"])
-    assert got.rare_ref_coord_min_cov == 0.95
+    assert got.context_margin == 0.90
 
 
 import pytest  # noqa: E402

@@ -1,4 +1,4 @@
-"""书级开关门（`@book.<字段>`）+ real_proto 路径可移植（K#238c）。
+"""书级开关门（`@book.<字段>`）+ 整体哈希步迁移 + real_proto 路径可移植（K#238c）。
 
 门的测试借 `BookSpec.iron_gate` 这个现成的书级布尔字段当开关（原先借的 `ocr_candidates`
 已随 Step5-c 于 2026-10-18 删除）；它在这里只当一个书级布尔量，与铁证通道本身无关。"""
@@ -17,7 +17,9 @@ from open_guji_cv.core.engine import FRESH, STALE, Engine
 from open_guji_cv.core.pipeline import Pipeline
 from open_guji_cv.core.spec import ProductKindSpec, StepSpec
 from open_guji_cv.core.step import KINDS, STEPS, Step, register_kind, register_step
+from open_guji_cv.products import fp_migrate
 from open_guji_cv.products.cache import ImageCache
+from open_guji_cv.products.fp_migrate import migrate_book
 from open_guji_cv.products.store import ProductStore
 
 
@@ -113,6 +115,33 @@ def test_gate_off_upstream_change_does_not_stale(tmp_path):
         ost.put(dataclasses.replace(e, sha256="f" * 64))
     st = _eng(w).status()["steps"]["t_bg_down"]["counts"]
     assert st[STALE] == 0 and st[FRESH] == 2
+
+
+def test_migrate_after_wiring_explain_clean_and_no_false_fresh(tmp_path, monkeypatch):
+    """整体哈希步 + 门：迁移只 --trust；真过期（上游变）不会被洗成新鲜。"""
+    monkeypatch.setattr(fp_migrate, "WHOLE_HASH_STEPS", frozenset({"t_bg_down"}))
+    w = _world(tmp_path, ocr=False)
+    eng = _eng(w)
+    eng.run()
+    m = w[2].manifest("tbg", "t_bg_down")
+    # 模拟「旧公式记录」：指纹被改成别的
+    for k, e in list(m.all().items()):
+        m.put(dataclasses.replace(e, fingerprint="0" * 24))
+    assert _eng(w).status()["steps"]["t_bg_down"]["counts"][STALE] == 2
+    r = migrate_book(_eng(w), [1, 2], steps=["t_bg_down"], apply=True)["t_bg_down"]
+    assert r["migrated"] == 0 and "整体哈希步只能 --trust" in next(iter(r["skipped"]))
+    r = migrate_book(_eng(w), [1, 2], steps=["t_bg_down"], trust=True, apply=True, explain=True)["t_bg_down"]
+    assert r["migrated"] == 2 and not r["skipped"]
+    assert _eng(w).status()["steps"]["t_bg_down"]["counts"][FRESH] == 2
+    # 真过期：记录里的 upstream 与现算不同 → 不迁
+    for k, e in list(m.all().items()):
+        m.put(dataclasses.replace(e, fingerprint="1" * 24, upstream={"raw_page": "dead"}))
+    r = migrate_book(_eng(w), [1, 2], steps=["t_bg_down"], trust=True, apply=True)["t_bg_down"]
+    assert r["migrated"] == 0 and r["skipped"] == {"上游产物变了": 2}
+    assert _eng(w).status()["steps"]["t_bg_down"]["counts"][STALE] == 2
+    # 整体哈希步不接 --old-path
+    assert "na" in migrate_book(_eng(w), [1, 2], old_paths={"t_bg_down": {"gain": "1"}},
+                                trust=True)["t_bg_down"]
 
 
 def test_real_proto_fingerprint_same_content_different_root(tmp_path, monkeypatch):

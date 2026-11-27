@@ -1,7 +1,13 @@
 # -*- coding: utf-8 -*-
-"""字位流 `slots.py` 与整理本 `witness.py`：识字、定字和 guji-manager 共用的两块底层。
+"""Step9 结果整理的**汇总层**：字位流、与整理本比对、体检表。
 
-原 Step9 结果整理（导出、与整理本对勘、体检表、截条图）已在 v0.9.0 整个搬到 guji-manager
-`guji_manager/output/`（第五步 `output`）；这里只留两块被 cv 步骤（如 `align_ref`）与 manager 共同读的库。
-**不进 `core.step.STEPS`**。
+跟 `render/` 的分工：`render/` 把一页拼成给人看的文本（9.1 分行 md、9.2 可读
+排版），`report/` 做**跨页跨册的汇总与校验**（9.3 比对、9.4 体检表）。两边共用
+同一份字位流 `slots.py`——不共用的后果见该模块头。
+
+设计见 `overview` 仓 `项目进展/图片初步数字化/进度/Step9-结果整理/`：
+[04-与整理本对比校验.md]（9.3）、[05-整理本清单.md]（三份整理本的来历与结构）。
+
+**不进 `core.step.STEPS`**，理由同 Step8（`feedback/step8.py` 模块头）：输入是
+跨页跨册的汇总，产物不属于任何一页。
 """

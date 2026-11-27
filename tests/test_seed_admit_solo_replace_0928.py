@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Step7 书级收紧三参数（2026-09-28，overview#155 D：全唐文 match_solo / match_replace 单独核）。
 
+- `off_channels`：关掉 `admission_decision` 的某几条通道，判决作废、记 `channel_off`；
 - `solo_confusable_guard` 已随 W2（GUJI-49）删除（缺省关、十册 yaml 零使用）；
 - `replace_form`：match_replace 整理本字与库 top1 字面不同时取整理本（align，旧行为）
   ／取库形（lib）／落审（review）。
@@ -52,6 +53,20 @@ def test_solo_default_admits(tmp_path, monkeypatch):
     assert r.admit and r.channel == "match_solo" and r.char == "明"
     r = _run(tmp_path, monkeypatch, cands=SOLO_CONF, verdict="same")
     assert r.admit and r.channel == "match_solo" and r.char == "千"
+
+
+def test_off_channels_sends_solo_to_review(tmp_path, monkeypatch):
+    r = _run(tmp_path, monkeypatch, cands=SOLO_PLAIN, verdict="same",
+             params={"off_channels": "match_solo"})
+    assert not r.admit and r.channel is None
+    assert "channel_off" in r.doubts
+
+
+def test_off_channels_other_channel_untouched(tmp_path, monkeypatch):
+    r = _run(tmp_path, monkeypatch, cands=SOLO_PLAIN, verdict="same",
+             params={"off_channels": "match_replace, match_margin"})
+    assert r.admit and r.channel == "match_solo"
+
 
 
 # match_replace：整理本 replace 层给「旣」，库 top1「既」（语义同、字面不同），库 unsure。

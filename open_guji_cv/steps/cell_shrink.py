@@ -20,7 +20,6 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.cells import ColumnCells, CutPointCandidates, PageCells
 from ..products.kinds.chars import CandidatePatch, CharRec, ColumnChars, PageChars
 from ..products.kinds.columns import PageWindows
-from ._colview import merged_windows
 from ._warpmap import ColumnMapper
 
 
@@ -63,11 +62,6 @@ class CellShrinkParams(BaseModel):
     """列端格剥版框横线时，线行段往上下连着长：覆盖够、跨度不够满宽的毛边行也算线（extractor.strip_frame_line
     `grow`）。缺省关＝旧行为。开（全唐文嘉慶本）：版框粗到 20 行，只有中间几行跨度满宽，毛边当「线外有墨」，
     第 1 列、列首、列尾格的字块整条带着框线，库首选认歪（功→可、明→所；Sheldon 11-03 标 9 格）。"""
-
-    long_rule_outer_only: bool = False
-    """剥界行／版框竖线（extractor.strip_long_rule）只认贴着图块外沿 LONG_RULE_OUTER 宽以内的一段。缺省关＝旧行为。
-    开（全唐文）：单字成列（「制」「敕」）时字缘就是这个字自己，刂 落在字缘外、列首又是列尾，长竖钩连到格底，
-    被当拐角框线整条抹掉（009:33:7:5、009:40:4:5，台账 R038）。"""
 
     inner_frame_cut: bool = True
     """整页拟合双边版框的内框细线，线上和线外的像素在列图上统一抹白，再切字块（seg.frame_line；Sheldon 11-04 定）。
@@ -135,8 +129,6 @@ class CellShrinkParams(BaseModel):
             d.pop("frame_line_max_off", None)
         if isinstance(d, dict) and not self.frame_line_grow:
             d.pop("frame_line_grow", None)
-        if isinstance(d, dict) and not self.long_rule_outer_only:
-            d.pop("long_rule_outer_only", None)
         if isinstance(d, dict) and not self.jiazhu_end_halves:
             d.pop("jiazhu_end_halves", None)
         if isinstance(d, dict) and not self.jiazhu_strip_rules:
@@ -410,7 +402,7 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 class CellShrinkStep(Step):
     spec = StepSpec(
         id="cell_shrink", title="Step4 字框收缩", version="1.26", unit="cell",   # 1.26：inner_frame_cut、inner_frame_profile 缺省开（三套书都开着，Sheldon 11-06 定；写 false 的书参数 dump 与以前相同）；1.25：书级开关 inner_frame_cut——整页拟双边版框内框细线（seg.frame_line），列图上线和线外统一抹白再切字块（殿本新图源列首列尾挂着的一截框线，Sheldon 11-04）；1.24：夹注拆 a/b 跨中缝的连通体，少的一侧伸过中缝超过那侧半宽 1/4 的不整块归边、照中缝切（两行字笔画相碰连成一块，整块归边把另一行整个小字吞进对侧；史記 02:5:3:13a「魏人」，SJ 报，extractor.JIAZHU_SIDE_DEPTH）；1.23：图块最外侧落在本列字缘以外的窄段，在整列条带里上下贯穿 1.6 格以上、或在列端格里连到格外沿（版框拐角）的，是界行／版框竖线，抹白；夹注格不剥（extractor.strip_long_rule；第 9 列列尾「取」「錄」「也」，A23 送审 26 格）；1.22：列端剥框线越过写本框线的毛边判字与线之间的白行，并连毛边一起剥（史記列首格顶线残留，SJ 经 #805 检查器报）；1.21：列端条带按版框提示找框线，容差按格高算、提示以内连着上面笔画的横不当下框（新图 0.69 倍，死 40 行够到半格，「士」「王」「二」底横被当框截掉）；夹注拆 a/b 跨中缝的连通体墨大半在一侧就整块归那侧（右行字越线被切半）（GUJI-748）；1.20：全页框线线位找到版框往内 0.8 格并记线厚，跨度不满 0.85 的实线位置、厚度对上线位也剥（双边框内框贴字脚，vol06 p112「而」）；1.19：列端剥框线认双边框之间的连墨与又厚又满的粗版框（「乾」「者」「尚」）；1.18：归属图里跨格界、不算小部件的连通体整块归墨多的那格（原按伸得深的那格，「上」的底横左段被分给「下」）；1.17：整列先分好每个墨像素归哪格（extractor.partition_strip），图块只留本格的墨，替掉 pad 裁块后的逐块清理；1.16：两字粘成一块、跨格界两边都伸得深的连通体按格界切开（extractor.clip_unions_at_line）；1.15：跨格界部件伸进本格超过 0.1 格就不挪（NEIGHBOR_PART_DEPTH）；1.14：小印压着的字也打 seal_region 旗（occlusion.page_occluded 第 4 期）；1.13：跨格界、墨大半在格界外的邻字部件从本格抹掉（extractor.drop_neighbor_parts）；1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
-        consumes=("cells", "column_windows", "column_image"), optional_consumes=("seals", "raw_page", "column_raw", "column_bands", "column_ends"),
+        consumes=("cells", "column_windows", "column_image"), optional_consumes=("seals", "raw_page", "column_raw"),
         optional_consumes_when=(("raw_page", "inner_frame_cut"), ("column_raw", "inner_frame_only")),
         produces=("char_index", "char_patch"),
         params=CellShrinkParams,
@@ -420,7 +412,7 @@ class CellShrinkStep(Step):
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
                    "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.seg.seam", "open_guji_cv.seg.frame_line",
                    "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect",
-                   "open_guji_cv.impl.keben.patch_clean", "open_guji_cv.steps._colview"),
+                   "open_guji_cv.impl.keben.patch_clean"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────
@@ -492,7 +484,7 @@ class CellShrinkStep(Step):
         only = bool(p.inner_frame_cut and p.inner_frame_only)  # type: ignore[attr-defined]
         if p.inner_frame_cut and (p.inner_frame_only or p.inner_frame_local):  # type: ignore[attr-defined]
             # 整页拟出内框细线的边（cut_inner_frame 已抹白）：extractor 列端不再逐格剥框线行；抬头列不抹上框，上框照旧
-            wins: PageWindows = merged_windows(ctx, page)
+            wins: PageWindows = ctx.product("column_windows", page)
             inner = self._inner_frame_lines(ctx, page, cells, wins)
             if only:
                 out["debris_thin_only"] = {cc.col: True for cc in cells.columns}    # 没拟出内线的一端：框渣也只剥薄片
@@ -603,7 +595,6 @@ class CellShrinkStep(Step):
                      **({"jiazhu_rules": True} if p.jiazhu_strip_rules else {}),
                      **({"frame_line_reach": p.frame_line_max_off} if p.frame_line_max_off else {}),
                      **({"frame_line_grow": True} if p.frame_line_grow else {}),
-                     **({"long_rule_outer": True} if p.long_rule_outer_only else {}),
                      **({"tail_one_abs": True} if p.tail_one_abs else {}),
                      **({"ink_blob_empty": True} if p.ink_blob_empty else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
@@ -673,7 +664,7 @@ class CellShrinkStep(Step):
     # ── Step 接口 ─────────────────────────────────────────────────────
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         cells: PageCells = ctx.product("cells", page)
-        wins: PageWindows = merged_windows(ctx, page)
+        wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
         seal: dict = {}
         if ctx.params_for(self).seal_flag:  # type: ignore[attr-defined]
@@ -785,19 +776,6 @@ class CellShrinkStep(Step):
         return ColumnChars(col=cc.col, ok=True, n_instances=len(recs), chars=recs)
 
 
-    @staticmethod
-    def _inner_memo_stamp(ctx: RunContext, page: int) -> tuple:
-        """`_INNER_MEMO` 的产物戳（2026-11-25，CV4 报同进程换配置会串）：整页内框线读 cells、column_windows
-        两份产物和原图，按这两份产物这一页的 sha 记；取不到的记 None（与老行为同，只按书页）。"""
-        out = []
-        for kind in ("cells", "column_windows"):
-            try:
-                ent = ctx.store.manifest(ctx.book.id, ctx.producer(kind).spec.id).get(f"p{page:04d}")
-                out.append(ent.sha256 if ent is not None and ent.status == "ok" else None)
-            except Exception:  # noqa: BLE001 —— 取不到戳就按 None 记
-                out.append(None)
-        return tuple(out)
-
     def _page_memo(self, ctx: RunContext, page: int, col: int) -> dict | None:
         """`render` 的按页记忆（键：cells 产物 sha、列图页戳、本步参数）；戳取不到返回 None（不记）。"""
         stamp_img = ctx.cache_stamp("column_image", column_key(page, col))
@@ -858,9 +836,9 @@ class CellShrinkStep(Step):
                 memo["imgs"][col] = cimg
         img = cimg.copy()
         if ctx.params_for(self).inner_frame_cut:  # type: ignore[attr-defined]
-            wins: PageWindows = merged_windows(ctx, page)
+            wins: PageWindows = ctx.product("column_windows", page)
             wrec = wins.column(col)
-            mkey = (ctx.book.id, page, self._inner_memo_stamp(ctx, page), repr(ctx.params_for(self)))
+            mkey = (ctx.book.id, page)
             if mkey not in _INNER_MEMO:
                 while len(_INNER_MEMO) >= _RENDER_MEMO_MAX:
                     _INNER_MEMO.pop(next(iter(_INNER_MEMO)))

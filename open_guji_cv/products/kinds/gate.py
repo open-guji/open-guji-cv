@@ -9,7 +9,7 @@
 block 那条 flag」，这道闸自己在 `run_page` 里按判据分别决定写 `reject`（block）
 还是 `flags`（flag）。L2b 只在 115 列金标上验证过一种机制（背景印章），不确定
 未来会不会在没见过的书页上误伤，先用 flag 形式进生产、积累人审证据，跟
-`row_segment_gate.py` 的 R2/R2s 先例一致（见 `doc/经验/切分四步-研发记录.md`
+`row_segment_gate.py` 的 R2/R2s 先例一致（见 `doc/segmentation_v2_pipeline.md`
 「Step2→3 交接」节的 2026-09-11 记录）。
 """
 
@@ -83,9 +83,4 @@ class GateManifest(BaseModel):
 
 GATE_MANIFEST = register_kind(ProductKindSpec(
     id="gate_manifest", title="Step2→3 交接闸裁决", storage="numeric", unit="column",
-    schema=GateManifest, coord_space=COLUMN_PX))
-
-
-COLUMN_GEOMETRY = register_kind(ProductKindSpec(
-    id="column_geometry", title="2 列几何（文字带、格线范围、页级字距；结构性可切裁决）", storage="numeric", unit="column",
     schema=GateManifest, coord_space=COLUMN_PX))

@@ -33,17 +33,3 @@ def fetch_derived(kind_dir: str, name: str, dest: Path) -> bool:
             tmp.replace(dest)
             return True
     return bool(FETCHER and FETCHER(kind_dir, name, Path(dest)))
-
-
-# ── 字块按页取回（2026-11-25，CV0「字块随包存 R2」）──────────────────────────
-#: 缓存不在时可以去别处整页取回的图像种类。只管字块：识字、定字只读它；列图只在切字里用，切字单本来就现算。
-PAGE_KINDS = frozenset({"char_patch"})
-
-#: `(book_id, kind_id, page, chain_fp, cache, stamp) -> bool`：按链指纹取回这一页这一种类的全部图，
-#: 核对后写进 `cache`（`ImageCache.put_bytes`，带 `stamp`）。由 manager 注册；没注册、没取到返回 False，调用方照旧现算。
-#: 键相同即内容相同（链指纹含产出它的那一步及全部上游这一页的指纹），所以取不取只影响快慢，不影响产物。
-PAGE_FETCHER: Callable | None = None
-
-
-def page_fetch_enabled() -> bool:
-    return PAGE_FETCHER is not None and os.environ.get("GUJI_PATCH_FETCH", "1") not in ("0", "false", "no", "off")
