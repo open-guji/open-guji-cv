@@ -47,7 +47,7 @@ def match_algo(gp) -> str:
     return f"cnn:{c.path}" + (f"+cov/{c.fuse}" if c.fuse else "") + (f"@{sha}" if sha else "")
 
 
-def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str) -> FinalRec:
+def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, cand_rec=None, cand_k: int = 10) -> FinalRec:
     """一格：3a 记录 ＋（可选）3b 记录 → FinalRec。`calibrators`：{方法全名: 方法对象}（有 `calibrate`）。"""
     cands: dict[str, FinalCand] = {}
     order: list[str] = []
@@ -61,6 +61,17 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str) -> 
                                           evidence={"a": {"sim": round(float(match_rec.cov or 0), 4), "algo": algo}})
         order.append(match_rec.char)
     p_src = ""
+    if cand_rec is not None and cand_rec.ran:
+        # 3c 按图候选：前 cand_k 个并进来（3a 已有的补上证据 c，没有的新增、排在 3a 候选之后）
+        for c, s in cand_rec.cands[:cand_k]:
+            fc = cands.get(c)
+            if fc is None:
+                fc = cands[c] = FinalCand(char=c)
+                order.append(c)
+            ev = {"sim": round(float(s), 4)}
+            if c in (cand_rec.fam_of or {}):
+                ev["fam_of"] = cand_rec.fam_of[c]
+            fc.evidence["c"] = ev
     if near_rec is not None:
         for mo in near_rec.methods:
             for c, s in mo.sims.items():
@@ -94,7 +105,7 @@ class GlyphAnalyzerStep(Step):
     spec = StepSpec(
         id="glyph_analyzer", title="3 识字收尾（汇总）", version="0.1", unit="cell",
         consumes=("glyph_match",), produces=("glyph_analyzer",),
-        optional_consumes=("glyph_near",),
+        optional_consumes=("glyph_near", "glyph_candidate"),
         params=GlyphAnalyzerParams,
         code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.clustering.sim_cnn"),
         enabled_by="enabled",
@@ -108,6 +119,11 @@ class GlyphAnalyzerStep(Step):
         except Exception:  # noqa: BLE001 —— 可选上游：3b 没开或没跑就当没有这一路
             near = None
         near_by = near.by_id() if near is not None else {}
+        try:
+            cand = ctx.product("glyph_candidate", page)
+        except Exception:  # noqa: BLE001 —— 可选上游：3c 没开或没跑就当没有这一路
+            cand = None
+        cand_by = cand.by_id() if cand is not None else {}
 
         calibrators: dict[str, object] = {}
         if near_by:
@@ -118,7 +134,7 @@ class GlyphAnalyzerStep(Step):
                     calibrators[f"{name}:{gid}"] = load_method(name, mdir)
         algo = match_algo(ctx.params_for(STEPS["glyph_match"]))
 
-        cols = [ColumnFinal(col=cm.col, chars=[merge_cell(r, near_by.get(r.id), calibrators, p.topk, algo)
+        cols = [ColumnFinal(col=cm.col, chars=[merge_cell(r, near_by.get(r.id), calibrators, p.topk, algo, cand_by.get(r.id))
                                                for r in cm.chars])
                 for cm in match.columns]
         return {"glyph_analyzer": PageFinal(page=page, model=MODEL, columns=cols)}

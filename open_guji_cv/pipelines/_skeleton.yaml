@@ -22,6 +22,7 @@ slots:
     - glyph_match        # 3a 字形库匹配（原 Step5-a）：字块 → GlyphDB 三档判决 + 逐实例证据（指纹带库指纹）
     - glyph_near         # 3b 形近字组分析（2026-11-27）：触发了形近字组的格，按组登记的方法给组内各字新分；书配置 groups 空＝不跑
     - rare_candidates    # 生僻字候选（原 Step5-b）：字体模板 + CNN 分类/embedding 的 RRF 融合（needs=model）；将并进 3c glyph_candidate
+    - glyph_candidate    # 3c 按图候选（2026-11-27，CV3）：r5 向量对全字表单路＋异体族展开，缺省关（enabled）
     - glyph_analyzer     # 3 识字收尾（2026-11-27）：汇总成 cands（字＋p＋证据）与 p_map；书配置 enabled 为假＝不跑
     - align_ref          # 3c 整理本对位（原 Step5-d）：文本证据一路，四路互相独立，排在 context_decide 之前（needs=corpus）
     - context_decide     # 4a 上下文（原 Step6）：库候选 + 上下文 → 门槛化定字（needs=corpus）
@@ -34,7 +35,7 @@ required: [layout, columns, cells]
 stages:
   layout: [page_survey, invert_detect, "slot:layout", "slot:seals"]                  # 1 版面：只管认位置、判类型（版框、界行、抬头、页型、印章）
   cut: ["slot:columns", "slot:cells", cell_shrink]                                   # 2 切字：单列拉直（射影、缩放）、字与框线分离、切字、缩框（2026-11-22 用户定）
-  read: [glyph_match, glyph_near, rare_candidates, glyph_analyzer]                   # 3 识字：只管从字块图取证（2026-11-22 用户定）
+  read: [glyph_match, glyph_near, rare_candidates, glyph_candidate, glyph_analyzer]                   # 3 识字：只管从字块图取证（2026-11-22 用户定）
   decide: [align_ref, context_decide, seed_admit]                                     # 4 定字：整理本对位归这里（不读字块图，合文本与字形证据）
 # 大步收尾（2026-11-27 用户定）：每个大步可以有一个收尾步骤，在本大步其他步骤之后、下一大步之前跑，
 # 汇总本大步各小步的结果。收尾必须是本大步在管线里的最后一步（加载时校验）。不是每个大步都要有。
