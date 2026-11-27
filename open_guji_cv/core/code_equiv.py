@@ -636,6 +636,11 @@ _SOLO5B_SCOPE_1126 = ("seed_admit 加 solo_5b_scope 参数（any|no_ref，缺省
                       "殿本 vol28 192 页 28,815 格（#17838 对 #17839），cells/text/state/geom 全不变，GUJI_CORPUS_DRIFT=warn。"
                       "登记哈希按合入时的 origin/dev 重算（改动同一处）。")
 
+_PIN_LEVELS_1127 = ("feedback/lookup.py human_chars 加开关 GUJI_PIN_LEVELS（GM4 2026-11-27，用户定「人裁>AI>pipeline」）：开时同一格已有人裁字，"
+                    "之后写的 AI 钉不覆盖（payload.override_human=true 例外）；缺省关，关时多出的只是 lv_of 记账，out 的写入与原先逐位相同，"
+                    "按构造逐字节不变（tests/test_pin_removed.py::test_levels_human_over_later_ai 两种状态都验）。"
+                    "未在真册上跑 scripts/code_equiv.py check（GM4 容器无册数据），合入前请有数据的机器补一次。")
+
 _PIN_GEOM_096 = ("row_segment 套整列钉子前按钉子记的列图几何底（manager column_basis.geom）换算（CV1 2026-11-26，CV0 批的钉子护栏，"
                  "v0.9.6 补发线＝v0.9.5＋#1924）：没记 geom 的钉子（现有全部）照原坐标套、只写 stderr；几何一致照套。"
                  "row_segment 在殿本 vol01 10 页（30,32,48,88,89,105,117,129,179,182，其中 9 页带钉子）、全唐文 053 12 页"
@@ -2783,6 +2788,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97",
           old="d9af94abb75fb9557ab425514532c9506ac1274ae3ceb0c47c50ce78b817c9c6",
           evidence=_SOLO5B_SCOPE_1126),
+    Equiv(module="open_guji_cv.feedback.lookup",
+          new="d1dfd6a8914551a335843194bf71258bfd80e8f5a4381f38f0500296d6629a20",
+          old="f92a02c93d76432954d1e021802af8faa4f900855e1de867ba3fd7b7613c9de2",
+          evidence=_PIN_LEVELS_1127),
     # 四周單邊：frame_layers 左右=1（CV1 11-27，cv #1922）
     Equiv(module='open_guji_cv.impl.keben.border',
           new='9d2e7a4bd695f98fbc8941e1a25174273081ae059f09a23da082284fb33c0c48',
