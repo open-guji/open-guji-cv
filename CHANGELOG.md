@@ -122,6 +122,13 @@
 
 ## [未发版]
 
+## [0.9.8] - 2026-11-27
+
+补发（PATCH，L0）＝v0.9.7＋#1956（cherry-pick b42592c，朱楓林集 MBJ 报）。对 v0.9.7 各步 code_hash 全同（seed_admit 三模块按本线哈希登 code_equiv）；底库 b35 不变；不需 manager 配套。
+重跑起点：册 yaml 写了 `chars_per_line_pages` 的从 border_detect 起过期；`seed_admit.seg_box_check` 开了的从 seed_admit 起过期；都没写的册不过期。
+
+- PATCH（缺省关，产物逐字节不变，seed_admit 三模块 code_equiv 登记；CV2 2026-11-27，朱楓林集 MBJ 报）：①册 yaml 顶层 `chars_per_line_pages` 按页每列字数（如序页 `{"2-9": 14}`），border_detect／column_geometry／column_gate／row_segment／row_segment_gate／cut_gate 一处认（`core/step` 注册处换 `ctx.book.chars_per_line`，步代码不动）；写了表的册这几步指纹加 `cpl_pages`，没写的册不变。②`seed_admit.seg_box_check`（按书挑 sliver／frame_line／speck／split_pair／tall，`[all]` 全开）：碎格、框线扁条、墨点、一字劈两框、过高框退回待审，doubt `seg_defect`（待审原因 seg_defect）。
+
 ## [0.9.7] - 2026-11-27
 
 从 dev 切（脉经 01 按用户 11-27 定用最新改动重跑）：v0.9.6 之外带上 dev 已合的 #1899、#1900（2b side_cut 缺省开）、#1911、#1914、#1918（boundary_net、layout_off_tol 缺省关）、#1919、#1920（solo_5b_scope）、#1921、#1923、#1930、#1932、#1933。

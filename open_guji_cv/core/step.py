@@ -37,7 +37,40 @@ def register_kind(kind: ProductKindSpec) -> ProductKindSpec:
     return kind
 
 
+#: 读「本页每列格数」的步（2026-11-27，朱楓林集序页六行十四字、正文九行二十字）：册配置写了 `chars_per_line_pages`
+#: 时，这几步跑点名页期间 `ctx.book.chars_per_line` 换成表里的数（`_cpl_page_view`）。换在注册处、不改各步代码：
+#: 步模块的代码指纹不动，没写表的册产物与指纹逐位不变；写了表的册由 `engine._self_payload` 加键 `cpl_pages` 过期。
+CPL_PAGES_STEPS = frozenset({"border_detect", "column_geometry", "column_gate", "row_segment",
+                             "row_segment_gate", "cut_gate"})
+
+
+def _cpl_page_view(run_page: Callable) -> Callable:
+    """包一层 `run_page`：点名页期间 `ctx.book` 换成 `chars_per_line` 改为本页数的浅拷贝，跑完换回。
+    各步自己的 `chars_per_line`／`n_body_slots`／`expected_slots` 参数显式写了的仍优先（与册级 `chars_per_line` 同口径）。"""
+    import copy
+    import functools
+
+    @functools.wraps(run_page)
+    def wrapped(self, ctx, page, *a, **kw):
+        book = getattr(ctx, "book", None)
+        table = getattr(book, "chars_per_line_pages", None) or {}
+        n = table.get(int(page)) if table else None
+        if not n or n == book.chars_per_line:
+            return run_page(self, ctx, page, *a, **kw)
+        view = copy.copy(book)
+        view.chars_per_line = int(n)
+        ctx.book = view
+        try:
+            return run_page(self, ctx, page, *a, **kw)
+        finally:
+            ctx.book = book
+    wrapped._cpl_page_view = True  # type: ignore[attr-defined]
+    return wrapped
+
+
 def register_step(cls: type["Step"]) -> type["Step"]:
+    if cls.spec.id in CPL_PAGES_STEPS and not getattr(cls.run_page, "_cpl_page_view", False):
+        cls.run_page = _cpl_page_view(cls.run_page)  # type: ignore[method-assign]
     inst = cls()
     sid = inst.spec.id
     if sid in STEPS and type(STEPS[sid]) is not cls:

@@ -120,6 +120,7 @@ from .seed_admit_lanes import (  # noqa: F401  CV4 整理 PR3c（2026-11-26）�
     _consensus_lib_pass,
     _edge_pair_pass,
     _evict_review_pass,
+    _seg_box_pass,
     _follow_ref_pass,
     _human_unbound_pass,
     _p_ref_pass,
@@ -1107,6 +1108,11 @@ class SeedAdmitStep(Step):
         d_ju = _jiazhu_uneven_pass(ctx, page, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
         n_auto -= d_ju
         n_review += d_ju
+        if p.seg_box_check:
+            # 字框几何闸（降，CV2 11-27，缺省关、按书开）：碎格／框线扁条／墨点／一字劈两框／过高框送审，归 seg_defect
+            d_sb = _seg_box_pass(ctx, page, out, p.seg_box_check)
+            n_auto -= d_sb
+            n_review += d_sb
         if ctx.book.codepoints:
             # 放行字落到册指定码位。放在所有后处理遍之后：`group_flow` 的文意 L2 表键是按整理本原字
             # 建的（`_clf_ctx` 取邻格放行字），提前改邻格字会让键对不上、组内格被误降。

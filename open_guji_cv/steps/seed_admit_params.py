@@ -194,6 +194,7 @@ _DUMP_DROP_HASH: tuple = (
 )
 
 _DUMP_DROP: tuple = (
+    (lambda p: not p.seg_box_check, ("seg_box_check",)),
     (lambda p: not p.book_lanes, ("book_lanes", "book_lanes_fingerprint")),
     (lambda p: not p.symbol_review, ("symbol_min_human",)),
     (lambda p: p.rare_ref_coord_min_cov == _RARE_REF_COORD_MIN_COV, ("rare_ref_coord_min_cov",)),
@@ -663,6 +664,29 @@ class SeedAdmitParams(BaseModel):
     候选＝本格字、整理本、库前三（`glyph_match` candidates）；不因候选互为异体跳过，改为**出口闸**：给出的字须等于整理本字，
     或与整理本字同属本书码位表／异体表一组，否则留审。判法、门槛、`skip_chars`／`skip_groups` 不变；`evidence.near_knn.via = near_gap`。
     全唐文 r9b variant_pair 164 格：给字 63，看图错 2（元←无、尸←戶，都被出口闸拦下），放 61 错 0。"""
+    seg_box_check: list[str] = []
+    """字框几何闸（CV2，2026-11-27，朱楓林集 MBJ 报 3:4:7 碎格被放成「一」进了发布文本）：按格高、列宽判字框，命中的一律退回待审，
+    doubt 码 `seg_defect`（待审原因 seg_defect）。写要开的判据：`sliver`（Step3 格高 <0.35 格）、`frame_line`（框线扁条）、`speck`（墨点）、
+    `split_pair`（一字劈两框，与邻框合起来 <1.25 格）、`tall`（过高框 >1.6 格）；`[all]`＝全开。判据与阈值见
+    `seed_admit_lanes.seg_box_defects`。**按书开、按书挑判据**：殿本「一」本来就扁（frame_line 误中），史記卷首大字题会中 tall。
+    缺省空＝关，关时不进参数 dump。"""
+
+    @field_validator("seg_box_check", mode="before")
+    @classmethod
+    def _seg_box_kinds(cls, v):
+        from .seed_admit_lanes import SEG_BOX_CRITERIA
+        if v in (None, False):
+            return []
+        if v is True:
+            v = ["all"]
+        v = [str(x) for x in ([v] if isinstance(v, str) else v)]
+        if "all" in v:
+            return list(SEG_BOX_CRITERIA)
+        bad = [x for x in v if x not in SEG_BOX_CRITERIA]
+        if bad:
+            raise ValueError(f"seed_admit.seg_box_check 不认 {bad}，可写 {list(SEG_BOX_CRITERIA)} 或 all")
+        return [x for x in SEG_BOX_CRITERIA if x in v]
+
     symbol_review: bool = True    # 2026-10-24 sheldon 定缺省开（殿本 vol04–20 原本逐册开着）
     """特殊符号送审（`doc/design/特殊符号进字符候选集-设计.md` S3，2026-10-24 起缺省开；关时 `symbol_review`／`symbol_min_human`
     不进 dump，`params_hash` 不变）。与册配置 `font.charset.symbols`（5-b 字表收符号）配套开。

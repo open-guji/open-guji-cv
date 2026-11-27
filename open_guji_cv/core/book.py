@@ -32,6 +32,13 @@ class BookSpec:
     expected_cols: int | None = 9
     #: Step3 的正文格数先验。同上，现代链是 None（由块宽 ÷ pitch 推）。
     chars_per_line: int | None = 21
+    #: 按页每列字数（yaml 的 `chars_per_line_pages:`，2026-11-27，朱楓林集序页六行十四字、正文九行二十字）：
+    #: `{页: 本页每列格数}`，覆盖本页的 `chars_per_line`。
+    #: **一处写、各步都认**：border_detect（抬头补框）、column_geometry、column_gate、row_segment（正文与职名格网）、
+    #: row_segment_gate、cut_gate 跑点名页时 `ctx.book.chars_per_line` 就是表里的数（`core/step.CPL_PAGES_STEPS`，
+    #: 在注册处换、不改步代码）。各步自己显式写的 `chars_per_line`／`n_body_slots`／`expected_slots` 参数仍优先。
+    #: 缺省空；空时行为与指纹逐位相同（不进 `book_deps`，写了由 `engine._self_payload` 加键 `cpl_pages`）。
+    chars_per_line_pages: dict[int, int] = field(default_factory=dict)
     #: 版式大类（`keben`／`modern`）：选缺省管线（`core/pipeline.default_pipeline_id`），现代书的字形库分域
     #: `modern:<册>`。**不是**书 ID、也不是版本名——书 ID 是 `book_id`（字形库里记作 `meta.book_edition`），
     #: 导出用的版本名是 `book_edition`，本书用字账的键是 `params.seed_admit.edition`。
@@ -490,6 +497,14 @@ class BookSpec:
         except ValueError as e:
             raise BadRequest(f"页号表达式错误：{e}") from e
 
+    def chars_per_line_at(self, page: int | None) -> int | None:
+        """本页每列格数：`chars_per_line_pages` 点名的页取表里的数，其余取册级 `chars_per_line`。"""
+        if page is not None and self.chars_per_line_pages:
+            v = self.chars_per_line_pages.get(int(page))
+            if v:
+                return int(v)
+        return self.chars_per_line
+
     def __post_init__(self) -> None:
         if self.page_kinds:
             from .page_kinds import merge_into_params
@@ -500,6 +515,8 @@ class BookSpec:
             "id": self.id, "title": self.title, "raw_dir": str(self.raw_dir),
             "raw_pattern": self.raw_pattern, "expected_cols": self.expected_cols,
             "chars_per_line": self.chars_per_line, "edition": self.edition,
+            **({"chars_per_line_pages": {str(k): v for k, v in sorted(self.chars_per_line_pages.items())}}
+               if self.chars_per_line_pages else {}),
             "dev_set": list(self.dev_set), "n_pages": len(self.all_pages()),
             "sets": {k: list(v) for k, v in self.sets.items()},
             "jiazhu": dict(self.jiazhu),
@@ -738,6 +755,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
                        else int(d.get("expected_cols", 9))),
         chars_per_line=(None if "chars_per_line" in d and d["chars_per_line"] is None
                         else int(d.get("chars_per_line", 21))),
+        chars_per_line_pages=_load_cpl_pages(d.get("chars_per_line_pages")),
         edition=d.get("edition", "keben"),
         dev_set=[int(p) for p in d.get("dev_set", [])],
         sets={str(k): [int(p) for p in v]
@@ -794,6 +812,22 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         freeze=_load_freeze(d.get("freeze"), book_id),
         gaps=load_gaps(d.get("gaps"), book_id),
     )
+
+
+def _load_cpl_pages(raw) -> dict[int, int]:
+    """`chars_per_line_pages:` → `{页: 格数}`。键可写整数或区间字符串（同 `pages:`，如 `"2-9": 14`）。"""
+    if not raw:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"chars_per_line_pages 要写成 {{页: 每列格数}}，不是 {type(raw).__name__}")
+    out: dict[int, int] = {}
+    for k, v in raw.items():
+        n = int(v)
+        if n <= 0:
+            raise ValueError(f"chars_per_line_pages[{k!r}] = {v!r}：每列格数要是正整数")
+        for pg in _expand_pages([k]):
+            out[int(pg)] = n
+    return out
 
 
 def _parse_ink(raw):

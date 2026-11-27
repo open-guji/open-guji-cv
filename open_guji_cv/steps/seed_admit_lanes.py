@@ -1204,3 +1204,130 @@ def _pair_form_pass(p, out: list, mmap: dict, ctx=None) -> int:
             rec.char = new
             n += 1
     return n
+
+
+# ── 字框几何闸 `seg_box_check`（CV2，2026-11-27，朱楓林集 MBJ 报）────────────────────────────────
+#: 判据（单位：格高 period、页参考列宽 ref_w；双行小注半格只查过高）。MBJ 01 册 13,676 框实测（实验记录
+#: 2026-11-27-网站标注与字框检查.md）：命中 15 框，13 框本来就在待审单里，自动放行里 2 框看图都是真错
+#: （3:4:7 碎格放行成「一」、25:2:6「其二」劈成三框）。
+SEG_BOX_FRAME_H, SEG_BOX_FRAME_W = 0.12, 0.6     # frame_line：扁长一条——框线／界行残段
+SEG_BOX_SPECK = 0.25                             # speck：高、宽都小于它——墨点
+SEG_BOX_SPLIT_H, SEG_BOX_SPLIT_W = 0.62, 0.85    # split_pair：半截字（高 [0.12, 0.62)、宽 <0.85）……
+SEG_BOX_SPLIT_NB, SEG_BOX_SPLIT_SUM = 0.9, 1.25  # ……邻框也不满一格（<0.9），两框合起来 <1.25 格——一字劈两框
+SEG_BOX_TALL = 1.6                               # tall：一框高过 1.6 格——两字并一框或污渍
+SEG_BOX_SLIVER = 0.35                            # sliver：Step3 格高 <0.35 格（同 row_segment_gate.sliver_ratio，L4 碎格）
+#: 判据 → `evidence.seg_kind`（guji-manager review/reasons.SEG_KINDS 认的细分；不在表里的只记 `evidence.seg_box`）。
+SEG_BOX_KIND = {"frame_line": "frame_residue", "tall": "merged", "split_pair": "clipped"}
+SEG_BOX_CRITERIA = ("sliver", "frame_line", "speck", "split_pair", "tall")
+
+
+def _g(x, k, d=None):
+    return x.get(k, d) if isinstance(x, dict) else getattr(x, k, d)
+
+
+def seg_box_defects(char_cols, period: float | None, ref_w: float | None,
+                    cell_cols=None) -> dict[str, list[str]]:
+    """字框几何不合理的格 → {格 id: [判据…]}。纯函数，产物（`char_index.columns`、`cells.columns`）或其 dict 都收。
+
+    `char_cols` 逐列逐字框（`cell_type == "char"`）按格高 `period`、参考列宽 `ref_w` 判 frame_line／speck／split_pair／tall；
+    `cell_cols`（Step3 `cells.columns`，可缺）补 sliver：格高 < `SEG_BOX_SLIVER`×本列 period 的正文格（职名列、小字格不查）。"""
+    out: dict[str, list[str]] = {}
+    if period and period > 0:
+        rw = ref_w if ref_w and ref_w > 0 else None
+        for c in char_cols or []:
+            chars = [x for x in (_g(c, "chars") or []) if _g(x, "cell_type") == "char"]
+            main = [x for x in chars if not _g(x, "sub")]
+            for x in chars:
+                h = float(_g(x, "height") or 0.0) / period
+                w = (float(_g(x, "width") or 0.0) / rw) if rw else None
+                why: list[str] = []
+                if h > SEG_BOX_TALL:
+                    why.append("tall")
+                if not _g(x, "sub") and w is not None:
+                    if h < SEG_BOX_FRAME_H and w >= SEG_BOX_FRAME_W:
+                        why.append("frame_line")
+                    elif h < SEG_BOX_SPECK and w < SEG_BOX_SPECK:
+                        why.append("speck")
+                    if SEG_BOX_FRAME_H <= h < SEG_BOX_SPLIT_H and w < SEG_BOX_SPLIT_W:
+                        j = next((i for i, y in enumerate(main) if y is x), -1)
+                        for k in (j - 1, j + 1):
+                            if j < 0 or not 0 <= k < len(main):
+                                continue
+                            y = main[k]
+                            bx, by = _g(x, "bbox_page"), _g(y, "bbox_page")
+                            if not bx or not by or float(_g(y, "height") or 0.0) / period >= SEG_BOX_SPLIT_NB:
+                                continue
+                            if (max(bx[3], by[3]) - min(bx[1], by[1])) / period < SEG_BOX_SPLIT_SUM:
+                                why.append("split_pair")
+                                break
+                if why:
+                    out.setdefault(str(_g(x, "id")), []).extend(why)
+    if cell_cols:
+        ids = {(_g(c, "col"), _g(x, "slot")): str(_g(x, "id")) for c in (char_cols or [])
+               for x in (_g(c, "chars") or []) if _g(x, "cell_type") == "char" and not _g(x, "sub")}
+        for cc in cell_cols:
+            per = _g(cc, "period") or 0
+            if not _g(cc, "ok") or per <= 0 or "roster" in (_g(cc, "flags") or []):
+                continue
+            for cell in _g(cc, "cells") or []:
+                if _g(cell, "sub"):
+                    continue
+                if (float(_g(cell, "y1")) - float(_g(cell, "y0"))) < SEG_BOX_SLIVER * per:
+                    cid = ids.get((_g(cc, "col"), _g(cell, "slot")))
+                    if cid and "sliver" not in out.get(cid, []):
+                        out.setdefault(cid, []).append("sliver")
+    return out
+
+
+def _seg_box_pass(ctx: RunContext, page: int, out: list, kinds=SEG_BOX_CRITERIA) -> int:
+    """字框几何闸（只降级，`SeedAdmitParams.seg_box_check`）。→ 降级格数。碎格、框线扁条、墨点、一字劈两框、过高框一律送审：
+    doubt 码 `seg_defect`（待审原因归 seg_defect），`evidence.seg_box` 记判据、能对上 SEG_KINDS 的写 `evidence.seg_kind`。人裁不动。"""
+    try:
+        ci = ctx.product("char_index", page)
+    except Exception:                     # noqa: BLE001
+        return 0
+    gate = cells = None
+    for kind in ("gate_manifest", "cells"):
+        try:
+            v = ctx.product(kind, page)
+        except Exception:                 # noqa: BLE001 —— 缺了照样判能判的
+            v = None
+        if kind == "gate_manifest":
+            gate = v
+        else:
+            cells = v
+    period, ref_w = _g(gate, "period"), _g(gate, "ref_w")
+    if not period:
+        pers = sorted(float(_g(cc, "period")) for cc in (_g(cells, "columns") or []) if _g(cc, "period"))
+        period = pers[len(pers) // 2] if pers else None
+    if not ref_w:
+        ws = sorted(float(_g(x, "width") or 0) for c in _g(ci, "columns") or [] for x in _g(c, "chars") or []
+                    if _g(x, "cell_type") == "char" and not _g(x, "sub"))
+        ref_w = ws[len(ws) // 2] if ws else None
+    on = set(kinds)
+    bad = {k: w for k, why in seg_box_defects(_g(ci, "columns"), period, ref_w,
+                                              _g(cells, "columns") if "sliver" in on else None).items()
+           if (w := [x for x in why if x in on])}
+    if not bad:
+        return 0
+    n = 0
+    hits: list[str] = []
+    for col in out:
+        for rec in col.chars or []:
+            why = bad.get(rec.id)
+            if not why or rec.provenance == "human" or rec.channel == "human":
+                continue
+            ev = {**(rec.evidence or {}), "seg_box": list(why)}
+            kind = next((SEG_BOX_KIND[w] for w in why if w in SEG_BOX_KIND), None)
+            if kind:
+                ev["seg_kind"] = kind
+            rec.evidence = ev
+            rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["seg_defect"]))
+            if rec.admit:
+                _demote(rec, "seg_box_check")
+                hits.append(f"{rec.id}「{rec.char}」{'/'.join(why)}")
+                rec.admit, rec.channel, rec.provenance = False, None, ""
+                n += 1
+    if hits:
+        ctx.log(f"seed_admit p{page}: 字框几何闸 {len(hits)} 格退回待审（doubt seg_defect）：{'；'.join(hits)}")
+    return n

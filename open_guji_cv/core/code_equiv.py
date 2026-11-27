@@ -647,6 +647,10 @@ _CUTGATE_REMAP_1126 = ("cut_gate（刻本链出口闸）也认 row_segment 列�
                        "（30,32,48,88,89,105,117,129,179,182）、全唐文 053 12 页（28,74,76,77,83,84,89,90,94,95,97,116）与 origin/dev 产物"
                        "逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
 
+_SEG_BOX_1127 = ('seed_admit 字框几何闸 seg_box_check（CV2，缺省空、不进参数 dump；空时 _seg_box_pass 不调，seed_admit_lanes 只多常量与新函数 seg_box_defects／_seg_box_pass）：朱楓林集 01 册 6 页（3,10,25,50,86,104，rev-001-r0 包 cv0.9.6 当上游）seed_admit 与 origin/dev fde00a0 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-27（CV2，MBJ 碎格放行成「一」）。'
+                 'v0.9.8 patch 线（v0.9.7＋#1956 cherry-pick，改动与 dev 同，只少 dev 的 solo_self_exemplar 一行）按本线哈希另登，CV0 2026-11-27')
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.gates.cut_gate",
           new="925a3ee71711731992ffa1a26abe8f1444c23cf679f84ced22508507aa578938",
@@ -2775,6 +2779,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97",
           old="d9af94abb75fb9557ab425514532c9506ac1274ae3ceb0c47c50ce78b817c9c6",
           evidence=_SOLO5B_SCOPE_1126),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='bb399d901451c923a4d5c094d82275904cfc835d8739e89a4245d80e55056739',
+          old='861f2eb9818bcbd7643164eb32921feb05a27a5801e97823003794331c08c878',
+          evidence=_SEG_BOX_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit_params',
+          new='a983e51c2790877a16253d180a7f45afcdf402b0c2d832a1d393a7203c7f1236',
+          old='7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97',
+          evidence=_SEG_BOX_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit_lanes',
+          new='5af58a0512ba501d499d21c67aeabb225f19d1e4b2a242bcb51afc6b7f7e34c0',
+          old='edbe250857b9aedf78278c6dd78c00f34c92fe711591293980f9ea70d419139c',
+          evidence=_SEG_BOX_1127),
 )
 
 

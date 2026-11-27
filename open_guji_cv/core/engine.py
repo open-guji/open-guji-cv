@@ -25,7 +25,7 @@ from .book import BookSpec
 from .pipeline import Pipeline, _produces, resolve_params
 from .parallel import effective_jobs, is_parallel_safe, warm_first, worker_threads
 from .spec import gated_optional_on, live_optional_consumes, page_key
-from .step import STEPS, RunContext, Step, kind_of
+from .step import CPL_PAGES_STEPS as _CPL_PAGES_STEPS, STEPS, RunContext, Step, kind_of
 from ..products.cache import ImageCache
 from ..products.manifest import ManifestEntry
 from ..products.store import ProductStore
@@ -373,6 +373,10 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     # 再把这个修订号 +1，只让下端两层的册（现在只有殿本）从 column_end 起判过期。没声明两层的册不写这个键，指纹逐位不变。
     if step.spec.id == "column_end" and int((getattr(book, "frame_layers", None) or {}).get("bottom", 1) or 1) >= 2:
         payload["frame_layer_rev"] = FRAME_LAYER_REV
+    # 按页每列字数 `chars_per_line_pages`（2026-11-27，朱楓林集序页）：读每列格数的步，只在写了表的册加键（整张表），
+    # 没写的册指纹逐位不变（不进 `book_deps`，同 side_frame）。
+    if step.spec.id in _CPL_PAGES_STEPS and getattr(book, "chars_per_line_pages", None):
+        payload["cpl_pages"] = {str(k): int(v) for k, v in sorted(book.chars_per_line_pages.items())}
     # Step5-b 的字表语料由册配置 `rare_charset` 指定（参校本属性 C 块）：只在写了的册加键，没写的册指纹逐位不变
     # （不进 `book_deps`，那会让所有册指纹变，见 core/ref_profile.py 模块头）。
     if step.spec.id == "rare_candidates" and getattr(book, "rare_charset", None):
