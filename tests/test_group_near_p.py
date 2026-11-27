@@ -33,3 +33,11 @@ def test_guan_methods_and_decide_skips_near_p_when_not_enabled():
     r = type("R", (), {"id": "v:1:1:1", "char": "官"})()
     ch, why, trail = decide("guan", r, [("官", 0.9)], None, cfg)
     assert all(t["solver"] != "near_p" for t in trail)            # 没开 → 留痕不出现，别的书产物不变
+
+
+def test_per_char_threshold():
+    thr = {"宫": 0.955, "官": 0.999}
+    assert M.NEAR_P.run(_inp({"官": 0.01, "宫": 0.96}, thr)).char == "宫"
+    assert M.NEAR_P.run(_inp({"官": 0.98, "宫": 0.02}, thr)).why == "abstain:low_p"      # 官 没到 0.999
+    assert M.NEAR_P.run(_inp({"官": 0.9995, "宫": 0.0005}, thr)).char == "官"
+    assert M.NEAR_P.run(_inp({"官": 0.2, "宫": 0.99}, {"官": 0.9})).why == "abstain:low_p"   # 没列的字不放
