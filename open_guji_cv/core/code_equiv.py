@@ -618,6 +618,10 @@ _EVENT_LEVEL_1126 = ("feedback/events.py 分事件级别（CV0 2026-11-26，GM4 
                      "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。史記 104/106 首跑曾异：绑定表 fp_diff 随字块缓存先后变，"
                      "同一份旧代码重跑也给出同样结果，非本改动所致，复跑逐字节同。")
 
+_BIND_CACHE_ALGO_1126 = ("feedback/bindings.py 页绑定盘上缓存键加算法哈希（bindings/anchor/anchor_backfill 三文件 sha256 前 16 位），"
+                         "改算法后旧缓存不再命中；只影响缓存命中，不改绑定结果（GM2／CV0 2026-11-26）。"
+                         "seed_admit 在史記 02 25 页、殿本 vol28 13 页、全唐文 020 16 页上与 origin/dev 产物逐字节相同"
+                         "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。")
 _PIN_REMOVED_1126 = ("feedback/bindings.py 加删钉垫片 removed_pin_events（读 <feedback>/pins/*.state.jsonl，最后为 removed 的钉所列答案事件不进 "
                      "human_chars／绑定表；GM4 方案第九节，CV0 2026-11-26），lookup.py 两处读者接上。没有钉状态文件时为空集，行为不变。"
                      "seed_admit 在史記 02 25 页、殿本 vol28 13 页、全唐文 020 16 页上与 origin/dev 产物逐字节相同"
@@ -2754,6 +2758,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="91f0bfe636d6749888609af6a60e1cb4bfd8b976678afd0d65d2182b8445496d",
           old="ddf0c55cd63fe58202633d1e664647a5435749994140cf6c4e744358275cceee",
           evidence=_PIN_REMOVED_1126),
+    Equiv(module="open_guji_cv.feedback.bindings",
+          new="2249d6f8568e0bd1b60d70ecc5922080002444baf834703f2bd6da5573c897be",
+          old="ddf0c55cd63fe58202633d1e664647a5435749994140cf6c4e744358275cceee",
+          evidence=_BIND_CACHE_ALGO_1126),
     # seed_admit solo_5b_scope（无参照放行收窄，缺省 any 不变；CV0 11-26，#1920）
     Equiv(module="open_guji_cv.steps.seed_admit",
           new="861f2eb9818bcbd7643164eb32921feb05a27a5801e97823003794331c08c878",
