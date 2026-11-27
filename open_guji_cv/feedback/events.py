@@ -9,7 +9,7 @@
 **同一字位的多条事件按 `replay_key` = (ts, batch, seq) 升序应用、后到覆盖**。早先写的是
 「按 (batch, seq)」——批次名的字典序不是时间序（`H-mojibake-fix-…` 排在 `vol01-…` 前面，
 更正事件反被旧裁决盖回去），2026-09-24 起 `lookup.human_chars` 已改按时间；2026-10-20 全部
-「后到覆盖」的地方统一到 `replay_key`（规范见 `doc/formats/人裁事件规范.md` §6）。
+「后到覆盖」的地方统一到 `replay_key`（规范见 `doc/formats/裁定事件规范.md` §6）。
 """
 
 from __future__ import annotations
@@ -130,7 +130,7 @@ HUMAN_MODEL_BATCHES = frozenset({
 })
 EVENT_LEVELS = ("human", "ai")
 
-#: 裁定事件的**来源三字段**（2026-11-27，用户定「裁定事件要能区分来源」；规范见 `doc/formats/人裁事件规范.md` §4.1）：
+#: 裁定事件的**来源三字段**（2026-11-27，用户定「裁定事件要能区分来源」；规范见 `doc/formats/裁定事件规范.md` §4.1）：
 #: `payload.level`（这个字是谁判的：human／ai／machine）、`payload.by`（具体是谁：人的账号、模型名、脚本名）、
 #: `payload.channel`（从哪条路进来）。缺省按旧规则推（`event_level`），新写的要写全；`EventLog.append` 缺了只告警不拒。
 #: 2026-11-27 起 `machine` 也是合法的 `payload.level`：规则自动补的，**不算钉**（`event_level` 给 None）。
@@ -420,7 +420,7 @@ class EventLog:
         fields = sorted({f for _, m in lack for f in m}, key=PROVENANCE_FIELDS.index)
         batches = sorted({e.batch for e, _ in lack})
         _log.warning("裁定事件缺来源字段 %s：%d 条（批次 %s%s）。新写的 confirm 请在 payload 写明 level／by／channel，"
-                     "见 doc/formats/人裁事件规范.md §4.1", "／".join(fields), len(lack), "、".join(batches[:3]),
+                     "见 doc/formats/裁定事件规范.md §4.1", "／".join(fields), len(lack), "、".join(batches[:3]),
                      "…" if len(batches) > 3 else "")
 
     def compact(self, batch: str, dry_run: bool = False) -> dict:

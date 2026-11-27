@@ -1,7 +1,7 @@
 """卡片 id／格键 → (book, page, col, slot)。
 
 原在 `harvest.py`；2026-10-20 挪到这里，因为 `events.EventTarget` 读回老事件时也要用它补空字段
-（`harvest` 依赖 `events`，反过来就成了循环导入）。格键语法总表见 `doc/formats/人裁事件规范.md` §3。
+（`harvest` 依赖 `events`，反过来就成了循环导入）。格键语法总表见 `doc/formats/裁定事件规范.md` §3。
 """
 from __future__ import annotations
 

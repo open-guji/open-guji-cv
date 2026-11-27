@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://open-guji.org/schema/feedback-event/v1.json",
   "title": "guji 人裁事件（feedback event）v1",
-  "description": "feedback/events/<batch>.jsonl 与 feedback/vision/<batch>.jsonl 的一行。规范正文：doc/formats/人裁事件规范.md（§4.1 来源三字段 payload.level／by／channel）。代码真源：open_guji_cv/feedback/events.py（Event）。本 schema 描述**线上格式**：老数据（2026-09 起）全部能过；带 'normative' 字样的约束只对新写入要求，lint（guji events lint）报。",
+  "description": "feedback/events/<batch>.jsonl 与 feedback/vision/<batch>.jsonl 的一行。规范正文：doc/formats/裁定事件规范.md（§4.1 来源三字段 payload.level／by／channel）。代码真源：open_guji_cv/feedback/events.py（Event）。本 schema 描述**线上格式**：老数据（2026-09 起）全部能过；带 'normative' 字样的约束只对新写入要求，lint（guji events lint）报。",
   "type": "object",
   "required": ["id", "ts", "batch", "seq", "kind", "target"],
   "additionalProperties": false,

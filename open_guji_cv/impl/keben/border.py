@@ -1788,7 +1788,7 @@ def _trk_gray_line(dark: np.ndarray, v: VLine, yt: float, yb: float, w: int) -> 
     cy, cx = [], []
     for a in np.arange(yt + 4, yb - 4 - TRK_GSEC / 2, TRK_GSEC / 2):
         yy = np.arange(a, min(a + TRK_GSEC, yb - 4), 1.0)
-        yi = yy.astype(int)
+        yi = np.minimum(yy.astype(int), h - 1)   # 只封上界：页图比下框矮（合扫拆坏的窄条）时原先越界抛错；负号照旧，产物不变
         xo = xs_old(yy)
         prof = np.empty(len(dxs))
         for k, dx in enumerate(dxs):
@@ -1818,7 +1818,7 @@ def _trk_gray_line(dark: np.ndarray, v: VLine, yt: float, yb: float, w: int) -> 
                 best = (s2, [p, q], co2)
     ys = np.arange(yt + 4, yb - 4, TRK_STEP)
     new = _trk_basis(ys, best[1]) @ best[2]
-    yi = ys.astype(int)
+    yi = np.minimum(ys.astype(int), h - 1)
     d_new = float(dark[yi, np.clip(np.round(new).astype(int), 0, w - 1)].mean())
     d_old = float(dark[yi, np.clip(np.round(xs_old(ys)).astype(int), 0, w - 1)].mean())
     if d_new < d_old * TRK_GBETTER:

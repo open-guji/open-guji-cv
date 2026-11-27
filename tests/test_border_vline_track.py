@@ -149,3 +149,15 @@ def test_no_faint_line_stays_put():
     top, bottom = _lines()
     out, n = refit_vlines_by_track(m, top, bottom, [_v(600.0)], W, H, gray=g)
     assert n == 0
+
+
+def test_gray_fallback_page_shorter_than_frame():
+    """页图比上下框矮（汉书 26 册 p5：合扫拆坏的 120px 窄条，2026-11-27）：淡线兜底不越界抛 IndexError。"""
+    h = 120
+    m = np.zeros((h, W), dtype=np.float64)
+    gray = np.full((h, W), 230, dtype=np.uint8)
+    gray[:, 598:602] = 120                       # 一条淡竖线（mask 里没有，走灰度兜底）
+    top = HLine(y_at_right=10.0, slope=0.0, kind="top")
+    bottom = HLine(y_at_right=float(h + 300), slope=0.0, kind="bottom")   # 下框落在图外
+    out, _n = refit_vlines_by_track(m, top, bottom, [_v(600.0)], W, h, gray=gray)
+    assert len(out) == 1

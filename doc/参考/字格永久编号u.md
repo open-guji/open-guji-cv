@@ -13,7 +13,7 @@
 | 文意裁定（`_vis_ruling_pass`、fold 遍） | 窗口键、版本等价、格锚点都没中后，按本格 u 查同组同册同 u 的裁定 | 书级 `seed_admit.ruling_by_u` | `RulingStore.get_by_u` |
 | 字组文意在线问前查缓存 | 窗口精确键没中，按 u 查**版本完全相同**的那条 | 同上（开着时本页设 `UMAP_SCOPE`） | `RulingCache.lookup` → `RulingStore.get_by_u_ver` |
 | 身份账 | `<feedback>/uid/<册>.jsonl` 里本页当前 `cells_sha` 那一行的 `map`（格号→u） | 同上 | `feedback.rulings.UidLedger`（只读） |
-| 人裁绑定 | **不按 u 绑**：仍按锚框／指纹／补锚档（见 [人裁事件规范 §7](../formats/人裁事件规范.md)） | — | `feedback/bindings.py` |
+| 人裁绑定 | **不按 u 绑**：仍按锚框／指纹／补锚档（见 [裁定事件规范 §7](../formats/裁定事件规范.md)） | — | `feedback/bindings.py` |
 | 字形库刻例 | **不读 u、不改键** | — | 见第五节 |
 
 查裁定的顺序（每档没中才往下）：
