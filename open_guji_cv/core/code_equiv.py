@@ -651,6 +651,14 @@ _SEG_BOX_1127 = ('seed_admit 字框几何闸 seg_box_check（CV2，缺省空、�
                  'v0.9.8 patch 线（v0.9.7＋#1956 cherry-pick，改动与 dev 同，只少 dev 的 solo_self_exemplar 一行）按本线哈希另登，CV0 2026-11-27')
 
 
+_SINGLE_SIDES_1127 = ("版面 frame_layers 左右=1（四周單邊，朱楓林集）：该侧跳过 refit_outer_by_bar、find_vertical_lines 加 no_snap（缺省空）、"
+                      "detect_outer_borders 不量竖直外框；没写左右的册走原路径。scripts/code_equiv.py check 对 dev 7c5b894 逐字节相同，"
+                      "border_detect、border_detect_gate（随 border_detect）、column_warp、column_end 四步：殿本 vol01 8 页（1,8,30,40,100,132,149,188）、"
+                      "全唐文 053 8 页（1,2,3,20,50,80,120,150）、脈經 01 6 页（1,4,20,40,47,60）、史記文淵閣 05 8 页（1,3,8,28,58,73,90,94），"
+                      "共 4 册 30 页 ×4 步全同；另 79 页金标原图 detect_borders JSON sha256 逐页相同；中心库 402 个册配置无册写 frame_layers 左右；"
+                      "2026-11-27（CV1，cv #1922，CV0 审口径）。v0.9.9 patch 线（v0.9.8＋#1922 cherry-pick，改动同 dev）按本线哈希另登，CV0 2026-11-27")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.gates.cut_gate",
           new="925a3ee71711731992ffa1a26abe8f1444c23cf679f84ced22508507aa578938",
@@ -2791,6 +2799,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='5af58a0512ba501d499d21c67aeabb225f19d1e4b2a242bcb51afc6b7f7e34c0',
           old='edbe250857b9aedf78278c6dd78c00f34c92fe711591293980f9ea70d419139c',
           evidence=_SEG_BOX_1127),
+    # 四周單邊：frame_layers 左右=1（CV1 11-27，cv #1922；v0.9.9 本线哈希）
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='9d2e7a4bd695f98fbc8941e1a25174273081ae059f09a23da082284fb33c0c48',
+          old='34759d932d09ab73a0a3cca66dd67233f51ea553f72b9ab9a8d5634e51a5006c',
+          evidence=_SINGLE_SIDES_1127),
+    Equiv(module='open_guji_cv.seg.lines',
+          new='4aaaa5b2df2c51a5a3b02eb4c268834f15dd8c9cdc4d1ef8d9d1df21a3ad3f72',
+          old='97407131a39ae521fcb4777bbe2fbefd56a8e978e73a4acdd579e13992bf703d',
+          evidence=_SINGLE_SIDES_1127),
 )
 
 
