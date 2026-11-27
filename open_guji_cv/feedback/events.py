@@ -148,6 +148,18 @@ def is_ruling_event(e) -> bool:
     return getattr(e, "kind", None) == "confirm" and getattr(t, "unit", None) == "cell"
 
 
+def provenance(level: str, by: str, channel: str) -> dict:
+    """裁定事件来源三字段（并进 `payload`）。取值不合法 ValueError。与 guji-manager `feedback.levels.provenance` 同口径，
+    脚本写 confirm 时用它，不要自己拼。"""
+    if level not in PROVENANCE_LEVELS:
+        raise ValueError(f"payload.level 须是 {PROVENANCE_LEVELS} 之一，拿到 {level!r}")
+    if channel not in PROVENANCE_CHANNELS:
+        raise ValueError(f"payload.channel 须是 {PROVENANCE_CHANNELS} 之一，拿到 {channel!r}")
+    if not by or not str(by).strip():
+        raise ValueError("payload.by 不能为空：写人的账号、模型名或脚本名")
+    return {"level": level, "by": str(by), "channel": channel}
+
+
 def missing_provenance(e) -> list[str]:
     """这条事件缺哪几个来源字段（空列表＝齐了或不要求）。取值不在枚举里的也算缺。"""
     if not is_ruling_event(e):

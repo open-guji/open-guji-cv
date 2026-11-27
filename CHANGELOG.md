@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- 脚本／事件格式（不进任何 Step 指纹，events.py 不在 code_deps，L0；清理计划 2.4，用户 11-27 定）：`feedback/events.provenance(level, by, channel)`（与 manager `levels.provenance` 同口径）；cv 里写 `confirm` 的脚本接来源三字段：`build_newchar_review`（`human／--reviewer／console`）、`ingest_char_review.py`、`harvest_shadow_review.py`（**都新增必填 `--reviewer 账号`**，原来可以不带）、`book_lib_auto`（`machine／book_lib_auto／script`，含撤回）、`glyph_codepoint_unify`（按现行口径写 `ai`，改 human 要各书线先确认）、`mojibake_census`（按现行口径写 `human`，改 machine 会让该批不再算钉，先查影响）。`research/qtw_booklib/a4_import.py` 一次性、历史批次已写完，不改。
 - 文档／事件格式（不进任何 Step 指纹，events.py 不在 code_deps，L0；CV0 线程 2026-11-27，用户定「裁定事件要能区分来源」，清理计划 1.6）：裁定事件（`confirm`，格级）加来源三字段 `payload.level`（human／ai／machine）／`by`／`channel`（console／web_vote／opinion／script／llm／vision），写进规范 §4.1 与 `guji_feedback_event_v1.schema.json`；`EventLog.append` 缺字段或取值越界**只告警不拒**（`provenance_missing` 计数）；`payload.level=machine` 现在明确不算钉（`event_level` 给 None，同中心库 `events.level` 与 Worker 落定条件）。必填化留 2.4。
 - 脚本（不进指纹，只加注释与文档；待审单清理 1.7）：`scripts/zhengli/republish.py`、`proof_cycle.py`、`auto_cycle.py` 文件头标 DEPRECATED（整张换单已被 `guji land` 取代）；调用方清单与退役条件见 `doc/design/整张换单脚本退役清单.md`。**未删**：guji-manager 的 `online_lists`（标 main 后自动重出）和 `swap run` 仍在调用。
 - 修复（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-27，汉书 WYG #18261）：`border_detect` vline_track 淡线兜底 `_trk_gray_line` 取行号只封上界，页图比下框矮（汉书 26 册 p4/p5 是合扫拆坏的 120px 窄条）时不再抛 `IndexError: index 120 is out of bounds`。v0.9.2 起 vline_track 缺省开即有此错。

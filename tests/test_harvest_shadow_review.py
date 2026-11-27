@@ -10,7 +10,7 @@ SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "harvest_shadow_re
 
 def _run(html, cards, fb, *extra):
     return subprocess.run([sys.executable, str(SCRIPT), str(html), "--cards", str(cards),
-                           "--feedback-dir", str(fb), "--batch", "t-shadow", *extra],
+                           "--feedback-dir", str(fb), "--batch", "t-shadow", "--reviewer", "tester", *extra],
                           capture_output=True, text=True, encoding="utf-8", check=True).stdout
 
 
@@ -39,7 +39,8 @@ def test_idempotent_and_mapping(tmp_path):
     assert evs[0]["payload"]["v"] == "confirm" and evs[0]["payload"]["shape"] == "卽"
     assert evs[0]["target"]["anchor"]["product_key"]["fingerprint"] == "abc"
     assert evs[1]["payload"] == {"v": "seg_defect", "quality": "truncated", "shape": "",
-                                 "via": "shadow-review", "client_ts": 1790645247979}
+                                 "via": "shadow-review", "client_ts": 1790645247979,
+                                 "level": "human", "by": "tester", "channel": "console"}
     assert (evs[0]["step" if "step" in evs[0] else "kind"], evs[0]["target"]["unit"]) == ("confirm", "cell")
 
     _run(page(v), cards, fb)                       # 原样重跑：不增
