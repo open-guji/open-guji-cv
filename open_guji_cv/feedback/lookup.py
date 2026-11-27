@@ -651,8 +651,13 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
                                    "或悄悄丢掉；先查原因（原图／glyph.db／字块缓存），确知可忽略时设 GUJI_LOOKUP_LENIENT=1") from e
             _logger.warning("human_chars(%s)：绑定表算不出来，退回按格号（GUJI_LOOKUP_LENIENT）：%r", book, e)
             bound = {}
-    from .events import EventLog, counts_as_pin, iter_events_readonly
+    from .events import EventLog, counts_as_pin, event_level, iter_events_readonly
     out: dict[str, tuple[str, str | None]] = {}
+    # 级别优先（GM4 11-26，用户定：人裁>AI>pipeline，同级新覆盖旧；低级覆盖高级要高置信度）。
+    # 默认关＝与改前逐字节相同（后到覆盖）；GUJI_PIN_LEVELS=1 时，同一格已有人裁字，之后写的 AI 钉不覆盖它，
+    # 除非该 AI 事件带 `payload.override_human=true`（高置信：大数据或用户点头，由写事件的人负责）。
+    levels_on = _env_on("GUJI_PIN_LEVELS")
+    lv_of: dict[str, str] = {}
     pre = f"{book}:"
     if log is None:
         _require_events_dir(EventLog())
@@ -691,6 +696,7 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         if p.get("v") == "figure":
             # 图片格（GUJI-740）：后来判成图形，先前定的字作废（图上没有这个字）
             out.pop(e.target.key, None)
+            lv_of.pop(e.target.key, None)
             continue
         # `seg_defect` 带着字也算定了字（2026-09-20 用户定）：「有噪声 / 字形不完整」说的是
         # **这块图**的毛病，人同时看得出是哪个字时，那个字不该被丢——文本照样出字，
@@ -736,6 +742,11 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
                     lost[e.target.key] = {"char": ch, "status": row.get("status"),
                                           "event": e.id, "ts": e.ts}
                 continue
+        if levels_on:
+            lv = event_level(e)
+            if lv == "ai" and lv_of.get(key) == "human" and not p.get("override_human"):
+                continue            # 后写的 AI 不压人裁
+            lv_of[key] = lv or "ai"
         out[key] = ch
     if lost is not None:
         for k in [k for k in lost if k in out]:
