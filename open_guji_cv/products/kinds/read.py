@@ -49,6 +49,31 @@ class PageNear(BaseModel):
         return {r.id: r for c in self.columns for r in c.chars}
 
 
+class CandRec(BaseModel):
+    """3c 一格的按图候选：[字, 余弦]，已按分降序；`fam_of` 记哪些字是按异体族并进来的（并进来的字→它所属的头名字）。"""
+    id: str
+    slot: int
+    sub: str | None = None
+    ran: bool = True
+    cands: list[list] = Field(default_factory=list)        # [[字, 分], …]，最多 topk 个
+    fam_of: dict[str, str] = Field(default_factory=dict)
+
+
+class ColumnCand(BaseModel):
+    col: int
+    chars: list[CandRec] = Field(default_factory=list)
+
+
+class PageCand(BaseModel):
+    page: int
+    #: 向量模型与字表包的版本，如 "r5@d2ce8bab+emb-807344bd"；写进产物，换模型或换字表包本步与收尾就过期
+    model: str = ""
+    columns: list[ColumnCand] = Field(default_factory=list)
+
+    def by_id(self) -> dict[str, CandRec]:
+        return {r.id: r for c in self.columns for r in c.chars}
+
+
 class FinalCand(BaseModel):
     """收尾的一个候选：字、校准后的 p（还没有校准来源的为 None）、各小步的证据（a／b／c 键）。"""
     char: str
@@ -81,6 +106,10 @@ class PageFinal(BaseModel):
     def by_id(self) -> dict[str, FinalRec]:
         return {r.id: r for c in self.columns for r in c.chars}
 
+
+GLYPH_CANDIDATE = register_kind(ProductKindSpec(
+    id="glyph_candidate", title="3c 按图候选", storage="numeric", unit="cell",
+    schema=PageCand, coord_space=COLUMN_PX))
 
 GLYPH_NEAR = register_kind(ProductKindSpec(
     id="glyph_near", title="3b 形近字组分析", storage="numeric", unit="cell",

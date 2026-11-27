@@ -64,6 +64,17 @@ class Image:
         m = self.pack.mat.astype(np.float32)
         self.M = m / (np.linalg.norm(m, axis=1, keepdims=True) + 1e-9)
         self.chars = self.pack.chars
+        from open_guji_cv.hanzi.db import shared as hz
+        _hz, _fc = hz(), {}
+
+        def family(c):
+            if c not in _fc:
+                try:
+                    _fc[c] = list(_hz.family(c).keys())
+                except Exception:  # noqa: BLE001
+                    _fc[c] = []
+            return _fc[c]
+        self.family = family
 
     def patch(self, r: dict) -> np.ndarray | None:
         p = self.root / r["crop"]["path"]
@@ -190,7 +201,10 @@ def main() -> None:
         rare = [c[0] for c in pool_in.get("rare") or []]
         order = np.argsort(-s)[:200]
         full = [(img.chars[j], float(s[j])) for j in order]
-        x = {"id": r["id"], "layer": r["layer"], "book": r["book_title"], "st": r["stratum"],
+        from open_guji_cv.steps.glyph_candidate import GlyphCandidateParams, rank_cell
+        gp = GlyphCandidateParams()
+        cand50, _fo = rank_cell(s, img.chars, img.pack.index, img.family, gp.topk, gp.fam_top, gp.fam_after)
+        x = {"r_cand": rank([c for c, _ in cand50], g), "id": r["id"], "layer": r["layer"], "book": r["book_title"], "st": r["stratum"],
              "r_lib": rank(lib, g), "r_rare": rank(rare, g), "r_full": rank([c for c, _ in full], g)}
         # 固定池：产线 3a 前 5 ∪ 3b（原序：3a 在前），图像分现场算
         fixed = list(dict.fromkeys(lib + rare))
@@ -256,7 +270,8 @@ def main() -> None:
         if "3c" in parts:
             d["3c"] = {"3a前5": [pct([x["r_lib"] for x in xs], k, n) for k in (1, 5)],
                        "3b产线": [pct([x["r_rare"] for x in xs], k, n) for k in (1, 10)],
-                       "r5全字表": [pct([x["r_full"] for x in xs], k, n) for k in (1, 10, 30, 50)]}
+                       "r5全字表": [pct([x["r_full"] for x in xs], k, n) for k in (1, 10, 30, 50)],
+                       "glyph_candidate(产线3c)": [pct([x["r_cand"] for x in xs], k, n) for k in (1, 10, 30, 50)]}
         if "4b" in parts:
             fx = [x for x in xs if x["fixed_n"]]
             hasctx = [x for x in fx if "r_fixed_mlm" in x]
