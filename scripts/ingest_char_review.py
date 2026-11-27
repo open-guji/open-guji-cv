@@ -5,7 +5,7 @@
 `confirm(v="confirm", shape=字)` 事件（actor=user、source=char_review，是人亲审），
 再跑 `glyphdb_admit` 消费者把字块写进本工作区的字形库。`bad` 不写事件，只在报告里列出。
 
-用法：GUJI_WORKSPACE=<工作区> ingest_char_review.py <result.json> [--batch NAME] [--dry-run]
+用法：GUJI_WORKSPACE=<工作区> ingest_char_review.py <result.json> --reviewer 账号 [--batch NAME] [--dry-run]
 只写本机 feedback/events 和 glyph.db，不推中心库（推库走 `guji db push`，要另行同意）。"""
 import argparse
 import json
@@ -15,6 +15,7 @@ import sys
 ap = argparse.ArgumentParser()
 ap.add_argument("result")
 ap.add_argument("--batch", default="char-review-grid")
+ap.add_argument("--reviewer", required=True, help="审查人账号（写 payload.by；人在页上点确认，算人裁）")
 ap.add_argument("--dry-run", action="store_true")
 a = ap.parse_args()
 res = json.load(open(a.result, encoding="utf-8"))
@@ -22,7 +23,7 @@ if not os.environ.get("GUJI_WORKSPACE"):
     sys.exit("先设 GUJI_WORKSPACE")
 
 from guji_manager.feedback.consumers import route_and_consume
-from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
+from open_guji_cv.feedback.events import EventLog, EventTarget, make_event, provenance
 
 book = res["book"]
 bad = set(res.get("bad", []))
@@ -36,7 +37,8 @@ for k, (cid, ch) in enumerate((x for x in res["ok"] if x[0] not in bad)):
     evs.append(make_event(a.batch, base + k, "confirm",
                           EventTarget(step="seed_admit", unit="cell", key=cid, book=book,
                                       page=int(page), col=int(col), slot=int(m.group(1))),
-                          {"v": "confirm", "shape": ch, "source": "char_review"}))
+                          {"v": "confirm", "shape": ch, "source": "char_review",
+                           **provenance("human", a.reviewer, "console")}, reviewer=a.reviewer))
 print(f"确认 {len(evs)} 格，剔除 {len(bad & {x[0] for x in res['ok']})} 格，不对 {len(bad)} 格")
 if a.dry_run:
     out = route_and_consume(log, batch=a.batch, dry_run=True) if log.read(a.batch) else {}
