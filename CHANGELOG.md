@@ -122,6 +122,12 @@
 
 ## [未发版]
 
+## [0.9.10] - 2026-11-27
+
+补发（PATCH，L0）＝v0.9.9＋#1961（汉书 WYG #18261）。对 v0.9.9 各步 code_hash 全同（border 登 code_equiv `_TRK_CLIP_1127`）；底库 b35 不变；不需 manager 配套；各书不过期。
+
+- 修复（产物逐字节不变）：`border_detect` vline_track 淡线兜底 `_trk_gray_line` 取行号只封上界，页图比下框矮（汉书 26 册 p4/p5 是合扫拆坏的 120px 窄条）时不再抛 `IndexError`。v0.9.2 起 vline_track 缺省开即有此错。
+
 ## [0.9.9] - 2026-11-27
 
 补发（PATCH，L0）＝v0.9.8＋#1922（cherry-pick cc426f1，四周單邊版框，明别集 MBJ 要用）。对 v0.9.8 各步 code_hash 全同（border、seg.lines 按本线哈希登 code_equiv）；底库 b35 不变；不需 manager 配套。
