@@ -1,4 +1,4 @@
-"""人裁事件规范（doc/formats/人裁事件规范.md）落到代码的几条：
+"""人裁事件规范（doc/formats/裁定事件规范.md）落到代码的几条：
 
 - 「后到覆盖」一律按 `replay_key` = (ts, batch, seq)，不按批次名；
 - `target.book/page/col/slot` 全空时构造事件就从 key 补（写入口统一；老数据 10-21 已迁）；

@@ -9,7 +9,7 @@
 **同一字位的多条事件按 `replay_key` = (ts, batch, seq) 升序应用、后到覆盖**。早先写的是
 「按 (batch, seq)」——批次名的字典序不是时间序（`H-mojibake-fix-…` 排在 `vol01-…` 前面，
 更正事件反被旧裁决盖回去），2026-09-24 起 `lookup.human_chars` 已改按时间；2026-10-20 全部
-「后到覆盖」的地方统一到 `replay_key`（规范见 `doc/formats/人裁事件规范.md` §6）。
+「后到覆盖」的地方统一到 `replay_key`（规范见 `doc/formats/裁定事件规范.md` §6）。
 """
 
 from __future__ import annotations
