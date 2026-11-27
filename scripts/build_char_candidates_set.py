@@ -73,7 +73,8 @@ STATUS = {"confirm": "char", "seg_defect": "seg", "figure": "figure", "not_a_cha
 AI_RE = re.compile(r"AI|ai-")
 
 
-def vol_num(v: str) -> int:
+def vol_num(v) -> int:
+    """册号一律按数值认（1／01／001／vol01 同册；CV0 11-27 定，册身份是整数 volume）。"""
     return int(re.sub(r"^vol", "", str(v)))
 
 
@@ -101,7 +102,8 @@ class Packs:
 
     def __init__(self, root: Path, lists: dict[str, Path], ws_root: Path, fetch: bool = True):
         self.root, self.ws_root, self.fetch = root, ws_root, fetch
-        self.main: dict[tuple[str, str], str] = {}
+        self.main: dict[tuple[str, int], str] = {}       # (ws, 整数册号) → 包名
+        self.volname: dict[tuple[str, int], str] = {}   # (ws, 整数册号) → 包里的册目录名（册号写法会变）
         for ws, p in lists.items():
             book = BOOKS[ws][0]
             for line in Path(p).read_text(encoding="utf-8").splitlines():
@@ -109,22 +111,36 @@ class Packs:
                     continue
                 m = re.search(rf"products/(?:{book}|{ws})/([^/\s]+)/([^\s/]+)", line)   # 殿本的包按工作区名 siku-zongmu 存
                 if m:
-                    self.main[(ws, m.group(1))] = m.group(2)
+                    k = (ws, vol_num(m.group(1)))
+                    self.main[k], self.volname[k] = m.group(2), m.group(1)
         self._page: dict = {}
         self.missing: set = set()
 
-    def label(self, ws: str, vol: str) -> str | None:
-        return self.main.get((ws, vol))
+    def label(self, ws: str, vol) -> str | None:
+        return self.main.get((ws, vol_num(vol)))
 
-    def dir(self, ws: str, vol: str) -> Path | None:
+    def dir(self, ws: str, vol) -> Path | None:
         book = BOOKS[ws][0]
-        lab = self.label(ws, vol)
+        key = (ws, vol_num(vol))
+        lab = self.main.get(key)
         if not lab:
-            self.missing.add((ws, vol))
+            self.missing.add(key)
             return None
-        d = self.root / book / vol / lab               # 按包名分目录：主版换了不会误用旧包
+        vn = self.volname[key]                         # 包里的册目录名（册号写法以包为准）
+        d = self.root / book / vn / lab                # 按包名分目录：主版换了不会误用旧包
         if glob.glob(str(d / "*" / "seed_admit")):
             return d
+        if not self.fetch or key in self.missing:
+            self.missing.add(key)
+            return None
+        env = dict(os.environ, GUJI_WORKSPACE=str(self.ws_root / BOOKS[ws][2]), PYTHONIOENCODING="utf-8")
+        r = subprocess.run(["guji", "products", "pack", "fetch", vn, "--label", lab, "--steps", self.STEPS,
+                            "--to", str(d)], env=env, capture_output=True, text=True)
+        if not glob.glob(str(d / "*" / "seed_admit")):
+            print(f"  ✗ 取包失败 {ws} {vn} {lab}: {r.stdout[-300:]} {r.stderr[-300:]}", flush=True)
+            self.missing.add(key)
+            return None
+        return d
         if not self.fetch or (ws, vol) in self.missing:
             self.missing.add((ws, vol))
             return None
@@ -138,7 +154,7 @@ class Packs:
         return d
 
     def rows(self, ws: str, vol: str, kind: str, page: int) -> list[dict] | None:
-        k = (ws, vol, kind, page)
+        k = (ws, vol_num(vol), kind, page)
         if k in self._page:
             return self._page[k]
         d = self.dir(ws, vol)
@@ -282,7 +298,7 @@ def layer_a(ds: Path, packs: Packs) -> list[dict]:
             fi = packs.frozen_input(ws, vol, page, cell)
             strata = list(r.get("strata") or [])
             rec = {
-                "id": f"{BOOKS[ws][0]}:{vol}:{cell}",
+                "id": f"A:{BOOKS[ws][0]}:{vol_num(vol)}:{cell}", "vol_n": vol_num(vol),
                 "layer": "A",
                 "book": BOOKS[ws][0], "book_title": BOOKS[ws][1], "vol": vol, "cell": cell,
                 "crop": {"path": f"char-clustering/samples/{shard}/{r['png']}", "kind": "norm64"},
@@ -360,7 +376,7 @@ def layer_b(ds_out: Path, data_home: Path, packs: Packs, workers: int = 16) -> t
                            "lib2-5" if gold in lib else "alt" if gold in [a["c"] for a in card["alt"]] else "none")
                 vote = votes.get(snap.get("id"))
                 rec = {
-                    "id": f"{book}:{vol}:{cell}",
+                    "id": f"B:{book}:{vol_num(vol)}:{cell}", "vol_n": vol_num(vol),
                     "layer": "B",
                     "book": book, "book_title": title, "vol": vol, "cell": cell, "u": snap.get("u") or rs[-1].get("u"),
                     "anchor": {k: (e["target"].get("anchor") or {}).get(k) for k in ("bbox", "space")},
