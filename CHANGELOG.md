@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- 脚本（不进任何 Step 指纹；GM2 2026-11-27，CV0 采纳执行方建议）：`scripts/rerun_prep.sh` 切 cv 改走 `safe_checkout`：遇「未跟踪文件会被覆盖／删除」只处理 git 报出的那几个文件，先带时间戳备份到工作区外（缺省 `~/.guji-jobs/checkout-bak/<UTC 时间>-<pid>/<仓名>/`），再移走、重切，备份路径打进准备日志；不整仓 clean，清单里有仓外／已跟踪／不存在的路径就一个都不动。执行方取 dev 上的准备脚本，合进 dev 即生效。规则同 guji-manager `jobs/safe_checkout.py`。
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV2 2026-11-27，CV4 算法待办 #13）：拆步前的旧产物包（各书钉 0.7.x 线的 main 包）没有 `column_bands`，现行 cv 再生 `column_image`／`char_patch` 时 `column_end` 报上游缺失、`seed_admit` 整页 PatchUnavailable。现在 `column_end` 读不到 2b 产物且 `column_windows` 带旧 `band` 时，经 `column_band.legacy_strip` 按拆步前 `clean_column` 前半在内存里现算（不带 `side_cut`，不写包、不进缓存），文字带用包里记的值；新包缺 2b 照旧报错。史記 42（v0.7.112 包）、全唐文 020（v0.7.104 包）各 12 页列图＋字块与包的原版本逐像素同。
 
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26，CV0 定）：刻本链出口闸 `cut_gate` 也认 row_segment 列旗 `manual_cells_remapped`（钉子按列图几何换算、位移 >3px），列级 flags 记「待人核」，只记不拦，口径同 row_segment_gate；manager ≥ v0.6.38 按它出 S05 待审卡。
