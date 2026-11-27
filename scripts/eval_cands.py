@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 FOLD = {"己": "己", "已": "己", "巳": "己", "曰": "日"}
 FLOOR = -12.0
+NOISE_POOL = "之不也其而有以於為者曰人大天子日以所故無是何下上中公王"
 LM_NAME, LM_REV = "SIKU-BERT/sikuroberta", "bb25260d5c321924fe4fb353c09191c0aaf5c5c6"
 
 
@@ -148,11 +149,9 @@ class LM:
 
 
 def fuse(pool: list[tuple[str, float]], sem: dict[str, float], w: float) -> list[str]:
-    vals = sorted(sem.get(c) for c, _ in pool if c in sem)
-    neutral = vals[len(vals) // 2] if vals else 0.0
-    sc = [(c, s + w * max(sem.get(c, neutral), FLOOR)) for c, s in pool]
-    sc.sort(key=lambda t: -t[1])
-    return [c for c, _ in sc]
+    """融合口径与产线 4b `context_rank` 同一份实现（`clustering.ctx_fill.fuse`）。"""
+    from open_guji_cv.clustering.ctx_fill import fuse as _fuse
+    return [c for c, _, _ in _fuse(pool, sem, w)]
 
 
 # ───────────────────────── 主程序 ─────────────────────────
@@ -170,6 +169,8 @@ def main() -> None:
     ap.add_argument("--no-mlm", action="store_true")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--w", type=float, default=0.005)
+    ap.add_argument("--ctx-noise", type=float, default=0.0,
+                    help="给前后文的字按这个概率随机换成别的常用字（模拟产线里邻格是机器猜的）；缺省 0＝测试集冻结的前后文")
     ap.add_argument("--extra-min-sim", type=float, default=0.70)
     a = ap.parse_args()
     t0 = time.time()
@@ -217,6 +218,11 @@ def main() -> None:
         x["r_fixed"] = rank(fixed, g)
         x["r_ctxd"] = rank([c for c, _ in (pool_in.get("ctx_ranked") or [])], g)
         ctx = r["input"].get("ctx")
+        if ctx and a.ctx_noise > 0:
+            import random
+            rnd = random.Random(r["id"])
+            noisy = lambda t: "".join(rnd.choice(NOISE_POOL) if rnd.random() < a.ctx_noise else ch for ch in t)  # noqa: E731
+            ctx = {"left": noisy(ctx["left"]), "right": noisy(ctx["right"])}
         card = (r["input"].get("card") or {})
         refc = ((r["input"].get("ref") or {}).get("c")) or (card.get("ref") or {}).get("c")
         if lm is not None and ctx:
