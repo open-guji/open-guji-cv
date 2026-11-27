@@ -187,7 +187,9 @@ _RETIRED.update(_CONSTANTS)
 #: 去了键会落回新缺省，写死的旧值就丢了。
 _DUMP_DROP_HASH: tuple = (
     (lambda p: not p.consensus_fallback, ("consensus_fallback",)),
+    (lambda p: not p.note_lexicon_lib_form, ("note_lexicon_lib_form",)),
     (lambda p: not p.ref_lib_coord_dissent, ("ref_lib_coord_dissent",)),
+    (lambda p: not p.solo_coord_dissent, ("solo_coord_dissent",)),
     (lambda p: not p.human_unbound_shift_ok, ("human_unbound_shift_ok",)),
     (lambda p: not p.group_flow_ctx_agree, ("group_flow_ctx_agree",)),
     (lambda p: p.edge_pair_group_seam, ("edge_pair_group_seam",)),
@@ -257,7 +259,6 @@ _DUMP_DROP: tuple = (
     (lambda p: p.solo_5b_same_cov is None, ("solo_5b_same_cov",)),
     (lambda p: p.solo_5b_scope == "any", ("solo_5b_scope",)),
     (lambda p: not p.replace_form_edge_exclude, ("replace_form_edge_exclude",)),
-    (lambda p: not p.solo_coord_dissent, ("solo_coord_dissent",)),
     (lambda p: not p.lane_coord_blind_guard,
      ("lane_coord_blind_guard", "lane_coord_blind_min_n", "lane_coord_blind_lib_cov", "lane_coord_blind_gap")),
     (lambda p: not p.rare_ref, ("rare_ref_coord", "rare_ref_coord_min_cov")),
@@ -981,12 +982,16 @@ class SeedAdmitParams(BaseModel):
     `ref_lib_coord_dissent`（硬疑问，补放通道不再按现役字放回）、落人审（全唐文 r11 11-05：去借库后本书库缺
     麒／褚／俘 刻例，库首位落到 麟／諸／俾，现役对位跟着错位成 equal，ref_lib 照放；坐标对位是对的。r11 ref_lib
     226 格里有坐标对位的 14 格、两边不一致 9 格，看图 7 格坐标对、2 格现役对）。缺省开（2026-11-25 CV4 起缺省改成三本主力书都设的值，Sheldon 11-24 定；参数 dump 仍按旧缺省去键，设了旧值或没设而用新缺省的册指纹分别照旧／改变）；关时逐字节同旧行为、不进 dump。"""
-    solo_coord_dissent: bool = False
+    solo_coord_dissent: bool = True
     """match_solo 系放行前看坐标对位（同 `ref_lib_coord_dissent` 的判据，GUJI-750）：坐标对位给了实字、与放行字
     （库 same 取库字，否则库候选 top1）语义不同，不单独放行，记 doubt `solo_coord_dissent`（硬疑问，补放通道不再放回）、
-    落人审。起因：史记 r49 十册 match_solo 系放行 68 格里，坐标对位字≠放行字 16 格，看图 6 格坐标对（槨→以、陪→倍、
+    落人审。缺省开（2026-11-27 CV4：殿本 large 基线 撫→廵、鶴→號 两格放错字，开后拦入人审；关时逐字节同旧行为）。起因：史记 r49 十册 match_solo 系放行 68 格里，坐标对位字≠放行字 16 格，看图 6 格坐标对（槨→以、陪→倍、
     毒→毐 ×2、理→里、旱→早）、4 格放行对（二→三 ×2、一→二 ×2：数字处坐标对位常漂）、5 格误报（坐标字是私用码／异体）、1 格不确定。
-    故豁免：坐标字不是汉字（私用码、占位）、两边都是数字、语义同字（异体）。缺省关（关时逐字节不变，不进 dump）。"""
+    故豁免：坐标字不是汉字（私用码、占位）、两边都是数字、语义同字（异体）。"""
+    note_lexicon_lib_form: bool = True
+    """note_lexicon 通道放行的字：库首位与短语字语义同、字面不同时，取库首位的形（刻形），不取短语写的形。
+    起因：殿本 large 基线 𨽾→𨽻 6 格（vol02:134、vol04:16/46/48/58/81 的夹注），库首位 𨽾 cov 0.97–0.98，短语表写 𨽻，
+    Sheldon 11-24 复核金标是 𨽾。缺省开（2026-11-27 CV4）；关时逐字节同旧行为、不进指纹。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
     variant_graph_fingerprint: str = ""

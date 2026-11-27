@@ -436,7 +436,10 @@ def _shape_first_ok(p, m, a, b, form) -> bool:
     if not p.lane_shape_first or frozenset((a, b)) not in _shape_variant_pairs(p.lane_shape_first, p.lane_shape_first_fingerprint):
         return False
     rows = (getattr(m, "stage", None) or {}).get("pair") or []
-    return any(set(r.get("pair") or "") == {a, b} and (r.get("tier") or 0) >= 3 and r.get("lean") == form for r in rows)
+    # tier 是整数档（1–3）；形近字线「交上下文」的对记 tier="context"（字符串），不是终判档，不当证据
+    # （全唐文 004 p162 奥奧 曾因 'str' >= 'int' 整页失败，decide-bench 动态层 11-26）
+    return any(set(r.get("pair") or "") == {a, b}
+               and isinstance(r.get("tier"), int) and r["tier"] >= 3 and r.get("lean") == form for r in rows)
 
 
 def _shape_first_lib(p, m, lib, ref):
