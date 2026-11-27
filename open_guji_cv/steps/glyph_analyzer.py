@@ -96,7 +96,7 @@ class GlyphAnalyzerStep(Step):
         consumes=("glyph_match",), produces=("glyph_analyzer",),
         optional_consumes=("glyph_near",),
         params=GlyphAnalyzerParams,
-        code_deps=("open_guji_cv.groups.near_methods",),
+        code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.clustering.sim_cnn"),
         enabled_by="enabled",
     )
 
