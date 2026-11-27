@@ -124,6 +124,7 @@
 
 ## [未发版]
 
+- PATCH（缺省关，产物逐字节不变，code_equiv 登记；CV2 2026-11-27）：cell_shrink 新开关 `end_dash_row`，列首／列尾格端区里成排的虚线短划整排抹白（`extractor.strip_dash_row`）。写本内框细线印成短划、整页拟不出内线的页，紧框不再横着拉宽去圈短划（cut-frame 史記 42:43:5「宗」、42:27:5「事」）。
 - PATCH（11-27，CV0，参校本 bug）：`seed_admit.no_ref_params` 也叠在册配置 `reference_profile` 声明 `kind: none` 的页上（原先只认 `no_ref_pages`／`page_kinds.no_ref`），两种写法同一口径。现行各书没有同时配 no_ref_params 与 none 页的，产物不变，登 code_equiv。
 - PATCH（指纹变更：seed_admit 起过期，`feedback.bindings` 在其 code_deps；CV0 2026-11-27）：绑定给无框旧人裁补锚时，字形库里同格号人裁实例的图只有在「裁决当时那版切分被换掉」之前写进库才当旁证（看切分步 manifest 历史）；之后才写进去的（回库、补放、重切刷新）是按原格号从新切分切的，与现格比等于自己比自己——史記 03 册 #17918／#17967 因此把 16／360 格旧人裁照原格号采信。另：manifest 查不到这一页时现行切分起始时间不再当 0（当作刚切）。`_VERSION` 9。code_equiv：殿本 vol28 13 页、全唐文 020 16 页逐字节相同；史記 02 25 页中 10 页不同（15 格 human→机器字，均为上述情形）。
 - PATCH（L0：`glyph_analyzer` 缺省关、尚无册跑过）：`glyph_analyzer` 的 `code_deps` 补 `clustering.sim_cnn`（`match_algo` 用它解析 `sim_model` 拼证据里的算法名），过 manager 指纹覆盖守卫 `test_code_deps_coverage`（CV0 2026-11-27，GM3 报）。
