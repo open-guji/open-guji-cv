@@ -105,3 +105,9 @@ def test_flip_guard_na_without_against_and_cmp_skip(tmp_path):
     out = B.write_result(tmp_path / "r0", r)
     now = B.execute(s, _ctx(tmp_path, [{"id": 1, "ok": False, "cmp_skip": True}]), against=out)
     assert now.against["worse"] == 0
+
+
+def test_needs_accepts_bench5b():
+    from open_guji_cv.eval import bench as B
+    B.BenchSpec(id="t-5b", title="t", steps=("glyph_match",), owner="CV3", gold="x", needs=("bench5b",),
+                primary="acc", run=lambda c: c.work, score=lambda c, p: None)
