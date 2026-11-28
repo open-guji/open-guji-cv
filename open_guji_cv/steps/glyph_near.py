@@ -229,7 +229,9 @@ class GlyphNearStep(Step):
         code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_registry",
                    "open_guji_cv.groups.book_knn", "open_guji_cv.groups.near_knn", "open_guji_cv.clustering.match",
                    "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.part_shape",
-                   "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.stroke_veto", "open_guji_cv.groups.wu_shape"),
+                   "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.stroke_veto", "open_guji_cv.groups.wu_shape",
+                   "open_guji_cv.strokes", "open_guji_cv.strokes._ink", "open_guji_cv.strokes.features",
+                   "open_guji_cv.strokes.register", "open_guji_cv.strokes.template"),
         enabled_by="groups",
     )
 
