@@ -382,6 +382,9 @@ _HR_FIT_0106 = ("border_detect head_raise_fit（CV1 #1868，缺省关、关时�
                 "vol28 12 页（1-6,30-33,82,100）border_detect＋border_detect_gate 产物与 v0.7.105 逐字节相同；scripts/code_equiv.py check --gate border_detect_gate，2026-11-25（CV0）")
 
 
+_LAYOUT_ALIAS_0716 = ("row_segment.load_layout 认册 yaml 的 aliases（CV0 2026-11-28，cv #1980 搬到殿本 patch 线 v0.7.116）："
+                      "没写 aliases 的册 names＝{本册名}，与原 `== book` 逐行同真，产物逐字节不变。哈希按 v0.7.110 重算。")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1842,6 +1845,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='63b9807b82801f71544d15ed548ca4cbfc356d4f6d4600bcc51e5717a5776ddb',
           old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
           evidence=_HR_FIT_0106),
+    # 格位表／备选格表认册旧名 aliases（CV0 11-28，殿本 patch 线 v0.7.116）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="41bc44d590c37cd29d490700f13f60cc53038d04a235f188638f90efbadff431",
+          old="78b75d2c2d6573a284e137e7f87e6f9848449aa563fd20f78cd1b4f1c88b5980",
+          evidence=_LAYOUT_ALIAS_0716),
 )
 
 
