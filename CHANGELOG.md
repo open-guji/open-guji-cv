@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
 
+- PATCH（指纹变更：开了 3b 的书 glyph_near 起过期——Step 模块与 `groups.near_methods` 改；现行只有殿本开 3b；CV3 2026-11-28，按 CV4《4d 接 3b 看图方法-接口要求》）：3b 新触发方式 `trigger: cands`（3a 首位或候选前 `topk` 名（缺省 5）里有组内任一字就跑，罩住第四步看图判法的触发格）；3b 产物 `PageNear.models` 记本页各方法的模型版本（`方法.model_sha`，rr_shape 与第四步参数指纹 `rs` 段同算法）；收尾 `glyph_analyzer` 每格新键 `near: {group, trigger, methods: {方法名: {method, …方法证据原样, model}}}`（rr_shape 证据＝`{method: "rr_shape", char, why, nn, score, geo}`，后五键同 `rr_shape.judge()`；4d 读口是 3b 产物本身，见 cv #1999），没触发的格不落盘，宫官 cnn_small 的 `evidence.b`／p／p_src 不变。3b 只管主切法格，备选切法列 4d 本地现算。
 - 新步骤（只新增 gate，不影响别的步骤指纹：现役各步 code_hash 逐个核过不变；`decide_gate` 自己的指纹不过期任何东西，L0；CV4 2026-11-28，Sheldon 定「gate 只检测、不判断」）：第四步出口 gate `decide_gate`，挂在 `seed_admit` 出口、永远最后跑（照 `cut_gate`），读 `seed_admit`／`align_ref`／`glyph_match`／`context_decision`／`char_index`，每页出检测清单 `PageDecideGate`（`fail`／`flag` 两级）。首批检测：列报错、连续放行字等于参校本错开一位（`ref_shift`）、放行字没有任何出处、放行格是空白（fail）；参校本缺席／没锚上却靠它放行、坐标退回、备选切法、罕用码位、人裁绑丢、字组漏判、上游报错（flag）。不改任何格，没有 Step 读它。文档 `doc/4-定字/decide_gate.md`；量法 ai-team decide-bench `gate_bench.py`。
 
 - 修复（缺省关；指纹变更：glyph_near 起过期——code_deps 补 `groups.hou_shape`，glyph_near 是 dev 上未发版的新步骤、缺省关，只有开了它的书（殿本）受影响，且它们未出过 v0.1 产物；CV3 2026-11-28）：#1997 把刻形判法 `rr_shape` 包进 glyph_near 后，`glyph_near.code_deps` 只列了 SPLITS 里 `rr_shape` 拆出的一块（hou_shape 漏列），`tests/test_seg_move.py::test_split_parts_listed_together_in_every_step` 报红；补上并重生成 doc/3-识字/步骤与产物.md。
