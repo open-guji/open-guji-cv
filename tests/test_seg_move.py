@@ -76,11 +76,19 @@ def test_split_collapses_back_to_old_module_while_parts_unchanged(monkeypatch):
     assert len(engine._collapse_splits(list(mods))) == 4      # 缺一块 → 不合并
 
 
+#: 登记项 → 允许只列一部分的 Step。全唐文 jiazhu_split＋seg_overrides 那项是 row_segment 专用（cv 的 jiazhu_split 本身不 import
+#: seg_overrides；row_segment 里 seg_overrides 才是 code_dep）。cut_gate 只列 jiazhu_split：硬补 seg_overrides 会把 seal_ink／row_hooks／
+#: boundary_net／jiazhu_step 一整串登记项都拖进 cut_gate 的块表，各书 cut_gate 指纹白白过期一次，且合不回原指纹。
+_PARTIAL_OK = {("guji_book.quantangwen.jiazhu_split", "cut_gate")}
+
+
 def test_split_parts_listed_together_in_every_step():
     """拆分登记的几块：哪个 Step 用了其中一块，就得把几块都列进 code_deps（否则合不回去，产物白白过期）。"""
     for old, (old_h, parts) in code_equiv.SPLITS.items():
         # 书仓模块（guji_book.*）由 seg_set.resolve 换进模块表，不在 code_deps 里，不查
         names = {p for p, _ in parts if not p.startswith("guji_book.")}
         for sid, st in STEPS.items():
+            if (old, sid) in _PARTIAL_OK:
+                continue
             mods = {type(st).__module__, *st.spec.code_deps}
             assert not (mods & names) or names <= mods, f"{sid} 只列了 {old} 拆出来的一部分：{sorted(mods & names)}"

@@ -3096,6 +3096,17 @@ ENTRIES: tuple[Equiv, ...] = (
           new="4d9f0e35da3dbf8a1ae1c142c86e3e241cd10586254a48b7308d995419db28f5",
           old="47cde846ac5378eef452e9734fb179698ab7c960af78ac738dc1bbcbbca7cabd",
           evidence=_L10_TITLE_1128),
+    # cell_state、group_decision 的 code_deps 补 seed_admit_vis3（与 seed_admit_params 同属 SPLITS 一项，守卫要求两块一起列；
+    # seed_admit 早已列齐）。只改 StepSpec.code_deps 元组，不动运行路径，产物逐字节不变按构造成立；两块都还是这一版时经 SPLITS 合回，
+    # 两步指纹与补 dep 前逐位相同（CV3 2026-11-28）。
+    Equiv(module="open_guji_cv.steps.cell_state",
+          new="160ccd881442bbf1aee77b394d26b5ee163e3f66e3e1945fd92e816ea53a0d33",
+          old="2fdc6c08c424981e11eede40e941373fb18bf3d1e00b18161766583867949a99",
+          evidence="cell_state 的 StepSpec.code_deps 元组补一项 open_guji_cv.steps.seed_admit_vis3；code_deps 运行时只用来算指纹，不改运行路径，产物逐字节不变按构造成立；2026-11-28（CV3）"),
+    Equiv(module="open_guji_cv.steps.group_decision",
+          new="a464dcf9f390834e92e65af26fb1795354f5d1a2b617b45558486168fe19bc37",
+          old="3c9bc0ebfe44f461a07190f1e6abc352c7ea15917da3ead3972cedf3efc54585",
+          evidence="group_decision 的 StepSpec.code_deps 元组补一项 open_guji_cv.steps.seed_admit_vis3；同上，产物逐字节不变按构造成立；2026-11-28（CV3）"),
 )
 
 
