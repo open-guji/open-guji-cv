@@ -38,7 +38,9 @@ sys.path.insert(0, str(ROOT))
 
 
 def _module_path(mod: str) -> str:
-    return mod.replace(".", "/") + ".py"
+    """模块的源文件（相对仓根）：包（目录里有 `__init__.py`，如 2026-11-28 起的 `groups/near_methods/`）取 `__init__.py`。"""
+    base = mod.replace(".", "/")
+    return f"{base}/__init__.py" if (ROOT / base / "__init__.py").is_file() else base + ".py"
 
 
 def code_hash_at(mod: str, rev: str | None) -> str | None:

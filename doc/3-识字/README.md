@@ -17,6 +17,7 @@
 - 3b 触发、十一个看图方法、证据与指纹约定：[形近字组分析-3b.md](形近字组分析-3b.md)。
 - 各步的输入输出、参数缺省值：[步骤与产物.md](步骤与产物.md)（从代码生成）。
 - 形近字组登记表（六处来源合一的 `near_groups/2`、schema、读口）：[形近字组登记表.md](形近字组登记表.md)。
+- 3b 形近字组整体 benchmark（触发量、覆盖率、方法间一致率、ECE、耗时、指纹）与临时校准表：[3b整体benchmark.md](3b整体benchmark.md)。
 - 3e 离线 ask（不调模型服务、只写本机）：`python -m open_guji_cv.feedback.llm_queue vis-export <册…> -w <工作区> --out <目录>` 把 pending 的 ask 去重、跳过已答，落出题图 PNG（与在线送模型同口径）＋`manifest.jsonl`＋`prompt.md`；对话判完 `vis-import <答案.jsonl> --name <名>` 核对后写 `vis_glyph` 缓存（`model=session:<名>`，书配置 `accept_models` 要列上），再从 `glyph_vis` 起 `--force` 重跑。见 `feedback/vis_queue.py` 模块头。
 - 本大步的工具命令：`guji-cv read rare`（生僻字单查、批量）；现代排印本播种用 `calibrate-font`、`witness-align`、`witness-align-stream`、`seed-witness`。
 - 字形库、语料、模型的版本钉法：[../design/字形库按版本钉-细设计.md](../design/字形库按版本钉-细设计.md)、[../design/语料库分层版本.md](../design/语料库分层版本.md)、[../design/模型系统.md](../design/模型系统.md)。
