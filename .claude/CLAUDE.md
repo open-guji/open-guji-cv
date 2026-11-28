@@ -4,32 +4,32 @@
 - 默认使用中文进行交流
 
 ## 项目概述
-古籍刻本图像 → 逐字转写的引擎：切分（Step1–4）、识别与定字（Step5–7）、人裁回流（Step8）、导出（Step9）。
+古籍刻本图像 → 逐字结果的引擎，分四大步：**1 版面** `layout`（原 Step0–1，只认位置、判类型）、**2 切字** `cut`（原 Step2–4，含单列拉直；2026-11-22 用户定）、**3 识字** `read`（原 Step5-a/b，只从字块图取证）、**4 定字** `decide`（原 Step5-d 整理本对位、Step6–7；整理本对位 2026-11-22 用户定移来）。原 Step8 入库、Step9 排版输出已移到 guji-manager（第二步 `pipeline`、第五步 `output`）。cv 有自己的命令行入口 `guji-cv`（cv 文档都写它）；`guji` 是 guji-manager 的总入口，manager 通过 `guji pipeline …` 调 cv（2026-11-22 用户定）。
 **2026-11-04 起本仓只是 pipeline**（凡影响识别产物的）；工作区、中心库、R2、任务库、审阅、评测、整理命令都在 [guji-manager](https://github.com/open-guji/guji-manager)（`guji_manager`，经入口点并进 `guji` 命令）。改 manager 不用给 pipeline 发版。分界见 `doc/design/拆分-pipeline与manager.md`。
-数据集与评测在隔壁仓 `open-guji-dataset`；原图在 `guji-workspace`（git，2026-10-19 起只存原图）；册配置、人裁、台账、字形库在**中心库**（`guji db sync`，见 `doc/datastore.md` 第六节）；产物在各机本地。
+数据集与评测在隔壁仓 `open-guji-dataset`；原图在 `guji-workspace`（git，2026-10-19 起只存原图）；册配置、人裁、台账、字形库在**中心库**（`guji db sync`，见 `doc/参考/datastore.md` 第六节）；产物在各机本地。
 
 ## 先看哪份
-文档都在仓根 `doc/`（2026-10-06 起；原 `.claude/doc/` 已并入，旧路径对照见 `.claude/doc/README.md`）。
+文档都在仓根 `doc/`，入口 [doc/README.md](../doc/README.md)。分工（2026-11-22 用户定）：**doc 只写事实与 schema、尽量短；介绍、教程、怎么用写 Wiki（仓里 `wiki/`）**。四个大步各一个目录 `doc/1-版面/`…`doc/4-定字/`，其中 `步骤与产物.md` 由 `scripts/gen_stage_docs.py` 从代码生成，改了 Step 或产物定义要重跑（`tests/test_stage_docs.py` 守着）。
 
 | 要做什么 | 读 |
 |---|---|
-| **整理一册书（从开工到交付）** | **[doc/runbook/整理一册书.md](../doc/runbook/整理一册书.md)** |
-| 用控制台、`guji` 命令 | [doc/console_manual.md](../doc/console_manual.md) |
-| 开新书、找数据在哪 | [doc/workspace_layout.md](../doc/workspace_layout.md) |
-| 看包分层、谁能依赖谁、改动前要注意什么 | [doc/module_map.md](../doc/module_map.md)（守卫：`tests/test_architecture.py`） |
-| 改切分代码（各套书自管、原语库、样页对比） | [doc/切分代码结构.md](../doc/切分代码结构.md) |
-| 让某页／某列／某格按人说的切（15 种人定切分、优先级） | [doc/切分覆盖.md](../doc/切分覆盖.md) |
-| 改算法之前 | [doc/pipeline_handbook.md](../doc/pipeline_handbook.md)（踩坑、量法、负结果）、[doc/segmentation_v2_pipeline.md](../doc/segmentation_v2_pipeline.md)（切分四步） |
+| **整理一册书（从开工到交付）、跑批、人审** | guji-manager 的 `doc/` 与 Wiki（按 start／pipeline／text／feedback／output 五步） |
+| 某一大步的步骤、产物、参数 | `doc/1-版面/` … `doc/4-定字/` |
+| 开新书、找数据在哪 | [doc/参考/workspace_layout.md](../doc/参考/workspace_layout.md) |
+| 看包分层、谁能依赖谁、改动前要注意什么 | [doc/参考/module_map.md](../doc/参考/module_map.md)（守卫：`tests/test_architecture.py`） |
+| 改切分代码（各套书自管、原语库、样页对比） | [doc/参考/切分代码结构.md](../doc/参考/切分代码结构.md) |
+| 让某页／某列／某格按人说的切（15 种人定切分、优先级） | [doc/2-切字/切分覆盖.md](../doc/2-切字/切分覆盖.md) |
+| 改算法之前 | [doc/经验/管线手册-踩坑与负结果.md](../doc/经验/管线手册-踩坑与负结果.md)（踩坑、量法、负结果）、[doc/经验/切分四步-研发记录.md](../doc/经验/切分四步-研发记录.md)（切分四步） |
 | 各步的设计与失败案例 | [doc/design/](../doc/design/) |
 | 调研、文献、基准、负结果 | [doc/research/](../doc/research/) |
 | 格式（guji-page、guji-format、pages.json） | [doc/formats/](../doc/formats/) |
-| 开关开不开（A/B 实验、开关登记）| [doc/exp_framework.md](../doc/exp_framework.md)、[doc/开关登记表.md](../doc/开关登记表.md) |
+| 开关开不开（A/B 实验、开关登记）| [doc/参考/exp_framework.md](../doc/参考/exp_framework.md)、[doc/开关登记表.md](../doc/开关登记表.md) |
 | 产物指纹、过期、跨册新鲜度 | skill `cv-pipeline-ops` |
 | 已退役与过期的文档 | [doc/archive/](../doc/archive/)（含旧 CLAUDE.md 的长索引原文） |
 
 ## 怎么干活
-- **前台用控制台，后台用 `guji` 命令**：`pipeline` / `step` / `status` 在本仓；`close-check` / `recheck` / `cache` / `collate` / `gold` / `eval` / `db` …由 guji-manager 提供（装上就并进 `guji`，没装会提示装法）。
-  别直接调 `scripts/` 下的散脚本做书的整理，runbook 里点名的除外。
+- **前台用控制台，后台用命令行**：cv 自己的入口 `guji-cv`（大步工具可带前缀，如 `guji-cv layout preclean`）：`guji-cv pipeline <管线> <册>`（`--from/--to` 可写大步名）、`guji-cv step`、`guji-cv status` 在本仓；`close-check` / `recheck` / `cache` / `collate` / `gold` / `eval` / `db` …由 guji-manager 提供，走总入口 `guji`（manager 文档里写 `guji pipeline …`）。
+  别直接调 `scripts/` 下的散脚本做书的整理，manager 文档里点名的除外。
 - 当前只优化**正文页**；目录、职名、序跋、牌记先不管，指标按正文与非正文分开报。
 - 旧的 v1 命令（`python -m open_guji_cv run/extract/preprocess`）已退役，不要在上面加东西。
 
@@ -56,4 +56,4 @@
 - 本仓 `output/glyph_store/` 是测试用的样本库；根目录早期遗留的跨书 `glyph_store/` 已于 2026-10-06 删除（可从分支 archive/pre-cleanup-2026-10-06 找回）；字体字形不进 git，由 `fonts/` 确定性重建（见 `fonts/README.md`）。
 
 ## 云服务器（2026-09-30 起搁置）
-- 内存额度、systemd 托管控制台等旧说明见 `doc/snap_autoimport.md` 与 overview `机器清单.md`。整理一本书一律在本地做。
+- 内存额度、systemd 托管控制台等旧说明见 `doc/archive/snap_autoimport.md` 与 overview `机器清单.md`。整理一本书一律在本地做。

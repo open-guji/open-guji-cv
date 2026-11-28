@@ -42,7 +42,7 @@ vol01/15 两条（NCC 0.843/0.827）、vol01/9:3:20（金标框仅 33px 高，v2
 范围：vol01 10 页（5,6,8,11,14~18,20，即迁移条目所在页）。
 
 **与 doc 上次值对照**：
-- `doc/pipeline_handbook.md` §12（2026-08-28 裁边迁移后）：`recrop 32/40 → 33/40`；`char_clustering_design.md:4034`：含住+盖墨 32（无声放行 3→6）；
+- `doc/经验/管线手册-踩坑与负结果.md` §12（2026-08-28 裁边迁移后）：`recrop 32/40 → 33/40`；`char_clustering_design.md:4034`：含住+盖墨 32（无声放行 3→6）；
   r14：`recrop 28/33`；
 - `doc/design/review_feedback_loops.md:44` / `segmentation_border_feedback.md:100`：IoU 基线 **0.671**（24 条，2026-08-25）。
 - v2：26/31（84%）vs 旧 33/40（82.5%）、28/33（85%）；IoU 0.712 vs 0.671。**样本不同（40→31，丢的多是 50 页等坐标系存疑页），不能直接比**；

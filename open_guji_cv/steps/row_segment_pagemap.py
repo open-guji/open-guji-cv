@@ -149,8 +149,6 @@ def build_from_pins(book: str, pins_path: str) -> list[dict]:
 
 
 def _book_lines(name: str, book: str) -> list[dict]:
-    from ..core.volume_alias import names_for
-    names = names_for(book)      # 册改名后表不改写，旧册名的行照样归本册（11-28）
     p = _dz_dir() / name
     if not p.exists():
         return []
@@ -158,15 +156,13 @@ def _book_lines(name: str, book: str) -> list[dict]:
     for ln in p.read_text(encoding="utf-8").splitlines():
         if ln.strip():
             r = json.loads(ln)
-            if r.get("vol") in names:
+            if r.get("vol") == book:
                 out.append(r)
     return out
 
 
 def _pin_lines(pins_path: str, book: str) -> list[dict]:
     """`pins` 档的本册钉位行（`{"book", "page", "head"}`），按文件顺序。"""
-    from ..core.volume_alias import names_for
-    names = names_for(book)      # 册改名后表不改写，旧册名的行照样归本册（11-28）
     from ..core.workspace import corpus_path
     p = Path(corpus_path(pins_path))
     if not p.exists():
@@ -175,7 +171,7 @@ def _pin_lines(pins_path: str, book: str) -> list[dict]:
     for ln in p.read_text(encoding="utf-8").splitlines():
         if ln.strip():
             r = json.loads(ln)
-            if r.get("book") in names:
+            if r.get("book") == book:
                 out.append(r)
     return out
 
@@ -325,7 +321,6 @@ def _check(summary: dict, strategy: str, book: str) -> None:
 
 def build(ctx, sid: str, pages: list[int], key: str, skip=()) -> dict:
     from ..core.spec import page_key
-    from ..core.volume_alias import names_for
     from ..utils.daizhige import (
         SHORT_CHARS,
         apply_overrides,
@@ -367,7 +362,7 @@ def build(ctx, sid: str, pages: list[int], key: str, skip=()) -> dict:
             if mt.confident and not h.cover:
                 layout.extend(half_layout_rows(h, ctx.book.id, p))
         rows.append(row)
-    layout = apply_overrides(layout, _dz_dir() / OVERRIDES_NAME, set(names_for(ctx.book.id)), as_vol=ctx.book.id)
+    layout = apply_overrides(layout, _dz_dir() / OVERRIDES_NAME, {ctx.book.id})
     used = sorted(mt.half for mt in res.matches.values() if mt.half is not None)
     text = [p for p, g in zip(pages, grids) if g is not None and int(g[:, N_EXTRA:].sum()) >= TEXT_MIN_CELLS
             and p not in skip]
@@ -423,8 +418,6 @@ def _ref_path(ref: dict) -> Path:
 
 def _corpus_lines(rel: str, key: str, book: str) -> list[dict]:
     """corpus 下一份 jsonl 里本册的行（`key` 是册号字段名）。`rel` 空或文件不在给空表。"""
-    from ..core.volume_alias import names_for
-    names = names_for(book)      # 册改名后表不改写，旧册名的行照样归本册（11-28）
     if not rel:
         return []
     from ..core.workspace import corpus_path
@@ -435,7 +428,7 @@ def _corpus_lines(rel: str, key: str, book: str) -> list[dict]:
     for ln in p.read_text(encoding="utf-8").splitlines():
         if ln.strip():
             r = json.loads(ln)
-            if r.get(key) in names:
+            if r.get(key) == book:
                 out.append(r)
     return out
 
@@ -487,7 +480,7 @@ def _ensure_coltext(ctx, strategy: str, pins_path: str, ref: dict, skip=()) -> d
     if strategy == "pins" and not pins:
         raise ValueError(f"{ctx.book.id} 在钉位表 {pins_path} 里没有一行（page_map: pins）：先补本册钉位")
     d = CT.build(ctx.book.id, pages, grids, _ref_path(ref), pins, strategy, n_slots, ncol, skip=skip)
-    d["layout"] = CT.apply_overrides(d["layout"], _corpus_lines(ref.get("overrides", ""), "vol", ctx.book.id), as_vol=ctx.book.id)
+    d["layout"] = CT.apply_overrides(d["layout"], _corpus_lines(ref.get("overrides", ""), "vol", ctx.book.id))
     d.update(key=key, version=ALGO_VERSION, how="column_text")
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")

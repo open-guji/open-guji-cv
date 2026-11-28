@@ -46,8 +46,8 @@ def test_signals_empty_columns_counted():
 
 def test_model_roundtrip_and_gate_abstain(tmp_path):
     pytest.importorskip("sklearn")
+    pd = pytest.importorskip("pandas")               # 同属 [shadow] extra；只装 sklearn 的环境跳过
     from sklearn.ensemble import HistGradientBoostingClassifier
-    import pandas as pd
     from open_guji_cv.pagetype_model.gate import PageTypeGate
     from open_guji_cv.pagetype_model.model import file_fingerprint, load_model, save_model
     g1, b1 = _page(); g0, b0 = _page(text=False)

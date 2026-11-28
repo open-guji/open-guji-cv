@@ -39,7 +39,7 @@ _spec.loader.exec_module(mod)
 # - 数据集不在就整条 skip，云端五条一条没跑过。
 #
 # 结论本身（两条负结果 + 印章类分得开）留在模块头与
-# `doc/segmentation_v2_pipeline.md`，要复量就跑评测 `guji eval run`。
+# `doc/经验/切分四步-研发记录.md`，要复量就跑评测 `guji eval run`。
 # 这里改为用**合成列图**钉判据的**机制**——机制是代码的，分布是数据的。
 
 

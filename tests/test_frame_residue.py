@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.steps.column_warp import (FRAME_RESIDUE_MIN_RUN, frame_residue)
+from open_guji_cv.steps.column_end import (FRAME_RESIDUE_MIN_RUN, frame_residue)
 
 BAND = (10, 110)
 

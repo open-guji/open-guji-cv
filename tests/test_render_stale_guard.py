@@ -35,14 +35,17 @@ def _ctx(tmp_path, book=None):
 
 def _run_warp(ctx, book_at_run):
     """按 `book_at_run` 的配置跑 column_warp 这一页，写产物与 manifest（含 book_deps 原值），清掉缓存图。"""
-    step = STEPS["column_warp"]
-    out = step.run_page(ctx, PAGE)
-    _, sha = ctx.store.write(ctx.book.id, "column_warp", f"p{PAGE:04d}", out)
-    ctx.store.manifest(ctx.book.id, "column_warp").put(ManifestEntry(
-        key=f"p{PAGE:04d}", fingerprint="x", sha256=sha, status="ok",
-        book=book_dep_values(step, book_at_run)))
-    ctx.cache.invalidate(ctx.book.id, "column_image")
-    ctx.cache.invalidate(ctx.book.id, "column_raw")
+    out = None
+    for sid in ("column_warp", "column_band", "column_end"):
+        step = STEPS[sid]
+        o = step.run_page(ctx, PAGE)
+        out = out or o
+        _, sha = ctx.store.write(ctx.book.id, sid, f"p{PAGE:04d}", o)
+        ctx.store.manifest(ctx.book.id, sid).put(ManifestEntry(
+            key=f"p{PAGE:04d}", fingerprint="x", sha256=sha, status="ok",
+            book=book_dep_values(step, book_at_run)))
+    for k in ("column_image", "column_banded", "column_raw"):
+        ctx.cache.invalidate(ctx.book.id, k)
     return out
 
 
@@ -65,7 +68,7 @@ def test_old_manifest_without_book_not_checked(tmp_path):
     """老条目没记 book（2026-09-28 之前）→ 无从比对，照旧放行。"""
     ctx = _ctx(tmp_path)
     _run_warp(ctx, ctx.book)
-    m = ctx.store.manifest(ctx.book.id, "column_warp")
+    m = ctx.store.manifest(ctx.book.id, "column_end")
     ent = m.get(f"p{PAGE:04d}")
     m.put(dataclasses.replace(ent, book=None))
     ctx.book = dataclasses.replace(ctx.book, frame_layers={"top": 2})
@@ -81,7 +84,7 @@ def test_render_refuses_on_warped_size_mismatch(tmp_path):
     bad = wins.model_copy(update={"columns": [rec.model_copy(update={"warped_size": (w, h + 30)}), *wins.columns[1:]]})
     ctx.store.write(ctx.book.id, "column_warp", f"p{PAGE:04d}", {"column_windows": bad})
     with pytest.raises(StaleRenderError, match="warped_size"):
-        STEPS["column_warp"].render(ctx, "column_image", column_key(PAGE, rec.col))
+        STEPS["column_warp"].render(ctx, "column_raw", column_key(PAGE, rec.col))
 
 
 def test_inner_memo_stamp_follows_products(tmp_path):

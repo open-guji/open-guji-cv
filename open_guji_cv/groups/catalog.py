@@ -1,9 +1,9 @@
-"""字组总表（2026-10-24，sheldon「形近字处理规范化」）：由注册表生成 `doc/字组/字组总表.md`，人不手改。
+"""字组总表（2026-10-24，sheldon「形近字处理规范化」）：由注册表生成 `doc/4-定字/字组/字组总表.md`，人不手改。
 
 类型只分两类（sheldon 10-24 定）：**同义**（异体，同一个字的不同写法，`kind="variant"`）与**不同义**（形近，`kind="near_form"`）。
 怎么判全看这一组的方法数组（`FlowSpec.methods`），不另分方法类。
 
-    python -m open_guji_cv.groups.catalog            # 重写 doc/字组/字组总表.md
+    python -m open_guji_cv.groups.catalog            # 重写 doc/4-定字/字组/字组总表.md
     python -m open_guji_cv.groups.catalog --check    # 只比对，不一致退出码 1
 
 `tests/test_groups_catalog.py` 守住「注册表改了总表就得重生成」。只读注册表与 `config/groups/<组>/` 下的文件名、
@@ -18,7 +18,7 @@ from pathlib import Path
 from . import registry as R
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "doc" / "字组" / "字组总表.md"
+OUT = ROOT / "doc" / "4-定字" / "字组" / "字组总表.md"
 KIND = {"variant": "同义", "near_form": "不同义"}
 
 

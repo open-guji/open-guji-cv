@@ -68,6 +68,7 @@ from ..eval.rulers import _col_profile, classify_boundary
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.cells import PageCells
 from ..products.kinds.row_segment_gate import RowSegmentGateColumn, RowSegmentGateManifest
+from ..impl.keben.row_boundaries import row_split_extra
 
 
 class RowSegmentGateParams(BaseModel):
@@ -114,26 +115,41 @@ class RowSegmentGateStep(Step):
             reject: list[str] = []
             flags: list[str] = []
             roster = "roster" in cc.flags      # Step3 职名页分支切的列（overview#450）：字数本就不定
-            if not cc.ok:
+            if not cc.ok and "table_column" in (cc.error or ""):
+                # 半文半表页册配置点名的表格列（column_gate.table_cols）：版式如此，不是 DP 无解
+                reject.append("table_column：册配置 page_kinds.table_cols 点名本列是表格，不切")
+            elif not cc.ok:
                 reject.append(f"dp_no_solution：DP 无解（{cc.error or '未知原因'}）")
             elif roster:
                 if "roster_dense_guess" in cc.flags:
                     flags.append("roster_dense_guess：职名列有粘连密排段，字数是推出来的，待人核")
                 if "roster_jiazhu" in cc.flags:
                     flags.append("roster_jiazhu：职名列有雙行小字，两行相位不齐，字数待人核")
+                if "manual_cells_remapped" in cc.flags:
+                    flags.append("manual_cells_remapped：人钉的格按列图几何变化换算到新列图，位移超过 3px，待人核")
                 if "roster_overlap" in cc.flags:
                     flags.append("roster_overlap：相邻两字 y 重叠（多是「臣」贴官衔末字），Step4 满宽裁会互相带墨")
-            elif expected is not None and abs(cc.n_body_slots - expected) > p.slot_tol:
+            elif expected is not None and abs(cc.n_body_slots - row_split_extra(cc.flags) - expected) > p.slot_tol:
                 reject.append(
-                    f"slot_count：格数 {cc.n_body_slots} 偏离版式格数 {expected} "
+                    f"slot_count：格数 {cc.n_body_slots - row_split_extra(cc.flags)} 偏离版式格数 {expected} "
                     f"超过容许的 {p.slot_tol} 格（非 effective_body_slots 的正当下调）")
 
             n_r2 = n_r2s = n_r2x = 0
             if not reject and cc.ok:
                 # 与 eval/rulers.py 用同一个函数取墨投影——两处必须是同一个量。
                 prof = _col_profile(ctx.store, ctx.book.id, page, cc.col)
+                # 书级 row_split 切过的列：夹注段里的逻辑格线是段高均分的，不是真切线，不量
+                inner = set()
+                if row_split_extra(cc.flags):
+                    subs_at: dict[int, list] = {}
+                    for c_ in cc.cells:
+                        subs_at.setdefault(c_.pos, []).append(c_.sub)
+                    inner = {k for k in range(1, len(cc.boundaries) - 1)
+                             if all(subs_at.get(k, [None])) and all(subs_at.get(k + 1, [None]))}
                 if prof is not None:
-                    for b in cc.boundaries[1:-1]:
+                    for k_b, b in enumerate(cc.boundaries[1:-1], start=1):
+                        if k_b in inner:
+                            continue
                         result = classify_boundary(prof, int(round(b)), cc.period or 40)
                         if result is None:
                             continue
@@ -156,7 +172,10 @@ class RowSegmentGateStep(Step):
             sliver: list[int] = []
             if not reject and cc.ok and not roster and (cc.period or 0) > 0:
                 lim = p.sliver_ratio * cc.period
+                split_col = bool(row_split_extra(cc.flags))
                 for k, cell in enumerate(cc.cells):
+                    if split_col and cell.sub:
+                        continue                 # 小字格本就矮
                     if (cell.y1 - cell.y0) < lim:
                         sliver.append(cell.slot)
             if sliver:
@@ -215,7 +234,7 @@ class RowSegmentGateStep(Step):
 
 # 挂到 Step3（row_segment）出口——levels 的 desc 只描述层次，不重复具体阈值数字
 # （阈值在 RowSegmentGateParams 里，写两处会漂）。
-attach_gate("row_segment", GateSpec(
+ROW_SEGMENT_GATE_SPEC = GateSpec(
     id="row_segment_gate", unit="column", on_fail="block",
     levels=(
         GateLevel(id="L0", unit="page",
@@ -237,4 +256,5 @@ attach_gate("row_segment", GateSpec(
         GateLevel(id="L4", unit="cell",
                   desc="碎格：格高远小于一格——flag，不拦（列里多数字仍切得对）", name="sliver_cell"),
     ),
-))
+)
+# 2026-11-25：不再挂在 row_segment 出口，层次并进 `cut_gate`（出口闸永远最后调用）。

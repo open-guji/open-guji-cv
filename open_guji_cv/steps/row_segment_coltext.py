@@ -213,12 +213,12 @@ def page_rows(book: str, page: int, grid: np.ndarray, lines: list[list], n_slots
 OVERRIDE_SKIP = ("vol", "page", "col", "why", "drop")
 
 
-def apply_overrides(rows: list[dict], lines: list[dict], as_vol: str | None = None) -> list[dict]:
+def apply_overrides(rows: list[dict], lines: list[dict]) -> list[dict]:
     """人核过的改格（`page_map_overrides`，一行 `{"vol","page","col", 要改的字段…, "why"}`）盖到推出的行上，
     表里没有的列整行补进来；`"drop": true` 删掉这一列（配不准、不要先验的列）。"""
     at = {(r["vol"], r["page"], r["col"]): r for r in rows}
     for o in lines:
-        k = (as_vol or o["vol"], int(o["page"]), int(o["col"]))     # as_vol：册改名后改格表还是旧名（11-28）
+        k = (o["vol"], int(o["page"]), int(o["col"]))
         if o.get("drop"):
             at.pop(k, None)
             continue

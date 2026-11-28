@@ -6,6 +6,9 @@ pipeline 不 import manager。原先夹在 `cli_v2` 里的 manager 行为（开�
 
 时点：
 
+- `route(argv)`：解析参数之前，可改写命令行（返回新的 argv 列表；不管就返回 None）。manager 用它做
+  `guji <步> <命令> …` 的步骤前缀（如 `guji pipeline seg check …` ≡ `guji seg check …`，2026-11-22 用户定）。
+  第一个返回非 None 的钩子说了算。
 - `startup(command)`：解析完参数、执行命令前（如注册去 R2 取派生缓存的取件器、耗时记录）。
 - `prepare(book, steps, jobs)`：`guji pipeline` 起跑前、建引擎之后（钉版字形库、模型、语料、生僻字索引就位）。
 - `finished(args, eng, steps, ok)`：`guji pipeline` 跑完；`ok` = 没有失败页（自动存包、提醒没存包的产物）。
@@ -22,7 +25,7 @@ import sys
 from typing import Callable
 
 GROUP = "guji.hooks"
-POINTS = ("startup", "prepare", "finished", "status")
+POINTS = ("route", "startup", "prepare", "finished", "status")
 _HOOKS: dict[str, list[Callable]] = {p: [] for p in POINTS}
 _LOADED = False
 

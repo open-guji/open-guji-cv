@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""包分层护栏：低层包不许 import 高层包。分层与各包职责见 `doc/module_map.md`。
+"""包分层护栏：低层包不许 import 高层包。分层与各包职责见 `doc/参考/module_map.md`。
 
 只做静态扫描（读 `open_guji_cv/` 的源码、解析 import），不 import 引擎，不碰任何数据。
 
@@ -11,7 +11,7 @@
 
 修一条存量的办法通常是把被依赖的那段代码下沉到低层，或让调用方把依赖传进来（参数 / 回调），
 不要再加一个惰性 import 绕过去——这个测试连惰性 import 也看。
-注意：被 Step 声明为 `code_deps` 的文件一动，各书产物就判过期，下沉前先看 `doc/module_map.md` 末尾。
+注意：被 Step 声明为 `code_deps` 的文件一动，各书产物就判过期，下沉前先看 `doc/参考/module_map.md` 末尾。
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ PKG = "open_guji_cv"
 #: 层号越小越底层。同层互相 import 不限制。
 LAYER: dict[str, int] = {
     # L0 基础：无内部依赖的小模块
-    "errors": 0, "variants": 0, "variant_ledger": 0, "gloss": 0, "detectors": 0, "ocr": 0, "hanzi": 0,
+    "errors": 0, "variants": 0, "variant_ledger": 0, "gloss": 0, "detectors": 0, "ocr": 0, "hanzi": 0, "pair_kind": 0,
     # L1 设施：Step 引擎、产物 schema、通用工具、格式
     "core": 1, "products": 1, "utils": 1, "datastore": 1,
     # 笔画识别纯算法（模板配准、骨架法）；判法外壳在 groups，strokes 不许反过来 import groups（由「低层不许 import 高层」管）
@@ -71,9 +71,6 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "feedback.lookup -> eval.colgeom",
     "gates.row_segment_gate -> eval.rulers",
     "gold.store -> feedback.lock",
-    "products.fp_migrate -> clustering",
-    "products.fp_migrate -> clustering.cnn_candidates",
-    "products.fp_migrate -> clustering.font_candidates",
     "utils.binarized -> clustering.normalize",
     "impl.keben.calibrate -> steps",
     "utils.font_calibrate -> clustering.canonical",
@@ -94,7 +91,7 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
 SIDE_PIPELINE = "pipeline"
 SIDE_MANAGER = "manager"
 PIPELINE_PKGS: frozenset[str] = frozenset({
-    "errors", "variants", "variant_ledger", "gloss", "detectors", "ocr", "hanzi",
+    "errors", "variants", "variant_ledger", "gloss", "detectors", "ocr", "hanzi", "pair_kind",
     "core", "products", "utils", "seg", "strokes", "impl", "clustering", "pagetype_model", "groups",
     "gates", "steps", "shadow", "api", "__main__", "preflight",
     # 拆分 P6（2026-11-04）：manager 一侧已全部搬去 guji-manager，下面这些包里留下的都是 pipeline——
@@ -186,7 +183,7 @@ def _upward_edges() -> set[str]:
 def test_every_top_level_package_has_a_layer():
     tops = {_top(m) for m in _modules() if _top(m)}
     missing = sorted(tops - set(LAYER))
-    assert not missing, f"新顶层包/模块 {missing} 没登记在 LAYER 里；在 tests/test_architecture.py 和 doc/module_map.md 里给它定一层"
+    assert not missing, f"新顶层包/模块 {missing} 没登记在 LAYER 里；在 tests/test_architecture.py 和 doc/参考/module_map.md 里给它定一层"
 
 
 def test_no_new_upward_imports():

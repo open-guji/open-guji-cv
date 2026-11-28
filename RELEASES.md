@@ -56,6 +56,43 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 
 - `cv-2026.09.26-base`
 
+## v0.9.0
+
+对比 `v0.8.0`。用户 11-22 定九步并四大步，11-23 说「可以发新版」。tag 经 ai-team 中转站打在 main 的发版合并提交上。
+
+### Changed
+- 九步并成四大步：1 版面 `layout`（原 Step0–2）、2 切字 `cut`（Step3–4）、3 识字 `read`（Step5）、4 定字 `decide`（Step6–7）。骨架 `_skeleton.yaml` 加 `stages:`；`guji-cv pipeline --from/--to` 可写大步名。步骤 id、产物、指纹都不变。
+- cv 自己的命令行入口 `guji-cv`（＝`python -m open_guji_cv`）只有 cv 的命令；大步工具可带前缀（`guji-cv layout preclean`、`guji-cv read rare`、`guji-cv decide variants`）。`guji` 是 guji-manager 的总入口，`guji pipeline <命令>` 经 route 钩子转到 cv。
+- doc 按四大步重整（入口 `doc/README.md`，各大步 `步骤与产物.md` 由 `scripts/gen_stage_docs.py` 从代码生成）；Wiki 按四大步重排。
+
+### Removed
+- 原 Step9 排版输出的代码整个搬进 guji-manager（`guji output export md|format|wikisource|reflow`、`guji output collation-report`）：删 `report/` 的 collate 等 6 个模块、7 个导出／对勘脚本、`guji export`。原 Step8 入库归 manager 第二步。
+- `guji fp-migrate`（连 `products/fp_migrate.py`）、`guji import-pdf`（manager `source commons` 已收 PDF）。
+
+影响：23 步 `code_hash` 与 v0.8.0 相同，各书产物不过期、不用重跑。底库仍是 b33（`config/` 未变）。要用排版输出须装 guji-manager v0.6.0 起。Wiki 已按 v0.9 重改。
+
+## v0.8.0
+
+对比 `v0.7.0`。用户 11-21 定升 MINOR（本版起新任务用 v0.8）。v0.7.1–v0.7.93 的 PATCH 明细见 CHANGELOG 各节，这里按主题归并。tag 经 ai-team 中转站打在 main 的发版合并提交上。
+
+### Added
+- 5a 形近字对：按书分类器 `groups/pair_clf.py`（5a.3）、笔画证据 `clustering/stroke_evidence.py`（5-b，缺省关）、库字档 `font.charset.lib_chars`（缺省关）、按刻形改字两件、相似度底座 `glyph_sim_base_v1`、`hou_shape` 小卷积网、字组登记（never_group、sb 组手写否决、zw/ry 等）。
+- seed_admit 书级开关一批（都缺省关、不进参数哈希）：`group_flow_hou_shape_late`、`group_flow_ref_alias`、`lane_shape_first`、`alt_note_region`、`alt_backed_gain`、`vis_ruling_half`、`vis_ruling_ctx_*`；5c 给待审格记 `evidence.vis_ctx`；语料等价登记 `same_output_as`。
+- row_segment／border_detect 书级开关：`alt_cuts`、`alt_nojz`、`roster_grid_slots`、`cut_repair`、`cut_free_seam`、`jiazhu_cc_min`、`head_raise_notch`、`column_warp.inner_b…`，页型表 `no_ref`／`roster_cols`，`jiazhu_step.row_split`。
+- `guji seg check` 页级检查 `gutter_ink`，`eval/seg_screen` 两条墨账；PUA 码表共享层读取侧（`pua_table_pin`）；书级钩子 `follow_ref_hooks.variant_rank` 等；五 patch 线（史記、殿本、全唐文）用的各档发版说明。
+
+### Changed
+- row_segment 1.50–1.54（印边墨、闭口方框字、叠横画数字、细横「一」、列端空格「一」不当框线／空白）；出单门：复审格旧人裁与现行字归一后相同不上单；重跑后覆盖逻辑清查；`status` 过期原因分出「语料钉变了」。
+- 异体边补 16 对兄弟异体；字对关系表 回/迴 定为纯形近。
+- 网站票读中心库 D1 的相关口径（manager v0.5.0 配套；cv 侧只动 `scripts/zhengli`，不进 Step 指纹）。
+
+### Removed
+- 作废版本：v0.7.81（底子错，用 v0.7.82）。
+
+影响：本版新增项都**缺省关**，各书不重跑不变；开了才改识别结果的是 5a/5b/seed_admit 新开关与 row_segment 1.50–1.54。逐步的 `code_hash` 变化见各 PATCH 节；跑哪册要不要重跑，仍以 `guji status` 的过期判断为准。
+
+**配底库 b33**（`check_base_corpus.py` 与 b33 一致，65 个文件；比 b32 多 `config/dicts/variants.pairkind.tsv`，已用 `guji corpus build-base` 建好）。钉旧底库的册要改钉 b33，否则起跑被语料校验拒绝。Wiki 已按 v0.8 重改。
+
 ## v0.7.0
 
 对比 `v0.6.39`。用户 11-09 定升 MINOR：书级代码搬出 cv（四库字母整数版本号）、模型文件搬出 git。tag 经 ai-team 中转站打在 main 的发版合并提交上。
@@ -170,7 +207,7 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 - guji-proof 0.2 审阅字段模块 `open_guji_cv/review/proof_fields.py`。
 - 统一字组接口 `open_guji_cv/groups/` 与统一评测 `open_guji_cv/eval/groups.py`（尚未被任何 Step 引用）。
 - 字组参数守卫 `tests/test_group_params_guard.py`：不许再往 `SeedAdmitParams` 加新的字组参数。
-- 包分层守卫 `tests/test_architecture.py` 与 `doc/module_map.md`。
+- 包分层守卫 `tests/test_architecture.py` 与 `doc/参考/module_map.md`。
 
 ### Changed
 - 版本号规矩改为 `vX.Y.Z` tag、按 PR 滚动升版（`doc/版本号规矩.md`）。

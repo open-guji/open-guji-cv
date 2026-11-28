@@ -25,7 +25,7 @@ from .book import BookSpec
 from .pipeline import Pipeline, _produces, resolve_params
 from .parallel import effective_jobs, is_parallel_safe, warm_first, worker_threads
 from .spec import gated_optional_on, live_optional_consumes, page_key
-from .step import STEPS, RunContext, Step, kind_of
+from .step import CPL_PAGES_STEPS as _CPL_PAGES_STEPS, STEPS, RunContext, Step, kind_of
 from ..products.cache import ImageCache
 from ..products.manifest import ManifestEntry
 from ..products.store import ProductStore
@@ -212,7 +212,8 @@ def _collapse_splits(mods: list[str]) -> list[tuple[str, str]]:
         first = min(idx)
         keep = [(i, pr) for i, pr in enumerate(pairs) if i == first or i not in idx]
         pairs = [((old, old_hash) if i == first else pr) for i, pr in keep]
-        mods = [mods[i] for i, _ in keep]
+        # 合回后的那一项按旧名记，后面的 SPLITS 条目可以把它当一块再合（书仓模块先改名回 cv 模块、再随 cv 的拆分合回）
+        mods = [(old if i == first else mods[i]) for i, _ in keep]
     return pairs
 
 
@@ -240,8 +241,9 @@ _FORMAL_CV = re.compile(r"^\d+\.\d+\.\d+$")     # 正式版 cv_version（不带 
 def params_hash(params: BaseModel, soft: tuple[str, ...] = (),
                 path: tuple[str, ...] = ()) -> str:
     """参数指纹。`soft`（`StepSpec.soft_params`）、`path`（`StepSpec.path_params`）里的
-    字段剔掉不算；两者都空的步与 2026-09-25 之前逐位相同。"""
-    d = params.model_dump(mode="json")
+    字段剔掉不算；两者都空的步与 2026-09-25 之前逐位相同。`context={"hash": True}` 让参数类分清
+    「算指纹」与「重建参数用的 dump」（seed_admit 改过缺省的键只在算指纹时按旧缺省去，见 `_DUMP_DROP_HASH`）。"""
+    d = params.model_dump(mode="json", context={"hash": True})
     for k in (*soft, *path):
         d.pop(k, None)
     return hashlib.sha256(json.dumps(d, sort_keys=True,
@@ -250,7 +252,7 @@ def params_hash(params: BaseModel, soft: tuple[str, ...] = (),
 
 def param_parts(params: BaseModel, soft: tuple[str, ...] = (), path: tuple[str, ...] = ()) -> dict[str, str]:
     """参数逐字段的短哈希（剔除口径同 `params_hash`）。记进 manifest，不进指纹；`stale_reason` 用它点名变了的字段。"""
-    d = params.model_dump(mode="json")
+    d = params.model_dump(mode="json", context={"hash": True})
     return {k: hashlib.sha256(json.dumps(v, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
             for k, v in sorted(d.items()) if k not in soft and k not in path}
 
@@ -308,6 +310,39 @@ class RunReport:
         }
 
 
+_LIB_STORE_FP_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def _lib_store_token(font: dict) -> str:
+    """库字档（`font.charset.lib_chars`）用的库内容指纹：`font.real_proto.stores`（缺省本书 `output/glyph_store`）
+    下 `instances/*.jsonl` 的内容 sha256。路径解析与 `clustering.cnn_candidates.book_real_proto` 同一口径
+    （相对路径按工作区根）；写在 core 里是因为 core 不许反过来 import clustering。库不存在时是 `none`。"""
+    from .workspace import workspace_root
+    stores = ((font.get("real_proto") or {}).get("stores")) or ["output/glyph_store"]
+    base = workspace_root() or Path(__file__).resolve().parents[2]
+    parts = []
+    for st in stores:
+        d = Path(st)
+        d = (d if d.is_absolute() else base / d) / "instances"
+        if not d.exists():
+            continue
+        for jf in sorted(d.glob("*.jsonl")):
+            stt = jf.stat()
+            key = (str(jf), stt.st_size, stt.st_mtime_ns)
+            fp = _LIB_STORE_FP_CACHE.get(key)
+            if fp is None:
+                fp = _LIB_STORE_FP_CACHE[key] = hashlib.sha256(jf.read_bytes()).hexdigest()[:16]
+            parts.append(f"{jf.name}:{fp}")
+    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:12] if parts else "none"
+
+
+#: 双线版框下端剥层修订号（见 `_self_payload` 里 `frame_layer_rev` 一段）。改 `impl/keben/column.py` 里
+#: `frame_layers` 下端 ≥2 才走到的剥层判据、又登了 code_equiv 时 +1。
+#: 1：cv #1891，下端第三道线只认边距证据，末字「二／三」下横不再被当框剥掉（殿本 ZM 报，2026-11-25）。
+#: 2：CV1 补 #1891，第三道候选离 Step1 内框线 >10 行的也只认边距证据（vol04 p207c6、vol05 p149c6 等末字下横离内框线 13 行白）。
+FRAME_LAYER_REV = 2
+
+
 def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False) -> dict:
     """指纹里**不含上游**的那部分：步 id、版本、参数、代码、册配置。
     `fingerprint` = 它 + 上游 sha；`self_hash` = 只有它（格级复用的判据，见 core/reuse.py）。
@@ -323,16 +358,35 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     # （Step1 版框、Step2 矫正、Step3 切格、Step4 收框…），没法靠某一步的
     # `book_deps` 覆盖全，所以在这里统一进指纹。
     # 只在开启时写这个键：关着的册（四庫等）指纹逐位不变，不触发全量重跑。
-    if getattr(book, "binarized_input", False):
+    if getattr(book, "ink", None) is not None:
+        # 册级墨层（`utils/ink.py`，用户 11-17 定）：同 `bin_input` 的理由，换的是 `ctx.raw_page` 本身，统一进指纹；
+        # 写了 `ink` 时 `binarized_input` 不起作用，所以不再写 `bin_input`。没写 `ink` 的册指纹逐位不变。
+        payload["ink"] = book.ink.token()
+    elif getattr(book, "binarized_input", False):
         payload["bin_input"] = True
     # 左右外框规则 `side_frame`（版面，2026-11-23）：只给 border_detect、且写了的册加键，没写的册指纹逐位不变
     # （不进 `book_deps`，同 rare_charset，见 core/ref_profile.py 模块头）。
     if step.spec.id == "border_detect" and getattr(book, "side_frame", None):
         payload["side_frame"] = dict(sorted(book.side_frame.items()))
+    # 双线版框下端剥层修订号（2c column_end，2026-11-25 CV0 定，cv #1891）：`impl/keben/column.py` 里只有册配置
+    # `frame_layers.bottom >= 2` 才走到的剥层逻辑一改，模块哈希登 code_equiv（别的书逐字节不变、不白过期），
+    # 再把这个修订号 +1，只让下端两层的册（现在只有殿本）从 column_end 起判过期。没声明两层的册不写这个键，指纹逐位不变。
+    if step.spec.id == "column_end" and int((getattr(book, "frame_layers", None) or {}).get("bottom", 1) or 1) >= 2:
+        payload["frame_layer_rev"] = FRAME_LAYER_REV
+    # 按页每列字数 `chars_per_line_pages`（2026-11-27，朱楓林集序页）：读每列格数的步，只在写了表的册加键（整张表），
+    # 没写的册指纹逐位不变（不进 `book_deps`，同 side_frame）。
+    if step.spec.id in _CPL_PAGES_STEPS and getattr(book, "chars_per_line_pages", None):
+        payload["cpl_pages"] = {str(k): int(v) for k, v in sorted(book.chars_per_line_pages.items())}
     # Step5-b 的字表语料由册配置 `rare_charset` 指定（参校本属性 C 块）：只在写了的册加键，没写的册指纹逐位不变
     # （不进 `book_deps`，那会让所有册指纹变，见 core/ref_profile.py 模块头）。
     if step.spec.id == "rare_candidates" and getattr(book, "rare_charset", None):
         payload["rare_charset"] = book.rare_charset
+    # 库字档（`font.charset.lib_chars`，缺省关）：字表跟着本书字形库里人裁的字走，库长了产物要过期。
+    # 只在开着的册加键（库的内容指纹），没开的册指纹逐位不变。
+    if step.spec.id == "rare_candidates":
+        font = getattr(book, "font", None) or {}
+        if (font.get("charset") or {}).get("lib_chars"):
+            payload["lib_chars"] = _lib_store_token(font)
     # 册钉了语料库版本，且这一步读语料：整步带上版本号（`core/corpus_pin.CORPUS_STEPS`）。
     # 没钉的册不写这个键，指纹逐位不变。
     from .corpus_pin import step_pin_token
@@ -349,6 +403,10 @@ def ref_profile_token(step: Step, book: BookSpec, page: int) -> str | None:
         return None
     prof = getattr(book, "reference_profile", None)
     return prof.page_token(page) if prof is not None else None
+
+
+def _hash24(payload: dict) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
 
 
 def self_hash(step: Step, book: BookSpec, params: BaseModel) -> str:
@@ -455,7 +513,7 @@ class Engine:
             return ups
         wants = set(step.spec.consumes) | (set(step.spec.optional_consumes) - off)
         needs = self.pipeline.needs.get(step.spec.id, [])
-        return [u for u in ups if (_produces(STEPS[u]) & wants) or u in needs]
+        return [u for u in ups if (_produces(STEPS[u], self.pipeline.steps) & wants) or u in needs]
 
     def _upstream_sha(self, kind: str, page: int) -> str | None:
         """一个上游种类这一页的 sha，拿不到返回 None（调用方决定算不算阻塞）。"""
@@ -533,6 +591,14 @@ class Engine:
 
     def self_hash(self, step: Step) -> str:
         return self_hash(step, self.book, self._params(step))
+
+    def _corpus_fields(self, step: Step) -> dict:
+        """写进条目的语料钉（只给 `stale_reason` 用，不进指纹）：读语料的步记总号与内容串，没钉记 0／空串；别的步不记。"""
+        from .corpus_pin import CORPUS_STEPS, step_pin_token
+        if step.spec.id not in CORPUS_STEPS:
+            return {}
+        return {"corpus_pin": int(getattr(self.book, "corpus", None) or 0),
+                "corpus": step_pin_token(step.spec.id, self.book) or ""}
 
     # ── 状态 ─────────────────────────────────────────────────────────
     def page_status(self, step: Step, page: int) -> tuple[str, ManifestEntry | None]:
@@ -677,18 +743,64 @@ class Engine:
                 now_parts = param_parts(self._params(step), step.spec.soft_params, step.spec.path_params)
                 diff = sorted(k for k in {*now_parts, *entry.param_parts}
                               if now_parts.get(k) != entry.param_parts.get(k))
-                # 改名时封存过的字段（`seal_rename`）旧→新对得上，不是这一页过期的原因，不列（MJ 11-28：列出来易误读）
-                sealed = (self._rename_marker().get("sealed") or {}).get(step.spec.id) or {}
-                diff = [k for k in diff
-                        if list(sealed.get(k) or ()) != [entry.param_parts.get(k), now_parts.get(k)]] or diff
                 if diff:
                     return "参数变了：" + "、".join(diff)
             return "参数变了"
         if (entry.upstream or {}) != (ups or {}):
             return "上游产物变了"
+        cr = self._corpus_reason(step, entry, ph)
+        if cr:
+            return cr
         if now is not None and entry.book is None:
             return "代码或册配置变了（" + "/".join(sorted(now)) + "；旧条目没记册配置原值）"
         return "代码或版本变了"
+
+    def _corpus_reason(self, step: Step, entry: ManifestEntry, ph: str) -> str | None:
+        """读语料的步（`CORPUS_STEPS`）只因册的语料钉变了而过期 → 「语料钉变了：corpus 6→8（代码未变）」。
+
+        新条目记着 `corpus`／`corpus_pin`，直接比；老条目没记，就拿记下的 `self_hash` 试：把指纹里的语料串换成
+        钉子账里每个旧总号（以及「没钉」）的串重算，对上了＝代码、参数、册配置都没变，只是语料钉变了。
+        分不出（代码也变了，或旧总号的清单找不到）返回 None，照旧报「代码或版本变了」。只报原因，不改过期判定。"""
+        from .corpus_pin import CORPUS_STEPS, corpus_token, load_pins, step_pin_token
+        if step.spec.id not in CORPUS_STEPS:
+            return None
+        try:
+            tok_now = step_pin_token(step.spec.id, self.book) or ""
+        except Exception:  # noqa: BLE001 —— 钉子账读不到只是说不清原因，不拦状态
+            return None
+        pin_now = getattr(self.book, "corpus", None) or 0
+        name = lambda n: str(n) if n else "未钉"   # noqa: E731
+        base = {k: v for k, v in _self_payload(step, self.book, ph).items() if k != "corpus"}
+        same_self = lambda tok: bool(entry.self_hash) and _hash24({**base, "corpus": tok} if tok else base) == entry.self_hash  # noqa: E731
+        if entry.corpus is not None:
+            if entry.corpus == tok_now:
+                return None
+            old = name(entry.corpus_pin)
+            if same_self(entry.corpus):
+                return f"语料钉变了：corpus {old}→{name(pin_now)}（代码未变）"
+            return f"代码或版本变了；语料钉也变了：corpus {old}→{name(pin_now)}"
+        if not entry.self_hash:
+            return None
+        cands: list[tuple[int, str]] = [(0, "")]
+        try:
+            from .workspace import workspace_root
+            ws = workspace_root()
+            for r in load_pins(ws, getattr(self.book, "id", None) or ""):
+                n = int(r["n"])
+                if n == pin_now:
+                    continue
+                try:
+                    cands.append((n, corpus_token(ws, n, getattr(self.book, "id", None))))
+                except Exception:  # noqa: BLE001 —— 旧总号清单不在本机：这个候选跳过
+                    continue
+        except Exception:  # noqa: BLE001
+            pass
+        for n, tok in cands:
+            if tok == tok_now:
+                continue
+            if same_self(tok):
+                return f"语料钉变了：corpus {name(n)}→{name(pin_now)}（代码未变）"
+        return None
 
     def _page_status_row(self, step: Step, pages: list[int],
                           upstream_fresh: dict[int, bool],
@@ -784,7 +896,7 @@ class Engine:
                 if gaps:
                     row["optional_gaps"] = gaps
                 out[sid] = row
-            gate = step.spec.gate
+            gate = self.pipeline.gate_of(sid)
             if gate:
                 gate_step = STEPS[gate.id]
                 gate_upstream_fresh = {pg: page_state.get(pg) == FRESH for pg in pages}
@@ -803,6 +915,7 @@ class Engine:
         跑完就清，下一步照样现算。"""
         run_perf = getattr(self, "_perf", None)
         self._sp = run_perf.step(step.spec.id, len(pages), jobs) if run_perf is not None else None
+        prev_step_id, self.ctx.step_id = self.ctx.step_id, step.spec.id   # `RunContext.LUMA_STEPS`：写了 ink 的册上认印读原样亮度
         try:
             if getattr(self, "_pcache", None) is not None:   # 已在 status() 之类的缓存范围里
                 return self._run_one_step_pages(step, pages, report, force, stop_on_error, total, done, jobs)
@@ -812,6 +925,7 @@ class Engine:
             finally:
                 self._pcache = self.ctx._params_memo = None
         finally:
+            self.ctx.step_id = prev_step_id
             if self._sp is not None:
                 self._sp.finish()
             self._sp = None
@@ -923,7 +1037,7 @@ class Engine:
                 manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                            params_hash=ph, upstream=ups or {},
                                            code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
-                                           self_hash=self.self_hash(step),
+                                           self_hash=self.self_hash(step), **self._corpus_fields(step),
                                            soft=soft_values(step, self.ctx.params_for(step)),
                                            param_parts=param_parts(self._params(step), step.spec.soft_params,
                                                                    step.spec.path_params),
@@ -1057,7 +1171,7 @@ class Engine:
                 manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                            params_hash=ph, upstream=ups or {},
                                            code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
-                                           self_hash=self.self_hash(step),
+                                           self_hash=self.self_hash(step), **self._corpus_fields(step),
                                            soft=soft_values(step, self.ctx.params_for(step)),
                                            param_parts=param_parts(self._params(step), step.spec.soft_params,
                                                                    step.spec.path_params),
@@ -1147,8 +1261,8 @@ class Engine:
     def _run(self, steps: list[str], pages: list[int], force: bool, stop_on_error: bool,
              jobs: int) -> RunReport:
         report = RunReport(self.book.id, self.pipeline.id, list(steps), list(pages))
-        gated_extra = [STEPS[s].spec.gate.id for s in steps
-                       if STEPS[s].spec.gate and STEPS[s].spec.gate.id not in steps]
+        gated_extra = [self.pipeline.gate_of(s).id for s in steps
+                       if self.pipeline.gate_of(s) and self.pipeline.gate_of(s).id not in steps]
         total = len(pages) * (len(steps) + len(gated_extra))
         done = 0
         for sid in steps:
@@ -1158,7 +1272,7 @@ class Engine:
             if stopped:
                 report.finished_at = time.time()
                 return report
-            gate = step.spec.gate
+            gate = self.pipeline.gate_of(sid)
             if gate and gate.id not in steps:
                 gate_step = STEPS[gate.id]
                 done, stopped = self._run_one_step(gate_step, pages, report, force,
@@ -1252,6 +1366,7 @@ def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
     _worker_step = STEPS[step_id]
     _worker_ctx = RunContext(book, ProductStore(store_root), ImageCache(cache_root, cache_limit),
                              params, log=lambda s: None, pipeline=pipeline)
+    _worker_ctx.step_id = step_id
     _worker_ctx._params_memo = {}         # worker 只跑这一步：参数每进程构造一次（同 `Engine._run_one_step`）
 
 

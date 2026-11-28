@@ -71,7 +71,7 @@ from pathlib import Path
 
 from ..gold.drift import FP_TOL
 from .anchor import parse_cell_key, patch_key, patch_path, quad_bbox
-from .events import counts_as_human
+from .events import counts_as_pin
 
 IOU_SAME = 0.85       # 框几乎没动：原图上同一块像素，必是同一个字，不再看图块（图块会因 Step4 去噪/收紧而变）
 IOU_OK = 0.6          # 重合到这个程度、且图块也像，才算「还是那一格」
@@ -98,6 +98,27 @@ def strict_enabled() -> bool:
 _MEMO: dict = {}
 _PAGE_MEMO: dict = {}    # (书, 产物库根, 页) → (cells_sha, 本页事件签名, rows)；提交一条裁决只让它那一页失效（GUJI-525）
 _VERSION = 8          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点；6：图像指纹优先、行加 fp_diff；7：缓存键加字块那一步的 sha、字块图验戳；8：缓存缺字块图现切、行加 why=no_patch）
+
+
+def _algo_hash() -> str:
+    """绑定算法的代码哈希（本模块＋anchor＋anchor_backfill 源码）：进缓存键（2026-11-26，GM2／CV0）。
+    `feedback/bindings/` 随中心库同步，别的机器、别的 cv 版本算的缓存只看 cells_sha＋事件签名＋_VERSION 就会被沿用；
+    加上它，算法一改缓存自动作废，不用记得手动加 _VERSION。"""
+    global _ALGO
+    if _ALGO is None:
+        import hashlib
+        h = hashlib.sha256()
+        here = Path(__file__).parent
+        for n in ("bindings.py", "anchor.py", "anchor_backfill.py"):
+            try:
+                h.update((here / n).read_bytes())
+            except OSError:
+                h.update(n.encode())
+        _ALGO = h.hexdigest()[:16]
+    return _ALGO
+
+
+_ALGO: str | None = None
 
 #: 字块图（`char_patch`）是哪一步切的：它的产物 sha 就是缓存图上记的戳（`engine._stamp_cache`）。
 PATCH_STEP = "cell_shrink"
@@ -287,12 +308,62 @@ def _sorted_events(log) -> list:
     return sorted(iter_events_readonly(log), key=lambda e: (e.ts, e.batch, e.seq))
 
 
+# ── 删钉垫片 `pin_removed`（GM4 方案第九节，2026-11-26 定 A）───────────────────────────
+# manager 删钉只写钉状态流 `pin_state`（本机 `<feedback>/pins/<册>.state.jsonl`，只追加，一行一条）：
+# 每个 `pin_id` 取最后一条，`payload.v == "removed"` 的，它 `payload.events` 列的答案事件 cv 不再当钉用
+# （不进 human_chars、不进绑定表）；`expired`（仍照套）／`reactivated` 不删。没有这些文件时行为与原来逐字节同。
+# 钉状态和事件一样是数据、不进指纹：写了 removed 要从 seed_admit 起 force 重放。cv 改读编好的钉表后去掉。
+_PIN_STATE_MEMO: dict = {}
+
+
+def removed_pin_events(root) -> frozenset[str]:
+    """`<root>/pins/*.state.jsonl` 里最后状态为 removed 的钉所列答案事件 id。"""
+    d = Path(root) / "pins"
+    try:
+        files = sorted(d.glob("*.state.jsonl"))
+    except OSError:
+        return frozenset()
+    if not files:
+        return frozenset()
+    sig = tuple((f.name, f.stat().st_mtime_ns, f.stat().st_size) for f in files)
+    hit = _PIN_STATE_MEMO.get(str(d))
+    if hit and hit[0] == sig:
+        return hit[1]
+    last: dict[str, tuple[tuple, dict]] = {}
+    n = 0
+    for f in files:
+        for line in f.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            p = row.get("payload") if isinstance(row.get("payload"), dict) else row
+            pid = p.get("pin_id")
+            if not pid:
+                continue
+            n += 1
+            key = (str(p.get("at") or row.get("ts") or ""), n)      # 同一钉后到覆盖先到；同刻按文件顺序
+            if pid not in last or key >= last[pid][0]:
+                last[pid] = (key, p)
+    out = frozenset(str(x) for _, p in last.values() if p.get("v") == "removed" for x in (p.get("events") or ()))
+    _PIN_STATE_MEMO[str(d)] = (sig, out)
+    return out
+
+
+def _log_root(log):
+    r = getattr(log, "root", None)
+    if r is None:
+        from ..core.workspace import feedback_root
+        return feedback_root()
+    return r
+
+
 def _verdict_events(book: str, log, evs: list | None = None) -> dict[int, list]:
     """本书逐格裁决事件（confirm 类），按页分组、按时间排序。`evs`：已排好的 `_sorted_events(log)`。"""
     out: dict[int, list] = {}
+    gone = removed_pin_events(_log_root(log))
     for e in (evs if evs is not None else _sorted_events(log)):
-        if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_human(e):
-            continue                  # 看图结论不进绑定表（overview#428）：绑定表只给人裁找回格
+        if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_pin(e) or e.id in gone:
+            continue                  # 看图结论不进绑定表（overview#428）：绑定表只给人裁找回格；删了的钉也不进
         pk = parse_cell_key(e.target.key)
         if pk is None or pk[0] != book:
             continue
@@ -612,7 +683,7 @@ def page_bindings(book: str, page: int, events: list, store=None, cache=None, gl
     if not refresh and f.exists():
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
-            if (d.get("v") == _VERSION and d.get("cells_sha") == cells_sha and d.get("sig") == sig
+            if (d.get("v") == _VERSION and d.get("algo") == _algo_hash() and d.get("cells_sha") == cells_sha and d.get("sig") == sig
                     and not any(r.get("why") == "no_patch" for r in d["rows"])):
                 return d["rows"]              # 带 no_patch 的行不信缓存：字块图可能已经有了
         except Exception:
@@ -625,7 +696,7 @@ def page_bindings(book: str, page: int, events: list, store=None, cache=None, gl
     # 绑定，直接 write_text 会让别的进程读到半个文件（读坏会被上面吞掉重算，但写本身会互相截断）。
     import os
     tmp = f.with_name(f"{f.stem}.tmp{os.getpid()}.json")
-    tmp.write_text(json.dumps({"v": _VERSION, "cells_sha": cells_sha, "sig": sig,
+    tmp.write_text(json.dumps({"v": _VERSION, "algo": _algo_hash(), "cells_sha": cells_sha, "sig": sig,
                                "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                                "rows": rows}, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, f)
@@ -698,7 +769,8 @@ def usable(row: dict | None, event_ts: str | None = None) -> str | None:
 
 
 def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
-                          lost: dict[str, dict] | None = None) -> dict[str, str]:
+                          lost: dict[str, dict] | None = None,
+                          relabeled_at: dict[str, str] | None = None) -> dict[str, str]:
     """字形库人裁（`seed_admit._human_shapes`，按入库时的编号）→ 现在该落的编号。
 
     以该编号**最后一条**裁决事件的绑定状态为准：仍有效照旧、顺移了改绑、其余丢掉。
@@ -707,7 +779,14 @@ def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
     库里有而事件日志里没有的（很老的数据）原样保留——没有依据就不动，与 09-25 之前一致。
     传 `lost`（空 dict）时，因绑定不可用而丢掉的那些按原编号记进去（同 `lookup.human_chars` 的 `lost`）；
     「人后来改判」那种不算丢。
+
+    `relabeled_at`（2026-11-18）：`{编号: 入库时刻}`，只含库内审阅改标（`glyph_audit relabel`）重进的人裁刻例。
+    改标时旧人裁事件被作废（`stale_verdicts.tsv`），而改标本身不是 confirm 事件：以前这里见「作废之后没有再裁」
+    就把库里**新改的字**也丢了，又因「最后一条裁决的字与库里不同」再丢一次——改标永远进不了文本，机器照旧放行旧字
+    （全唐文 b3 整轮重算后仍有 10 格：侯 被放成 𠋫、𡽪 被放成 徽）。作废时刻当时或之后改标重进的，库里这份就是最新的人裁：
+    不算作废、不因旧事件的字不同而丢；落在哪一格仍照绑定表。
     """
+    relabeled_at = relabeled_at or {}
     try:
         b = book_bindings(book, log)
     except Exception:
@@ -723,7 +802,9 @@ def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
         stale = {}
     for k, ch in shapes.items():
         r = latest.get(k) if k.startswith(book + ":") else None
-        if k in stale:
+        at = "".join(c for c in (relabeled_at.get(k) or "")[:16] if c not in "-:")     # 20261118T0637
+        fresh = bool(at) and k in stale and at[:len(stale[k])] >= stale[k]
+        if k in stale and not fresh:
             # 作废标记（字形库 human_stale_* 或 stale_verdicts.tsv）：撤下时刻之后没有再裁的，库里这份不再算人裁。
             # 否则重绑只看「该格号最新事件的锚」，误锚的人裁会在重绑后落到别的格（vol01 182:9:15a 变「宅」，11-13）。
             st = stale[k]
@@ -734,7 +815,7 @@ def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
         if r is None:
             out[k] = ch
             continue
-        if r.get("shape") and r["shape"] != ch:
+        if r.get("shape") and r["shape"] != ch and not fresh:
             continue       # 库里是旧裁决，之后人改判了：让事件那条路（human_chars）给新字，库里这份作废
         nk = usable(r)
         if nk:

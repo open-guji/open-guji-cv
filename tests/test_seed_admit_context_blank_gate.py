@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import open_guji_cv.steps  # noqa: F401
 from helpers import make_book, make_ctx, page_chars, page_decision, page_match, write_product
+from open_guji_cv.steps.seed_admit_params import _CONSTANTS
 from open_guji_cv.core.step import STEPS, RunContext
 from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.products.store import ProductStore
@@ -67,15 +68,6 @@ def test_normal_ink_char_still_admitted_via_context(tmp_path, monkeypatch):
     assert r.admit and r.channel == "context", f"正常墨量的格不该被拦：{r.doubts}"
 
 
-def test_gate_can_be_switched_off(tmp_path, monkeypatch):
-    """开关关了退回改动前的行为——「只加不改」的验证判据。"""
-    ctx = _ctx(tmp_path, monkeypatch, params=SeedAdmitParams(context_blank_gate=False))
-    sa = _run(ctx, **_BLANK_CASE)
-    r = _all(sa)[0]
-    assert r.admit and r.channel == "context", (
-        f"关掉闸该退回原行为（放行）：{r.channel}/{r.doubts}")
-
-
 def test_missing_char_index_does_not_block(tmp_path, monkeypatch):
     """没有 `char_index` 产物（老测试/老产物）时不该挡——不知道墨量就不拦，这是
     「拿不准就保持基线」的落法，同 `_align` 缺失时的处理一致。"""
@@ -99,7 +91,8 @@ def test_normal_aspect_cell_still_admitted_via_context(tmp_path, monkeypatch):
     r = _all(_run(_ctx(tmp_path, monkeypatch), **case))[0]
     assert r.admit and r.channel == "context", r.doubts
     tall = {**_BLANK_CASE, "char_recs": [dict(slot=1, ink_ratio=0.3, width=33.0, height=108.0)]}
-    r = _all(_run(_ctx(tmp_path, monkeypatch, params=SeedAdmitParams(context_max_aspect=0)), **tall))[0]
+    monkeypatch.setitem(_CONSTANTS, "context_max_aspect", 0)
+    r = _all(_run(_ctx(tmp_path, monkeypatch), **tall))[0]
     assert r.admit and r.channel == "context", r.doubts
 
 

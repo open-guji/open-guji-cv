@@ -457,6 +457,45 @@ def test_detect_outer_borders_rejects_when_ink_continues_beyond():
     assert abs(abs(r["top_outer_offset"]) - (40 + 6)) < 4      # 上边不受连累
 
 
+def _big_outer_page(gap=40, bar=56, pitch=350, n=10, top_y=600, bot_y=2600):
+    """全唐文那样的大图：列距 ~350px、外框粗条厚 ~56px，外延离内框线 gap+bar≈96px（> OUTER_GAP_MAX=78）。"""
+    w = int(pitch * (n - 1) + 600)
+    h = bot_y + 400
+    mask = np.zeros((h, w), dtype=np.float64)
+    xs_old = [300 + pitch * i for i in range(n)]
+    for x_old in xs_old:
+        mask[top_y:bot_y, x_old - 3:x_old + 4] = 1.0
+    mask[top_y:top_y + 8, :] = 1.0
+    mask[bot_y - 8:bot_y, :] = 1.0
+    x_in = xs_old[0]
+    mask[top_y:bot_y, x_in - gap - bar:x_in - gap] = 1.0
+    mask[top_y - gap - bar:top_y - gap, :] = 1.0
+    mask[bot_y + gap:bot_y + gap + bar, :] = 1.0
+    top = HLine(y_at_right=float(top_y + 4), slope=0.0, kind="top")
+    bottom = HLine(y_at_right=float(bot_y - 4), slope=0.0, kind="bottom")
+    verticals = [VLine(x_at_top=float((w - 1) - x), slope=0.0) for x in xs_old[::-1]]
+    return mask, top, bottom, verticals, w, h
+
+
+def test_detect_outer_borders_outer_scale_big_page():
+    """`outer_scale`（2026-11-26）：大图外框粗条超出殿本标的窗口与厚度上限，关着量不到双框；开了按列距放大后量到外延。"""
+    mask, top, bottom, verts, w, h = _big_outer_page()
+    off = detect_outer_borders(mask, top, bottom, verts, width=w, height=h)
+    assert off["top_frame_kind"] != "double" or abs(off["top_outer_offset"]) <= 78
+    on = detect_outer_borders(mask, top, bottom, verts, width=w, height=h, outer_scale=True)
+    assert on["v_outer_side"] == "left"
+    for k in ("v_outer_offset", "top_outer_offset", "bottom_outer_offset"):
+        assert abs(abs(on[k]) - (40 + 56 + 4)) < 8, (k, on[k])
+    assert on["top_frame_kind"] == on["bottom_frame_kind"] == "double"
+
+
+def test_detect_outer_borders_outer_scale_noop_on_small_pitch():
+    """列距 ≤ OUTER_REF_PITCH 的页（殿本、脈經、史記）开不开 `outer_scale` 结果全同。"""
+    mask, top, bottom, verts = _outer_page(gap=40)
+    assert (detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200)
+            == detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200, outer_scale=True))
+
+
 # ---------------------------------------------------------------- 界行折线
 
 from open_guji_cv.seg.polyline import fit_vlines_polyline, gutter_projection
@@ -595,3 +634,27 @@ def test_head_raise_fit_leaves_double_raise_alone():
     a = {r.col: r.inner_y for r in detect_head_raise(mask, top, verts, width=1000)}
     b = {r.col: r.inner_y for r in detect_head_raise(mask, top, verts, width=1000, fit=True)}
     assert a == b
+
+
+def test_fit_head_raise_terminates_on_noop_update():
+    """`_fit_head_raise` 不许死循环（脈經 01 p67，v0.9.2）：本列按粗框条＋间距推出的内框仍比邻列低出
+    HR_FIT_TOL 以上时，下一轮又推到同一个值——原先每轮都置 changed，while 永不结束。"""
+    import threading
+    import numpy as np
+    from open_guji_cv.impl.keben import border as bg
+    from open_guji_cv.seg.frame_types import HeadRaiseBorder
+
+    g = bg._HRGeom(1.0)
+    curve = np.zeros(200)
+    curve[60:70] = 0.9                                   # 一道粗框条，外延 59.5；59.5 + 38 = 97.5
+    out = [HeadRaiseBorder(col=1, inner_y=88.0, outer_y=50.0),
+           HeadRaiseBorder(col=2, inner_y=120.0, outer_y=82.0)]
+    res = {}
+    th = threading.Thread(target=lambda: res.setdefault("r", bg._fit_head_raise(out, [None, (curve, 0)], set(), g)),
+                          daemon=True)
+    th.start()
+    th.join(timeout=10)
+    assert not th.is_alive(), "_fit_head_raise 死循环"
+    r = {b.col: b for b in res["r"]}
+    assert r[2].inner_y == 97.5 and r[2].estimated
+    assert r[1].inner_y == 88.0

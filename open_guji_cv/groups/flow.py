@@ -97,6 +97,7 @@ class FlowConfig:
     tolerate_extra: dict = field(default_factory=dict)  # 组 id → 书级追加的陪衬字（叠在 `FlowSpec.tolerate` 上；seed_admit `group_flow_tolerate_extra`）
     rr_model: str | None = None
     rr_p: float = 0.5
+    ref_alias: dict = field(default_factory=dict)      # 书级：整理本（及坐标对位）字进字组流程前先换成本书刻的字（{間: 閒}；本书无此字、整理本的字来自模板；seed_admit `group_flow_ref_alias`，全唐文 11-20）
     coord_outside_skip: bool = False                   # 现役对位缺这一格、坐标对位字是组外字（非组员、非陪衬、非〓）时不补放入组（A24 Z01 深挖 2026-11-06；seed_admit `group_flow_coord_outside_skip`）
     lift_ref_guard: bool = True                        # 补放与整理本互证（`group_flow_pass`，seed_admit `group_flow_lift_ref_guard`）
     codepoint_min_cov: float = 0.91                    # 码位法（`methods.Codepoint`）给字要库首位 cov 到这个数：更低的多是褪墨页（vol44:213:9:12 郞 0.90 看不清）
@@ -268,6 +269,11 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         return g, "lift"
     for g in groups_in(top, cfg.groups):      # 库首位与整理本（缺位时坐标对位）字同在本组：分差内的组外字不拦（`FlowSpec.ref_top_enter`）
         if GROUPS[g].flow.ref_top_enter and rr and (rr in GROUPS[g].members or canon(rr) in GROUPS[g].members):
+            return g, "lift"
+    for g in groups_in(top, cfg.groups):      # 库首位与整理本（缺位时坐标对位）字同在本组、分差内的组外字都在 `ref_top_extra` 里（库补常用字的新邻字）
+        f = GROUPS[g].flow
+        if f.ref_top_extra and rr and (rr in GROUPS[g].members or canon(rr) in GROUPS[g].members) and all(
+                c in GROUPS[g].members or c in _tol(g, cfg) or c in f.ref_top_extra for c, v in cands[1:] if c1 - v < cfg.delta):
             return g, "lift"
     for g in groups_in(top, cfg.groups):      # 整理本与库首位都是本组暂归一的写法、领先组外字够：分差内的组外形近字不拦（`pv_ref_gap`）
         if not _rf(g, cfg) and _pv_ref_ok(g, cands, ref, cfg, canon):
@@ -743,6 +749,11 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
     """`seq`：本页读序展平的放行记录；`amap`：{id: (整理本字, op)}；`cands_of(id)`：库候选 [(字, cov)]；
     `blocked(r)`：硬护栏（遮挡、超时、排除、非字…），True 的格不进流程。就地改 `seq` 里的记录。
     `veto_refs`：{id: 坐标对位字}，只在现役对位缺这一格时用来拦补放（`cfg.lift_ref_guard`），不参与判字。"""
+    if cfg.ref_alias:                        # 书级整理本字别名（全唐文 間→閒：本书只刻 閒，整理本 間 不算异议）
+        al = cfg.ref_alias
+        amap = {k: ((al.get(v[0], v[0]),) + tuple(v[1:])) if v and v[0] else v for k, v in amap.items()}
+        if veto_refs:
+            veto_refs = {k: al.get(v, v) if v else v for k, v in veto_refs.items()}
     entries = {}
     tol_hit = set()                          # 分差内（含 top1）有组外陪衬字的补放格（`FlowSpec.tolerate_ref_agree`）
     for i, r in enumerate(seq):
@@ -1016,7 +1027,8 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             else:
                 decision = "keep"
         r.evidence = {**(r.evidence or {}), "group": {"id": g, "mode": mode, "pick": ch, "why": why,
-                                                       "decision": decision, "solvers": trail}}
+                                                       "decision": decision, "solvers": trail,
+                                                       "members": "".join(sorted(GROUPS[g].members))}}
     return res
 
 

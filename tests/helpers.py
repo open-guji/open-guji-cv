@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -206,11 +207,11 @@ def run_border_to_column_gate(tmp_path, gray, borders, *, page: int = 1,
                     {"border_detect_gate_manifest": gate1 or make_gate1(
                         page, n_cols=borders.expected_cols,
                         expected_cols=book.expected_cols)})
-    return ctx, run_steps(ctx, page, ["column_warp", "column_gate"])
+    return ctx, run_steps(ctx, page, ["column_warp", "column_band", "column_end", "column_geometry", "column_gate"])
 
 
 #: 刻本链 Step2→Step4 的步骤序（含挂在出口的两道闸）。跑合成页时按需截断。
-KEBEN_STEPS = ["column_warp", "column_gate", "row_segment", "row_segment_gate",
+KEBEN_STEPS = ["column_warp", "column_band", "column_end", "column_geometry", "column_gate", "row_segment", "row_segment_gate",
                "cell_shrink"]
 
 
@@ -365,3 +366,26 @@ def dict_list(recs: list[dict]) -> list[dict]:
 def write_product(ctx, step_id: str, page: int, **kinds):
     """把产物摆进库（`{种类名: 产物}`）。种类名要与该步 `produces` 里的一致。"""
     ctx.store.write(ctx.book.id, step_id, f"p{page:04d}", kinds)
+
+
+@contextmanager
+def seed_admit_consts(**kv):
+    """临时换 seed_admit 收成常量的门槛（`seed_admit_params._CONSTANTS`，2026-11-24 起不再是参数）；退出时还原。
+
+    测试要验「门槛换个值行为怎么变」时用；`SeedAdmitParams(<常量>=别的值)` 会报「参数已退役」。"""
+    from open_guji_cv.steps.seed_admit_params import _CONSTANTS
+    bad = set(kv) - set(_CONSTANTS)
+    assert not bad, f"不是 seed_admit 常量：{bad}"
+    old = {k: _CONSTANTS[k] for k in kv}
+    _CONSTANTS.update(kv)
+    try:
+        yield
+    finally:
+        _CONSTANTS.update(old)
+
+
+def split_seed_admit_consts(params: dict) -> tuple[dict, dict]:
+    """把参数字典拆成（仍是参数的，收成常量的）两份，配 `seed_admit_consts` 用。"""
+    from open_guji_cv.steps.seed_admit_params import _CONSTANTS
+    return ({k: v for k, v in params.items() if k not in _CONSTANTS},
+            {k: v for k, v in params.items() if k in _CONSTANTS})

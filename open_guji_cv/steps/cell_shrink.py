@@ -20,11 +20,164 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.cells import ColumnCells, CutPointCandidates, PageCells
 from ..products.kinds.chars import CandidatePatch, CharRec, ColumnChars, PageChars
 from ..products.kinds.columns import PageWindows
+from ._colview import merged_windows
 from ._warpmap import ColumnMapper
 
 
 MANUAL_INK_FIT_REV = 2
 """`manual_ink_fit` 裁法修订号（进开了的书的参数 dump）。改 `_manual_fit_crop` 的产物就加 1。"""
+
+
+class InkMarkParams(BaseModel):
+    """`CellShrinkParams.ink_marks` 的判据（朱楓林集 01 册 13,668 字框实测，中位字宽 103px：印 6 格、墨点 16 格，见 `ink_mark_flags`）。"""
+    char_w: float | None = None
+    """参考字宽（px）；None＝本页正文字框宽中位数（本页正文字框不足 5 个时不判印的宽度一支）。大字序页中位数偏大，按书写定值更稳。"""
+    seal_w: float = 1.6
+    seal_ink: float = 0.45
+    frag_px: int = 60
+    frag_n: int = 15
+    speck_ink: float = 0.085
+    speck_aspect: float = 3.0
+
+
+def ink_mark_flags(ink: np.ndarray, width: float, height: float, char_w: float | None,
+                   p: InkMarkParams) -> list[str]:
+    """一个字框的墨迹记号：`ink` 是原图上字框内的二值墨（1＝墨）。→ [`ink_seal`] / [`ink_speck`] / []。
+
+    印：宽 ≥ `seal_w`×`char_w` 且墨比 ≥ `seal_ink`（实心印），或面积 ≤ `frag_px` 的连通块 ≥ `frag_n` 个（框线印，印文碎）；
+    墨点：墨量 < `speck_ink`×`char_w`² 且宽高比 < `speck_aspect`。朱楓林集 01 册：印中 9:5:7/8/10/11（序末两方实心印各占两格）、
+    37:1:19/20（卷端框线印），墨点 16 格（12 格非字墨点、4 格切坏半字），无误报。"""
+    import cv2
+    if ink.size == 0:
+        return []
+    out: list[str] = []
+    n, _lab, st, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
+    frags = int((st[1:, 4] <= p.frag_px).sum())
+    if (char_w and width >= p.seal_w * char_w and float(ink.mean()) >= p.seal_ink) or frags >= p.frag_n:
+        out.append("ink_seal")
+    elif char_w and int(ink.sum()) < p.speck_ink * char_w * char_w \
+            and max(width, height) / max(1.0, min(width, height)) < p.speck_aspect:
+        out.append("ink_speck")
+    return out
+
+
+def _mark_ink(ctx: RunContext, page: int, cols: list, p: InkMarkParams) -> None:
+    """`ink_marks`：逐个字格按原图量墨，旗加到 `CharRec.flags`（就地改）。"""
+    gray = ctx.raw_page(page)
+    H, W = gray.shape[:2]
+    char_w = p.char_w
+    if char_w is None:
+        ws = sorted(r.width for c in cols for r in c.chars if r.cell_type == "char" and not r.sub)
+        char_w = float(np.median(ws)) if len(ws) >= 5 else None
+    for c in cols:
+        for r in c.chars:
+            if r.cell_type != "char" or not r.bbox_page:
+                continue
+            x0, y0, x1, y1 = r.bbox_page               # 右上原点
+            lx0, lx1 = max(0, int(W - 1 - x1)), min(W, int(W - 1 - x0) + 1)
+            ya, yb = max(0, int(y0)), min(H, int(y1) + 1)
+            ink = (gray[ya:yb, lx0:lx1] < INNER_INK_THRESHOLD).astype(np.uint8)
+            for f in ink_mark_flags(ink, r.width, r.height, char_w, p):
+                if f not in r.flags:
+                    r.flags.append(f)
+
+
+#: 骑线字（row_segment `straddle_merge` 打的格旗）：`straddle:<左列>:<左格>` 记在右列（先读的那列）那一格上，
+#: `straddle_into:<右列>:<右格>` 记在左列被并掉的那一格上。
+STRADDLE_FLAG, STRADDLE_INTO_FLAG = "straddle:", "straddle_into:"
+
+
+def _straddle_partner(cell) -> tuple[int, int] | None:
+    for f in cell.flags or []:
+        if f.startswith(STRADDLE_FLAG):
+            c_, s_ = f[len(STRADDLE_FLAG):].split(":")
+            return int(c_), int(s_)
+    return None
+
+
+def straddle_patch(ctx: RunContext, page: int, cells: PageCells, col: int, slot: int, padding_ratio: float):
+    """骑线字的整字字块：右列 (col, slot) 与它旗上记的左列格两格合起来，在原图上取墨裁。→ (字块, bbox_tr) 或 None。
+
+    两格外接框内的连通块，质心落在框里、又不是长线（高 >1.5 格高或宽 >1.5 列宽：界行、框线）的留下，其余抹白；
+    按留下的墨收紧框、外扩 `padding_ratio`×格高。坐标：`bbox_tr` 右上原点（同 `CharRec.bbox_page`）。"""
+    import cv2
+    cc = cells.column(col)
+    cell = next((c for c in (cc.cells if cc else []) if c.slot == slot and not c.sub), None)
+    part = _straddle_partner(cell) if cell is not None else None
+    if part is None:
+        return None
+    oc = cells.column(part[0])
+    other = next((c for c in (oc.cells if oc else []) if c.slot == part[1] and not c.sub), None)
+    if other is None or not cell.quad_page or not other.quad_page:
+        return None
+    gray = ctx.raw_page(page)
+    H, W = gray.shape[:2]
+    pts = [*cell.quad_page, *other.quad_page]
+    bx0, bx1 = W - 1 - max(q[0] for q in pts), W - 1 - min(q[0] for q in pts)
+    by0, by1 = min(q[1] for q in pts), max(q[1] for q in pts)
+    per = float(cc.period or cells.period or (by1 - by0))
+    rw = float(cells.ref_w or (bx1 - bx0) / 2)
+    m = int(round(per * 0.5))
+    X0, Y0 = max(0, int(bx0) - m), max(0, int(by0) - m)
+    X1, Y1 = min(W, int(bx1) + m + 1), min(H, int(by1) + m + 1)
+    ink = (gray[Y0:Y1, X0:X1] < INNER_INK_THRESHOLD).astype(np.uint8)
+    n, lab, st, cen = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    keep = np.zeros(n, bool)
+    part_ids = []
+    ix0, iy0, ix1, iy1 = int(bx0) - X0, int(by0) - Y0, int(bx1) - X0 + 1, int(by1) - Y0 + 1
+    for i in range(1, n):
+        cx, cy = cen[i][0] + X0, cen[i][1] + Y0
+        if st[i, 2] > 1.5 * rw:
+            continue
+        if bx0 <= cx <= bx1 and by0 <= cy <= by1 and st[i, 3] <= 1.5 * per:
+            keep[i] = True
+        elif st[i, 3] <= 2.5 * per:
+            part_ids.append(i)
+    mask = keep[lab]
+    if part_ids:
+        # 跨格粘连的墨（朱楓林集 37 页「裔」「孫」连成一块）：本格框里占 ≥30% 的那块，只取框内那截
+        inner = np.zeros_like(mask)
+        inner[max(0, iy0):iy1, max(0, ix0):ix1] = True
+        for i in part_ids:
+            m_i = lab == i
+            got = m_i & inner
+            if got.sum() >= 0.3 * st[i, 4]:
+                mask |= got
+    if not mask.any():
+        return None
+    ys, xs = np.nonzero(mask)
+    pad = int(round(per * padding_ratio))
+    tx0, tx1 = max(0, int(xs.min()) - pad), min(X1 - X0, int(xs.max()) + pad + 1)
+    ty0, ty1 = max(0, int(ys.min()) - pad), min(Y1 - Y0, int(ys.max()) + pad + 1)
+    patch = gray[Y0:Y1, X0:X1].copy()
+    patch[~mask] = 255
+    patch = np.ascontiguousarray(patch[ty0:ty1, tx0:tx1])
+    lx0, lx1, ly0, ly1 = X0 + tx0, X0 + tx1 - 1, Y0 + ty0, Y0 + ty1 - 1
+    return patch, (float(W - 1 - lx1), float(ly0), float(W - 1 - lx0), float(ly1))
+
+
+def _apply_straddle(ctx: RunContext, page: int, cells: PageCells, out: list, padding_ratio: float) -> None:
+    """骑线字（Step3 `straddle_merge` 的格旗）：右列那格换成整字字块、外接框；左列那格记空、不出字块（就地改 `out`）。"""
+    recs = {(c.col, r.slot): r for c in out for r in c.chars if not r.sub}
+    for cc in cells.columns:
+        for cell in cc.cells:
+            part = _straddle_partner(cell)
+            if part is None or cell.sub:
+                continue
+            r, lr = recs.get((cc.col, cell.slot)), recs.get(part)
+            got = straddle_patch(ctx, page, cells, cc.col, cell.slot, padding_ratio)
+            if r is None or got is None:          # 左列那格 Step3 记空了，Step4 多半不发记录（lr 为 None），无需再记
+                continue
+            patch, box = got
+            key = r.patch_key or (cell_key(page, cc.col, cell.slot))
+            ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, patch))
+            r.patch_key, r.cell_type, r.bbox_page = key, "char", tuple(round(v, 2) for v in box)
+            r.width, r.height = float(box[2] - box[0]), float(box[3] - box[1])
+            r.cand_variants = []
+            r.flags = [f for f in r.flags if f != "lost_patch"] + [f"{STRADDLE_FLAG}{part[0]}:{part[1]}"]
+            if lr is not None:
+                lr.cell_type, lr.patch_key, lr.cand_variants = "empty", None, []
+                lr.flags = [f for f in lr.flags if f != "lost_patch"] + [f"{STRADDLE_INTO_FLAG}{cc.col}:{cell.slot}"]
 
 
 class CellShrinkParams(BaseModel):
@@ -62,6 +215,11 @@ class CellShrinkParams(BaseModel):
     """列端格剥版框横线时，线行段往上下连着长：覆盖够、跨度不够满宽的毛边行也算线（extractor.strip_frame_line
     `grow`）。缺省关＝旧行为。开（全唐文嘉慶本）：版框粗到 20 行，只有中间几行跨度满宽，毛边当「线外有墨」，
     第 1 列、列首、列尾格的字块整条带着框线，库首选认歪（功→可、明→所；Sheldon 11-03 标 9 格）。"""
+
+    long_rule_outer_only: bool = False
+    """剥界行／版框竖线（extractor.strip_long_rule）只认贴着图块外沿 LONG_RULE_OUTER 宽以内的一段。缺省关＝旧行为。
+    开（全唐文）：单字成列（「制」「敕」）时字缘就是这个字自己，刂 落在字缘外、列首又是列尾，长竖钩连到格底，
+    被当拐角框线整条抹掉（009:33:7:5、009:40:4:5，台账 R038）。"""
 
     inner_frame_cut: bool = True
     """整页拟合双边版框的内框细线，线上和线外的像素在列图上统一抹白，再切字块（seg.frame_line；Sheldon 11-04 定）。
@@ -121,14 +279,24 @@ class CellShrinkParams(BaseModel):
     （`_manual_fit_crop`）。缺省关＝旧行为（按框外扩 padding 直接裁）。开（史記）：正文定框多是满宽、上下相接的
     网格框，外扩的 padding 带进上下邻字，图块认错（08:124:5 连续 7 字、04:122:1、10:2:6；SJ 11-10 报）。"""
 
+    ink_marks: InkMarkParams | None = None
+    """格级墨迹记号（CV2 2026-11-28，朱楓林集 MBJ 报）：按原图上字框里的墨给字格打旗，下游 seed_admit `ink_marks` 据旗判非字。
+    `ink_seal`（藏书印：宽 ≥ seal_w×参考字宽且墨比 ≥ seal_ink，或面积 ≤ frag_px 的碎块 ≥ frag_n 个——框线印的印文碎）、
+    `ink_speck`（墨点：墨量 < speck_ink×参考字宽²且宽高比 < speck_aspect，扁的「一」不中）。参考字宽 `char_w`（px）不写就取本页正文字框宽中位数。
+    只打旗、不改框与字块。缺省 None＝关，不进 dump。判据与阈值见 `InkMarkParams`、`ink_mark_flags`。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
         d = handler(self)
+        if isinstance(d, dict) and self.ink_marks is None:
+            d.pop("ink_marks", None)
         if isinstance(d, dict) and not self.frame_line_max_off:
             d.pop("frame_line_max_off", None)
         if isinstance(d, dict) and not self.frame_line_grow:
             d.pop("frame_line_grow", None)
+        if isinstance(d, dict) and not self.long_rule_outer_only:
+            d.pop("long_rule_outer_only", None)
         if isinstance(d, dict) and not self.jiazhu_end_halves:
             d.pop("jiazhu_end_halves", None)
         if isinstance(d, dict) and not self.jiazhu_strip_rules:
@@ -402,7 +570,7 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 class CellShrinkStep(Step):
     spec = StepSpec(
         id="cell_shrink", title="Step4 字框收缩", version="1.26", unit="cell",   # 1.26：inner_frame_cut、inner_frame_profile 缺省开（三套书都开着，Sheldon 11-06 定；写 false 的书参数 dump 与以前相同）；1.25：书级开关 inner_frame_cut——整页拟双边版框内框细线（seg.frame_line），列图上线和线外统一抹白再切字块（殿本新图源列首列尾挂着的一截框线，Sheldon 11-04）；1.24：夹注拆 a/b 跨中缝的连通体，少的一侧伸过中缝超过那侧半宽 1/4 的不整块归边、照中缝切（两行字笔画相碰连成一块，整块归边把另一行整个小字吞进对侧；史記 02:5:3:13a「魏人」，SJ 报，extractor.JIAZHU_SIDE_DEPTH）；1.23：图块最外侧落在本列字缘以外的窄段，在整列条带里上下贯穿 1.6 格以上、或在列端格里连到格外沿（版框拐角）的，是界行／版框竖线，抹白；夹注格不剥（extractor.strip_long_rule；第 9 列列尾「取」「錄」「也」，A23 送审 26 格）；1.22：列端剥框线越过写本框线的毛边判字与线之间的白行，并连毛边一起剥（史記列首格顶线残留，SJ 经 #805 检查器报）；1.21：列端条带按版框提示找框线，容差按格高算、提示以内连着上面笔画的横不当下框（新图 0.69 倍，死 40 行够到半格，「士」「王」「二」底横被当框截掉）；夹注拆 a/b 跨中缝的连通体墨大半在一侧就整块归那侧（右行字越线被切半）（GUJI-748）；1.20：全页框线线位找到版框往内 0.8 格并记线厚，跨度不满 0.85 的实线位置、厚度对上线位也剥（双边框内框贴字脚，vol06 p112「而」）；1.19：列端剥框线认双边框之间的连墨与又厚又满的粗版框（「乾」「者」「尚」）；1.18：归属图里跨格界、不算小部件的连通体整块归墨多的那格（原按伸得深的那格，「上」的底横左段被分给「下」）；1.17：整列先分好每个墨像素归哪格（extractor.partition_strip），图块只留本格的墨，替掉 pad 裁块后的逐块清理；1.16：两字粘成一块、跨格界两边都伸得深的连通体按格界切开（extractor.clip_unions_at_line）；1.15：跨格界部件伸进本格超过 0.1 格就不挪（NEIGHBOR_PART_DEPTH）；1.14：小印压着的字也打 seal_region 旗（occlusion.page_occluded 第 4 期）；1.13：跨格界、墨大半在格界外的邻字部件从本格抹掉（extractor.drop_neighbor_parts）；1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
-        consumes=("cells", "column_windows", "column_image"), optional_consumes=("seals", "raw_page", "column_raw"),
+        consumes=("cells", "column_windows", "column_image"), optional_consumes=("seals", "raw_page", "column_raw", "column_bands", "column_ends"),
         optional_consumes_when=(("raw_page", "inner_frame_cut"), ("column_raw", "inner_frame_only")),
         produces=("char_index", "char_patch"),
         params=CellShrinkParams,
@@ -412,7 +580,7 @@ class CellShrinkStep(Step):
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
                    "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.seg.seam", "open_guji_cv.seg.frame_line",
                    "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect",
-                   "open_guji_cv.impl.keben.patch_clean"),
+                   "open_guji_cv.impl.keben.patch_clean", "open_guji_cv.steps._colview"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────
@@ -484,7 +652,7 @@ class CellShrinkStep(Step):
         only = bool(p.inner_frame_cut and p.inner_frame_only)  # type: ignore[attr-defined]
         if p.inner_frame_cut and (p.inner_frame_only or p.inner_frame_local):  # type: ignore[attr-defined]
             # 整页拟出内框细线的边（cut_inner_frame 已抹白）：extractor 列端不再逐格剥框线行；抬头列不抹上框，上框照旧
-            wins: PageWindows = ctx.product("column_windows", page)
+            wins: PageWindows = merged_windows(ctx, page)
             inner = self._inner_frame_lines(ctx, page, cells, wins)
             if only:
                 out["debris_thin_only"] = {cc.col: True for cc in cells.columns}    # 没拟出内线的一端：框渣也只剥薄片
@@ -595,6 +763,7 @@ class CellShrinkStep(Step):
                      **({"jiazhu_rules": True} if p.jiazhu_strip_rules else {}),
                      **({"frame_line_reach": p.frame_line_max_off} if p.frame_line_max_off else {}),
                      **({"frame_line_grow": True} if p.frame_line_grow else {}),
+                     **({"long_rule_outer": True} if p.long_rule_outer_only else {}),
                      **({"tail_one_abs": True} if p.tail_one_abs else {}),
                      **({"ink_blob_empty": True} if p.ink_blob_empty else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
@@ -664,7 +833,7 @@ class CellShrinkStep(Step):
     # ── Step 接口 ─────────────────────────────────────────────────────
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         cells: PageCells = ctx.product("cells", page)
-        wins: PageWindows = ctx.product("column_windows", page)
+        wins: PageWindows = merged_windows(ctx, page)
         page_w = wins.page_size[0]
         seal: dict = {}
         if ctx.params_for(self).seal_flag:  # type: ignore[attr-defined]
@@ -677,6 +846,10 @@ class CellShrinkStep(Step):
                                   for cc in cells.columns]
         alt = [self._column_chars(ctx, page, cc, wins, page_w, frame_lines, seal, alt=True, inner=inner)
                for cc in cells.alt_columns]
+        if any(_straddle_partner(c) for cc in cells.columns for c in cc.cells):
+            _apply_straddle(ctx, page, cells, out, ctx.params_for(self).padding_ratio)  # type: ignore[attr-defined]
+        if ctx.params_for(self).ink_marks is not None:  # type: ignore[attr-defined]
+            _mark_ink(ctx, page, out, ctx.params_for(self).ink_marks)  # type: ignore[attr-defined]
         if alt:
             return {"char_index": PageChars(page=page, columns=out, alt_columns=alt)}
         return {"char_index": PageChars(page=page, columns=out)}
@@ -842,6 +1015,10 @@ class CellShrinkStep(Step):
         cc = (next((c for c in cells.alt_columns if c.col == col), None) if alt else cells.column(col))
         if cc is None or not cc.ok:
             raise KeyError(f"第 {page} 页第 {col} 列没有可用的字格")
+        if not alt and not sub and any(c.slot == slot and _straddle_partner(c) for c in cc.cells):
+            got = straddle_patch(ctx, page, cells, col, slot, ctx.params_for(self).padding_ratio)  # type: ignore[attr-defined]
+            if got is not None:
+                return got[0]
         cimg = memo["imgs"].get(col) if memo is not None else None
         if cimg is None:
             cimg = ctx.image("column_image", column_key(page, col))
@@ -849,7 +1026,7 @@ class CellShrinkStep(Step):
                 memo["imgs"][col] = cimg
         img = cimg.copy()
         if ctx.params_for(self).inner_frame_cut:  # type: ignore[attr-defined]
-            wins: PageWindows = ctx.product("column_windows", page)
+            wins: PageWindows = merged_windows(ctx, page)
             wrec = wins.column(col)
             mkey = (ctx.book.id, page, self._inner_memo_stamp(ctx, page), repr(ctx.params_for(self)))
             if mkey not in _INNER_MEMO:

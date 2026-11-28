@@ -135,6 +135,10 @@ def cmd_plan(a) -> int:
     man = pack_info(ws, book, label)
     cmd = [*GUJI, "cellvotes", "draft", book, "--site-book", text_id, "--rev", rev, "--out", draft, "-w", ws]
     cmd += ["--from-kv"] if os.environ.get("CELLREVIEW_TOKEN") else []
+    if a.allow_empty:          # 零票册（殿本 21–99 册旧单，ZM 11-18）：draft 当场读网站确认两种记法都是 0 条才出空草稿
+        if not os.environ.get("CELLREVIEW_TOKEN"):
+            sys.exit("✗ --allow-empty 要当场从网站读票确认零票：设 CELLREVIEW_TOKEN")
+        cmd += ["--allow-empty"]
     if man:
         cmd += ["--pack", label]
     elif a.cord:
@@ -159,6 +163,7 @@ def cmd_plan(a) -> int:
         "pack_cv_version": (man or {}).get("cv_version"), "cord": None if man else str(a.cord),
         "pages": pages, "full_book": not a.voted_pages_only, "engine": engine,
         "engine_commit": engine_head(Path(engine)) if engine else None,
+        **({"empty_confirmed": meta["empty_confirmed"]} if meta.get("empty_confirmed") else {}),
         "recheck": sum(1 for ln in (draft / "recheck.tsv").read_text(encoding="utf-8").splitlines()[1:] if ln.strip())
         if (draft / "recheck.tsv").exists() else 0,
         "created": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -288,8 +293,7 @@ def cmd_apply(a) -> int:
         rp.book_text_to_dev(Path(a.book_text))
     tv = rp.online_text_version(Path(a.book_text), plan["text_id"], plan["chapter"])
     export = out / "export"
-    # 走 guji-manager 导出器（rp.export_entry）：册有字格身份账时 char 带 u；cv 自带脚本不写 u，book-text 拦（殿本 vol04，11-25）
-    cmd = [sys.executable, *rp.export_entry(), "--products", sandbox, "--book", book,
+    cmd = [sys.executable, "-m", "guji_manager.output.guji_format_export", "--products", sandbox, "--book", book,
            "--chapter", plan["chapter"], "--out", export, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
     for flag, f in (("--meta", rp.meta_file(book, out)),
                     ("--split-table", CV / "doc/formats/samples/guji_page_v0.2/split_table_siku.json")):
@@ -332,13 +336,17 @@ def cmd_apply(a) -> int:
     note = (f"{book} 精校一轮：{plan['rev']} 的 {plan['ready']} 条人裁（{plan['batch']}），待审单 {new_rev}")
     issue = [sys.executable, HERE / "republish.py", "issue", "--book", book, "-w", ws, "--export-dir", export,
              "--rev", new_rev, "--book-text", a.book_text, "--note", note,
-             "--held-file", Path(plan["draft_dir"]) / "held.tsv"]
+             "--held-file", Path(plan["draft_dir"]) / "held.tsv",
+             # 落完票、新单 0 格＝这一章审完了：照样换成空单、升 book-text，别让旧单挂在线上（ZM 11-17 殿本 vol08 008-r10）
+             "--allow-empty"]
     if rows:
         issue += ["--recheck", recheck]
     if engine != CV:
         issue += ["--engine", engine]
     if a.ack_unlanded_votes:
         issue += ["--ack-unlanded-votes", a.ack_unlanded_votes]
+    if getattr(a, "cells", None):            # 旧单出在换图源之前：票按格级对照表把旧格号对到新格（republish 换单门）
+        issue += ["--cells", a.cells]
     if getattr(a, "no_web", False):          # 批量时每册不单独触发网站发布，由 auto_cycle 最后统一发一次
         issue += ["--no-publish-web"]
     cv_commit = plan.get("engine_commit") if engine != CV else plan["pack_cv_commit"]   # 重跑用的是哪份 cv 就记哪份
@@ -564,6 +572,8 @@ def main(argv=None) -> int:
     p.add_argument("--engine", help="出单版 cv 的 worktree（重跑用它；缺省本仓，须就是包的 cv_commit）")
     p.add_argument("--recheck-extra", help="另加复审的格（同 recheck.tsv 格式）：别处发现的疑点，拿不准的回网站再看")
     p.add_argument("--voted-pages-only", action="store_true", help="只重跑有票的页（旧做法；缺省全册 seed_admit）")
+    p.add_argument("--allow-empty", action="store_true",
+                   help="这张单确实没人投也照出计划（交 guji cellvotes draft --allow-empty：要 CELLREVIEW_TOKEN，当场读网站两种记法都 0 条才放）")
     p.add_argument("--no-pull", action="store_true")
     p = sp.add_parser("apply")
     p.add_argument("--book", required=True)
@@ -574,6 +584,7 @@ def main(argv=None) -> int:
     p.add_argument("--reuse-products", help="产物沙箱用这份现成的（引擎换版本后自己从头跑好了，不取出单版包、不再重跑 seed_admit）；"
                                            "配合 plan --engine <新版 worktree> 与 --allow-cv-drift")
     p.add_argument("--ack-unlanded-votes", help="旧单还有票没落成人裁（如图形格）也照换单；写明原因，原样交给 republish issue")
+    p.add_argument("--cells", help="旧单出在换图源之前时的格级对照表（old_new_cells/<册>.tsv[.gz] 或放各册表的目录），原样交给 republish issue")
     p.add_argument("--allow-cv-drift", action="store_true", help="本机 cv 与出单版不同也照跑重跑那一步")
     p.add_argument("--dry-run", action="store_true", help="只核计划、打出要跑的命令，不执行")
     p.add_argument("--no-web", action="store_true", help="出单、推库、升 book-text，但不触发网站发布、不冒烟（批量用，最后统一发）")
