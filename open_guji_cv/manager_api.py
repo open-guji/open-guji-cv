@@ -148,6 +148,7 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "Engine": ("core.engine", "Engine"),
     "git_rev": ("core.engine", "git_rev"),
     "load_pipeline": ("core.pipeline", "load_pipeline"),
+    "pipeline_for": ("core.pipeline", "pipeline_for"),
     "ShadowGate": ("shadow.gate", "ShadowGate"),
     "load_model": ("shadow.model", "load_model"),
     "page_evidence": ("shadow.offline", "page_evidence"),
