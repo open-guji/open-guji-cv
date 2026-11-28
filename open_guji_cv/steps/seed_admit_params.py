@@ -499,8 +499,9 @@ class SeedAdmitParams(BaseModel):
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
     group_flow_book_knn: dict[str, str] = Field(default_factory=dict)   # 组 id → 书级刻形近邻库（`groups.book_knn`，缺省找 config/groups/book_knn/<组>.json；没有＝不跑，行为不变）
     group_flow_rr_shape: str = ""            # 入人八 书级刻形判法模型（`groups.rr_shape`，缺省找 config/groups/rr_shape.json；没有＝不跑，行为不变）。
-    group_flow_near_from_3b: list[str] = Field(default_factory=list)  # 这些看图方法（rr_shape、wu_shape、hou_shape、part_shape、pair_shape、book_knn、near_knn、stroke_veto）的判法结果先读 3b `glyph_near` 的原样结论，3b 没有的格（没触发、备选切法列、读不到字块）本地现算；模型须与书级参数同一份，不同报错。缺省空、空时不进参数 dump（CV4 11-28，第四步 4d 接 3b）。
+    cell_state_read: bool = False   # 收尾读 4c `cell_state` 产物里的格况探测原值（遮挡、盖章空栏、字框几何、墨迹格旗、夹注不齐、题列套语）；产物里没有的探测器（没跑、没这页）本地现算并计数进日志。缺省关＝一律现算（不看产物在不在）；开时放行结果与现算逐格相同（CV4 A1，2026-11-28；要同时开 `cell_state.enabled`）。缺省关、关时不进参数 dump
     group_flow_near_from_3b: list[str] = Field(default_factory=lambda: list(NEAR_FROM_3B_DEFAULT))  # 这些看图方法（rr_shape、wu_shape、hou_shape、part_shape、pair_shape、book_knn、near_knn、stroke_veto）的判法结果先读 3b `glyph_near` 的原样结论，3b 没有的格（没触发、备选切法列、读不到字块）本地现算；模型须与书级参数同一份，不同报错。**缺省 8 个全开**（CV4 11-28 转缺省开，依据 decide-bench 殿本 small／large 8 方法强配回放 0 翻转）；没配 3b／没配这个方法的 4d 模型的书照旧本地现算、产物不变；写 `[]` 关、写子集只开这几个。等于缺省时不进参数 dump（书没写它的参数哈希不变）。
+    vis3_shadow: bool = False  # 影子：读同页 glyph_analyzer 的 FinalRec.vis（3e glyph_vis，vis3）与现行 vis_llm 看图结论逐格对比，只写 evidence.vis3_shadow、不改放行；缺省关、关时不进参数 dump、不读产物（CV4 11-28，P1）。推荐层级：书级，仅评估时按书开（不是放行开关，不进各书册配置主分支，走实验分支或任务单 override）。
     group_flow_wu_shape: str = ""            # 嗚鳴 书级刻形判法模型（`groups.wu_shape`，缺省找 config/groups/wu_shape.json；没有＝不跑，行为不变；全唐文 11-14）。
     group_flow_hou_shape: str = ""           # 候𠋫 书级刻形判法（`groups.hou_shape`，几何量判 亻 右边第二竖长短；缺省找 config/groups/hou_shape.json；没有＝不跑，行为不变；全唐文 11-20）。
     group_flow_part_shape: str = ""          # 书级部件刻形判法模型（`groups.part_shape`，剌刺／疎踈 等差在一块部件的字对，一份文件挂多对；缺省空＝不跑，不自动找文件；全唐文 11-15）。
