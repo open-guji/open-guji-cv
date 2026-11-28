@@ -1,18 +1,20 @@
 """3b `glyph_near` 的字形方法登记表（2026-11-27，第三步重构）。
 
-一个字组可以挂几个方法，写在书配置 `params.glyph_near.groups.<组>.methods` 里：`{方法名: 模型目录}`。
+一个字组可以挂几个方法，写在书配置 `params.glyph_near.groups.<组>.methods` 里：`{方法名: 模型目录}`，或
+`{方法名: {path: 模型文件, pair: [字, 字]}}`（一份模型文件挂多对的方法，如 part_shape，2026-11-28；`pair` 选其中一对）。
 方法只回答「这张字块图在组内各字里更像哪个」，给组内每个字一个分，外加证据；**不定字、不放行**。
 校准（分 → p）也由方法自己带的校准表做，但只在收尾 `glyph_analyzer` 里调，3b 产物里存的是原始分。
 
 接口（以后的方法照这个写，第四步那些看图判字的方法迁过来也照这个）：
 
-    m = load_method(name, model_path)         # name 如 "cnn_small"；model_path 是模型目录或单个模型文件
+    m = load_method(name, spec)               # name 如 "cnn_small"；spec 是模型目录、单个模型文件，或 {path, pair}
     outs = score(m, patches, book_id, ctx=ctx, cells=cells)
                                               # 即 m.score(patches, book_id[, ctx=…, cells=…])
                                               # patches: 字块图（uint8，白底黑字，任意尺寸），哪种图见 m.patch
                                               # → [{"sims": {字: 分}, "evidence": {...}}, …]，与 patches 一一对应
     p = m.calibrate(sims)                     # {字: 校准后的 p} 或 None（没有校准表）
-    m.fingerprint()                           # 模型目录（或文件）的 sha256 短哈希，进参数指纹
+    m.fingerprint()                           # 模型目录（或文件）的 sha256 短哈希，进参数指纹；{path, pair} 时再并上 pair
+    method_fingerprint(name, spec)            # "<方法>=<指纹>"，进 `methods_sha`；4d 拿同一个函数比对（spec 是字符串时与之前逐位相同）
     m.model_sha                               # 模型版本，写进 3b 产物 `PageNear.models` 与收尾 `near.methods.*.model`
 
 - `m.patch`（类属性，可缺）：方法吃哪种字块图。`"raw"`（缺省）＝原图灰度按 `bbox_page` 裁块；`"char_patch"`＝第二步
@@ -90,6 +92,29 @@
   3b 也会在 侯／俟 格上出分（方法只认 候／𠋫，那些分没意义），4d 不读这些格。
 - 校准：`<模型去 .json>.calib.json`（给目录时 `calib.json`），`{"format": "near-calib/1", "knots": {"候": [[分…], [p…]]}}`，
   按 `sims.候` 映、𠋫＝1−p。**现在没有校准表**（`calibrate` 返回 None，收尾不出 p）。
+
+## part_shape（剌刺／疎踈／攢攅 等差在一块部件的字对，第四步 group_flow 的书级部件刻形判法搬来，2026-11-28）
+
+包的是 `groups.part_shape.judge`（seed_admit `_part_shape_pass` 用的同一个函数，按这一对的部件框 `box` 截部件、同一组网），
+吃 `char_patch` 字块图。模型是第四步那份书级文件（数据目录 `config/groups/part_shape.json`，`schema: part_shape/1`，**一份挂多对**），
+所以书配置要写明是哪一对：
+
+    ci: {ref: ci, trigger: cands, methods: {part_shape: {path: config/groups/part_shape.json, pair: [剌, 刺]}}}
+
+`pair` 两个字须是模型里某一对的两个字（次序不论，sims 的方向按模型里的 `chars`）；文件里只有一对时可以只写路径字符串。
+一个组挂一对；一份文件里的几对要各开一个组（各自的 `ref`）。
+
+- `sims`：`{chars[1]: p, chars[0]: 1−p}`（p＝`judge` 给的 chars[1] 概率，已取 4 位，同第四步 `evidence.part_shape.p`），同 wu_shape；
+  取不出部件（`abstain:no_ink`）→ `{}`；门槛中间（`abstain:low_p`）仍给 sims。
+- `evidence`：`{method: "part_shape", char, why, p, pair}`，后几键＝`judge()` 整个返回值（第四步 `evidence.part_shape` 存的那份，
+  `pair` 是两字拼起来，如 `剌刺`）。4d 读时去掉 `method`。
+- 指纹：`method_fingerprint("part_shape", {path, pair})`＝`part_shape=<模型文件（＋同名校准表）指纹与 pair（按码位排）合起来的短哈希>`，
+  `methods_sha` 里是 `<组>:part_shape=<指纹>`；4d 用 `group_flow_part_shape` 和本格所在那一对（`part_shape.pair_of(model, 字)["chars"]`）
+  调同一个函数比对。`model_sha`＝`part_shape.fingerprint(模型文件)`，与第四步参数指纹 `pt` 段同算法。
+- 现役第四步只判**本格字（库首位）落在某一对里**的格；3b 用 `trigger: cands` 罩住。登记表里 剌刺 是注册组 `ci`，
+  疎踈、攢攅 是单立字对 `p:疎踈`、`p:攅攢`。
+- 校准：模型文件旁边 `<去 .json>.calib.json`，`{"format": "near-calib/1", "knots": {chars[1]: [[p…], [校准 p…]]}}`，
+  按字取，几对共用一份表也行。**现在没有校准表**（`calibrate` 返回 None，收尾不出 p）。
 """
 from __future__ import annotations
 
@@ -442,26 +467,119 @@ class HouShape:
         return hou_shape.fingerprint(str(self.path))
 
 
-METHODS = {"cnn_small": CnnSmall, "rr_shape": RrShape, "wu_shape": WuShape, "hou_shape": HouShape}
+def _pair_fingerprint(path: Path, pair) -> str:
+    """{path, pair} 写法的指纹：模型文件（＋同名校准表）的指纹与这一对（按码位排，次序不论）合起来的 sha256 短哈希。"""
+    h = hashlib.sha256()
+    h.update(_dir_fingerprint(path).encode())
+    h.update(("|pair:" + "".join(sorted(str(c) for c in pair))).encode())
+    return h.hexdigest()[:16]
 
-_CACHE: dict[tuple[str, str], object] = {}
+
+class PartShape:
+    """剌刺／疎踈 等部件刻形判法（`groups.part_shape`，一份模型挂多对）包成 3b 方法，取其中一对，见模块头「part_shape」。"""
+
+    patch = "char_patch"
+
+    def __init__(self, path: Path, pair=None):
+        p = Path(path)
+        self.src = p
+        self.path = p / "model.json" if p.is_dir() else p
+        from . import part_shape
+        model = part_shape.load(str(self.path))
+        if pair is None:
+            if len(model["pairs"]) != 1:
+                raise ValueError(f"part_shape：{self.path} 挂了 {len(model['pairs'])} 对，书配置要写 "
+                                 f"{{path, pair: [字, 字]}} 指明哪一对")
+            self.pair = model["pairs"][0]
+            self.want = None
+        else:
+            want = [str(c) for c in pair]
+            hit = [pr for pr in model["pairs"] if sorted(pr["chars"]) == sorted(want)]
+            if len(want) != 2 or not hit:
+                raise ValueError(f"part_shape：{self.path} 里没有 {''.join(want)} 这一对"
+                                 f"（有 {[''.join(pr['chars']) for pr in model['pairs']]}）")
+            self.pair = hit[0]
+            self.want = want
+        self.chars = tuple(self.pair["chars"])
+        self.calib = _load_calib(p)
+
+    def sims_of(self, v: dict) -> dict[str, float]:
+        """`part_shape.judge` 的结果 → `{chars[1]: p, chars[0]: 1−p}`（p 用 judge 已取整的那个值）；没有 p → `{}`。"""
+        q = v.get("p")
+        if q is None:
+            return {}
+        a, b = self.chars
+        return {b: float(q), a: round(1.0 - float(q), 4)}
+
+    def score(self, patches: list[np.ndarray], book_id: str, ctx=None, cells: list | None = None) -> list[dict]:
+        from . import part_shape
+        out = []
+        for g in patches:
+            v = part_shape.judge(g, self.pair)
+            out.append({"sims": self.sims_of(v), "evidence": {"method": "part_shape", **v}})
+        return out
+
+    def calibrate(self, sims: dict[str, float]) -> dict[str, float] | None:
+        a, b = self.chars
+        kn = (self.calib or {}).get("knots", {}).get(b)
+        if not kn or b not in sims:
+            return None
+        xs, ys = kn
+        p = float(np.interp(sims[b], xs, ys))
+        return {b: round(p, 4), a: round(1.0 - p, 4)}
+
+    def fingerprint(self) -> str:
+        return _dir_fingerprint(self.src) if self.want is None else _pair_fingerprint(self.src, self.want)
+
+    @property
+    def model_sha(self) -> str:
+        """模型文件的版本，与第四步参数指纹里的 `pt` 段同算法（`part_shape.fingerprint`）。"""
+        from . import part_shape
+        return part_shape.fingerprint(str(self.path))
 
 
-def load_method(name: str, model_dir: str):
-    """方法名＋模型目录（或单个模型文件）→ 方法对象（按解析后的路径缓存）。"""
+METHODS = {"cnn_small": CnnSmall, "rr_shape": RrShape, "wu_shape": WuShape, "hou_shape": HouShape,
+           "part_shape": PartShape}
+SPEC_KEYS = ("path", "pair")
+
+_CACHE: dict[tuple, object] = {}
+
+
+def parse_spec(spec) -> tuple[str, dict]:
+    """书配置里一个方法的写法 → (模型路径, 其余参数)。字符串＝模型目录或文件；dict＝`{path, pair}`。"""
+    if isinstance(spec, (str, Path)):
+        return str(spec), {}
+    if isinstance(spec, dict):
+        bad = set(spec) - set(SPEC_KEYS)
+        if bad or "path" not in spec:
+            raise ValueError(f"glyph_near 方法写法 {spec!r} 不认识：要 {{path, pair}}（多了 {sorted(bad)}）")
+        kw = {k: (list(v) if k == "pair" else v) for k, v in spec.items() if k != "path"}
+        return str(spec["path"]), kw
+    raise ValueError(f"glyph_near 方法写法 {spec!r} 不认识：写模型路径字符串或 {{path, pair}}")
+
+
+def load_method(name: str, spec):
+    """方法名＋模型目录（或单个模型文件，或 `{path, pair}`）→ 方法对象（按解析后的路径＋参数缓存）。"""
     cls = METHODS.get(name)
     if cls is None:
         raise ValueError(f"glyph_near：不认识的方法 {name!r}（已登记：{sorted(METHODS)}）")
-    d = resolve_dir(model_dir)
-    key = (name, str(d))
+    path, kw = parse_spec(spec)
+    d = resolve_dir(path)
+    key = (name, str(d), json.dumps(kw, ensure_ascii=False, sort_keys=True))
     m = _CACHE.get(key)
     if m is None:
         if not d.exists():
             raise FileNotFoundError(f"glyph_near 方法 {name} 的模型目录不存在：{d}")
-        m = cls(d)
+        m = cls(d, **kw)
         _CACHE[key] = m
     return m
 
 
-def method_fingerprint(name: str, model_dir: str) -> str:
-    return f"{name}={_dir_fingerprint(resolve_dir(model_dir))}"
+def method_fingerprint(name: str, spec) -> str:
+    """`<方法>=<指纹>`，进 3b `methods_sha`；4d 比对模型版本也调它。spec 是字符串时＝模型目录（或文件）的指纹（与 11-28 之前逐位相同）；
+    `{path, pair}` 时＝文件指纹并上这一对（按码位排，次序不论）。"""
+    path, kw = parse_spec(spec)
+    d = resolve_dir(path)
+    if kw.get("pair") is not None:
+        return f"{name}={_pair_fingerprint(d, kw['pair'])}"
+    return f"{name}={_dir_fingerprint(d)}"
