@@ -82,5 +82,7 @@ def test_split_parts_listed_together_in_every_step():
         # 书仓模块（guji_book.*）由 seg_set.resolve 换进模块表，不在 code_deps 里，不查
         names = {p for p, _ in parts if not p.startswith("guji_book.")}
         for sid, st in STEPS.items():
+            if (sid, old) in code_equiv.SPLIT_PARTIAL_OK:      # 登记过「本就只用一块」的，放行
+                continue
             mods = {type(st).__module__, *st.spec.code_deps}
             assert not (mods & names) or names <= mods, f"{sid} 只列了 {old} 拆出来的一部分：{sorted(mods & names)}"
