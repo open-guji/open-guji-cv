@@ -48,18 +48,22 @@ def _layout_path(rel: str):
 
 
 def load_layout(rel: str, book: str) -> dict[tuple[int, int], dict]:
-    """逐列格位表（`scripts/dzg_layout.py` 产出）→ 本册 {(页, 列): 行}。缓存按文件签名失效。"""
+    """逐列格位表（`scripts/dzg_layout.py` 产出）→ 本册 {(页, 列): 行}。缓存按文件签名失效。
+    表行的 `vol` 是本册名或本册 yaml `aliases` 里的旧名都认（2026-11-27 册号位数统一：册改名后表不改写，
+    钉了 sha 的语料表也不必另出一份；没写 `aliases` 的册行为逐位不变）。"""
     import json
+    from ..core.volume_alias import alias_map
     p = _layout_path(rel)
     if not p.exists():
         raise FileNotFoundError(f"layout_prior 指的表不存在：{p}（先跑 scripts/dzg_layout.py）")
-    key = (_sig(p), book)
+    names = {book, *(a for a, n in alias_map(None).items() if n == book)}
+    key = (_sig(p), book, tuple(sorted(names)))
     if key not in _LAYOUT_CACHE:
         out: dict[tuple[int, int], dict] = {}
         for ln in p.read_text(encoding="utf-8").splitlines():
             if ln.strip():
                 r = json.loads(ln)
-                if r.get("vol") == book:
+                if r.get("vol") in names:
                     out[(int(r["page"]), int(r["col"]))] = r
         _LAYOUT_CACHE[key] = out
     return _LAYOUT_CACHE[key]

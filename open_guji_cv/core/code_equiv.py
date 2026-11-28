@@ -659,6 +659,12 @@ _SINGLE_SIDES_1127 = ("版面 frame_layers 左右=1（四周單邊，朱楓林�
                       "2026-11-27（CV1，cv #1922，CV0 审口径）。v0.9.9 patch 线（v0.9.8＋#1922 cherry-pick，改动同 dev）按本线哈希另登，CV0 2026-11-27")
 
 
+_LAYOUT_ALIAS_1128 = ("row_segment.load_layout 认册 yaml 的 aliases（CV0 2026-11-28，册号位数统一：脉经 01→1 后备选格表 vol \"01\" 行仍归第 1 册，殿本 vol01 格位表同）："
+                      "没写 aliases 的册 names＝{本册名}，`r.get('vol') in names` 与原 `== book` 逐行同真，缓存键只多一段同值元组，"
+                      "表行集合与原来逐项相同，产物逐字节不变；目前没有任何册写 aliases（改名迁移从 11-28 脉经起）。"
+                      "单测 tests/test_dzg_layout.py::test_load_layout_reads_old_volume_name_via_aliases（无 aliases／读不到册配置都只认本名）。"
+                      "哈希按合入时 origin/dev 重算。")
+
 _TRK_CLIP_1127 = ("vline_track 淡线兜底 _trk_gray_line 取行号只封上界（np.minimum(…, h-1)）：原先行号 ≥ 页高必抛 IndexError、该页失败，"
                   "没抛错的页行号都 < 页高，min 是恒等，产物逐字节同（负行号照旧）。汉书 26 册 13 页（1,2,3,4,6,20,50,80,110,140,165,175 对 v0.9.9 border_detect 逐字节同；"
                   "p5 原 120px 窄条由报错改为跑通）；单测 test_gray_fallback_page_shorter_than_frame。2026-11-27（CV0，WYG #18261）")
@@ -2818,6 +2824,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='064dc3aa396b925df392691ca745a40a59d3c1ca3ba519e0d6b3e260cc560098',
           old='9d2e7a4bd695f98fbc8941e1a25174273081ae059f09a23da082284fb33c0c48',
           evidence=_TRK_CLIP_1127),
+    # 格位表／备选格表认册旧名 aliases（CV0 11-28，册号位数统一）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="f824d42d1404c02ed897097ee1388709b508ce820bddda3bad8df4a2f012c984",
+          old="f4812f0b455a1f3cfb40fe24a6a844d5c7ddbf9b5708842ad327c3a2a1baa690",
+          evidence=_LAYOUT_ALIAS_1128),
 )
 
 
