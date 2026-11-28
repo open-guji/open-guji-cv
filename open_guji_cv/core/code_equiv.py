@@ -705,6 +705,12 @@ _TRK_CLIP_1127 = ("vline_track 淡线兜底 _trk_gray_line 取行号只封上界
                   "p5 原 120px 窄条由报错改为跑通）；单测 test_gray_fallback_page_shorter_than_frame。2026-11-27（CV0，WYG #18261）")
 
 
+_MBJ_MARKS_1128 = ("切字：朱楓林集藏书印／墨点格旗 cell_shrink.ink_marks、骑线字合一格 row_segment.straddle_merge（cell_shrink 见骑线格旗才走，旗只在开了的书上有）、"
+                   "seed_admit.ink_marks（三处缺省 None／关、不进参数 dump）：朱楓林集 01 册 8 页（9,25,37,50,53,77,86,104：序末印、目錄墨点、卷端骑线字、正文；"
+                   "本机关开关重跑产物当上游）row_segment、cell_shrink、seed_admit 与 origin/dev 54d4663 产物逐字节相同；scripts/code_equiv.py check，"
+                   "GUJI_CORPUS_DRIFT=warn，2026-11-28（CV2，MBJ 印章墨点骑线字）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.steps.column_end",
           new="5ff011688402af99e9afecfe4bb381016b1c892805a7b93f5de3c80d59d9af33",
@@ -2924,6 +2930,27 @@ ENTRIES: tuple[Equiv, ...] = (
           new="2071cbefb24aa5fdc3cedeee17f8bc77b8d3f036150ca1aa35af6cf84614a483",
           old="1c41134dcc1add33b4e65c712fd75226b2cf2c7ffc33ff64a817006f4b8320d1",
           evidence=_PAGEMAP_ALIAS_1128),
+    # 朱楓林集印章／墨点／骑线字（CV2 11-28，缺省关）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="b9d758dcd7fefa8d0fa48ff18a865e0671b45c6b74b597bdcba1d7fe24a56a52",
+          old="27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee",
+          evidence=_MBJ_MARKS_1128),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="b371efa2475cbb64d95bb988e7eb877550ef2703feec593c6cf50bffddfddb7b",
+          old="d7914794283cc70fa547e6dc003a410dda62e962684123b63eccfcce169d975c",
+          evidence=_MBJ_MARKS_1128),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="0bbcee8c0691132b1f6b12e028ed6fae9c4df09c90ea634573e6b6af8ac651fd",
+          old="4c1df66c210c3ccef9acb3e7b1fab4491a3bbfe02a77adcc5e039b6ee7ca92e8",
+          evidence=_MBJ_MARKS_1128),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="5936c1774bfa255e88a5b13a54ff146cb585a93731dddae68d35192bb8bc65d7",
+          old="5f8dd48c565d4f7660a9d464c2aabcb59181767362c140e9c1823d74c6579a49",
+          evidence=_MBJ_MARKS_1128),
+    Equiv(module="open_guji_cv.steps.seed_admit_lanes",
+          new="2741e0048a40bba40cefdac9bebf011fcad3a020baeb9c2c454f96c5aa49615e",
+          old="98fdf5949dc19daa7d1e913c39e02a2d6a9f5fc3683d8d9586957b882317aac0",
+          evidence=_MBJ_MARKS_1128),
 )
 
 
