@@ -34,6 +34,16 @@ def _book_vols(shard: Path, book: str, vols: list) -> list[str]:
     return [str(x["vol"]) for x in b["books"] if x["ws"] == book and (not vols or str(x["vol"]) in vols)]
 
 
+def plan(gold: Path, book: str, vols: list) -> dict:
+    """册清单（small＋large 都算，manager 按它建钉版字形库）；不用原图，页是 None。"""
+    out: dict = {}
+    for s in SETS:
+        p = Path(gold).parent / s
+        if (p / "bench.yaml").exists():
+            out.update({v: None for v in _book_vols(p, book, vols)})
+    return out
+
+
 def _vols(ctx: BenchCtx) -> list[str]:
     return _book_vols(_shard(ctx), ctx.book, ctx.vols)
 
@@ -78,5 +88,5 @@ register(BenchSpec(
     gold={b: "decide-bench/small" for b in BOOKS}, needs=("gold", "config", "code", "glyph_lib", "models", "corpus"),
     primary="wrong_admit", run=run, score=score, cost="heavy",
     guards=(Guard("wrong_admit", "max", 0), Guard("flip_worse", "max", 0)), suites=("decide",),
-    item_key="id", item_ok="ok",
+    item_key="id", item_ok="ok", plan=plan,
     args={"set": "small｜large（缺省 small）", "layer": "frozen｜dyn（缺省 frozen；dyn 待接）"}))
