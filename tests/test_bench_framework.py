@@ -107,6 +107,19 @@ def test_flip_guard_na_without_against_and_cmp_skip(tmp_path):
     assert now.against["worse"] == 0
 
 
+def test_registry_doc_lists_every_bench_id():
+    """doc/bench登记表.md 的「bench id」列要列全登记了、未 deprecated 的 bench（CV0 11-28）。"""
+    import re
+    from pathlib import Path
+    doc = (Path(__file__).resolve().parents[1] / "doc" / "bench登记表.md").read_text(encoding="utf-8")
+    rows = [ln.split("|") for ln in doc.splitlines() if ln.startswith("| ")]
+    col = rows[0].index(" bench id ")
+    listed = {x for r in rows[1:] for x in re.findall(r"`([^`]+)`", r[col])}
+    live = {s.id for s in B.all_specs() if not s.deprecated}
+    assert not live - listed, f"登记表「bench id」列漏了: {sorted(live - listed)}"
+    assert not listed - {s.id for s in B.all_specs()}, f"登记表写了没登记的 bench: {sorted(listed - {s.id for s in B.all_specs()})}"
+
+
 def test_needs_accepts_bench5b():
     from open_guji_cv.eval import bench as B
     B.BenchSpec(id="t-5b", title="t", steps=("glyph_match",), owner="CV3", gold="x", needs=("bench5b",),
