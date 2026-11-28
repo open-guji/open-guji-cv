@@ -148,7 +148,7 @@ class GroupDecisionStep(Step):
                    "open_guji_cv.steps.seed_admit_reasons", "open_guji_cv.steps.seed_admit_page_params", "open_guji_cv.steps.decide",
                    "open_guji_cv.steps.seed_admit_common", "open_guji_cv.steps.seed_admit_params", "open_guji_cv.steps.cell_state",
                    "open_guji_cv.steps.seed_admit_shapes",   # 读 3b 快照的两个读口住在这里（_near_from_3b／_near_by_model_from_3b）
-                   "open_guji_cv.groups.flow", "open_guji_cv.groups.registry", "open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_registry",
+                   "open_guji_cv.groups.flow", "open_guji_cv.groups.registry", "open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_methods._base", "open_guji_cv.groups.near_methods.cnn_small", "open_guji_cv.groups.near_methods.rr_shape", "open_guji_cv.groups.near_methods.wu_shape", "open_guji_cv.groups.near_methods.hou_shape", "open_guji_cv.groups.near_methods.part_shape", "open_guji_cv.groups.near_methods.pair_shape", "open_guji_cv.groups.near_methods.book_knn", "open_guji_cv.groups.near_methods.near_knn", "open_guji_cv.groups.near_methods.stroke_veto", "open_guji_cv.groups.near_methods.flow_shape", "open_guji_cv.groups.near_methods.pair_clf", "open_guji_cv.groups.near_registry",
                    "open_guji_cv.products.kinds.group_decision"),
         enabled_by="enabled",
     )
