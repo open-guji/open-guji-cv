@@ -43,6 +43,8 @@
 本模块、`near_route`、`shape_stage`、`groups.methods` 都**不进** `glyph_match` 的 `code_deps`；开着的书靠参数 `stages_sha`
 （`stages_fingerprint`：这几个模块的代码哈希＋形近字组表＋`final` 组的模板库指纹；写了 `pair` 再加 `pair_clf`
 的代码哈希、分类器文件哈希与 `final` 开关）判过期，不开的书不受影响。
+代码哈希按 `composite_key` 查 `core/code_equiv.py` 的等价登记：把判法搬出这几个模块、产物逐字节不变时，
+用 `scripts/code_equiv.py composite --base <改前>` 出登记行，开 stages 的书不过期（结构拆分 A4，11-28）。
 """
 from __future__ import annotations
 
@@ -110,14 +112,36 @@ def _resolve(path: str, what: str = "glyph_match.stages.route.table") -> str:
     raise ValueError(f"{what} 找不到：{path}（数据目录、工作区、仓根都没有）")
 
 
-def _code_sha(*mods: str) -> str:
-    import importlib.util
+#: 5a 各段进 `stages_sha` 的模块（次序进哈希，别动）
+STAGES_CODE_MODS = ("open_guji_cv.steps.glyph_stages", "open_guji_cv.clustering.near_route", "open_guji_cv.groups.shape_stage",
+                    "open_guji_cv.groups.methods", "open_guji_cv.groups.ids_online", "open_guji_cv.groups.registry")
+PAIR_CODE_MODS = ("open_guji_cv.groups.pair_clf",)
+
+
+def composite_key(mods) -> str:
+    """几个模块合算的代码哈希在 `core/code_equiv.py::ENTRIES` 里登记等价时用的 `module` 名。"""
+    return "composite:" + "+".join(mods)
+
+
+def composite_hash(mods, read: Callable[[str], str]) -> str:
+    """几个模块「只认代码」文本串起来的 sha256（全长、未经等价换算）；`read(模块名)` 给源码。"""
     from ..core.engine import code_only_text
     h = hashlib.sha256()
     for m in mods:
-        p = Path(importlib.util.find_spec(m).origin)
-        h.update(code_only_text(p.read_text(encoding="utf-8")).encode("utf-8"))
-    return h.hexdigest()[:16]
+        h.update(code_only_text(read(m)).encode("utf-8"))
+    return h.hexdigest()
+
+
+def _read_module(m: str) -> str:
+    import importlib.util
+    return Path(importlib.util.find_spec(m).origin).read_text(encoding="utf-8")
+
+
+def _code_sha(*mods: str) -> str:
+    """几个模块合算的代码哈希（前 16 位）。按 `composite_key(mods)` 查等价登记：搬家、改写但产物逐字节不变的改动
+    登记后换回旧值，开 `stages` 的书不过期（结构拆分 A4，11-28；登记行用 `scripts/code_equiv.py composite` 出）。"""
+    from ..core.code_equiv import canonical
+    return canonical(composite_key(mods), composite_hash(mods, _read_module))[:16]
 
 
 def stages_fingerprint(v) -> str:
@@ -129,13 +153,12 @@ def stages_fingerprint(v) -> str:
     from ..groups import ids_online
     tab = Path(cfg.route.table) if cfg.route.table else near_route.TABLE
     t = hashlib.sha256(tab.read_bytes()).hexdigest()[:16] if tab.exists() else "none"
-    code = _code_sha("open_guji_cv.steps.glyph_stages", "open_guji_cv.clustering.near_route", "open_guji_cv.groups.shape_stage",
-                     "open_guji_cv.groups.methods", "open_guji_cv.groups.ids_online", "open_guji_cv.groups.registry")
+    code = _code_sha(*STAGES_CODE_MODS)
     bank = hashlib.sha256(ids_online.fingerprint(cfg.final).encode("utf-8")).hexdigest()[:12] if cfg.final and cfg.shape else ""
     out = f"{code}:{t}" + (f":{bank}" if bank else "")
     if cfg.pair:
         from ..groups import pair_clf
-        out += f":pair={_code_sha('open_guji_cv.groups.pair_clf')}.{pair_clf.fingerprint(cfg.pair)}.{int(cfg.pair_final)}{'.u' if cfg.pair_unsure else ''}"
+        out += f":pair={_code_sha(*PAIR_CODE_MODS)}.{pair_clf.fingerprint(cfg.pair)}.{int(cfg.pair_final)}{'.u' if cfg.pair_unsure else ''}"
     return out
 
 

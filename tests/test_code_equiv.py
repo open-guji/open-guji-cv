@@ -28,6 +28,9 @@ def test_entries_are_well_formed():
     # 算这套书的册的指纹时由 replace_deps 换进去（engine.code_hash），所以也在指纹里
     from open_guji_cv.core.seg_set import OVERRIDES
     mods |= {mine for ov in OVERRIDES.values() for default, mine in ov.items() if default in mods}
+    # 合算的代码哈希（glyph_match 开 stages 时的 stages_sha，结构拆分 A4）：进参数指纹
+    from open_guji_cv.steps.glyph_stages import PAIR_CODE_MODS, STAGES_CODE_MODS, composite_key
+    mods |= {composite_key(STAGES_CODE_MODS), composite_key(PAIR_CODE_MODS)}
     seen = set()
     for e in code_equiv.ENTRIES:
         assert e.module in mods, f"{e.module} 不在任何 Step 的指纹里，登记它没用"
