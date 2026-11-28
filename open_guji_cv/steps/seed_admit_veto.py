@@ -127,8 +127,9 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
                     and not _rare_cp(rec.char)    # 放行字是罕用码位不弃权（#431：𠮓→變、𣼣→漏）
                     and vmap.semantic(v.pick) == vmap.semantic(rec.char)):
                 continue                      # 异体同字：标签口径差，不是认错字（#431）
-            fold_ruled = (getattr(p, "ruling_anchor_loose", False) and rec.channel == "fold"
-                          and ((rec.evidence or {}).get("fold") or {}).get("via") == "ruling")
+            # fold 按裁定给的字被影子降审 → 记 fold_ruling_vetoed（进 _LANE_HARD），待审通道不按整理本字放回。
+            # 原先只在宽松档（ruling_anchor_loose）记；缺省路径同样会出（CV0 11-24：草稿 PR，搭下次 seed_admit 改指纹时合，L2）
+            fold_ruled = (rec.channel == "fold" and ((rec.evidence or {}).get("fold") or {}).get("via") == "ruling")
             _demote(rec, "shadow_veto")
             rec.admit, rec.channel, rec.provenance = False, None, ""
             rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"] + (["fold_ruling_vetoed"] if fold_ruled else [])
