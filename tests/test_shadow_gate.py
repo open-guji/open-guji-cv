@@ -2,6 +2,8 @@
 """影子放行闸（overview#305 第一阶段）：信号口径、只降不升、弃权、模型文件与参数指纹。全部自造数据。"""
 from __future__ import annotations
 
+from helpers import patch_seed_admit
+
 import cv2
 import numpy as np
 import pytest
@@ -212,7 +214,7 @@ def test_seed_admit_shadow_veto_only_demotes(tmp_path, monkeypatch):
     assert all(r.admit for r in base.values())
 
     gate = ShadowGate(_StubModel({"乃": .95, "衡": .02}), _ctx(), 0.9)
-    monkeypatch.setattr(sa, "_shadow_gate", lambda _p: gate)
+    patch_seed_admit(monkeypatch, "_shadow_gate", lambda _p: gate)
     on = _run_seed(tmp_path, monkeypatch, p, recs, shadow_veto=True, shadow_model_fingerprint="x")
     assert not on[1].admit and "shadow_veto" in on[1].doubts
     ev = on[1].evidence["shadow_veto"]

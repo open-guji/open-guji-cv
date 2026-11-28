@@ -13,7 +13,7 @@ from open_guji_cv.products.kinds.chars import CharRec, ColumnChars, PageChars
 from open_guji_cv.products.kinds.gate import GateManifest
 from open_guji_cv.products.store import ProductStore
 from open_guji_cv.steps.seed_admit import SeedAdmitParams
-from open_guji_cv.steps.seed_admit_lanes import seg_box_defects
+from open_guji_cv.steps.seed_admit_cell_state import seg_box_defects
 
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")
 

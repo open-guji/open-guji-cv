@@ -3026,16 +3026,26 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
         ("guji_book.quantangwen.admit_lanes", "110539c6e051bd89a943b9ed5d57b045fecaed7a5e401d9f69383265317de8ac"),)),
     # seed_admit 的参数类与参数表搬到 steps.seed_admit_params（CV4 整理 2026-11-23，纯搬家，殿本 vol28 16 页、全唐文 020 16 页、
     # 史記 02 18 页 seed_admit 产物与 dev b189b2e 逐字节相同）：两块都还是这一版时合回 seed_admit 一项，各书不过期。
-    "open_guji_cv.steps.seed_admit": ("1f1f1fb43270438a7f7ae51c94fbf4f26b93ba7317a21bd05334211b1820663c", (
-        # 2026-11-26 CV4 PR3c：seed_admit.py 再拆出 common／lanes／shapes 三块（纯搬家＋字块读取改经模块属性调用，
-        # 殿本 vol28、全唐文 020、史記 02 共 50 页产物与 dev 逐字节相同），四块都还是这一版时照样合回旧 seed_admit 一项。
-        ("open_guji_cv.steps.seed_admit", "425f028ce7eeb0df7898611698cf8cfdcfa2a7ddf7a43829fe92c14b8120f20a"),
-        ("open_guji_cv.steps.seed_admit_common", "e9dcb6a9f748f479bec5b536784893a9db0297867ae0d23b750f9eacb05a3310"),
-        ("open_guji_cv.steps.seed_admit_lanes", "d372c3a9245e947aeb235335460dc5f193eef77371b1050c5af5ea3472041baa"),
-        ("open_guji_cv.steps.seed_admit_shapes", "ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77"),
-        ("open_guji_cv.steps.seed_admit_params", "e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091"),
-        # 书级放行通道钩子（缺省 None，CV4 2026-11-25）：书仓没覆盖时合回，各书指纹不变；全唐文 k13 覆盖后照常过期
-        ("open_guji_cv.impl.keben.admit_lanes", "26976aeeb23db0ece76f341f7cefbc0c2a4e25fbed3faa4671bcace3f4672cac"))),
+    # 历史（已失效，键与新条目同名，dict 只留一条）：seed_admit 旧哈希 1f1f1fb43270，块表 seed_admit／common／lanes／shapes／params＋impl.keben.admit_lanes（2026-11-23／26，CV4 PR3c）
+    # seed_admit 11-28 重登（CV4 P1a）：11-23／11-26 那条（拆出 params／common／lanes／shapes）在 dev 上早已失效（之后几个 PR 真改过这些模块，
+    # 块哈希对不上、没再合回），各册当前指纹是各块分列。这次再拆（纯搬家，seed_admit.py＋seed_admit_lanes.py 里的格况／字组／定字／否决／
+    # 备选切法／疑问码／按页参数各遍搬进新模块，不改一行逻辑，只改了 groups 里一处 `_coord_refs(ctx, page, {})` →
+    # `coord_refs(_opt(ctx, "align_ref", page))`，两者等价）：旧哈希取拆分前 dev d226f31 的 seed_admit／seed_admit_lanes 规范哈希，
+    # 下面几块都还是这一版时合回原来的一项，指纹与 dev d226f31 逐步相同（check_fp_change 0 步变）；之后哪块真改了照常过期。
+    # 证据：①AST 逐定义比对（顶层函数／类／常量搬前搬后 ast.dump 相同，仅 groups 里那一行等价替换、_align／_coord_refs 改调 decide 的解析、StepSpec.code_deps 加项）；
+    # ②全量测试与 dev 同一批失败（环境缺件），其余全过；未另跑真书页产物比对（纯搬家，需要时用 scripts/code_equiv.py check）。
+    "open_guji_cv.steps.seed_admit": ("4c1df66c210c3ccef9acb3e7b1fab4491a3bbfe02a77adcc5e039b6ee7ca92e8", (
+        ("open_guji_cv.steps.seed_admit", "71182f3f7aae3c13dbf3353b7b41d962471df2ee35552a0a986d43a0ce570634"),
+        ("open_guji_cv.steps.seed_admit_cell_state", "b75e6dbd27dd776282bcc66538b2f182d5f855119d2dac42d1d8a8b271fca42e"),
+        ("open_guji_cv.steps.seed_admit_groups", "1b9b64cd665c26ae764e2d03cc2422681ac56aa4a4a7120b07e2181347555510"),
+        ("open_guji_cv.steps.seed_admit_pick", "f658ffd0219c3aa8692fa0200b6e184f5abad6d4cc8e3613b4424bb015190598"),
+        ("open_guji_cv.steps.seed_admit_veto", "5e44d349989c2dfc774ce934b28fa961e304f5cea08d10552ba28f13f4795192"),
+        ("open_guji_cv.steps.seed_admit_altcut", "7586d369fa7828d84a5ea7cc37632047c5cd26a1a86512d4ab29bbd2da659c58"),
+        ("open_guji_cv.steps.seed_admit_reasons", "4ca3d046b18dea3f2811e7459f56d734233c4ac53fb64a52dc048e19baca913c"),
+        ("open_guji_cv.steps.seed_admit_page_params", "8af6cb7e02b26c1c843968960e5cbbba3f812333806eef410a1fe28bcdf54eae"),
+        ("open_guji_cv.steps.decide", "dfb56b89cdb723d82a3fb17def6ab15fcd938a461575139297f4f860337f0858"),)),
+    "open_guji_cv.steps.seed_admit_lanes": ("98fdf5949dc19daa7d1e913c39e02a2d6a9f5fc3683d8d9586957b882317aac0", (
+        ("open_guji_cv.steps.seed_admit_lanes", "c3744c75872b13cf3fbbc21c150125afdbc4b1857a2bdd35c5126863813d9e77"),)),
     # 不是拆分、是 seed_admit 新加了一个 code_dep（书级钩子 follow_ref_hooks，缺省 rival_skip=None；2026-11-13 A22）：
     # pua_v2_codes 与 follow_ref_hooks 都还是这一版时合回 pua_v2_codes 一项，指纹不变。书仓覆盖了钩子的书（史記）照常过期
     # 不是拆分、是 seed_admit 补列 code_dep groups.hou_shape（#1729 起 seed_admit 就 import 它，当时没列进 code_deps，

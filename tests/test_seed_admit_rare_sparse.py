@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from helpers import patch_seed_admit
+
 import pytest
 
 import open_guji_cv.steps  # noqa: F401
@@ -60,7 +62,7 @@ def test_default_off_not_in_hash():
 @pytest.mark.usefixtures("seed_admit_switches_off")   # 放行开关缺省全关，只看这一支，见 conftest
 def test_pass_coord_unanchored_low_cov(tmp_path, monkeypatch):
     """规则 A 两支都放不了的格：坐标对位、整页没锚、库首位 cov < 0.90。开了这支才放。"""
-    monkeypatch.setattr(sa, "_keben_counts", lambda _p: {})
+    patch_seed_admit(monkeypatch, "_keben_counts", lambda _p: {})
     kw = dict(rare=["奴", "姒", "奻"], cands=(("努", 0.88),), align=None, coord="奴")
     off = _run(tmp_path / "a", monkeypatch, params={"patch_missing": "skip"}, **kw)
     assert not off.admit
@@ -68,7 +70,7 @@ def test_pass_coord_unanchored_low_cov(tmp_path, monkeypatch):
     on = _run(tmp_path / "b", monkeypatch, params={"rare_ref_sparse": True, "patch_missing": "skip"}, **kw)
     assert on.admit and on.char == "奴" and on.channel == "rare_ref"
     assert on.evidence["rare_ref"]["via"] == "sparse_coord" and on.evidence["rare_ref"]["n_lib"] == 0
-    monkeypatch.setattr(sa, "_keben_counts", lambda _p: {"奴": 5})
+    patch_seed_admit(monkeypatch, "_keben_counts", lambda _p: {"奴": 5})
     many = _run(tmp_path / "c", monkeypatch, params={"rare_ref_sparse": True, "patch_missing": "skip"}, **kw)
     assert not many.admit
 

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """fold_groups：折叠组内待审格，整理本字在组里 → 放整理本字（通道 fold）。数据自造。"""
+from helpers import set_seed_admit
 from open_guji_cv.groups.registry import FLOW_GROUPS
 from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
 from open_guji_cv.steps.seed_admit import SeedAdmitParams, _fold_pass
@@ -59,7 +60,7 @@ def test_fold_guards(tmp_path):
     sa._L3_ONLINE.clear()
     l3 = {"ry": {"system": "s", "ver": "v1"}}
     orig = sa._l3_online
-    sa._l3_online = lambda p: l3
+    set_seed_admit("_l3_online", lambda p: l3)
     try:
         st.put("ry", "v1", "甲", "乙", char=a, conf="high", why="x", model="m", cell=f"{B}:1:2")
         rr = recs(); n = sa._fold_pass(SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ruling_first=True), [ColumnAdmit(col=1, chars=rr)], amap, None, store=st)
@@ -67,7 +68,7 @@ def test_fold_guards(tmp_path):
         rr = recs(); n = sa._fold_pass(SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ruling_first=True), [ColumnAdmit(col=1, chars=rr)], amap, None, store=RulingStore(tmp_path / "e"))
         assert n == 1 and rr[1].char == b and rr[1].evidence["fold"]["via"] == "ref"
     finally:
-        sa._l3_online = orig
+        set_seed_admit("_l3_online", orig)
     assert "fold_lib_top_in_group" not in SeedAdmitParams(db_path="x", fold_groups=("ry",)).model_dump()
 
 
@@ -128,7 +129,7 @@ def test_fold_no_ref_char_aspect_and_pending(tmp_path):
     assert not rs[2].admit and rs[2].evidence["fold_pending"] == {"group": "ry"} and rs[2].char == "乙"
     # 居中格有本组裁定：放裁定字（不是整理本字）
     st = RulingStore(tmp_path / "s")
-    orig, sa._l3_online = sa._l3_online, (lambda p_: {"ry": {"system": "s", "ver": "v1"}})
+    orig = sa._l3_online; set_seed_admit("_l3_online", (lambda p_: {"ry": {"system": "s", "ver": "v1"}}))
     try:
         st.put("ry", "v1", "", "", char="曰", conf="high", why="x", model="m", cell=f"{B}:1:3")
         rs = [rec("3", 0.92)]
@@ -137,9 +138,7 @@ def test_fold_no_ref_char_aspect_and_pending(tmp_path):
         n = sa._fold_pass(p, [ColumnAdmit(col=1, chars=rs)], seq_amap, None, store=st, wh=WH)
         assert n == 1 and rs[0].char == "曰" and rs[0].evidence["fold"]["via"] == "ruling"   # 无邻格，窗口键为空串
     finally:
-        sa._l3_online = orig
-
-
+        set_seed_admit("_l3_online", orig)
 def test_fold_occluded_needs_switch_and_ref_lib_both_in_group(tmp_path):
     """fold_occluded：遮挡格默认不碰；开了之后整理本字与库首位同在折叠组才归组，不取整理本字（fold_ref_char=false 时只放文意裁定／宽高判据）。"""
     from types import SimpleNamespace as NS
