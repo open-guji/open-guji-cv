@@ -9,12 +9,13 @@
 **同一字位的多条事件按 `replay_key` = (ts, batch, seq) 升序应用、后到覆盖**。早先写的是
 「按 (batch, seq)」——批次名的字典序不是时间序（`H-mojibake-fix-…` 排在 `vol01-…` 前面，
 更正事件反被旧裁决盖回去），2026-09-24 起 `lookup.human_chars` 已改按时间；2026-10-20 全部
-「后到覆盖」的地方统一到 `replay_key`（规范见 `doc/formats/人裁事件规范.md` §6）。
+「后到覆盖」的地方统一到 `replay_key`（规范见 `doc/formats/裁定事件规范.md` §6）。
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -119,21 +120,99 @@ Actor = Literal["user", "model", "align"]
 MODEL_JUDGMENT_SOURCES = frozenset({"vision", "llm", "knn_infer", "auto"})
 
 
-def counts_as_human(e) -> bool:
-    """这条事件能不能**当人裁用**（进字形库、算已裁、human_chars 认、进绑定表）。
+#: 2026-11-26（GM4 批量规则，用户 11-25 定「尽量批量处理」）：`actor="model"` 而没写 `payload.level` 的老事件里，
+#: 这 9 个批次（按批次名 `~` 前的部分认）是人授意的重写／重绑，字是人定的，算 human；其余 `actor="model"` 算 ai。
+#: 以后新写的事件在 `payload.level` 里写明级别（human／ai），不再靠批次名。与 guji-manager `feedback.levels`、
+#: 中心库 `events.level` 虚拟列（guji-workspace-data#37）是同一张表，改要三处一起改。
+HUMAN_MODEL_BATCHES = frozenset({
+    "H-mojibake-fix-20260927", "r74-v01", "r77-重绑", "r79-v01", "SJ-ry-rebind-1120", "SJ-sheldon-1123",
+    "SJ-L1取消归一-human24", "SJ-v02-rebind-1124", "SJ-歲暫歸一-1125",
+})
+EVENT_LEVELS = ("human", "ai")
+
+#: 裁定事件的**来源三字段**（2026-11-27，用户定「裁定事件要能区分来源」；规范见 `doc/formats/裁定事件规范.md` §4.1）：
+#: `payload.level`（这个字是谁判的：human／ai／machine）、`payload.by`（具体是谁：人的账号、模型名、脚本名）、
+#: `payload.channel`（从哪条路进来）。缺省按旧规则推（`event_level`），新写的要写全；`EventLog.append` 缺了只告警不拒。
+#: 2026-11-27 起 `machine` 也是合法的 `payload.level`：规则自动补的，**不算钉**（`event_level` 给 None）。
+PROVENANCE_LEVELS = ("human", "ai", "machine")
+PROVENANCE_CHANNELS = ("console", "web_vote", "opinion", "script", "llm", "vision")
+PROVENANCE_FIELDS = ("level", "by", "channel")
+
+_log = logging.getLogger(__name__)
+
+
+def is_ruling_event(e) -> bool:
+    """要带来源三字段的事件：对一个字格下了定字结论的（`kind=confirm`，单位是格）。切线、版框这类几何裁决、
+    复核台的 collate_*、体检的 glyph_audit 暂不要求（2.4 再定要不要扩）。"""
+    t = getattr(e, "target", None)
+    return getattr(e, "kind", None) == "confirm" and getattr(t, "unit", None) == "cell"
+
+
+def provenance(level: str, by: str, channel: str) -> dict:
+    """裁定事件来源三字段（并进 `payload`）。取值不合法 ValueError。与 guji-manager `feedback.levels.provenance` 同口径，
+    脚本写 confirm 时用它，不要自己拼。"""
+    if level not in PROVENANCE_LEVELS:
+        raise ValueError(f"payload.level 须是 {PROVENANCE_LEVELS} 之一，拿到 {level!r}")
+    if channel not in PROVENANCE_CHANNELS:
+        raise ValueError(f"payload.channel 须是 {PROVENANCE_CHANNELS} 之一，拿到 {channel!r}")
+    if not by or not str(by).strip():
+        raise ValueError("payload.by 不能为空：写人的账号、模型名或脚本名")
+    return {"level": level, "by": str(by), "channel": channel}
+
+
+def missing_provenance(e) -> list[str]:
+    """这条事件缺哪几个来源字段（空列表＝齐了或不要求）。取值不在枚举里的也算缺。"""
+    if not is_ruling_event(e):
+        return []
+    p = getattr(e, "payload", None) or {}
+    out = [k for k in PROVENANCE_FIELDS if not p.get(k)]
+    if p.get("level") and p["level"] not in PROVENANCE_LEVELS and "level" not in out:
+        out.append("level")
+    if p.get("channel") and p["channel"] not in PROVENANCE_CHANNELS and "channel" not in out:
+        out.append("channel")
+    return out
+
+
+def event_level(e) -> str | None:
+    """这条事件的**级别**：`"human"`（人裁）、`"ai"`（模型写的、已放行的钉）、None（不算钉：看图结论、
+    文意裁定、`payload.source` 是模型判断来源的）。
+
+    先认 `payload.level`（`machine` 给 None）；没有的：`actor` 不是 model 的算 human，是 model 的按批次名查
+    `HUMAN_MODEL_BATCHES`（在表里算 human，其余算 ai）。"""
+    if getattr(e, "kind", None) in ("vision_check", "ctx_ruling"):
+        return None
+    p = getattr(e, "payload", None) or {}
+    if p.get("source") in MODEL_JUDGMENT_SOURCES:
+        return None
+    lv = p.get("level")
+    if lv in EVENT_LEVELS:
+        return lv
+    if lv == "machine":      # 规则自动补的：不算钉（同中心库 `events.level` 的 machine，Worker 落定条件只认 human／ai）
+        return None
+    if getattr(e, "actor", None) != "model":
+        return "human"
+    return "human" if str(getattr(e, "batch", "") or "").split("~", 1)[0] in HUMAN_MODEL_BATCHES else "ai"
+
+
+def counts_as_pin(e) -> bool:
+    """这条事件能不能**当钉用**（进字形库、算已裁、human_chars 认、进绑定表）：人裁或已放行的 AI 钉。
 
     看图结论（`kind="vision_check"`，或任何 `payload.source="vision"` 的事件）一律不算——模型判的
-    可能有错，不能和人亲裁混在一起。
+    可能有错，不能和人亲裁混在一起。`source="auto"`（`scripts/book_lib_auto.py` 的机器高可信刻例）
+    2026-11-05 起也不算：它们只是刻例来源记账，当钉的话会进绑定表，按格号绑，重切后挪格就把别处的字
+    压上去（全唐文 r11 约 45 格）。新的「模型判断」来源要排除时加进 `MODEL_JUDGMENT_SOURCES`。
 
-    ⚠️ **不按 `actor="model"` 一刀切**：`events/` 里早有两类 `actor="model"` 的 confirm，语义各有
-    来路，不能跟着改：①人裁的**机械更正**（`scripts/glyph_codepoint_unify.py` 码位统一、
-    `scripts/mojibake_census.py` 乱码还原）——它们压的就是人裁本身，不认的话旧码位／乱码那条人裁
-    会原样复活；②`source="auto"`（`scripts/book_lib_auto.py` 的机器高可信刻例）2026-11-05 起也不算人裁：它们只是
-    刻例来源记账，刻例由 admit_instance 直接进库、replay 本就跳过；当人裁的话会进绑定表，按格号绑，
-    重切后挪格就把别处的字压上去（全唐文 r11 约 45 格）。新的「模型判断」来源要排除时加进 `MODEL_JUDGMENT_SOURCES`。"""
-    if getattr(e, "kind", None) in ("vision_check", "ctx_ruling"):
-        return False
-    return (getattr(e, "payload", None) or {}).get("source") not in MODEL_JUDGMENT_SOURCES
+    2026-11-26 前这就是 `counts_as_human` 的口径；那时 `events/` 里 `actor="model"` 的 confirm
+    （文意多路、码位统一、乱码还原、错锚修复…约 5,100 条）都当人裁。现在分出级别（`event_level`），
+    但**会改产物的读者一律用本函数**，产物与改前逐字节相同：AI 钉照旧放行（GM4：文本不动、老账不回头重审）；
+    「人裁压过后写的 AI」等书线复核完 AI 盖过人裁的 25 格再做。"""
+    return event_level(e) is not None
+
+
+def counts_as_human(e) -> bool:
+    """这条事件是不是**人裁**（严格，`event_level == "human"`）。只给统计、评测这类「人裁有多少、
+    准不准」的读者用；会改产物的读者用 `counts_as_pin`。"""
+    return event_level(e) == "human"
 
 
 class EventTarget(BaseModel):
@@ -244,6 +323,8 @@ class EventLog:
         self.root = Path(root) if root else default_feedback_root()
         #: 最近一次读各批时，因换图源页表 rev 不符没采信的条数：{批: {册: 条数}}
         self.dropped: dict[str, dict[str, int]] = {}
+        #: 最近一次 `append` 里缺来源三字段的裁定事件数（只告警不拒，见 `missing_provenance`）
+        self.provenance_missing = 0
 
     # ── 路径 ─────────────────────────────────────────────────────────
     @property
@@ -302,6 +383,7 @@ class EventLog:
         if bad:
             detail = "; ".join(f"{eid}: {f}={v!r}" for eid, f, v in bad)
             raise BadRequest(f"字形字段不合法（不是单字，也不是合法多码位），拒绝写入：{detail}")
+        self._warn_provenance(events)
         gate = self._rev_gate()  # 换图源（GUJI-748 §六）：切过的册，锚里页表 rev 不符的事件不许写
         stale = [e for e in events if not gate.admits(e.kind, _target_dict(e.target))]
         if stale:
@@ -339,6 +421,19 @@ class EventLog:
                         next_seq = max(next_seq, e.seq + 1)
                         n += 1
         return n
+
+    def _warn_provenance(self, events: list[Event]) -> None:
+        """裁定事件缺 `payload.level／by／channel` 只告警不拒（2026-11-27，计划 1.6；改必填是 2.4）。
+        一次 append 只打一行：缺几条、缺哪些字段、哪几批。"""
+        lack = [(e, m) for e in events if (m := missing_provenance(e))]
+        self.provenance_missing = len(lack)
+        if not lack:
+            return
+        fields = sorted({f for _, m in lack for f in m}, key=PROVENANCE_FIELDS.index)
+        batches = sorted({e.batch for e, _ in lack})
+        _log.warning("裁定事件缺来源字段 %s：%d 条（批次 %s%s）。新写的 confirm 请在 payload 写明 level／by／channel，"
+                     "见 doc/formats/裁定事件规范.md §4.1", "／".join(fields), len(lack), "、".join(batches[:3]),
+                     "…" if len(batches) > 3 else "")
 
     def compact(self, batch: str, dry_run: bool = False) -> dict:
         """同一 target.key 的重复裁决只留**最后一条**（用户 2026-09-16）。
@@ -401,10 +496,17 @@ class EventLog:
         from ..core.event_files import RevGate, sibling_books_dir
         return RevGate(sibling_books_dir(self.root / "events") if books_dir is _UNSET else books_dir)
 
+    def _aliases(self, gate) -> dict[str, str]:
+        """册旧名 → 新名（`core.volume_alias`，册 yaml 的 `aliases`；11-27 册号位数统一）。没写就是空表。"""
+        from ..core.volume_alias import alias_map
+        return alias_map(gate.books_dir)
+
     def _gate(self, batch: str, evs: list[Event]) -> list[Event]:
         """换图源的页表 rev 判据（`core.event_files.RevGate`）。丢掉的条数按批记在 `self.dropped`，
-        给 `guji db status`、落票命令打印「N 条因页表 rev 不符不采信」用，不静默。"""
+        给 `guji db status`、落票命令打印「N 条因页表 rev 不符不采信」用，不静默。
+        判之前先把册旧名换成新名（`_alias_events`），下游只看到新名。"""
         gate = self._rev_gate()
+        evs = _alias_events(evs, self._aliases(gate))
         out = [e for e in evs if gate.admits(e.kind, _target_dict(e.target))]
         if gate.dropped:
             self.dropped[batch] = dict(gate.dropped)
@@ -451,14 +553,15 @@ class EventLog:
         上一次问过的每一册当时的 rev：这回同一个 yaml 目录、问过的每一册 rev 都没变，结果必然逐条相同，直接用；
         有一册变了（换图源刚切了 yaml）就整批重判。rev 本身按 yaml 的 (mtime, 大小) 缓存，问一遍只 stat。"""
         gate = self._rev_gate(books_dir)
+        amap = self._aliases(gate)
         memo = hit[2]
-        if (memo is not None and memo[0] == gate.books_dir
+        if (memo is not None and memo[0] == gate.books_dir and memo[4] == amap
                 and all(gate.rev(b) == r for b, r in memo[1].items())):
             out, dropped = memo[2], memo[3]
         else:
-            out = [e for e in hit[1] if gate.admits(e.kind, _target_dict(e.target))]
+            out = [e for e in _alias_events(hit[1], amap) if gate.admits(e.kind, _target_dict(e.target))]
             dropped = dict(gate.dropped)
-            hit[2] = (gate.books_dir, dict(gate._rev), out, dropped)
+            hit[2] = (gate.books_dir, dict(gate._rev), out, dropped, amap)
         if dropped:
             self.dropped[batch] = dict(dropped)
         else:
@@ -546,6 +649,23 @@ class EventLog:
         done = self.consumed_ids(consumer)
         evs = sorted(self.read(batch) if batch else self.iter_all(), key=replay_key)
         return [e for e in evs if e.id not in done]
+
+
+def _alias_events(evs: list[Event], amap: dict[str, str]) -> list[Event]:
+    """册旧名换新名：要换的事件给一份改过的拷贝（缓存里的原对象不动），其余原样。没有旧名表原样返回。"""
+    if not amap:
+        return evs
+    from ..core.volume_alias import alias_event_dict
+    out = []
+    for e in evs:
+        d = {"target": e.target.model_dump(), "payload": e.payload}
+        d2 = alias_event_dict(d, amap)
+        if d2 is d:
+            out.append(e)
+        else:
+            out.append(e.model_copy(update={"target": EventTarget.model_validate(d2["target"]),
+                                            "payload": d2["payload"]}))
+    return out
 
 
 def iter_events_readonly(log) -> "Iterator[Event]":

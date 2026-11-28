@@ -37,7 +37,40 @@ def register_kind(kind: ProductKindSpec) -> ProductKindSpec:
     return kind
 
 
+#: 读「本页每列格数」的步（2026-11-27，朱楓林集序页六行十四字、正文九行二十字）：册配置写了 `chars_per_line_pages`
+#: 时，这几步跑点名页期间 `ctx.book.chars_per_line` 换成表里的数（`_cpl_page_view`）。换在注册处、不改各步代码：
+#: 步模块的代码指纹不动，没写表的册产物与指纹逐位不变；写了表的册由 `engine._self_payload` 加键 `cpl_pages` 过期。
+CPL_PAGES_STEPS = frozenset({"border_detect", "column_geometry", "column_gate", "row_segment",
+                             "row_segment_gate", "cut_gate"})
+
+
+def _cpl_page_view(run_page: Callable) -> Callable:
+    """包一层 `run_page`：点名页期间 `ctx.book` 换成 `chars_per_line` 改为本页数的浅拷贝，跑完换回。
+    各步自己的 `chars_per_line`／`n_body_slots`／`expected_slots` 参数显式写了的仍优先（与册级 `chars_per_line` 同口径）。"""
+    import copy
+    import functools
+
+    @functools.wraps(run_page)
+    def wrapped(self, ctx, page, *a, **kw):
+        book = getattr(ctx, "book", None)
+        table = getattr(book, "chars_per_line_pages", None) or {}
+        n = table.get(int(page)) if table else None
+        if not n or n == book.chars_per_line:
+            return run_page(self, ctx, page, *a, **kw)
+        view = copy.copy(book)
+        view.chars_per_line = int(n)
+        ctx.book = view
+        try:
+            return run_page(self, ctx, page, *a, **kw)
+        finally:
+            ctx.book = book
+    wrapped._cpl_page_view = True  # type: ignore[attr-defined]
+    return wrapped
+
+
 def register_step(cls: type["Step"]) -> type["Step"]:
+    if cls.spec.id in CPL_PAGES_STEPS and not getattr(cls.run_page, "_cpl_page_view", False):
+        cls.run_page = _cpl_page_view(cls.run_page)  # type: ignore[method-assign]
     inst = cls()
     sid = inst.spec.id
     if sid in STEPS and type(STEPS[sid]) is not cls:
@@ -123,7 +156,8 @@ def _with_book_params(p: BaseModel, step: "Step", ctx: "RunContext") -> BaseMode
     书 yaml 里显式配的字段是用户的明确决定，应该压过那几个函数算的「按本书
     convenience 默认值」，不能反过来被它们先占了「仍是默认值」这个判据的位置。
     """
-    book_kv = (getattr(ctx.book, "params", None) or {}).get(step.spec.id)
+    from .pipeline import rehome_params
+    book_kv = rehome_params(getattr(ctx.book, "params", None) or {}).get(step.spec.id)
     if not book_kv:
         return p
     # 调用方（CLI `--params`／`--override`／管线 yaml／Engine 已叠好的册配置）显式传过的字段不碰——按「写没写」判，不按「等不等于默认值」判：
@@ -325,6 +359,11 @@ def _with_book_step6_ai(p: BaseModel, ctx: "RunContext") -> BaseModel:
 
 
 # ── 运行上下文 ───────────────────────────────────────────────────────
+class StaleRenderError(RuntimeError):
+    """缓存图要现算，但产出它的那一步这一页产物与现在的册配置／再生结果对不上（`RunContext.materialize`、
+    `column_warp.render`）。宁可报错，不悄悄出一张跟产物坐标不符的图（2026-11-25）。"""
+
+
 class RunContext:
     """一次运行里 Step 看到的全部环境。Step 通过它读上游产物、拿原图、走图像缓存。"""
 
@@ -570,11 +609,101 @@ class RunContext:
             return None
         return ent.sha256 if ent is not None and ent.status == "ok" and ent.sha256 else None
 
+    def render_book_drift(self, step: "Step", key: str) -> dict | None:
+        """现算图之前的护栏（2026-11-25，CV4→CV0 殿本 frame_layers）：产出它的那一步这一页产物是按哪份
+        `book_deps` 跑的（manifest `book`），与现在册配置的取值比。不同 → {字段: (产物时, 现在)}；
+        相同、没 book_deps、没记录（老条目／还没产物）→ None（不验）。
+
+        `render` 读的是**现在**的册配置，产物（窗口、warped_size、格坐标）却是**当时**的配置出的：改了 yaml
+        而还没重跑这一步时冷缓存再生出的图跟产物对不上，下游按旧坐标裁新图就裁偏，而且一切状态都显示正常。
+        指纹里早有 book_deps（产物会报过期），但只跑下游、上游没重跑时没人拦——这里拦。"""
+        if not step.spec.book_deps:
+            return None
+        import json as _json
+        import re as _re
+        m = _re.match(r"^p\d{4}", key)
+        if not m:
+            return None
+        try:
+            ent = self.store.manifest(self.book.id, step.spec.id).get(m.group(0))
+        except Exception:                      # noqa: BLE001 —— 取不到记录不挡出图（同 cache_stamp）
+            return None
+        if ent is None or ent.status != "ok" or ent.book is None:
+            return None
+        from .engine import book_dep_values
+        now = _json.loads(_json.dumps(book_dep_values(step, self.book), sort_keys=True))
+        then = _json.loads(_json.dumps(ent.book, sort_keys=True))
+        diff = {k: (then.get(k), now.get(k)) for k in sorted(set(now) | set(then)) if then.get(k) != now.get(k)}
+        return diff or None
+
+    def chain_fingerprint(self, step_id: str, page: int) -> str | None:
+        """`step_id` 及它在本管线里的全部上游这一页 manifest 指纹的合哈希（16 位）：跨机器共享派生图的键
+        （2026-11-25「字块随包存 R2」）。每步指纹含自身版本、参数、代码、册配置与直接上游产物 sha，最上游吃原图 sha，
+        任何一项变了它就变。只读 manifest、不重算；哪一步这一页没有 ok 记录回 None（不取不传）。"""
+        import hashlib
+        pl = self.pipeline
+        if step_id not in pl.steps:
+            return None
+        seen: list[str] = []
+        stack = [step_id]
+        while stack:
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.append(cur)
+            stack.extend(pl.upstream(cur))
+        parts = []
+        pk = page_key(page)
+        for sid in sorted(seen):
+            try:
+                ent = self.store.manifest(self.book.id, sid).get(pk)
+            except Exception:                  # noqa: BLE001
+                return None
+            if ent is None or ent.status != "ok" or not ent.fingerprint:
+                return None
+            parts.append(f"{sid}:{ent.fingerprint}")
+        return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
+
+    def _page_fetch(self, kind_id: str, key: str, stamp: str | None) -> None:
+        """缓存不在时整页去别处取一次（`core.derived.PAGE_FETCHER`）。同一进程同一页只试一次。"""
+        import re as _re
+        from . import derived
+        m = _re.match(r"^p(\d{4})", key)
+        if not m or kind_id not in derived.PAGE_KINDS or not derived.page_fetch_enabled():
+            return
+        page = int(m.group(1))
+        prod = self.producer(kind_id).spec.id
+        if getattr(self, "step_id", None) == prod:
+            return                         # 产出它的那一步自己在跑：manifest 还是旧的，取回的会是上一代
+        tried = self.__dict__.setdefault("_page_fetch_tried", set())
+        if (kind_id, page) in tried:
+            return
+        tried.add((kind_id, page))
+        if self.cache.get(self.book.id, kind_id, key, stamp=stamp) is not None:
+            return
+        fp = self.chain_fingerprint(prod, page)
+        if not fp:
+            return
+        try:
+            derived.PAGE_FETCHER(self.book.id, kind_id, page, fp, self.cache, stamp)
+        except Exception as e:                 # noqa: BLE001 —— 取不到就现算
+            self.log(f"  （{kind_id} p{page:04d} 没取回：{type(e).__name__}: {str(e)[:120]}，现算）")
+
     def materialize(self, kind_id: str, key: str) -> Path:
         step = self.producer(kind_id)
+        self._page_fetch(kind_id, key, self.cache_stamp(kind_id, key))
+
+        def build() -> np.ndarray:
+            drift = self.render_book_drift(step, key)
+            if drift:
+                raise StaleRenderError(
+                    f"{kind_id} {key} 现算不了：{step.spec.id} 这一页的产物是按旧册配置跑的（"
+                    + "；".join(f"{k} {a!r}→{b!r}" for k, (a, b) in drift.items())
+                    + f"），按现配置再生的图会和产物坐标对不上。先从 {step.spec.id} 起重跑这一页（或撤回配置改动）。")
+            return step.render(self, kind_id, key)
+
         return self.cache.materialize(
-            self.book.id, kind_id, key,
-            lambda: step.render(self, kind_id, key),
+            self.book.id, kind_id, key, build,
             stamp=self.cache_stamp(kind_id, key))
 
     def image(self, kind_id: str, key: str) -> np.ndarray:

@@ -7,12 +7,42 @@ slot 编号：正文 1..n_body_slots，抬头格 -n_raised..-1，跳过 0；pos 
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_serializer
 
 from ...core.spec import COLUMN_PX, ProductKindSpec
 from ...core.step import register_kind
 
 Point = tuple[float, float]
+
+
+# ── 折线落盘压缩（2026-11-27，CV2，Sheldon 定「折线只存拐点」）────────────────
+# 折线（格的 seam_top／seam_bottom、切点候选的 y）在内存里是「每个 x 一个 y」的整数表（长约一列宽，二百来个）；
+# 落盘（model_dump(mode="json")，产物 store 就是这么写的）改存游程 {"n": 长度, "runs": [[x, y], …]}：
+# 每段从 x 起、到下一段的 x 之前 y 都是这个值。**无损**：载入时（field_validator）展开回原表，旧产物的逐 x 表照读，
+# 所以经本模型读写的代码一行不用改、第四步逐字节不变。史記 42 册 40 页 row_segment 产物 13.9MB → 7.0MB。
+# 直接读产物 JSON 的脚本用 `seam_ys()` 展开。本模块不在任何 Step 的 code_deps 里，改它不让产物过期。
+
+def seam_runs(ys: list[int] | None) -> dict | None:
+    """逐 x 的 y 表 → 游程 {"n", "runs"}；None／空表原样返回。"""
+    if not ys:
+        return ys
+    runs = [[0, int(ys[0])]]
+    for x in range(1, len(ys)):
+        if ys[x] != ys[x - 1]:
+            runs.append([x, int(ys[x])])
+    return {"n": len(ys), "runs": runs}
+
+
+def seam_ys(v) -> list[int] | None:
+    """折线落盘的两种写法（游程 dict，或旧的逐 x 表）→ 逐 x 的 y 表。直接读产物 JSON 的代码用它。"""
+    if v is None or isinstance(v, list):
+        return v
+    n, runs = int(v["n"]), v["runs"]
+    out: list[int] = []
+    for i, (x, y) in enumerate(runs):
+        end = runs[i + 1][0] if i + 1 < len(runs) else n
+        out.extend([int(y)] * (int(end) - int(x)))
+    return out
 
 
 class CellRec(BaseModel):
@@ -30,9 +60,18 @@ class CellRec(BaseModel):
     raised: bool = False
     suspect_jiazhu_body: bool = False      # 疑似被缝位骗过的整宽正文字（jiazhu_split.suspect_full_width_cells）
     quad_page: list[Point] | None = None   # 原图规范空间四角 [(x,y)…]，右上原点
-    seam_top: list[int] | None = None      # 折线缝（列图坐标，每 x 一个 y，从 x0 起）；见 seg/seam.py
+    seam_top: list[int] | None = None      # 折线缝（列图坐标，每 x 一个 y，从 x0 起）；见 seg/seam.py。落盘存游程（见 seam_runs）
     seam_bottom: list[int] | None = None
     flags: list[str] = Field(default_factory=list)   # 现代链 row_segment_runs 的项级标记（small / tall / punct_absorbed）
+
+    @field_validator("seam_top", "seam_bottom", mode="before")
+    @classmethod
+    def _seam_in(cls, v):
+        return seam_ys(v)
+
+    @field_serializer("seam_top", "seam_bottom", when_used="json")
+    def _seam_out(self, v):
+        return seam_runs(v)
 
 
 class SeamCandidate(BaseModel):
@@ -48,6 +87,15 @@ class SeamCandidate(BaseModel):
     dev_max: int = 0               # 相对直线的最大偏移 px（0 = 与直线重合）
     agree: float | None = None     # U-Net 裁判的置信加权一致率 [0,1]（seg/cut_select.py）；没过裁判为 None
     dis_unet: int | None = None    # 与 U-Net 归属分歧的最大连通块 px（2026-09-15 L2′ 升级门槛看它）
+
+    @field_validator("y", mode="before")
+    @classmethod
+    def _y_in(cls, v):
+        return seam_ys(v)
+
+    @field_serializer("y", when_used="json")
+    def _y_out(self, v):
+        return seam_runs(v)
 
 
 class CutPointCandidates(BaseModel):

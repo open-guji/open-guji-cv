@@ -83,7 +83,7 @@ class AnswerCache:
         return self._load().get(k)
 
     # judge 用的统一接口（裁定库 `feedback.rulings.RulingCache` 同款）：问过的窗口直接取，没问过 None
-    def lookup(self, group, prompt_ver, model, left, right):
+    def lookup(self, group, prompt_ver, model, left, right, cell=None):
         return self.get(cache_key(group, prompt_ver, model, left, right))
 
     def store(self, group, prompt_ver, model, left, right, e: dict, cell=None) -> None:
@@ -199,7 +199,7 @@ RANK = {"high": 3, "mid": 2, "low": 1}
 
 def _entry(group, system, ver, left, right, members, model, effort, cache, client, cell, pending_reason="group_abstain"):
     """问一次（先查缓存）→ (缓存条目 dict｜None, 是不是读的缓存, 本次真问的 token｜{}, 出错码｜None)。"""
-    e = cache.lookup(group, ver, model, left, right) if cache else None
+    e = cache.lookup(group, ver, model, left, right, cell=cell) if cache else None
     if e is not None:
         _bump(hits=1)
         return e, True, {}, None
@@ -296,6 +296,8 @@ def judge(group: str, system: str, prompt_ver: str, left: str, right: str, membe
     e, cached, tok, err = _entry(group, system, prompt_ver, left, right, members, model, effort, cache, client, cell, pending_reason)
     if cached:
         extra["cached"] = True
+        if e and e.get("ruling_key") == "u":     # 窗口键没中、按字格永久编号 u 查到的（`ruling_by_u`，CV0 T3 11-25）
+            extra.update({"ruling_key": "u", "u": e.get("u")})
     if tok:
         extra["tok"] = tok
     if err:

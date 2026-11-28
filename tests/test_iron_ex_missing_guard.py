@@ -2,6 +2,9 @@
 """铁证放行遇对照刻例原图缺失 → 转待审（`seed_admit.iron_ex_missing_guard`，overview#554）：只收紧。自造数据。"""
 from __future__ import annotations
 
+from helpers import patch_seed_admit
+import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
+
 import open_guji_cv.steps  # noqa: F401
 import open_guji_cv.steps.seed_admit as sa
 from helpers import make_book, page_align_ref, page_match, write_product
@@ -30,10 +33,10 @@ def _run(tmp_path, monkeypatch, params, n_missing):
             missing.extend(f"vol02:1:1:{i}" for i in range(n_missing))
         return "山"
 
-    monkeypatch.setattr(sa, "_iron_context", lambda *a, **k: object())
-    monkeypatch.setattr(sa, "_iron_page_scale", lambda *a, **k: 1.0)
-    monkeypatch.setattr(sa, "_iron_decide", fake_decide)
-    monkeypatch.setattr(sa, "_iron_confusable_witness", lambda *a, **k: False)
+    patch_seed_admit(monkeypatch, "_iron_context", lambda *a, **k: object())
+    patch_seed_admit(monkeypatch, "_iron_page_scale", lambda *a, **k: 1.0)
+    patch_seed_admit(monkeypatch, "_iron_decide", fake_decide)
+    patch_seed_admit(monkeypatch, "_iron_confusable_witness", lambda *a, **k: False)
     import open_guji_cv.clustering.seeding as seeding
     monkeypatch.setattr(seeding, "context_conflicts_ref", lambda *a, **k: False)
     page = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
@@ -66,7 +69,7 @@ def test_real_iron_decide_collects_only_cache_misses(tmp_path, monkeypatch):
         def match(self, *a, **k):
             return _Match()
 
-    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: np.zeros((20, 20), np.uint8))
+    monkeypatch.setattr(_sac, "_page_patch", lambda *a, **k: np.zeros((20, 20), np.uint8))
     monkeypatch.setattr(nm, "normalize_patch", lambda img, **k: img)
     seen = {}
 

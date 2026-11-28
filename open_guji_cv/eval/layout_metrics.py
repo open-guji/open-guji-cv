@@ -68,15 +68,27 @@ def _pts(d: dict | None) -> np.ndarray | None:
     return a
 
 
+def _monotone(t: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """按画线次序把自变量 t 压成单调不减（整条反画的先倒过来），再插值。
+
+    不能按 t 排序：抬头台阶是同 t 两点，人标时竖边常画得歪一点（如 [1209.5, 77.3] → [1204.5, 190.5]，
+    t 往回走了 5 px），一排序台阶顶点就跟下一段错配，整段插成斜线（vol01:45 一页 p95 因此虚报 106 px）。
+    取累计最大值等于把歪的竖边扶正，次序不变。"""
+    if len(t) > 1 and t[-1] < t[0]:
+        t, v = t[::-1], v[::-1]
+    return np.maximum.accumulate(t), v
+
+
 def x_at(pts: np.ndarray, ys: np.ndarray) -> np.ndarray:
-    """折线在各 y 处的 x（折线点按 y 排序；范围外取端点值，端点以外不外推）。"""
-    o = np.argsort(pts[:, 1], kind="stable")
-    return np.interp(ys, pts[o, 1], pts[o, 0])
+    """折线在各 y 处的 x（按画线次序，y 压成单调；范围外取端点值，端点以外不外推）。"""
+    t, v = _monotone(pts[:, 1], pts[:, 0])
+    return np.interp(ys, t, v)
 
 
 def y_at(pts: np.ndarray, xs: np.ndarray) -> np.ndarray:
-    o = np.argsort(pts[:, 0], kind="stable")
-    return np.interp(xs, pts[o, 0], pts[o, 1])
+    """折线在各 x 处的 y（同 `x_at`，按画线次序，x 压成单调；阶梯折线的台阶不会被排序打乱）。"""
+    t, v = _monotone(pts[:, 0], pts[:, 1])
+    return np.interp(xs, t, v)
 
 
 def _in_gaps(ys: np.ndarray, gaps: list[list[float]] | None) -> np.ndarray:

@@ -610,6 +610,14 @@
    "owner": "96mid1ogzk"
   },
   {
+   "kind": "boundary_net",
+   "path": "models/boundary_net_shiji_v1/model.pt",
+   "size": 343525,
+   "sha256": "90ab270eabed749034af8eef24316a6d8df11840b51ed8b2c3314883b261bfbb",
+   "level": "book",
+   "owner": "988g3f0wsu"
+  },
+  {
    "kind": "glyph_cnn",
    "path": "models/glyph_cnn_r4/best.pt",
    "size": 19677074,
@@ -622,6 +630,62 @@
    "path": "models/glyph_cnn_r5/best.pt",
    "size": 19674706,
    "sha256": "d2ce8bab0fd0e6a7c599ce49937d6050e5e24ce8fcc4ed9204c577f8d3cc883f",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "glyph_near_gong",
+   "path": "models/glyph_near_gong/calib.json",
+   "size": 1011,
+   "sha256": "5a979e7a9a8b23159c6ff4f0cac0f62139eec9ae617c70fb0476009458f118dc",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "glyph_near_gong",
+   "path": "models/glyph_near_gong/fold0.pt",
+   "size": 863221,
+   "sha256": "c99d41daeef75f14411970900fc6b78cac8a2ad6916acba1dc1f1e887acf6057",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "glyph_near_gong",
+   "path": "models/glyph_near_gong/fold1.pt",
+   "size": 863221,
+   "sha256": "4b4983b640ab1b2e09838cf464e0bc6dff58d54500c568dc5bcfbd4e78b13bf6",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "glyph_near_gong",
+   "path": "models/glyph_near_gong/fold2.pt",
+   "size": 863221,
+   "sha256": "68545530a0aa4a9bb7bb2c9a7ca94de1f5b3457663f654c344784ae6e3da5f6b",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "glyph_near_gong",
+   "path": "models/glyph_near_gong/fold3.pt",
+   "size": 863221,
+   "sha256": "88faf4e66e6ddadb370d3f3b724f2efe0dcd4600c28a7d91cd1b3f3aab97b4f5",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "glyph_near_gong",
+   "path": "models/glyph_near_gong/fold4.pt",
+   "size": 863221,
+   "sha256": "6bba09e69a86face6adb4cf658f0e30f23d7eaf9cf929f1e34db646549901a09",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "glyph_near_gong",
+   "path": "models/glyph_near_gong/model.json",
+   "size": 361,
+   "sha256": "6183682c9aacc1659203fb4ea59686ce0555f1940d34da676e998a3e67d478dc",
    "level": "book",
    "owner": "96mid1ogzk"
   },
@@ -654,6 +718,22 @@
    "path": "models/glyph_sim_qtw/model.pt",
    "size": 3774933,
    "sha256": "289fdf56aa646ae8ec4e19806706e5520f2a00a28db005d0ed63b4bc9b5f9319",
+   "level": "book",
+   "owner": "995ejelvk0"
+  },
+  {
+   "kind": "glyph_sim_qtw_v2",
+   "path": "models/glyph_sim_qtw_v2/calib.json",
+   "size": 605,
+   "sha256": "b9ecde99a75bd09598e1d3cc819031bab6852eec541dfef1652880bb97d537ff",
+   "level": "book",
+   "owner": "995ejelvk0"
+  },
+  {
+   "kind": "glyph_sim_qtw_v2",
+   "path": "models/glyph_sim_qtw_v2/model.pt",
+   "size": 3777853,
+   "sha256": "a6afa658f5f488177d1849851924447dc42e4d87da34d504c025edaadc682c07",
    "level": "book",
    "owner": "995ejelvk0"
   },

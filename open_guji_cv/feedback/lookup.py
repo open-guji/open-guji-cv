@@ -339,6 +339,10 @@ def _resolved_forced(book: str, reason: str, allow_sub: bool, log=None) -> dict[
             (p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in el.events_dir.glob("*.jsonl"))))
     except OSError:
         return {}
+    from .bindings import _log_root, removed_pin_events
+    gone = removed_pin_events(_log_root(el))
+    if gone:
+        sig = (*sig, gone)
     hit = _FORCED_JZ_CACHE.get((book, sig[0], reason))
     if hit and hit[0] == sig:
         return hit[1]
@@ -348,9 +352,9 @@ def _resolved_forced(book: str, reason: str, allow_sub: bool, log=None) -> dict[
         evs = list(el.iter_all())
     except FileNotFoundError:
         return {}
-    from .events import counts_as_human
+    from .events import counts_as_pin
     for e in evs:
-        if e.target.unit != "cell" or not e.target.key.startswith(pre) or not counts_as_human(e):
+        if e.target.unit != "cell" or not e.target.key.startswith(pre) or not counts_as_pin(e) or e.id in gone:
             continue
         p = e.payload or {}
         v = p.get("v") or e.kind
@@ -596,7 +600,8 @@ def _superseded_events(evs: list, bound: dict[str, dict], pre: str) -> set[str]:
 
 
 def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
-                bind: bool | None = None, lost: dict[str, dict] | None = None) -> dict[str, str]:
+                bind: bool | None = None, lost: dict[str, dict] | None = None,
+                pages: list[int] | None = None) -> dict[str, str]:
     """人在定字台上定过的字 → `{裸 id: 字}`，同一位**后到覆盖**。
 
     只有字形（2026-09-26 取消读法）。唯一的例外是**老事件**里的 己/已/巳：当时允许「看着像 X、
@@ -620,6 +625,9 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     按锚在现行切分里找回它现在对应的格：原格仍是那个字照用，整列顺移了改绑到新编号，
     切开/合并/找不到的不采信（回待审）。缺省 `bind=None` = 读工作区事件日志时开、传入测试日志时关。
 
+    ``pages``（GM4 11-24）：只算这几页裁决事件的绑定（其余页的事件按原格号用、不重绑）。收单 draft 只关心有票的几页，
+    全书重绑定在 QTW 004 上跑了 30 多分钟没完；默认 None＝全书，口径不变。
+
     **绑丢了的人裁不能悄悄消失**（2026-10-20，GUJI-697）：传 `lost`（一个空 dict）时，绑定后
     不采信的裁决按**原编号**记进去：`{原编号: {"char", "status", "event", "ts"}}`；同一编号之后
     又有可采信的裁决（出现在返回值里）的不记。`seed_admit` 拿它做「人裁绑丢」闸：机器在这一格
@@ -636,15 +644,20 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     if bind:
         try:
             from .bindings import book_bindings
-            bound = book_bindings(book, log)
+            bound = book_bindings(book, log, pages=pages) if pages is not None else book_bindings(book, log)
         except Exception as e:
             if not _lenient():
                 raise RuntimeError(f"human_chars({book})：绑定表算不出来：{e!r}。退回按格号会把换了切分的人裁落错格、"
                                    "或悄悄丢掉；先查原因（原图／glyph.db／字块缓存），确知可忽略时设 GUJI_LOOKUP_LENIENT=1") from e
             _logger.warning("human_chars(%s)：绑定表算不出来，退回按格号（GUJI_LOOKUP_LENIENT）：%r", book, e)
             bound = {}
-    from .events import EventLog, counts_as_human, iter_events_readonly
+    from .events import EventLog, counts_as_pin, event_level, iter_events_readonly
     out: dict[str, tuple[str, str | None]] = {}
+    # 级别优先（GM4 11-26，用户定：人裁>AI>pipeline，同级新覆盖旧；低级覆盖高级要高置信度）。
+    # 默认关＝与改前逐字节相同（后到覆盖）；GUJI_PIN_LEVELS=1 时，同一格已有人裁字，之后写的 AI 钉不覆盖它，
+    # 除非该 AI 事件带 `payload.override_human=true`（高置信：大数据或用户点头，由写事件的人负责）。
+    levels_on = _env_on("GUJI_PIN_LEVELS")
+    lv_of: dict[str, str] = {}
     pre = f"{book}:"
     if log is None:
         _require_events_dir(EventLog())
@@ -659,6 +672,8 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     gone = sum(n for d in (getattr(_log, "dropped", None) or {}).values() for b, n in d.items() if b == book)
     if gone:                  # 换图源：旧页号的事件不采信，要看得见（GUJI-748 §六）
         _logger.warning("human_chars(%s)：%d 条事件锚里页表 rev 与册 yaml 的 source_rev 不符，不采信", book, gone)
+    from .bindings import _log_root, removed_pin_events
+    pins_gone = removed_pin_events(_log_root(_log))
     superseded: set[str] = set()
     no_patch: list[str] = []
     # 库内审阅改标的新字（`stale_human_rules` 的 relabel 范围用）
@@ -673,14 +688,15 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
             continue
         if e.kind != "confirm" or e.target.unit != "cell" or not e.target.key.startswith(pre):
             continue
-        # 看图结论不算人裁定字（overview#428，口径见 `events.counts_as_human`）：混进来的话
+        # 看图结论不算人裁定字（overview#428，口径见 `events.counts_as_pin`）：混进来的话
         # seed_admit 会当人裁一票定案。
-        if not counts_as_human(e):
+        if not counts_as_pin(e) or e.id in pins_gone:     # 删了的钉（pin_state removed）也不认
             continue
         p = e.payload or {}
         if p.get("v") == "figure":
             # 图片格（GUJI-740）：后来判成图形，先前定的字作废（图上没有这个字）
             out.pop(e.target.key, None)
+            lv_of.pop(e.target.key, None)
             continue
         # `seg_defect` 带着字也算定了字（2026-09-20 用户定）：「有噪声 / 字形不完整」说的是
         # **这块图**的毛病，人同时看得出是哪个字时，那个字不该被丢——文本照样出字，
@@ -726,6 +742,11 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
                     lost[e.target.key] = {"char": ch, "status": row.get("status"),
                                           "event": e.id, "ts": e.ts}
                 continue
+        if levels_on:
+            lv = event_level(e)
+            if lv == "ai" and lv_of.get(key) == "human" and not p.get("override_human"):
+                continue            # 后写的 AI 不压人裁
+            lv_of[key] = lv or "ai"
         out[key] = ch
     if lost is not None:
         for k in [k for k in lost if k in out]:

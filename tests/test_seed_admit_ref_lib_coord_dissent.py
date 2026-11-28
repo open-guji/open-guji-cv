@@ -7,6 +7,7 @@
 摆法照抄 `test_seed_admit_ref_lib_diff_guard.py` 与 `test_seed_admit_solo_replace_0928.py`。
 """
 from __future__ import annotations
+import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 
 import open_guji_cv.steps  # noqa: F401
 from helpers import make_book, make_ctx, page_match, write_product
@@ -36,9 +37,9 @@ def _run(tmp_path, monkeypatch, *, cands, align_char, align_op, coord=None, verd
 RL = dict(cands=[("變", 0.9443), ("泊", 0.939)], align_char="變", align_op="replace")
 
 
-def test_coord_dissent_off_by_default(tmp_path, monkeypatch):
-    assert SeedAdmitParams().ref_lib_coord_dissent is False
-    r = _run(tmp_path, monkeypatch, **RL, coord="泊")
+def test_coord_dissent_off_admits(tmp_path, monkeypatch):
+    assert SeedAdmitParams().ref_lib_coord_dissent is True     # 缺省开（CV4 11-25）
+    r = _run(tmp_path, monkeypatch, **RL, coord="泊", params={"ref_lib_coord_dissent": False})
     assert r.admit and r.channel == "ref_lib" and r.char == "變"
 
 
@@ -55,7 +56,7 @@ def test_coord_agree_or_missing_still_admits(tmp_path, monkeypatch):
 
 
 def test_params_not_in_dump_when_off():
-    d = SeedAdmitParams().model_dump()
+    d = SeedAdmitParams(ref_lib_coord_dissent=False).model_dump(mode="json", context={"hash": True})
     assert "ref_lib_coord_dissent" not in d and "replace_form_edge_exclude" not in d
     d = SeedAdmitParams(ref_lib_coord_dissent=True, replace_form_edge_exclude=True).model_dump()
     assert d["ref_lib_coord_dissent"] is True and d["replace_form_edge_exclude"] is True
@@ -75,9 +76,22 @@ def test_replace_form_lib_not_excluded_still_swaps(tmp_path, monkeypatch):
 
 def test_replace_form_lib_excluded_keeps_align(tmp_path, monkeypatch):
     import open_guji_cv.steps.seed_admit as sa
-    monkeypatch.setattr(sa, "_edge_pair_excluded", lambda a, b: {a, b} == {"既", "旣"})
+    monkeypatch.setattr(_sac, "_edge_pair_excluded", lambda a, b: {a, b} == {"既", "旣"})
     kw = dict(cands=[("既", 0.97), ("當", 0.90)], align_char="旣", align_op="replace")
     r = _run(tmp_path, monkeypatch, **kw, params={"replace_form": "lib"})
     assert r.char == "既"                                     # 开关关：照旧换库形
     r = _run(tmp_path, monkeypatch, **kw, params={"replace_form": "lib", "replace_form_edge_exclude": True})
     assert r.admit and r.channel == "match_replace" and r.char == "旣"
+
+
+def test_new_defaults_survive_rebuild_and_hash_old_way():
+    """2026-11-25 改缺省的 5 个键：写死旧值的册重建参数（`type(p)(**p.model_dump())`）不丢值；指纹按旧缺省去键。"""
+    from open_guji_cv.core.engine import params_hash
+    old = dict(consensus_fallback=False, group_flow_ctx_agree=[], ref_lib_coord_dissent=False,
+               edge_pair_group_seam=True, human_unbound_shift_ok=False)
+    p = SeedAdmitParams(group_flow=("rr",), **old)
+    q = type(p)(**p.model_dump())
+    assert {k: getattr(q, k) for k in old} == old
+    h = p.model_dump(mode="json", context={"hash": True})
+    assert not set(old) & set(h)
+    assert params_hash(p) == params_hash(q)

@@ -125,6 +125,8 @@ class RowSegmentGateStep(Step):
                     flags.append("roster_dense_guess：职名列有粘连密排段，字数是推出来的，待人核")
                 if "roster_jiazhu" in cc.flags:
                     flags.append("roster_jiazhu：职名列有雙行小字，两行相位不齐，字数待人核")
+                if "manual_cells_remapped" in cc.flags:
+                    flags.append("manual_cells_remapped：人钉的格按列图几何变化换算到新列图，位移超过 3px，待人核")
                 if "roster_overlap" in cc.flags:
                     flags.append("roster_overlap：相邻两字 y 重叠（多是「臣」贴官衔末字），Step4 满宽裁会互相带墨")
             elif expected is not None and abs(cc.n_body_slots - row_split_extra(cc.flags) - expected) > p.slot_tol:
@@ -232,7 +234,7 @@ class RowSegmentGateStep(Step):
 
 # 挂到 Step3（row_segment）出口——levels 的 desc 只描述层次，不重复具体阈值数字
 # （阈值在 RowSegmentGateParams 里，写两处会漂）。
-attach_gate("row_segment", GateSpec(
+ROW_SEGMENT_GATE_SPEC = GateSpec(
     id="row_segment_gate", unit="column", on_fail="block",
     levels=(
         GateLevel(id="L0", unit="page",
@@ -254,4 +256,5 @@ attach_gate("row_segment", GateSpec(
         GateLevel(id="L4", unit="cell",
                   desc="碎格：格高远小于一格——flag，不拦（列里多数字仍切得对）", name="sliver_cell"),
     ),
-))
+)
+# 2026-11-25：不再挂在 row_segment 出口，层次并进 `cut_gate`（出口闸永远最后调用）。

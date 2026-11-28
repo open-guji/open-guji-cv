@@ -66,16 +66,26 @@ KINDS: tuple[Kind, ...] = (
     # 5a 精验的度量学习 CNN（`clustering/sim_cnn.py`，`glyph_match.sim_model` 开关）：每本书用本书库刻例各训一份
     Kind("glyph_sim", "repo", "models/glyph_sim_qtw/*", "book", QUANTANGWEN,
          ("glyph_match",), "全唐文字形库刻例训的 5a 相似度 CNN（model.pt）＋分数校准表（calib.json）；换权重要重拟校准表"),
+    Kind("glyph_sim_qtw_v2", "repo", "models/glyph_sim_qtw_v2/*", "book", QUANTANGWEN,
+         ("glyph_match",), "全唐文 11-24 字形库重训的 5a 相似度 CNN（model.pt）＋分数校准表（calib.json）；旧版 glyph_sim_qtw 不动"),
     Kind("glyph_sim_shiji", "repo", "models/glyph_sim_shiji/*", "book", SHIJI,
          ("glyph_match",), "史記字形库刻例训的 5a 相似度 CNN（model.pt）＋分数校准表（calib.json）；换权重要重拟校准表"),
     # 5a 相似度 CNN 的跨书通用底座：几本书的字形库合训一份（同码位跨书合一类），新书开书直接用。多书混合归 global。
     # 目录名带版本 `glyph_sim_base_v<N>`：重训（并进新书）出下一个目录，旧目录不动，钉着旧版的书不受影响
     Kind("glyph_sim_base", "repo", "models/glyph_sim_base_v*/*", "global", "global",
          ("glyph_match",), "多书合训的 5a 相似度 CNN 通用底座（model.pt）＋通用校准表（calib.json，对没见过的书取保守）"),
+    # 3b 形近字组分析（`steps/glyph_near.py`，`groups/near_methods.py`）：每组一个目录，书配置 `glyph_near.groups.<组>.methods`
+    # 指过来。宫／宮／官 小 CNN 是殿本现行文本按册 5 折训的（ZM 2026-11-26），calib.json 用 5 折留出概率标定
+    Kind("glyph_near_gong", "repo", "models/glyph_near_gong/*", "book", DIANBEN,
+         ("glyph_near", "glyph_analyzer"), "殿本宫／官二分类小 CNN（fold0–4.pt，按册号 % 5 取留出折）＋校准表（calib.json）＋model.json"),
     # 5b 笔画证据（`clustering/stroke_evidence.py`，`font.stroke_evidence` 开关）：不认字的笔画检测网络＋标准骨架索引。
     # 目录名带版本，换权重或索引出 `_v2`，不动 `_v1`
     Kind("stroke_evidence", "repo", "models/stroke_evidence_v*/*", "global", "global",
          ("rare_candidates",), "合成数据训的笔画检测（net.pt）＋GlyphWiki 展开的 9.8 万字骨架索引（skel.npz、skel_forms.json）"),
+    # 2c 字间界线判官（`impl/keben/boundary_net.py`，row_segment `boundary_net` 参数，缺省关）：只重排正文列内部切线。
+    # 目录名带书与版本，重训出 `_v2`，不动 `_v1`
+    Kind("boundary_net", "repo", "models/boundary_net_shiji_v*/model.pt", "book", SHIJI,
+         ("row_segment",), "史記 20–41 册生产切分（含人钉）当银标训的字间界线二分类 CNN"),
     # 字组 IDS 切分 U-Net：原先算在语料底库（config/groups/<组>/），11-04 挪进模型系统
     Kind("ids_unet", "repo", "config/groups/*/unet.npz", "book", DIANBEN,
          ("seed_admit",), "殿本本组人标切线训的三段切分 U-Net（纯 numpy）"),

@@ -141,7 +141,7 @@ CV 快照 `snap/96mid1ogzk/vol03/20260928T1708-full` 的 p107 产物建在 sha `
 ```
 
 - **页序**：工作区页号 n、拆点 P（裁剪框表里该册最小的 ws 页号）：n < P → n；P ≤ n ≤ P+3 → 表里那一块（`0105a`–`0105d`）；
-  n > P+3 → n−3。只有 vol03/04/07/09 受影响，其余各册 ws 页号 = IA leaf 号。人裁事件、products 的字位 key 仍是 ws 页号
+  n > P+3 → n−3。只有 vol03/04/07/09 受影响，其余各册 ws 页号 = IA leaf 号。裁定事件、products 的字位 key 仍是 ws 页号
   （`cv_id`、`page.index`、`page_id` 照旧），canvas 只在 `canvas` 块与 IIIF 导出里出现。
 - **`image.region` ⇔ `canvas.source.selector`（一一对应）**：两者都是「原叶上的 xywh」。
   - CV 跑批的图就是这一块（拆页修好后重跑的正常情况）：`image.region` = selector 的 xywh，`image` 宽高 = canvas 宽高，坐标原样；

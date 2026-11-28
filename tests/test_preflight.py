@@ -1,6 +1,8 @@
 """`ops/preflight.py`（GUJI-654）：起跑前查这次要跑的步骤本机缺不缺依赖。用假引擎，不碰真书。"""
 from __future__ import annotations
 
+from helpers import patch_seed_admit
+
 from types import SimpleNamespace
 
 import pytest
@@ -69,11 +71,11 @@ def test_human_events_missing_checks_dir_and_library(monkeypatch, tmp_path):
     db.write_bytes(b"")
     root = tmp_path / "feedback"
     monkeypatch.setattr(ev, "default_feedback_root", lambda: root)
-    monkeypatch.setattr(sa, "_human_shapes", lambda p: {"b:1:1:1": "甲"})
+    patch_seed_admit(monkeypatch, "_human_shapes", lambda p: {"b:1:1:1": "甲"})
     assert "事件目录" in preflight._human_events_missing(str(db))       # 有人裁、没事件目录
     (root / "events").mkdir(parents=True)
     assert preflight._human_events_missing(str(db)) is None             # 事件目录在
     (root / "events").rmdir()
-    monkeypatch.setattr(sa, "_human_shapes", lambda p: {})
+    patch_seed_admit(monkeypatch, "_human_shapes", lambda p: {})
     assert preflight._human_events_missing(str(db)) is None             # 库里没人裁（新书）
     assert preflight._human_events_missing(str(tmp_path / "none.db")) is None

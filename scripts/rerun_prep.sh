@@ -66,9 +66,35 @@ ws_code_check() {
     echo "⚠️ 工作区 $1 缺 code/code.yaml（HEAD 有；稀疏检出或旧克隆），请删掉本机那份重跑准备" >&2; return 1
   fi
 }
+# >>> safe_checkout（tests/test_rerun_prep_safe_checkout.py 抽出来单测；规则同 guji-manager jobs/safe_checkout.py）
+# 切 cv 遇「未跟踪文件会被覆盖／删除」（如 R2 取回的 models/、fonts/ 被要切的版本跟踪）：只处理 git 报出的那几个文件，
+# 先带时间戳备份到工作区外（缺省 ~/.guji-jobs/checkout-bak/<UTC 时间>-<pid>/<仓名>/），再移走，然后重切；备份路径打进日志。
+# 不整仓 clean。清单里有仓外、已跟踪、不存在或带引号的怪路径就一个都不动，照原错失败（CV0 11-27 采纳执行方建议）。
+safe_checkout() {
+  local repo=$1 ref=$2 err rel bad= bak root rels=()
+  err=$(LC_ALL=C git -c core.quotePath=false -C "$repo" checkout -q "$ref" 2>&1) && return 0
+  mapfile -t rels < <(printf '%s\n' "$err" | awk '/untracked working tree files would be (overwritten|removed) by checkout/ {g=1; next}
+    g && /^\t/ {sub(/^\t/, ""); print; next} {g=0}')
+  if [ ${#rels[@]} -eq 0 ]; then printf '%s\n' "$err" >&2; return 1; fi
+  root=$(cd "$repo" && pwd -P)
+  for rel in "${rels[@]}"; do
+    case "$rel" in ""|/*|\"*|.git|.git/*|..|../*|*/..|*/../*) bad=1; continue;; esac
+    { [ -e "$repo/$rel" ] || [ -L "$repo/$rel" ]; } || bad=1
+    git -C "$repo" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1 && bad=1
+  done
+  if [ -n "$bad" ]; then echo "⚠️ 未跟踪文件冲突里有不能自动处理的路径，未动任何文件：$err" >&2; return 1; fi
+  bak="${GUJI_CHECKOUT_BAK:-${GUJI_JOBS_HOME:-$HOME/.guji-jobs}/checkout-bak}/$(date -u +%Y%m%dT%H%M%SZ)-$$/${root##*/}"
+  case "$(realpath -m "$bak")/" in "$root"/*) echo "⚠️ 备份目录 $bak 在仓 $repo 里面，不处理" >&2; return 1;; esac
+  for rel in "${rels[@]}"; do
+    mkdir -p "$(dirname "$bak/$rel")" && mv "$repo/$rel" "$bak/$rel" || return 1
+  done
+  echo "[safe_checkout] $repo 切 $ref 遇 ${#rels[@]} 个未跟踪文件冲突，已备份到 $bak 后移走：${rels[*]}"
+  git -C "$repo" checkout -q "$ref"
+}
+# <<< safe_checkout
 if [ -n "$CV" ]; then
   t cv git -C $SEED fetch -q --tags origin "$CV"
-  git -C $SEED checkout -q "$CV" 2>/dev/null || git -C $SEED checkout -q FETCH_HEAD
+  safe_checkout $SEED "$CV" 2>/dev/null || safe_checkout $SEED FETCH_HEAD
 fi
 ensure_manager
 # v0.7 起 cv 仓不带 models/、fonts/ 和底库语料大文件（走 R2）：切到新版后这些文件已被检出删掉，要在「模板索引」等用到 checkpoint 的段之前取回，

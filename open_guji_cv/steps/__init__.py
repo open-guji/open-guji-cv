@@ -20,9 +20,10 @@ from ..products import kinds  # noqa: F401  —— 先注册产物种类
 from . import page_survey  # noqa: F401  —— Step0 页面预检（任务卡 #54 第22条），排最前
 from . import invert_detect  # noqa: F401  —— Step0 反色带候选（自动认＋送审，2026-10-22）
 from . import seal_detect  # noqa: F401  —— 印章定位（印章系统化，2026-10-22；拓扑上紧跟 border_detect）
-from . import (border_detect, column_warp, row_segment,  # noqa: F401
+from . import (border_detect, column_warp, column_band, column_end, column_geometry, row_segment,  # noqa: F401
                cell_shrink, glyph_match, rare_candidates,
                context_decide, align_ref, seed_admit)
+from . import glyph_near, glyph_candidate, cell_traits, glyph_analyzer, context_rank  # noqa: F401  —— 第三步重构：3b 形近字组、3c 按图候选、3d 其他特征、收尾汇总（2026-11-27/28，缺省关）
 from . import line_detect, column_crop, row_segment_runs  # noqa: F401  —— 现代印刷链（modern_body.yaml）
 from . import block_detect, column_trace, line_ocr, cell_cut  # noqa: F401  —— 自由版式链（keben_free.yaml，2026-10-27；line_ocr 10-28）
 from .. import gates  # noqa: F401  —— 闸挂在对应 Step 的 spec 上，必须晚于上面几行

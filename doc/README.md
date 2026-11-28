@@ -30,6 +30,7 @@ guji-cv version --json                                                          
 |---|---|
 | [版本号规矩.md](版本号规矩.md) | 分支、发版、tag、Wiki 随 MINOR 重改 |
 | [开关登记表.md](开关登记表.md) | 每个开关的证据与负责人 |
+| [参考/字格永久编号u.md](参考/字格永久编号u.md) | 字格永久编号 u：cv 读什么（裁定按 u 查、身份账只读）、`ruling_by_u` 怎么开、各版本线、换单导出带 u、字形库为什么不改键 |
 | [参考/契约.md](参考/契约.md) | cv 与 manager 的接口：命令、`--json`、退出码、磁盘 schema |
 | [参考/module_map.md](参考/module_map.md) | 包分层与依赖方向（守卫 `tests/test_architecture.py`） |
 | [参考/切分代码结构.md](参考/切分代码结构.md) | `seg/` 原语、`impl/` 版式、书仓 `code/` |
@@ -37,7 +38,7 @@ guji-cv version --json                                                          
 | [参考/受控重跑.md](参考/受控重跑.md)、[参考/性能统计.md](参考/性能统计.md)、[参考/longrun.md](参考/longrun.md) | 重跑分级、耗时、断点续跑 |
 | [参考/exp_framework.md](参考/exp_framework.md)、[参考/cloud_eval.md](参考/cloud_eval.md) | A/B 实验与评测 |
 | [参考/modern_print_pipeline.md](参考/modern_print_pipeline.md) | 现代排印链 |
-| [formats/](formats/README.md) | guji-page、pages.json、人裁事件等格式 |
+| [formats/](formats/README.md) | guji-page、pages.json、裁定事件等格式 |
 
 ## 其他
 

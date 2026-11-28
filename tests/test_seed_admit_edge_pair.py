@@ -108,14 +108,14 @@ def test_variant_edge_single_caliber():
 def test_group_seam_variant_group():
     """字组缝：衞衛 是 weiw（异体组）组员，is_auto_pair 不认；格没进组 → edge_pair 仍放（A24 V01 深挖 11-06）。"""
     assert not edge_pairs.is_auto_pair("衞", "衛") and edge_pairs.seam_pair("衞", "衛") == "variant"
-    n, r = _run({1: {}}, {1: ([("衛", 0.97), ("術", 0.956)],)}, {1: "衞"})
+    n, r = _run({1: {}}, {1: ([("衛", 0.97), ("術", 0.956)],)}, {1: "衞"}, edge_pair_group_seam=True)
     assert n == 1 and r[1].admit and r[1].evidence["edge_pair"]["seam"] == "variant"
-    n, r = _run({1: {}}, {1: ([("衛", 0.97), ("術", 0.956)],)}, {1: "衞"}, edge_pair_group_seam=False)
+    n, r = _run({1: {}}, {1: ([("衛", 0.97), ("術", 0.956)],)}, {1: "衞"})   # 缺省关（CV4 11-25）
     assert n == 0
 
 
 def test_group_seam_skips_cells_the_group_touched():
-    p = SeedAdmitParams(db_path="x")
+    p = SeedAdmitParams(db_path="x", edge_pair_group_seam=True)
     out = _page({1: {}})
     out[0].chars[0].evidence = {"group": {"id": "weiw", "decision": "abstain"}}
     n = _edge_pair_pass(p, out, _mm({1: ([("衛", 0.97), ("術", 0.956)],)}), {}, {f"{B}:1:1": "衞"}, {})
@@ -125,9 +125,9 @@ def test_group_seam_skips_cells_the_group_touched():
 def test_group_seam_near_form_needs_bigger_lead():
     """一字在形近组（迫∈chuo）：领先要 ≥0.03。"""
     assert edge_pairs.seam_pair("廹", "迫") == "near_form"
-    n, _ = _run({1: {}}, {1: ([("迫", 0.948), ("廻", 0.941)],)}, {1: "廹"})
+    n, _ = _run({1: {}}, {1: ([("迫", 0.948), ("廻", 0.941)],)}, {1: "廹"}, edge_pair_group_seam=True)
     assert n == 0
-    n, r = _run({1: {}}, {1: ([("迫", 0.97), ("廻", 0.93)],)}, {1: "廹"})
+    n, r = _run({1: {}}, {1: ([("迫", 0.97), ("廻", 0.93)],)}, {1: "廹"}, edge_pair_group_seam=True)
     assert n == 1
 
 

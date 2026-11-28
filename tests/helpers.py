@@ -207,11 +207,11 @@ def run_border_to_column_gate(tmp_path, gray, borders, *, page: int = 1,
                     {"border_detect_gate_manifest": gate1 or make_gate1(
                         page, n_cols=borders.expected_cols,
                         expected_cols=book.expected_cols)})
-    return ctx, run_steps(ctx, page, ["column_warp", "column_gate"])
+    return ctx, run_steps(ctx, page, ["column_warp", "column_band", "column_end", "column_geometry", "column_gate"])
 
 
 #: 刻本链 Step2→Step4 的步骤序（含挂在出口的两道闸）。跑合成页时按需截断。
-KEBEN_STEPS = ["column_warp", "column_gate", "row_segment", "row_segment_gate",
+KEBEN_STEPS = ["column_warp", "column_band", "column_end", "column_geometry", "column_gate", "row_segment", "row_segment_gate",
                "cell_shrink"]
 
 
@@ -389,3 +389,32 @@ def split_seed_admit_consts(params: dict) -> tuple[dict, dict]:
     from open_guji_cv.steps.seed_admit_params import _CONSTANTS
     return ({k: v for k, v in params.items() if k not in _CONSTANTS},
             {k: v for k, v in params.items() if k in _CONSTANTS})
+
+
+# ---- seed_admit 拆成多个模块（CV4 P1a，2026-11-28）后，测试换「某函数／表」要换在每个有这个名字的模块里 ----
+# 拆之前它们都在 seed_admit 一个命名空间里，`monkeypatch.setattr(sa, "_opt", …)` 一处就够；现在各遍搬到了 seed_admit_* 与 decide，
+# 调用方在哪个模块就查哪个模块的全局名，所以逐个模块都换。
+
+def _seed_admit_modules():
+    import importlib
+    import pkgutil
+    import open_guji_cv.steps as pkg
+    names = [m.name for m in pkgutil.iter_modules(pkg.__path__) if m.name.startswith("seed_admit") or m.name == "decide"]
+    return [importlib.import_module(f"open_guji_cv.steps.{n}") for n in names]
+
+
+def patch_seed_admit(monkeypatch, name, value):
+    """在每个定义或引入了 `name` 的 seed_admit* 模块（和 decide）里换成 `value`，测试结束自动还原。"""
+    hit = False
+    for m in _seed_admit_modules():
+        if hasattr(m, name):
+            monkeypatch.setattr(m, name, value)
+            hit = True
+    assert hit, f"seed_admit 各模块里都没有 {name}"
+
+
+def set_seed_admit(name, value):
+    """同上，但不自动还原（给不带 monkeypatch 的 try/finally 老写法用；还原时再 set 一次原值）。"""
+    for m in _seed_admit_modules():
+        if hasattr(m, name):
+            setattr(m, name, value)

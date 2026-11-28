@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+from helpers import patch_seed_admit
+
 import pytest
 
 import open_guji_cv.steps  # noqa: F401
@@ -29,9 +31,12 @@ def _rare(cs: list[str]) -> PageRare:
     return PageRare(page=PAGE, columns=[ColumnRare(col=COL, ok=True, chars=[rec])])
 
 
-def _run(tmp_path, monkeypatch, *, cands, rare, params=None, guard=None, verdict="unsure", via=None):
-    monkeypatch.setattr(sa, "_trusted_keben_counts", lambda _db, borrow=None: KEBEN)
-    ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
+def _run(tmp_path, monkeypatch, *, cands, rare, params=None, guard=None, verdict="unsure", via=None,
+         book_kw=None, coord=None):
+    patch_seed_admit(monkeypatch, "_trusted_keben_counts", lambda _db, borrow=None: KEBEN)
+    if coord is not None:
+        patch_seed_admit(monkeypatch, "_coord_refs", lambda _ctx, _page, _cache: {f"{BOOK}:{PAGE}:{COL}:1": coord})
+    ctx = make_ctx(tmp_path, make_book(BOOK, **(book_kw or {})), monkeypatch=monkeypatch)
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, verdict=verdict, char=cands[0][0] if verdict == "same" else None, cov=cands[0][1], wmax=16.0,
                                          guard=guard, candidates=list(cands), via=via)]))
@@ -140,3 +145,43 @@ def test_same_cov_sees_consensus_same_through_fallback(tmp_path, monkeypatch):
 
 def test_same_cov_param_invisible_when_unset():
     assert "solo_5b_same_cov" not in SeedAdmitParams(solo_5b_cov=0.98).model_dump()
+
+
+# ── solo_5b_scope（2026-11-26 Sheldon 定：无参照放行只在无参照页＋参校本标缺字的位）────────────
+def _prof(raw):
+    from open_guji_cv.core.ref_profile import load_reference_profile
+    return load_reference_profile(raw, [{"file": "x.txt"}])
+
+
+SCOPE = {**ON, "solo_5b_scope": "no_ref"}
+
+
+def test_scope_any_is_default_and_invisible():
+    p = SeedAdmitParams(solo_5b_cov=0.98)
+    assert p.solo_5b_scope == "any" and "solo_5b_scope" not in p.model_dump()
+    assert SeedAdmitParams(solo_5b_cov=0.98, solo_5b_scope="no_ref").model_dump()["solo_5b_scope"] == "no_ref"
+
+
+def test_scope_no_ref_skips_referenced_page(tmp_path, monkeypatch):
+    """未声明（＝column）的页上、整格没有对位的格：any 放，no_ref 留待审。"""
+    assert _run(tmp_path, monkeypatch, params=ON, **GOOD).admit
+    assert not _run(tmp_path, monkeypatch, params=SCOPE, **GOOD).admit
+
+
+def test_scope_no_ref_admits_on_declared_none_page(tmp_path, monkeypatch):
+    r = _run(tmp_path, monkeypatch, params=SCOPE, book_kw={"reference_profile": _prof("none")}, **GOOD)
+    assert r.admit and r.channel == "match_solo_5b"
+    r = _run(tmp_path, monkeypatch, params=SCOPE, book_kw={"reference_profile": _prof("text")}, **GOOD)
+    assert not r.admit
+
+
+def test_scope_no_ref_admits_on_page_kinds_no_ref(tmp_path, monkeypatch):
+    r = _run(tmp_path, monkeypatch, params={**SCOPE, "no_ref_pages": [PAGE]}, **GOOD)
+    assert r.admit and r.channel == "match_solo_5b"
+
+
+@pytest.mark.parametrize("gap", ["〓", "▣"])
+def test_scope_no_ref_admits_reference_lacuna(tmp_path, monkeypatch, gap):
+    """有参校本的页上，坐标对位说参校本这一位是缺字：照放。"""
+    r = _run(tmp_path, monkeypatch, params=SCOPE, coord=gap, **GOOD)
+    assert r.admit and r.channel == "match_solo_5b"

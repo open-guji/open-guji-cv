@@ -45,7 +45,7 @@
 | `products/<book>/<step>/` | 数值产物，可重算 | 否 | 引擎 |
 | `cache/<book>/<kind>/` | 派生图像 LRU 缓存（按页戳 `_stamps.json` 自检；产物外部换入后要 `guji cache verify` / 清掉，见 `products/cache.py` 模块头） | 否 | 引擎 |
 | `review/batches/` | 人裁批次登记 | 中心库 | 控制台 |
-| `feedback/{events,consumed}/` | 人裁事件日志与消费记账 | 中心库 | 控制台 |
+| `feedback/{events,consumed}/` | 裁定事件日志与消费记账 | 中心库 | 控制台 |
 | `feedback/verdicts/<shard>/` | 裁决表（导入测试集从这里挑） | 中心库 | 引擎 |
 | `config/crop_exclusions.jsonl` | 图块排除名单（`config/` 下人工配置都是） | 中心库 | 人 |
 | `reports/<book>/` | 对账 / 评测报告 | 是 | 脚本 |
@@ -251,7 +251,7 @@ python -m open_guji_cv pipeline keben_body_v2 bxgb --from row_segment --pages al
 | `GUJI_PRODUCTS_DIR` | 数值产物 `products/<book>/<step>/`（`products_root()`）——**只管这一个目录**，不连带改 cache/glyph_db 等其余路径 | `<workspace>/products` |
 | `GUJI_CACHE_DIR` | 派生图像缓存 列图/字块/归一图块（`cache_root()`） | `<workspace>/cache` |
 | `GUJI_BATCHES_DIR` | 人裁批次登记（`batches_root()`） | `<workspace>/review/batches` |
-| `GUJI_FEEDBACK_DIR` | 人裁事件日志与消费记账 `feedback/{events,consumed}/`（`feedback_root()`） | `<workspace>/feedback` |
+| `GUJI_FEEDBACK_DIR` | 裁定事件日志与消费记账 `feedback/{events,consumed}/`（`feedback_root()`） | `<workspace>/feedback` |
 | `GUJI_VERDICTS_DIR` | 人裁裁决表 `feedback/verdicts/<shard>/`（`verdicts_root()`） | `<workspace>/feedback/verdicts` |
 | `GUJI_REPORTS_DIR` | Step9 汇总产物（`reports_root()`） | `<workspace>/reports` |
 | `GUJI_RAW_ROOT` | 原图根目录，册配置的 `raw_dir` 相对它解释（`raw_root()`） | 工作区根本身（`raw_dir` 相对工作区解释） |

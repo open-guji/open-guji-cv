@@ -65,7 +65,7 @@ def withdraw(ws: Path, batch: str, apply: bool) -> dict:
     rep = {"withdraw": batch, "instances": len(ids), "apply": apply}
     if apply and ids:
         from open_guji_cv.clustering.audit import evict_instance
-        from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
+        from open_guji_cv.feedback.events import EventLog, EventTarget, make_event, provenance
         db = GlyphDB(dbp)
         for iid in ids:
             evict_instance(db, iid)
@@ -83,7 +83,8 @@ def withdraw(ws: Path, batch: str, apply: bool) -> dict:
                                   EventTarget(step="seed_admit", unit="cell", key=key, book=bk,
                                               page=int(pg), col=int(col), slot=int(slot)),
                                   {"v": "skip", "source": "auto", "withdraw": batch,
-                                   "note": "机器高可信刻例整批撤回"}, actor="model"))
+                                   "note": "机器高可信刻例整批撤回",
+                                   **provenance("machine", "book_lib_auto", "script")}, actor="model"))
         rep["events"] = log.append(evs)
     return rep
 
@@ -120,7 +121,7 @@ def main(argv=None) -> int:
     from open_guji_cv.clustering.normalize import normalize_patch as N
     from open_guji_cv.clustering.seeding import load_matcher_from_db
     from open_guji_cv.core.book import load_book
-    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
+    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event, provenance
 
     dbp = glyph_db_path()
     log = EventLog(ws / "feedback")
@@ -222,7 +223,8 @@ def main(argv=None) -> int:
             e = make_event(a.batch, base + i, "confirm",
                            EventTarget(step="seed_admit", unit="cell", key=k, book=bk,
                                        page=int(pg), col=int(col), slot=int(slot)),
-                           {"v": "confirm", "shape": ch, "source": "auto", **meta[k]},
+                           {"v": "confirm", "shape": ch, "source": "auto", **meta[k],
+                            **provenance("machine", "book_lib_auto", "script")},
                            actor="model")
             evs.append(e)
             ok = db.admit_instance(f"v2:{k}", ch, cv2.imencode(".png", bin_img)[1].tobytes(),

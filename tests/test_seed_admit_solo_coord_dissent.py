@@ -36,9 +36,12 @@ def _run(tmp_path, monkeypatch, *, cands, coord, params=None):
 C1 = [("陪", 0.9930), ("培", 0.9100)]
 
 
-def test_default_off_admits(tmp_path, monkeypatch):
-    assert SeedAdmitParams().solo_coord_dissent is False
+def test_default_on_blocks_and_explicit_off_admits(tmp_path, monkeypatch):
+    # 2026-11-27 CV4 起缺省开（殿本 撫→廵、鶴→號）；显式写 False 的册仍是旧行为
+    assert SeedAdmitParams().solo_coord_dissent is True
     r = _run(tmp_path, monkeypatch, cands=C1, coord="倍", params=SKIP)
+    assert not r.admit and "solo_coord_dissent" in r.doubts
+    r = _run(tmp_path, monkeypatch, cands=C1, coord="倍", params={**SKIP, "solo_coord_dissent": False})
     assert r.admit and r.channel == "match_solo" and r.char == "陪"
 
 
@@ -63,9 +66,14 @@ def test_exemptions(tmp_path, monkeypatch):
     assert r.admit and r.channel == "match_solo" and r.char == "二"
 
 
-def test_params_not_in_dump_when_off():
-    assert "solo_coord_dissent" not in SeedAdmitParams().model_dump()
-    assert SeedAdmitParams(solo_coord_dissent=True).model_dump()["solo_coord_dissent"] is True
+def test_params_hash_same_as_old_default_when_off():
+    # 缺省改开（11-27）：写 False 的册指纹仍按旧缺省去键（与改缺省前逐位相同）；没写的（新缺省 True）键进指纹
+    from open_guji_cv.steps.seed_admit_params import _DUMP_DROP_HASH
+    drop = {k for cond, keys in _DUMP_DROP_HASH if cond(SeedAdmitParams(solo_coord_dissent=False)) for k in keys}
+    assert "solo_coord_dissent" in drop
+    drop = {k for cond, keys in _DUMP_DROP_HASH if cond(SeedAdmitParams()) for k in keys}
+    assert "solo_coord_dissent" not in drop
+    assert SeedAdmitParams(solo_coord_dissent=False).model_dump()["solo_coord_dissent"] is False
 
 
 class _IdMap:

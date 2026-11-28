@@ -110,10 +110,11 @@ def main() -> None:
     ap.add_argument("--feedback-dir", required=True, help="工作区 feedback/ 目录（事件写到其 events/ 下）")
     ap.add_argument("--batch", default="vol03-shadow-review-0929")
     ap.add_argument("--ws", help="工作区根（读 books/<book>.yaml 的 codepoints 做冲突自检；可省）")
+    ap.add_argument("--reviewer", required=True, help="审查人账号（写 payload.by；页上人点的，算人裁）")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
-    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
+    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event, provenance
     from open_guji_cv.feedback.anchor import parse_cell_key
 
     verdicts, cards = load_verdicts(Path(a.html)), load_cards(Path(a.cards))
@@ -155,7 +156,7 @@ def main() -> None:
         if fp:
             pk_d["fingerprint"] = fp
         anchor = {"product_key": pk_d, "fp_source": src if fp else "none"}
-        payload.update({"via": "shadow-review", "client_ts": v.get("t")})
+        payload.update({"via": "shadow-review", "client_ts": v.get("t"), **provenance("human", a.reviewer, "console")})
         ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime((v.get("t") or 0) / 1000)) if v.get("t") else None
         target = EventTarget(step=STEP, unit="cell", key=cid, book=book, page=page, col=col,
                              slot=slot, anchor=anchor)
@@ -163,7 +164,7 @@ def main() -> None:
 
     # 按裁决时间排，seq 稳定可复现
     new.sort(key=lambda x: (x[3] or "", x[0]))
-    events = [make_event(a.batch, seq0 + i + 1, "confirm", tg, pl, actor="user", ts=ts)
+    events = [make_event(a.batch, seq0 + i + 1, "confirm", tg, pl, actor="user", ts=ts, reviewer=a.reviewer)
               for i, (_, tg, pl, ts) in enumerate(new)]
 
     cp = book_codepoints(Path(a.ws) if a.ws else None, "vol03")

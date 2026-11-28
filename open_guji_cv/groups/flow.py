@@ -118,6 +118,8 @@ class FlowConfig:
     ctx_agree: frozenset = frozenset()                 # 书级：`dissent_keep`／`ref_pair` 里列入此名单的组，还要本组文意（ctx）同意放行字／整理本字才生效（A24 Z02 11-07；入人八 rr）
     ref_pair: frozenset = frozenset()                  # 书级：这几组补放／联合判卡住时「整理本字＝本组解法给的字、反对的只有图像路」取整理本字（`_ref_pair_pick`；seed_admit `group_flow_ref_pair`）
     ref_pair_margin: float = 1.5                       # `ref_pair` 里图像路反对票的 margin 上限（seed_admit `group_flow_ref_pair_margin`）
+    near_p: dict = field(default_factory=dict)         # 第三步收尾的组内各字校准概率：格 id → {字: p}（seed_admit 读 `glyph_analyzer`，只在 `group_flow_near_p` 开时填）
+    near_p_min: dict = field(default_factory=dict)     # 组 id → 放行所需的最低 p；没列的组不跑 `near_p` 方法（seed_admit `group_flow_near_p`）
     ref_pair_coord: bool = False                       # 书级：`ref_pair` 的组联合判卡住、现役对位缺时，坐标对位字＝本组给的字且没有任何解法（含搭档）给别字 → 取它（`_ref_pair_coord_pick`；seed_admit `group_flow_ref_pair_coord`，A24 Z07 11-07）
 
 
@@ -341,6 +343,8 @@ def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_
     trail: list[dict] = []
     picks: list[str] = []
     for name in (f.review_solvers if alt else f.solvers):
+        if name == "near_p" and g not in cfg.near_p_min:
+            continue                       # 书没开 `group_flow_near_p`：当没有这个方法（留痕、产物都不变）
         v = _solve(name, g, r, cands, ref, cfg, left, right, patch_fn, review=alt, coord=coord)
         trail.append({"solver": name, "char": v.char, "why": v.why, **({"via": v.via} if v.via != name else {}),
                       **v.extra})
@@ -608,6 +612,13 @@ def _agree_fix(trail: list, ch: str | None, members) -> bool:
     if not ch or ch not in members:
         return False
     return len({_sname(t) for t in trail if t.get("char") == ch and _sname(t) in IMG_SOLVERS}) >= 2
+
+
+def _ref_backs(char: str | None, ref: str | None, norm: Callable[[str], str]) -> bool:
+    """`review_fix_agree` 的例外：整理本（现役对位缺格时用坐标对位字）与已放行字同字 → 不按图像两路改字，照常降审。
+    两路图像解法吃的是同一张字块，字块裁偏（换了框型配置、冷缓存再生列图，格坐标还是旧列图的）时会一起错：
+    殿本 replay-1125 二→一 37 格全是整理本＝库首位＝二、ids 与 yr_bars 看的是只剩下一横的偏块（CV4 2026-11-25）。"""
+    return bool(char and ref and ref not in GAPS and norm(ref) == norm(char))
 
 
 def _sname(t: dict) -> str:
@@ -953,7 +964,8 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 and any(t["solver"] == "ctx" and t["char"] == ch and t.get("via") == "ctx:ctx_l1" for t in trail)) or (
                 f.review_fix_margin > 0 and why == "agree" and any(
                     t["char"] == ch and (_margin(t) or 0) >= f.review_fix_margin for t in trail)) or (
-                g in cfg.review_fix_agree and why == "agree" and _agree_fix(trail, ch, GROUPS[g].members))
+                g in cfg.review_fix_agree and why == "agree" and _agree_fix(trail, ch, GROUPS[g].members)
+                and not _ref_backs(r.char, ref or (veto_refs or {}).get(r.id), norm))
             other = ch is not None and not _same(g, ch, r.char, norm)
             code = ("group_flow_disagree" if (other and not fix) or why == "conflict"
                     else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)
@@ -1019,7 +1031,8 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             else:
                 decision = "keep"
         r.evidence = {**(r.evidence or {}), "group": {"id": g, "mode": mode, "pick": ch, "why": why,
-                                                       "decision": decision, "solvers": trail}}
+                                                       "decision": decision, "solvers": trail,
+                                                       "members": "".join(sorted(GROUPS[g].members))}}
     return res
 
 

@@ -508,3 +508,21 @@ def test_blank_frame_junk_keeps_centered_bar_yi():
     cells = [mk(1, 0), mk(2, 100), mk(3, 200), mk(4, 300)]
     n = _blank_frame_junk(img, cells, {2}, (0, 100), 128, 100.0)
     assert cells[0].kind == "char" and cells[2].kind == "blank" and cells[3].kind == "blank" and n == 2
+
+
+def test_load_layout_reads_old_volume_name_via_aliases(tmp_path, monkeypatch):
+    """册改名后（册 yaml 写 `aliases`），格位表／备选格表里旧册名的行照样归本册（2026-11-27 册号位数统一）。"""
+    from open_guji_cv.core import book as B
+    from open_guji_cv.steps import row_segment as RS
+    books = tmp_path / "books"
+    books.mkdir()
+    (books / "1.yaml").write_text('id: "1"\naliases: ["01"]\n', encoding="utf-8")
+    (books / "2.yaml").write_text('id: "2"\n', encoding="utf-8")
+    p = tmp_path / "alt.jsonl"
+    p.write_text("".join(json.dumps({"vol": v, "page": pg, "col": 1, "cuts": [10]}) + "\n"
+                         for v, pg in (("01", 7), ("1", 8), ("02", 9))), encoding="utf-8")
+    monkeypatch.setattr(B, "_workspace_books_dir", lambda: books)
+    assert set(RS.load_layout(str(p), "1")) == {(7, 1), (8, 1)}
+    assert set(RS.load_layout(str(p), "2")) == set()          # 没写 aliases：只认本名，行为不变
+    monkeypatch.setattr(B, "_workspace_books_dir", lambda: None)
+    assert set(RS.load_layout(str(p), "1")) == {(8, 1)}       # 读不到册配置：只认本名

@@ -2,6 +2,8 @@
 """overview#431：影子选的字与现放行字是异体同字时，影子弃权、不降级。"""
 from __future__ import annotations
 
+from helpers import patch_seed_admit
+
 from types import SimpleNamespace
 
 from open_guji_cv.products.kinds.recog import AdmitRec
@@ -27,8 +29,8 @@ class _VMap:
 
 
 def _run(monkeypatch, cur, pick, abstain=True, channel="match_ref", provenance="match_ref", evidence=None, book_cp=None):
-    monkeypatch.setattr(sa, "_shadow_gate", lambda p: _Gate(pick))
-    monkeypatch.setattr(sa, "_opt", lambda ctx, kind, page: None)
+    patch_seed_admit(monkeypatch, "_shadow_gate", lambda p: _Gate(pick))
+    patch_seed_admit(monkeypatch, "_opt", lambda ctx, kind, page: None)
     import open_guji_cv.clustering.variants as variants
     monkeypatch.setattr(variants.VariantMap, "load", classmethod(lambda cls, *a, **k: _VMap()))
     rec = AdmitRec(id="v:1:1:1", slot=1, sub=None, admit=True, channel=channel, char=cur,
