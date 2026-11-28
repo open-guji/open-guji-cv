@@ -150,6 +150,16 @@
 - PATCH（新步骤缺省关，现役各步 code_hash 不变；指纹变更：glyph_candidate（新步）、glyph_analyzer 起过期——两者缺省关、尚无册跑过，不随重跑；CV3 2026-11-27，Sheldon 11-27 定「候选字线」由 CV3 做）：3 识字加 3c `glyph_candidate`（按图候选：字块图过 r5 向量网络，对全字表〔EmbPack 约 10.2 万字，含扩 B 以后〕取余弦前 50，**不用分类头与 RRF 融合**；再把图像前 5 名的异体族成员按自己的图像分插在前 10 之后）。书配置 `glyph_candidate.enabled`（缺省 false＝不跑）。收尾 `glyph_analyzer` 可选并入它的前 10 个，证据记 `evidence.c = {sim, fam_of?}`。依据测试集 `open-guji-dataset/char-candidates`（`guji eval run @cands`）：甲层难格首位 54.7%（3b 产线）→77.0%、前 10 87.8%→95.7%；扩 B 以后的字首位 1.5%→16.2%、前 30 80.1%→93.7%（异体族展开）。负结果：CSLS 去枢纽性校正全线更差。
 - PATCH（新步骤缺省关，现役各步 code_hash 不变；CV3 2026-11-27，Sheldon 11-26 定的第三步重构第一块）：3 识字加 3b `glyph_near`（形近字组分析：书配置 `glyph_near.groups` 里登记的字组被 3a 触发时，按组登记的方法给组内各字新分＋证据，不定字）与收尾 `glyph_analyzer`（汇总成每格 `cands`〔字＋校准后 p＋各小步证据〕与 `p_map`，第三步不判放行）。第一个方法 `cnn_small`：殿本 宫／宮／官 小 CNN（ZM 训，按册号 % 5 取留出折，`models/glyph_near_gong`，已登记模型表、传 R2；calib.json 用 7447 格留出概率保序标定）。框架：`StepSpec.enabled_by`（参数为假就跳过的可选步骤）、骨架 `finals:`（大步收尾，必须是本大步最后一步，`Pipeline.final_of`）。殿本 vol02 49 格经步骤复核与训练留出概率最大差 0.0195、0.5 两侧一致 49/49。
 
+## [0.9.11] - 2026-11-28
+
+补发（PATCH，L0）＝v0.9.10＋册号位数统一五件（#1970 #1976 #1977 #1980 #1987），给改名迁移中的各书（脉经、朱楓林集、北行、幼學、殿本）正式钉。对 v0.9.10 各步 code_hash 全同（row_segment 登 code_equiv `_LAYOUT_ALIAS_1128`）；底库不变；配 manager ≥0.7.0（`ops.rename_volume`／`ops.renumber`），待审路径按数值认要 ≥0.7.1；没写 `aliases` 的册行为逐位不变。
+
+- 事件读口（#1970）：`core/volume_id` 按全书册数定位数；`core/volume_alias` 按册 yaml `aliases` 读事件时把旧册名换新名，旧记录不改写。
+- 实例 id 不换（#1976）：`v1:`／`v2:` 前缀键与 `payload.instance_id` 保持原样，glyph_audit 撤库事件对得上库。
+- `status` 认改名过期（#1977）：`<产物根>/<册>/_renamed.json` 对照表把上游 sha 换回改写前，指纹对得上就算新鲜，记 `rename_only`；`run` 照旧。
+- 格位表／备选格表认旧册名（#1980）：`row_segment.load_layout` 表行 `vol` 是本册 `aliases` 里的旧名也归本册（脉经第 1 册继续用原 alt_cells 表）。
+- 新命令 `guji-cv rename-seal <册> [--keys …]`（#1987）：改名后封存只因改名改写了来源文件而变的参数指纹（如 `exclusions_fingerprint`），`status` 的 rename_only 据此认作改名；封存后再变照常过期。
+
 ## [0.9.10] - 2026-11-27
 
 补发（PATCH，L0）＝v0.9.9＋#1961（汉书 WYG #18261，vline_track 淡线兜底封上界；dev 条目见上文）。对 v0.9.9 各步 code_hash 全同（border 登 code_equiv `_TRK_CLIP_1127`，dev 与本线同一条）；底库 b35 不变；各书不过期。
