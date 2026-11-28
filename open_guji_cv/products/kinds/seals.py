@@ -20,7 +20,7 @@ from ...core.step import register_kind
 
 
 class Seal(BaseModel):
-    kind: Literal["stain", "crisp"]
+    kind: Literal["stain", "crisp"]   # stain 大印（斑驳藏书印）｜crisp 小印（笔画清楚，如御览之宝）
     bbox: tuple[float, float, float, float]
     """外框 [x0, y0, x1, y1]，规范空间（右上原点，x 向左）。"""
     score: float
@@ -32,10 +32,10 @@ class Seal(BaseModel):
 
 
 class PageSeals(BaseModel):
-    page: int
-    width: int
-    height: int
-    seals: list[Seal] = Field(default_factory=list)
+    page: int   # 页号
+    width: int   # 原图宽 px
+    height: int   # 原图高 px
+    seals: list[Seal] = Field(default_factory=list)   # 本页每方印；没有印为空表
 
 
 SEALS = register_kind(ProductKindSpec(

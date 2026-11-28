@@ -20,7 +20,7 @@ from ..impl.modern.line_layout import detect_lines, layout_to_borders
 
 
 class LineDetectParams(BaseModel):
-    ink_threshold: int = 128
+    ink_threshold: int = 128   # 二值化墨阈值（灰度低于它算墨）
     col_ink_min: float = 0.008      # 列方向投影里算「有墨」的墨占比下限
     min_width_frac: float = 0.15    # 窄于 em × 此值的墨段当噪点丢掉
     body_lo: float = 0.75           # 正文列宽下限（× em）
@@ -37,7 +37,7 @@ class LineDetectParams(BaseModel):
 @register_step
 class LineDetectStep(Step):
     spec = StepSpec(
-        id="line_detect", title="Step1 行探测（现代印刷）", version="1.0", unit="page",
+        id="line_detect", title="1b 行探测（现代印刷）", version="1.0", unit="page",
         consumes=("raw_page",), produces=("borders", "line_index"), params=LineDetectParams,
         code_deps=("open_guji_cv.impl.modern.line_layout",),
         # 纯函数：读原图算完直接返回，无实例级缓存、无数据库/模型一次性初始化，

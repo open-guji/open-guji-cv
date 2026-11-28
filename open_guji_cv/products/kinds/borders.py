@@ -17,9 +17,9 @@ from ...seg.frame_types import (BorderDetectionResult, HeadRaiseBorder, HLine,
 
 
 class HLineRec(BaseModel):
-    y_at_right: float
-    slope: float
-    kind: str
+    y_at_right: float   # 横线在规范空间右端（x_tr=0）处的 y，px
+    slope: float   # 横线斜率 dy/dx_tr
+    kind: str   # 线的来源或类别（探测路径名，如直线拟合、墨条、估位）
 
     @classmethod
     def of(cls, h: HLine) -> "HLineRec":
@@ -30,13 +30,13 @@ class HLineRec(BaseModel):
 
 
 class VLineRec(BaseModel):
-    x_at_top: float
-    slope: float
-    k2: float | None = None
-    k3: float | None = None
-    y1: float | None = None
-    y2: float | None = None
-    segments: int = 1
+    x_at_top: float   # 竖线在页顶（y=0）处的 x_tr，规范空间 px
+    slope: float   # 竖线斜率 dx_tr/dy（折线时为第一段）
+    k2: float | None = None   # 折线第二段斜率；直线为空
+    k3: float | None = None   # 折线第三段斜率；两段或直线为空
+    y1: float | None = None   # 第一折点 y；直线为空
+    y2: float | None = None   # 第二折点 y；直线为空
+    segments: int = 1   # 折线段数（1＝直线，3＝三段折线）
 
     @classmethod
     def of(cls, v: VLine) -> "VLineRec":
@@ -53,10 +53,10 @@ class VLineRec(BaseModel):
 
 
 class HeadRaiseRec(BaseModel):
-    col: int
-    inner_y: float
-    outer_y: float
-    estimated: bool = False
+    col: int   # 抬头列号（右→左，从 1 起）
+    inner_y: float   # 抬头处内框线 y，规范空间 px
+    outer_y: float   # 抬头处外框线 y，规范空间 px
+    estimated: bool = False   # 外框 y 是按规则估的、不是量到的
 
     @classmethod
     def of(cls, h: HeadRaiseBorder) -> "HeadRaiseRec":
@@ -69,36 +69,36 @@ class HeadRaiseRec(BaseModel):
 
 
 class Borders(BaseModel):
-    width: int
-    height: int
-    expected_cols: int
-    top: HLineRec
-    bottom: HLineRec
+    width: int   # 原图宽 px
+    height: int   # 原图高 px
+    expected_cols: int   # 册配置给的正文列数（每半页）
+    top: HLineRec   # 上内版框线
+    bottom: HLineRec   # 下内版框线
     verticals: list[VLineRec]                    # 右→左，N+1 条
     verticals_straight: list[VLineRec] = Field(default_factory=list)   # 折线拟合前的直线
-    head_raise: list[HeadRaiseRec] = Field(default_factory=list)
-    top_outer_offset: float | None = None
-    bottom_outer_offset: float | None = None
+    head_raise: list[HeadRaiseRec] = Field(default_factory=list)   # 抬头框阶梯（有抬头的列各一条），无则空表
+    top_outer_offset: float | None = None   # 上外框线到上内框线的距离 px；没量到为空
+    bottom_outer_offset: float | None = None   # 下外框线到下内框线的距离 px；没量到为空
     # "double" / "single"（單邊框）/ "none"；旧产物缺省 None。见 BorderDetectionResult。
-    top_frame_kind: str | None = None
-    bottom_frame_kind: str | None = None
-    top_bar_extent: float | None = None
-    bottom_bar_extent: float | None = None
-    top_outer_estimated: bool = False
-    bottom_outer_estimated: bool = False
-    bottom_pushed: float = 0.0
-    vlines_snapped: int = 0
-    v_outer_side: str | None = None
-    v_outer_offset: float | None = None
+    top_frame_kind: str | None = None   # 上框型 double｜single｜none；旧产物为空
+    bottom_frame_kind: str | None = None   # 下框型，同上
+    top_bar_extent: float | None = None   # 上粗外框条的厚度 px；没有为空
+    bottom_bar_extent: float | None = None   # 下粗外框条的厚度 px；没有为空
+    top_outer_estimated: bool = False   # 上外框线位置是估的
+    bottom_outer_estimated: bool = False   # 下外框线位置是估的
+    bottom_pushed: float = 0.0   # 下框被字挤下移的像素数（0＝没动）
+    vlines_snapped: int = 0   # 被吸到淡界行细峰上的竖线条数
+    v_outer_side: str | None = None   # 左右外框在哪一侧（纸边侧）left｜right；没量到为空
+    v_outer_offset: float | None = None   # 侧外框线到内框线的距离 px；没量到为空
     v_outer_estimated: bool = False
     """规则（册配置 `side_frame`）说该有外框、这页没量到而按 `outer_gap.side` 估位。False **不落盘**、True 才落盘
     （同 `cells.alt_columns`），没用新规则的老册产物逐字节不变；读回缺省 False。"""
-    vline_segments: int = 1
-    bend_w80_med: float | None = None
-    bend_w80_max: float | None = None
+    vline_segments: int = 1   # 竖线中折线最多的段数
+    bend_w80_med: float | None = None   # 折线弯曲宽度（沿线 80% 内偏离直线）的中位数 px；全直线为空
+    bend_w80_max: float | None = None   # 折线弯曲宽度最大值 px；全直线为空
     # 与 verticals 一一对应；True = 网格模式下该槽位没探到细线、按几何插值
     # （见 `find_vertical_lines_grid`）。自由模式 / 旧产物为空或全 False。
-    vline_filled: list[bool] = Field(default_factory=list)
+    vline_filled: list[bool] = Field(default_factory=list)   # 与 verticals 一一对应；True＝该槽位没探到细线、按几何插值
 
     @classmethod
     def from_result(cls, r: BorderDetectionResult, expected_cols: int) -> "Borders":

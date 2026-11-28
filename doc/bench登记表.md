@@ -5,9 +5,9 @@
 
 | 小步 | Step id | 负责 | bench（命令或脚本） | 住处 | 主指标 | 护栏（必须为 0／不增） | 测试集（dataset 分片） | 覆盖的书 | 基线报告 |
 |---|---|---|---|---|---|---|---|---|---|
-| 1a 页面预检 | `page_survey`、`invert_detect` | CV1 | | | | | page-type | 殿本 | |
-| 1b 版框界行 | `border_detect`（`line_detect`、`block_detect`） | CV1 | `python -m open_guji_cv.eval.layout_bench` | cv `eval/` | 框线、界行误差；列数；页型 | 正文页判成非正文 | layout、border-detection | 殿本（W1 79 页）；史記、全唐文、脉经只有回归例 | |
-| 1c 印章 | `seal_detect` | CV1 | | | | 印章漏认压字 | | | |
+| 1a 页面预检 | `page_survey`、`invert_detect` | CV1 | `guji bench run page-survey --book <书id>`（尺寸判据；旧口径 `python -m open_guji_cv.eval.survey_bench`；页型走老评测器 `pagetype`、`unsupported_layout`；反色带暂无） | cv `eval/` | 异常页召回、精确率、形态对率 | 正常页判异常（false_alarm）=0 | page-survey（种子，rule 快照，待人核）；page-type | 殿本、史記、全唐文、脈經（样本尺寸表） | [doc/1-版面/基线报告.md](1-版面/基线报告.md) 第三节 |
+| 1b 版框界行 | `border_detect`（`line_detect`、`block_detect`） | CV1 | `guji bench run layout --book <书id>`（按书；四套书分表用 `python -m open_guji_cv.eval.layout_bench --series-report`） | cv `eval/` | 框线、界行误差（>5／10／20px 条数）；列数；页型 | 正文页判成非正文 | layout（79 页）、border-detection | 殿本 47 页、史記 11、全唐文 10、脈經 11 | [doc/1-版面/基线报告.md](1-版面/基线报告.md) |
+| 1c 印章 | `seal_detect` | CV1 | `guji bench run seal-box --book <书id>`（无人核金标报 no_gold；旧口径 `eval.seal_bench`） | cv `eval/` | 印章召回／精确率@IoU、IoU 中位、类别对率 | 印章漏认压字 | seal-box（种子，全是待核底稿，缺人标框） | 殿本 vol01:1、脈經 mj01:3 两页底稿；史記、全唐文无 | [doc/1-版面/基线报告.md](1-版面/基线报告.md) 第四节 |
 | 2a 拉直 | `column_warp`（现代 `column_crop`、自由版式 `column_trace`） | CV2 | `guji bench run cut-2d --book <书>`（经 2d 量；底层 `eval.cut_bench`） | cv `eval/` | 列全对 | 好列改坏（`--against` 对→错翻转） | char-segmentation/cut-bench | 史記、全唐文、殿本、脉经（各 35–40 页）；缺朱楓林集、汉书 | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md) |
 | 2b 字带左右边 | `column_band` | CV2 | `guji bench run cut-2b-band --book <书>`（底层 `eval.cut_ink band`） | cv `eval/` | 字带余量（中位、p10） | 抹墨格 | char-segmentation/band-ink（v0.1，金标由人核格界＋连通域推出）；殿本旧集 text-band、side-rule | 史記、全唐文各 30 列（band-ink）；殿本（旧集） | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md) |
 | 2c 列端字 | `column_end` | CV2 | `guji bench run cut-2e-frame --book <书>`（底层 `eval.cut_frame`＋cut-frame） | cv `eval/` | IoU@0.9 | 切笔；新带渣 | char-segmentation/cut-frame、frame-end-crop | 史記、全唐文各 60 列；殿本 451 格（frame-end-crop） | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md) |
