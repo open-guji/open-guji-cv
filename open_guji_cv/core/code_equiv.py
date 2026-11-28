@@ -3124,6 +3124,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='37feb18a51360d01c3a812295bf37811b7d1f80fb219236ab3ac95e9574f7c0e',
           old='1bc07d8f8c109e0ae4479299c81b561c4af4007197d6646f15fcd24665ba8158',
           evidence='context_rank 在 03 231 页（--pages 1-231）上与 7ba08115e2d9186f327b96f7d0256416686c7835 产物逐字节相同；史記 03 small 231 页'),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="840d1a9a399595a3aacfbd6d8336058d4278a0d39c6bfb95af903ea78055dc57",
+          old="4aa0dee4383fe880e76ca1cb8f78fe77b2f288e9d0045d75ebffcbfa497333c2",
+          evidence="char_decide 在 03 231 页上与基线逐字节相同（A1 开关缺省关，证据见前行；rebase 到 dev 7f902e7b 后哈希重登，dev 合入的 vis3_shadow 非本改动）；史記 03 small"),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="86ebd9ff7f789e823ed96505e38fda1281cb377339c3db13398af8f708bcb2b2",
+          old="50f75f21c3eef6f208ab3f822f19e56cb4a54b45f2279c48158166a5b93edafa",
+          evidence="char_decide 在 03 231 页上与基线逐字节相同（A1 开关缺省关，证据见前行；rebase 到 dev 7f902e7b 后哈希重登，dev 合入的 vis3_shadow 非本改动）；史記 03 small"),
 )
 
 
