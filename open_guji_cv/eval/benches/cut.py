@@ -27,13 +27,13 @@ GOLD = {"988g3f0wsu": "char-segmentation/cut-bench/shiji",
         "99k3i35yww": "char-segmentation/cut-bench/maijing"}
 
 
-def _meta(ctx: BenchCtx) -> dict:
-    return json.loads((Path(ctx.res["gold"]) / "bench.json").read_text(encoding="utf-8"))
+def plan(gold: Path, book: str, vols: list) -> dict:
+    meta = json.loads((Path(gold) / "bench.json").read_text(encoding="utf-8"))["vols"]
+    return {v: [int(p) for p in x["pages"]] for v, x in meta.items() if not vols or v in vols}
 
 
 def _vols(ctx: BenchCtx) -> dict:
-    vols = _meta(ctx)["vols"]
-    return {v: x for v, x in vols.items() if not ctx.vols or v in ctx.vols}
+    return {v: {"pages": p} for v, p in plan(Path(ctx.res["gold"]), ctx.book, ctx.vols).items()}
 
 
 def run(ctx: BenchCtx) -> Path:
@@ -88,4 +88,4 @@ register(BenchSpec(
                                                                     "row_segment", "cell_shrink"),
     owner="CV2", gold=GOLD, needs=("gold", "config", "code", "raw", "products"), primary="col_exact",
     run=run, score=score, guards=(Guard("flip_worse", "max", 0),), suites=("cut",),
-    args={"pipeline": "管线（缺省 guji_default）"}))
+    args={"pipeline": "管线（缺省 guji_default）"}, plan=plan))

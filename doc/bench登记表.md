@@ -30,7 +30,7 @@
 
 ## 统一接口（CV0，2026-11-28 起）
 
-各 bench 收进一个登记表 `open_guji_cv/eval/bench.py`（`BenchSpec`／`BenchCtx`／`BenchResult`），实现放 `eval/benches/<名>.py`；命令走 guji-manager `guji bench list|fetch|run|ab|guard|show`，资源由 manager 按书备齐。结果目录 `bench-results/<bench>/<书>/<时间>/`（`result.json` schema 1、`items.jsonl`、`report.md`），status 只有 ok／regressed／skipped／no_gold。已接：`cut-2d`（2d 行、CV2）、`decide`（定字收尾行、CV4）；其余各行由负责线 P1 接，接完把 bench id 写进本表「bench」列。分派与接入验收见 ai-team `domain/CV/规范/bench统一接口-2026-11-28.md`。
+各 bench 收进一个登记表 `open_guji_cv/eval/bench.py`（`BenchSpec`／`BenchCtx`／`BenchResult`），实现放 `eval/benches/<名>.py`；命令走 guji-manager `guji bench list|fetch|run|ab|guard|show`，资源由 manager 按书备齐。结果目录 `bench-results/<bench>/<书>/<时间>/`（`result.json` schema 1、`items.jsonl`、`report.md`），status 只有 ok／regressed／skipped／no_gold，跑崩记 failed。已接：`cut-2d`（2d 行、CV2）、`decide`（定字收尾行、CV4）；其余各行由负责线 P1 接，接完把 bench id 写进本表「bench」列。分派与接入验收见 ai-team `domain/CV/规范/bench统一接口-2026-11-28.md`。
 
 ## 第四步脚本说明（CV4，2026-11-28）
 

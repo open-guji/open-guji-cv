@@ -1,6 +1,6 @@
 """decide：第四步定字（CV4 decide-bench，`eval/decide_bench/`）接统一接口（CV0 2026-11-28 样板，CV4 审）。
 
-资源：`gold`＝dataset `decide-bench/<集>/`（bench.yaml＋items.jsonl，按 `ws` 分书）；`ws`＝已 `guji db pull` 的
+资源：`dataset`＝测试集仓根（`decide-bench/<集>/` bench.yaml＋items.jsonl，按 `ws` 分书）；`ws`＝已 `guji db pull` 的
 工作区（册配置、书仓 `code/`、钉版字形库、模型、语料齐）。冻结快照（产物包）由 decide_bench.run 按 bench.yaml
 的 label 取回并核 digest。参数：`--arg set=small|large`、`--arg layer=frozen|dyn`（dyn 待接）。
 """
@@ -29,9 +29,13 @@ def _shard(ctx: BenchCtx) -> Path:
     return Path(ctx.res["dataset"]) / "decide-bench" / s
 
 
+def _book_vols(shard: Path, book: str, vols: list) -> list[str]:
+    b = yaml.safe_load((Path(shard) / "bench.yaml").read_text(encoding="utf-8"))
+    return [str(x["vol"]) for x in b["books"] if x["ws"] == book and (not vols or str(x["vol"]) in vols)]
+
+
 def _vols(ctx: BenchCtx) -> list[str]:
-    b = yaml.safe_load((_shard(ctx) / "bench.yaml").read_text(encoding="utf-8"))
-    return [x["vol"] for x in b["books"] if x["ws"] == ctx.book and (not ctx.vols or x["vol"] in ctx.vols)]
+    return _book_vols(_shard(ctx), ctx.book, ctx.vols)
 
 
 def run(ctx: BenchCtx) -> Path:
@@ -71,7 +75,7 @@ def score(ctx: BenchCtx, pred: Path) -> BenchResult:
 register(BenchSpec(
     id="decide", title="第四步定字收尾（放错字必须 0、放行率、人审首选对率）",
     steps=("align_ref", "context_decide", "cell_state", "group_decision", "char_decide"), owner="CV4",
-    gold={b: "decide-bench/small" for b in BOOKS}, needs=("gold", "config", "code", "products", "glyph_lib", "models", "corpus"),
+    gold={b: "decide-bench/small" for b in BOOKS}, needs=("gold", "config", "code", "glyph_lib", "models", "corpus"),
     primary="wrong_admit", run=run, score=score, cost="heavy",
     guards=(Guard("wrong_admit", "max", 0), Guard("flip_worse", "max", 0)), suites=("decide",),
     item_key="id", item_ok="ok",

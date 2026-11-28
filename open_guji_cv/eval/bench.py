@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 SCHEMA = 1
-STATUSES = ("ok", "regressed", "skipped", "no_gold")
+STATUSES = ("ok", "regressed", "skipped", "no_gold", "failed")   # failed：跑崩了（不是结论，护栏按不过算）
 #: 资源种类（manager 按这些取，填进 ctx.res 的同名键）
 NEEDS = ("gold", "config", "code", "raw", "products", "glyph_lib", "models", "corpus", "torch", "gpu", "ocr")
 
@@ -62,6 +62,9 @@ class BenchSpec:
     args: dict = field(default_factory=dict)
     suites: tuple[str, ...] = ()
     deprecated: str = ""
+    #: 金标涉及哪些册、哪些页：`plan(金标目录, 书, 点名的册) -> {册: [页…] 或 None（整册）}`。
+    #: manager 按它取原图（只取这些页）和产物包（按册）；不给＝不知道，原图、产物按 `--vol` 取整册。
+    plan: Callable[[Path, str, list], dict] | None = None
 
     def __post_init__(self):
         bad = set(self.needs) - set(NEEDS)
