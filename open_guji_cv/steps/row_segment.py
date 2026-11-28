@@ -791,14 +791,25 @@ class StraddleMergeParams(BaseModel):
     band_w: float = 0.2
     """界行两侧各量多宽（×列宽 ref_w）。"""
     band_min: float = 0.28
+    outer_max: float = 0.08
+    """离界行 0.45–0.85 列宽那两条（两列各自的字身位置）的墨比都 ≤ 它。骑线字只占界行两侧，两列本来的字位是空的（朱楓林集 5 册
+    卷端 38 格全是 0.00–0.01）；界行上一团墨污、两旁是正常字时（05 册 47 页「于」「剥」之间）这两条有字身（0.44／0.18）。"""
+    min_col_w: float = 0.8
+    """两列的文字带（`content_x`）都至少这么宽（×ref_w）才看。列窗认错、一列劈成两窄列时（朱楓林集 04 册 23 页 93、69px，ref_w 147），
+    劈线穿过字中间，两条都满墨，整列误认骑线；正常列 ≥0.9。"""
     """界行左右两条的墨比都 ≥ 它才算骑线。朱楓林集 01 册：骑线字 8 格 0.33–0.50，其余有字格对最高 0.23（列首／列尾格框线行已剔）。"""
+
+
+#: `straddle_pairs` 量「两列本来的字位」的那两条：离界行这么多 ×ref_w
+OUTER_BAND = (0.45, 0.85)
 
 
 def straddle_pairs(gray: np.ndarray, pc: PageCells, p: StraddleMergeParams) -> list[tuple[int, int, int, int]]:
     """骑线字：写在两列之间界行上（界行在此断开）、被两列各劈一半的字。→ [(右列, 右格, 左列, 左格)]。
 
-    相邻两列（列号 c 在右、c+1 在左）里纵向重叠过半、至少一格有字的一对格：界行（两格之间、墨最多的那条像素列）
-    左右各 `band_w`×列宽的两条里墨比都 ≥ `band_min`（横贯的框线行先剔掉）。正常的字离界行有空白，骑线字压在线上，两条都满。
+    相邻两列（列号 c 在右、c+1 在左，文字带都 ≥ `min_col_w`×列宽）里纵向重叠过半、至少一格有字的一对格：界行（两格之间、墨最多的那条像素列）
+    左右各 `band_w`×列宽的两条里墨比都 ≥ `band_min`（横贯的框线行先剔掉），而离界行 `OUTER_BAND` 的两条（两列各自的字身位置）
+    墨比都 ≤ `outer_max`。正常的字离界行有空白，骑线字压在线上、两列本来的字位空着。
     `gray` 是 `RunContext.raw_page`（左上原点），格的 `quad_page` 右上原点。只看正文整格（不看雙行小注 a/b 半格）。"""
     H, W = gray.shape[:2]
     rw = float(pc.ref_w or 0)
@@ -812,12 +823,15 @@ def straddle_pairs(gray: np.ndarray, pc: PageCells, p: StraddleMergeParams) -> l
         ys = [q[1] for q in c.quad_page]
         return min(xs), min(ys), max(xs), max(ys)
 
+    def _band_w(c) -> float:
+        return float(c.content_x[1] - c.content_x[0]) if c.content_x else 0.0
+
     cols = {c.col: c for c in pc.columns if c.ok}
     out = []
     for col, cc in sorted(cols.items()):
         lc = cols.get(col + 1)
-        if lc is None:
-            continue
+        if lc is None or not (_band_w(cc) >= p.min_col_w * rw and _band_w(lc) >= p.min_col_w * rw):
+            continue                       # 列窗没认对（一列劈成两窄列，朱楓林集 04 册 23 页）：「界行」穿过字中间，不算
         right = [(c, box(c)) for c in cc.cells if not c.sub and c.quad_page]
         left = [(c, box(c)) for c in lc.cells if not c.sub and c.quad_page]
         used: set[int] = set()
@@ -842,7 +856,10 @@ def straddle_pairs(gray: np.ndarray, pc: PageCells, p: StraddleMergeParams) -> l
                 if keep.sum() >= 0.5 * len(keep):
                     seg = seg[keep]
                 lft, rgt = float(seg[:, rx - w:rx - 4].mean()), float(seg[:, rx + 5:rx + w].mean())
-                if min(lft, rgt) >= p.band_min:
+                o0, o1 = int(OUTER_BAND[0] * rw), int(OUTER_BAND[1] * rw)
+                outer = max(float(seg[:, max(0, rx - o1):rx - o0].mean()) if rx - o0 > 0 else 0.0,
+                            float(seg[:, rx + o0:min(W, rx + o1)].mean()) if rx + o0 < W else 0.0)
+                if min(lft, rgt) >= p.band_min and outer <= p.outer_max:
                     out.append((col, a.slot, col + 1, b.slot))
                     used.add(b.slot)
                     break

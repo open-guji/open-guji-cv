@@ -66,8 +66,8 @@ def _cell(slot, x_l, x_r, y0, kind="char"):
 
 def _page_cells():
     # 右列（列 1）x 300–440，左列（列 2）x 160–300，界行在 x=300
-    c1 = ColumnCells(col=1, ok=True, n_body_slots=3, period=PER_, cells=[_cell(s, 300, 440, 100 * (s - 1)) for s in (1, 2, 3)])
-    c2 = ColumnCells(col=2, ok=True, n_body_slots=3, period=PER_, cells=[_cell(s, 160, 300, 100 * (s - 1)) for s in (1, 2, 3)])
+    c1 = ColumnCells(col=1, ok=True, n_body_slots=3, period=PER_, content_x=(0, RW_), cells=[_cell(s, 300, 440, 100 * (s - 1)) for s in (1, 2, 3)])
+    c2 = ColumnCells(col=2, ok=True, n_body_slots=3, period=PER_, content_x=(0, RW_), cells=[_cell(s, 160, 300, 100 * (s - 1)) for s in (1, 2, 3)])
     return PageCells(page=1, period=PER_, ref_w=RW_, columns=[c1, c2])
 
 
@@ -166,3 +166,10 @@ def test_speck_touching_char_is_half(tmp_path, monkeypatch):
     half = half.model_copy(update={"bbox_page": (20, 260, 40, 295), "width": 20, "height": 35})
     on = _run(tmp_path, monkeypatch, SeedAdmitParams(ink_marks=True), [_box(1), _box(2), half, _box(4)], ref_slots=[1, 2, 4])
     assert not on[3].admit and "seg_defect" in on[3].doubts and on[3].evidence["speck_half"]
+
+
+def test_straddle_skips_narrow_bands():
+    """列窗认错（一列劈成两窄列）时不认骑线。"""
+    pc = _page_cells()
+    narrow = pc.model_copy(update={"columns": [pc.columns[0].model_copy(update={"content_x": (0, 0.6 * RW_)}), pc.columns[1]]})
+    assert straddle_pairs(_page_img(), narrow, StraddleMergeParams()) == []
