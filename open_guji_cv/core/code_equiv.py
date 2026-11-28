@@ -2982,6 +2982,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="842046b514531070e360e798f85a8fc534bfb84b6ab445a156029eefb64d58d0",
           old="ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77",
           evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 c32c0ed 产物逐字节相同；#1999（4d 读 3b 看图判法，group_flow_near_from_3b 缺省空＝关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_shapes",
+          new="88b64132ad232206b5c940aad8ee9f86c0b6402ed63d2cbb01084360e10e4ec2",
+          old="ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77",
+          evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 2aae3bd 产物逐字节相同；#2027（4d 接 3b：stroke_veto 读口，缺省关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
 )
 
 

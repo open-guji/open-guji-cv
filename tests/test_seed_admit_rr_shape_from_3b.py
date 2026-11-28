@@ -21,6 +21,7 @@ from test_glyph_near_part_shape import model as part_model  # noqa: F401
 from test_glyph_near_pair_shape import models as pair_models  # noqa: F401
 from test_glyph_near_book_knn import models as bk_models  # noqa: F401
 from test_glyph_near_near_knn import models as nk_models  # noqa: F401
+from test_glyph_near_stroke_veto import models as sv_models  # noqa: F401
 
 
 def _recs(n):
@@ -351,3 +352,40 @@ def test_near_knn_read_3b_same_as_local(nk_models, k):  # noqa: F811
     got = " ".join(ctx.logs)
     assert "near_knn(near) 判法结果" in got and "near_knn(gap) 判法结果" in got
     assert sum(int(x.split("读 3b ")[1].split("｜")[0]) for x in ctx.logs) >= 3
+
+
+# ── stroke_veto（CV3 #2024）：按 (格 id, {path, group} 指纹) 取；降不降审仍在第四步 ──────────────
+
+@pytest.mark.parametrize("k", ["base", "hi_t", "no_z", "ch"])
+@pytest.mark.parametrize("group,admitted_as", [("jys", "己"), ("jys", "已"), ("qg", "千"), ("qg", "干")])
+def test_stroke_veto_read_3b_same_as_local(sv_models, k, group, admitted_as):  # noqa: F811
+    from open_guji_cv.steps.seed_admit_shapes import _stroke_veto_pass
+    from test_glyph_near_stroke_veto import _imgs as _sv_imgs
+
+    imgs = _sv_imgs(group)
+    n = len(imgs)
+
+    def recs():
+        return [NS(id=f"b:1:1:{i + 1}", slot=i + 1, sub=None, char=admitted_as, admit=True, evidence={},
+                   provenance="match", channel="match_ref", doubts=[]) for i in range(n)]
+
+    def run(ctx, on):
+        rs = recs()
+        p = NS(stroke_veto=str(sv_models[k]), patch_missing="error",
+               group_flow_near_from_3b=["stroke_veto"] if on else [])
+        d = _stroke_veto_pass(p, [NS(col=1, chars=rs)], ctx, 1)
+        return d, [(r.char, r.admit, r.channel, r.doubts, copy.deepcopy(r.evidence)) for r in rs]
+
+    base = run(_Ctx(imgs, None, set(range(n))), False)
+    spec = {"path": str(sv_models[k]), "group": group}
+    outs = NM.load_method("stroke_veto", spec).score(imgs, "b")
+    covered = set(range(0, n, 2))
+    chars = [NearRec(id=r.id, slot=r.slot, group=group, trigger="cands",
+                     methods=[NearMethodOut(method=f"stroke_veto:{group}", sims=o["sims"], evidence=o["evidence"])])
+             for i, (r, o) in enumerate(zip(recs(), outs)) if i in covered]
+    sha = f"{group}:" + NM.method_fingerprint("stroke_veto", spec)
+    ctx = _Ctx(imgs, PageNear(page=1, methods_sha=sha, columns=[ColumnNear(col=1, chars=chars)]), set(range(n)) - covered)
+    got = run(ctx, True)
+    assert got == base
+    if ctx.logs:
+        assert "stroke_veto 判法结果" in ctx.logs[0]
