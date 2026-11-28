@@ -2,7 +2,7 @@
 
 ## Wiki 维护规矩
 
-1. **平时不追着改**：PATCH 版（vX.Y.Z 的 Z 变）不要求动 Wiki。
+1. **平时不追着改**：一般的 PATCH 版（vX.Y.Z 的 Z 变）不要求动 Wiki。**例外：新增小步、改大步划分（拆步、并步、挪步、改编号），即使发 PATCH 也要在同一批 PR 里改 Wiki**（2026-11-28 定，cv `doc/验收标准.md` B5）：改对应大步页的小步表、管线全景的总表与流程图、侧栏；首页顶上的版本行改成「对应 vX.Y.Z 起」。
 2. **每升一次 MINOR（Y 变），必须整体重改一遍 Wiki**，算在发版清单里（`doc/版本号规矩.md` 第八节），发版 PR 写一行「Wiki 已按 vX.Y 重改」才算发完。做法：
    1. 列出上一个 MINOR 以来的全部 PATCH：`CHANGELOG.md` 里 `[X.(Y-1).0]` 到 `[X.Y.0]` 之间各节，加 `git log vX.(Y-1).0..vX.Y.0 --first-parent`；
    2. 归纳动了哪些大步、哪些步骤、加了哪些功能、哪些说法过时了（新开关缺省开、新通道、新套书、新页型……）；
@@ -20,6 +20,17 @@
 ## 版本历史
 
 每个 MINOR 一段：这一版多了什么。逐版细节见仓里 [CHANGELOG.md](https://github.com/open-guji/open-guji-cv/blob/dev/CHANGELOG.md)（含全部 PATCH）和 [RELEASES.md](https://github.com/open-guji/open-guji-cv/blob/dev/RELEASES.md)（MINOR 的发版说明）。
+
+### v0.9.16 起（2026-11-28）：按四大步现行小步重改
+
+0.9.13 起第三步重构、第四步子步、切字五小步、册号位数统一等都按 PATCH 发，没触发「MINOR 重改 Wiki」，Wiki 落后了五天（CV0 四大步审查 X10 指出）。这次按 cv dev 859b25e 的骨架 `stages:` 与四个大步 README（cv #2048）整体重改：
+
+- **2 切字** 五小步拆成独立 Step（11-25，cv #1869、#1872）：2a 拉直 `column_warp`、2b 字带左右边 `column_band`、2c 列端字 `column_end`、列几何 `column_geometry`、2d 字间切分 `row_segment`、2e 字框压缩 `cell_shrink`，出口闸统一成 `cut_gate`。旧编号「2b 逐字切分、2c 字框收缩」改成 2d、2e。
+- **3 识字** 重构（11-27、11-28，CV3）：3b 形近字组 `glyph_near`（第四步的 8 个看图判法搬进来）、3c 按图候选 `glyph_candidate`（取代旧生僻字候选）、3d 其他特征 `cell_traits`、3e 看图大模型 `glyph_vis`、收尾 `glyph_analyzer`；都缺省关。
+- **4 定字** 分四个子步、一个收尾、一道 gate（11-28，CV4）：4a 参照对位、4b 上下文（加 `context_rank`）、4c 格况 `cell_state`、4d 字组 `group_decision`、收尾 `seed_admit` 改名 `char_decide`、gate `decide_gate`；三条纪律「子步只出证据、收尾做全部判断、gate 只检测」。
+- 参校本四维（`form`／`punct`／`script`／`accuracy`）成唯一入口（4 定字页新一节）；册号位数按全书册数（产物与数据）；验收标准、bench 登记表、dataset STEP_MAP（实验与评测）。
+- 维护规矩加一条：新增小步、改大步划分，即使发 PATCH 也要改 Wiki。
+- **截图**：沿用 v0.8 的，图注里的小步编号改成新编号；新小步（2b、2c、3b–3e、4c、4d、gate）还没有专门的截图，等下一个 MINOR 按 `wiki/tools/make_shots.py` 补。
 
 ### v0.9（2026-11-23，v0.9.0）：按四大步重排
 
