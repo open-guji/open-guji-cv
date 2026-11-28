@@ -661,6 +661,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
     # 遮挡格先留底：字组流程放行的字不等于默认字（整理本字）时退回（印章底下字形类解法不可靠）
     occ_snap = ({r.id: (r, r.admit, r.channel, r.provenance, r.char, list(r.doubts or []), dict(r.evidence or {}))
                  for r in seq if (r.evidence or {}).get("occluded") and not r.admit})
+    # 保留内联回退（C2 查过，不删）：4d 只预算「待审口径」格的入口归属；已放行格的 review entry、4d 缺席时都在 group_flow_pass 里现算。
     _gd = _opt(ctx, "group_decision", page) if ctx is not None else None      # 4d（A2）：入口归属存在产物里就读它，没有就现算
     pre_entry = {c.id: c.lift for c in _gd.cells} if (_gd is not None and "entry" in _gd.ran) else None
     res = group_flow_pass(seq, amap, cands_of, blocked, cfg,
