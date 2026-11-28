@@ -23,7 +23,7 @@ def _ctx(tmp_path, monkeypatch, *, params: SeedAdmitParams | None = None):
     params = params or SeedAdmitParams()
     params.context_garble_guard = False
     params.context_page_end_review = False  # 单列自造格即页末格
-    kwargs = {"seed_admit": params}
+    kwargs = {"char_decide": params}
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
                       params=kwargs, log=lambda s: None)
 
@@ -36,7 +36,7 @@ def _run(ctx, *, match_recs, decision_recs, char_recs=None):
     if char_recs is not None:
         write_product(ctx, "cell_shrink", PAGE,
                       char_index=page_chars(PAGE, BOOK, recs=char_recs, col=COL))
-    return STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    return STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
 
 
 def _all(sa):

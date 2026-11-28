@@ -23,7 +23,9 @@ from . import seal_detect  # noqa: F401  —— 印章定位（印章系统化�
 from . import (border_detect, column_warp, column_band, column_end, column_geometry, row_segment,  # noqa: F401
                cell_shrink, glyph_match, rare_candidates,
                context_decide, align_ref, seed_admit)
-from . import glyph_near, glyph_candidate, cell_traits, glyph_analyzer, context_rank  # noqa: F401  —— 第三步重构：3b 形近字组、3c 按图候选、3d 其他特征、收尾汇总（2026-11-27/28，缺省关）
+from . import cell_state  # noqa: F401  —— 第四步 4c 格况（2026-11-28，缺省关）
+from . import group_decision  # noqa: F401  —— 第四步 4d 字组（2026-11-28，缺省关）
+from . import glyph_near, glyph_candidate, cell_traits, glyph_vis, glyph_analyzer, context_rank  # noqa: F401  —— 第三步重构：3b 形近字组、3c 按图候选、3d 其他特征、3e 看图大模型、收尾汇总（2026-11-27/28，缺省关）
 from . import line_detect, column_crop, row_segment_runs  # noqa: F401  —— 现代印刷链（modern_body.yaml）
 from . import block_detect, column_trace, line_ocr, cell_cut  # noqa: F401  —— 自由版式链（keben_free.yaml，2026-10-27；line_ocr 10-28）
 from .. import gates  # noqa: F401  —— 闸挂在对应 Step 的 spec 上，必须晚于上面几行

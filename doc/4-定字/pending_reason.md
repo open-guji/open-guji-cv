@@ -1,40 +1,51 @@
 # 收尾步写的送审原因（`pending_reason`）
 
-> P3a-1（2026-11-28）起 `pending-cells` 每格带 `pending_reason`、`pending_reason_detail`、`form_src` 三个字段，**本版值一律 `None`**
-> （产物仍是 `seed_admit`，没有这些字段）。收尾步（`char_decide`）改名并直接写原因的那一版起，下面这些值由 cv 写，其余仍由 manager 判。
+> P3a-2（2026-11-28）起，收尾 `char_decide`（P3a-3 起改名，旧名 `seed_admit`）**每格直接写** `pending_reason`、`pending_reason_detail`、`form_src`
+> （`AdmitRec` 三个可选字段，空不落盘）。放行结果一格不变。P3a-1 起 `pending-cells` 就带这三个键，现在 cv 有值就带上。
+> 加字段与改名都让第四步产物过期（Step id 变）：旧册用 `guji-cv decide migrate-name` 原地改名（指纹按新名换算），带不上新字段的旧页 `pending_reason` 仍是 None，manager 回退反推；跟各书下一轮整轮走。
 
 ## 约定
 
-- enum 真源是 guji-manager `review/pending_reasons.yaml`（`PendingReason`，读取 `python -m guji_manager.review.pending_reason --json`）；
-  cv 只写**第四步名下**的原因（yaml 里 `owner` 是第四步的那些值，下表 15 个），常量见 `core/decide_names.py::FINAL_PENDING_REASONS`。
-- 不在这个集合里的格（切分 S、遮挡 D、刻例太少 L02–L04、复审 X……）cv 写 `None`：manager 自判类照旧覆盖，缺或 `unknown` 回退 `reasons_for_pending` 反推；
-  过渡期两边都算，出差异表（GM4 方案），一两轮后 manager 切到读产物。
-- 遮挡（D01／D02）、切坏（S04）随 P3b（4c 独立成 Step）改由格况状态给，到时本表增补。
-- `pending_reason_detail`：自由文本，说明依据（命中哪条通道／护栏、原标注、事件 id）；`form_src`：选形来源 `lib|ref|group|code_table|human`。
+- enum 真源是 guji-manager `review/pending_reasons.yaml`（`PendingReason`，导出 `python -m guji_manager.review.pending_reason --json`）；
+  cv 存精简副本 `open_guji_cv/ops/pending_reasons.json`（code、category、route、owner、reviewer、priority），
+  测试 `tests/test_pending_reason_enum.py` 与 manager 导出逐项核对，不一致即失败（改了 yaml 就重新导出副本）。
+- cv 只写**第四步名下**的原因（副本里 `owner == "CV4"`，下表 18 个；常量 `core/decide_names.py::FINAL_PENDING_REASONS`）。
+  判法在 `steps/char_decide_reasons.py`，逐条搬自 manager `review/reasons.py::classify`：按 priority 从小到大试，第一个命中的是这一格的原因；
+  **第一个命中的若归别人**（切分 S、遮挡 D、库刻例 L02／L04、复审 X02–X04……），这格写 `None`，manager 自判类照旧覆盖，缺或 `unknown` 回退 `reasons_for_pending`。
+- 已放行的格、排除名单上的格：`pending_reason` 恒 `None`。
+- `pending_reason_detail`：同 manager `detail_of`（组 id、字对、码位），不是判定依据；依据在格的 `evidence`／`doubts`。
+- `form_src`：这一格放字（或默认字）的来源，`human`（人裁）｜`code_table`（私用码表）｜`group`（字组流程放行）｜`ref`（整理本，provenance=align／context 或通道带 ref）｜`lib`（字形库）；没放字（□、空）为 None。
+- 过渡期两边都算，用 ai-team `domain/CV/A24/decide-bench/diff_pending_reason.py` 出逐格差异表（GM4 方案）；一两轮后 manager 切到读产物。
+- 与 manager 暂不同：列级无参照（`reference_profile` 的 `col_none`，cv #2018）manager 还按整页；两边口径对齐前，这类格可能有差异。
 
-## 第四步名下的原因
+## 第四步名下的原因（yaml owner＝CV4）
 
 | 值 | 码 | 显示名 | 去向 | 谁看 |
 |---|---|---|---|---|
 | `hard_pair` | H01 | 极难形近 | deferred | none |
+| `lib_missing` | L01 | 少见的字 | human | human |
+| `garble_gate` | L05 | 像框线或墨点 | algo | llm_then_human |
+| `near_form_guard` | N01 | 形近字 | llm | llm_then_human |
+| `ref_ocr_diff` | P01 | 识别字与参校本不同 | llm | llm_then_human |
+| `ref_final_diff` | P02 | 定字与参校本不同 | llm | llm_then_human |
+| `ref_lacuna` | R01 | 参校本缺字 | algo | llm_then_human |
+| `ref_gap` | R02 | 参校本这里没字 | llm | llm_then_human |
+| `glyph_pending` | R03 | 待收字 | deferred | none |
+| `variant_pair` | V01 | 异体字 | human | human |
+| `variant_form_open` | V02 | 写法待定 | algo | human |
+| `ruling_conflict` | X01 | 裁定有冲突 | human | human |
 | `group_abstain` | Z01 | 形近字·没把握 | llm | llm_then_human |
 | `group_conflict` | Z02 | 形近字·判法打架 | llm | llm_then_human |
 | `group_demoted` | Z03 | 形近字·复核推翻 | llm | llm_then_human |
-| `group_ref_dissent` | Z04 | 形近字·与整理本不同 | llm | llm_then_human |
-| `group_weak` | Z05 | 形近字·证据弱 | llm | llm_then_human |
-| `group_form_open` | Z06 | 写法待定 | algo | human |
-| `near_form_guard` | N01 | 形近字 | llm | llm_then_human |
-| `variant_pair` | V01 | 异体字 | human | human |
-| `lib_missing` | L01 | 少见的字 | human | human |
-| `garble_gate` | L05 | 像框线或墨点 | algo | llm_then_human |
-| `ref_lacuna` | R01 | 整理本缺字 | algo | llm_then_human |
-| `ref_gap` | R02 | 整理本这里没字 | llm | llm_then_human |
-| `ref_replaced` | P01 | 整理本改过字 | llm | llm_then_human |
-| `ref_mismatch` | P02 | 和整理本不一致 | llm | llm_then_human |
+| `group_ref_dissent` | Z04 | 形近字·与参校本不同 | llm | llm_then_human |
+| `group_weak` | Z05 | 形近字·证据弱（已停用） | llm | llm_then_human |
+| `group_unconfirmed` | Z07 | 形近字·差一路确认 | llm | llm_then_human |
 
-## 兼容读口（本版）
+（`group_weak`、`group_form_open`→`variant_form_open` 等改名与停用以 yaml 为准；旧名数据由 manager `parse()` 换新名。）
 
-新旧名并认，产物仍写 `seed_admit`；改名那一版把 `core/decide_names.py::ADMIT_STEP_ACTIVE` 改成 `char_decide`。
+## 改名与兼容读口
+
+改名版（P3a-3）起 `core/decide_names.py::ADMIT_STEP_ACTIVE = "char_decide"`：Step id、产物目录／种类、页顶层键、参数键都写新名；旧名一律并认（下表）。`guji-cv decide migrate-name <册>` 现在可实跑。
 
 | 对象 | 读法 |
 |---|---|
@@ -43,5 +54,6 @@
 | 参数 | `params.char_decide.*` 与 `params.seed_admit.*` 都认（册配置、管线 yaml、套书缺省、`--params`／`--override`）；同一层同时写报错 |
 | 事件 | `feedback.decide_events.decided_view`／`ruling_by_u`／`invalidate_final`：`target.step` 两个名字当同一步，后到覆盖按写入时间，失效两个目录都标；D1 历史事件不改写 |
 | 迁移 | `guji-cv decide migrate-name <册>`：改名不删、换算指纹、sha 清单存 `<产物根>/<册>/_migrate_char_decide.json`；本版只能 `--dry-run` |
-| 导入 | `steps.char_decide.CharDecideStep`＝`steps.seed_admit.SeedAdmitStep` 同一个类（改名那一版两边互换，旧名留垫片） |
+| 导入 | `steps.char_decide.CharDecideStep`＝`steps.seed_admit.SeedAdmitStep` 同一个类（代码仍在 `steps/seed_admit.py`，类名不变） |
+| 步名 | `STEPS["seed_admit"]`、`resolve_step_id`、`--from/--to`、管线 `slice` 都把 `seed_admit` 当 `char_decide` |
 | manager | 以上都经 `manager_api` 导出（`read_final`、`decided_view`、`ADMIT_STEPS`、`fold_admit_params` 等） |

@@ -20,8 +20,8 @@ def _run(tmp_path, monkeypatch, **match):
         PAGE, BOOK, col=COL, recs=[dict(slot=SLOT, char="明", margin=0.9, source="context")]))
     write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
         PAGE, BOOK, col=COL, recs=[dict(slot=SLOT, align_char="明")]))
-    ctx.params["seed_admit"] = SeedAdmitParams()
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    ctx.params["char_decide"] = SeedAdmitParams()
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 

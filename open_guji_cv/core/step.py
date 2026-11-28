@@ -26,8 +26,32 @@ if TYPE_CHECKING:
 
 
 # ── 注册表 ───────────────────────────────────────────────────────────
-STEPS: dict[str, "Step"] = {}
-KINDS: dict[str, ProductKindSpec] = {}
+class _AliasDict(dict):
+    """注册表：收尾步旧名 `seed_admit` 当 `char_decide`（P3a-3，2026-11-28 改名；过渡期旧名照样查得到，撤旧名前先通知）。
+    只影响按键查（`[]`／`in`／`get`），遍历、`keys()` 只有新名。"""
+
+    def _canon(self, k):
+        from .decide_names import canonical_step
+        return canonical_step(k) if isinstance(k, str) else k
+
+    def __missing__(self, k):
+        c = self._canon(k)
+        if c != k and dict.__contains__(self, c):
+            return dict.__getitem__(self, c)
+        raise KeyError(k)
+
+    def __contains__(self, k):
+        return dict.__contains__(self, k) or (self._canon(k) != k and dict.__contains__(self, self._canon(k)))
+
+    def get(self, k, default=None):
+        try:
+            return self[k]
+        except KeyError:
+            return default
+
+
+STEPS: dict[str, "Step"] = _AliasDict()
+KINDS: dict[str, ProductKindSpec] = _AliasDict()
 
 
 def register_kind(kind: ProductKindSpec) -> ProductKindSpec:
@@ -109,6 +133,8 @@ def resolve_step_id(name: str) -> str:
     是 kind_id 就解到产出它的 step_id；两者都不是就报错，报错里列出
     已注册的 kind_id 供对照（截了前 30 个，免得刷屏）。
     """
+    from .decide_names import canonical_step      # 收尾步旧名 seed_admit 归到 char_decide（P3a-3）
+    name = canonical_step(name)
     if name in STEPS:
         return name
     if name in KINDS:

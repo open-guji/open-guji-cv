@@ -26,7 +26,7 @@ def _ctx(tmp_path, monkeypatch, **params):
     # 乱码护栏（overview#427，缺省开）会拦这里自造的低 cov 无证人格，本文件只测 G1 四条
     params.setdefault("context_garble_guard", False)
     params.setdefault("context_page_end_review", False)  # 单列自造格即页末格
-    kwargs = {"seed_admit": SeedAdmitParams(**params)}
+    kwargs = {"char_decide": SeedAdmitParams(**params)}
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
                       params=kwargs, log=lambda s: None)
 
@@ -47,7 +47,7 @@ def _run(ctx, *, verdict="unsure", cov=0.86, flags=None, ref=None, ctx_char="今
              if ref is not None else [])
     write_product(ctx, "align_ref", PAGE,
                   align_ref=PageAlignRef(page=PAGE, anchored=False, coord=coord, coord_cols=[COL]))
-    sa = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    sa = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
     return [r for cc in sa.columns for r in cc.chars][0]
 
 

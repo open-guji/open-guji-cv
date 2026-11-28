@@ -14,9 +14,6 @@ pl = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pl)
 
 
-#: 待审格行自带的送审原因字段（cv #2008 P3a-1：本版一律 None，manager 读到 None 走反推）
-_NO_REASON = {"pending_reason": None, "pending_reason_detail": None, "form_src": None}
-
 def make_products(tmp_path: Path, n_review: int = 2) -> Path:
     """一页 seed_admit：放行 1 格、待审 2 格（含带 sub 的）、排除名单 1 格。"""
     seed = tmp_path / "products" / "vol01" / "seed_admit"
@@ -43,9 +40,10 @@ def test_plain_pending_lists_unadmitted_non_excluded_cells(tmp_path):
     out = tmp_path / "out"
     pl.main(base_args(make_products(tmp_path), out))
     doc = json.loads((out / "001.pending.json").read_text(encoding="utf-8"))
+    none = {"pending_reason": None, "pending_reason_detail": None, "form_src": None}      # P3a-1：字段在，值先留 None
     assert doc == {"rev": "vol01-r0", "cv_version": None, "cv_commit": "abc1234",
-                   "cells": [{"cell": "1:1:2", "review": "pending", **_NO_REASON},
-                             {"cell": "1:2:1a", "review": "pending", **_NO_REASON}]}
+                   "cells": [{"cell": "1:1:2", "review": "pending", **none},
+                             {"cell": "1:2:1a", "review": "pending", **none}]}
 
 
 def test_chapter_style_rev_is_accepted(tmp_path):
@@ -161,7 +159,7 @@ def test_recheck_puts_cells_back_with_note_and_prior(tmp_path):
 
 
 #: 自造产物没有 cell_shrink 目录：manager meta_fresh 看到的现行页集是空的，meta 记空才算新鲜
-_FRESH = {"seed_admit": {}, "cell_shrink": {}}
+_FRESH = {"seed_admit": {}, "char_decide": {}, "cell_shrink": {}}
 
 
 def _flags(tmp_path: Path, rows: list[tuple], meta: dict | None = None) -> Path:

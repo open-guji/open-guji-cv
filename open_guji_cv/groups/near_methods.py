@@ -1,18 +1,24 @@
 """3b `glyph_near` 的字形方法登记表（2026-11-27，第三步重构）。
 
-一个字组可以挂几个方法，写在书配置 `params.glyph_near.groups.<组>.methods` 里：`{方法名: 模型目录}`。
+一个字组可以挂几个方法，写在书配置 `params.glyph_near.groups.<组>.methods` 里：`{方法名: 模型目录}`，或
+`{方法名: {path: 模型文件, pair: [字, 字]}}`（一份模型文件挂多对的方法，如 part_shape，2026-11-28；`pair` 选其中一对），
+或 `{方法名: {path: 模型文件, group: 模型组名}}`（一份模型文件挂几组的方法，如 stroke_veto；`group` 选其中一组）。
 方法只回答「这张字块图在组内各字里更像哪个」，给组内每个字一个分，外加证据；**不定字、不放行**。
 校准（分 → p）也由方法自己带的校准表做，但只在收尾 `glyph_analyzer` 里调，3b 产物里存的是原始分。
 
 接口（以后的方法照这个写，第四步那些看图判字的方法迁过来也照这个）：
 
-    m = load_method(name, model_path)         # name 如 "cnn_small"；model_path 是模型目录或单个模型文件
+    m = load_method(name, spec)               # name 如 "cnn_small"；spec 是模型目录、单个模型文件，或 {path, pair}／{path, group}
     outs = score(m, patches, book_id, ctx=ctx, cells=cells)
                                               # 即 m.score(patches, book_id[, ctx=…, cells=…])
                                               # patches: 字块图（uint8，白底黑字，任意尺寸），哪种图见 m.patch
                                               # → [{"sims": {字: 分}, "evidence": {...}}, …]，与 patches 一一对应
     p = m.calibrate(sims)                     # {字: 校准后的 p} 或 None（没有校准表）
-    m.fingerprint()                           # 模型目录（或文件）的 sha256 短哈希，进参数指纹
+    m.fingerprint()                           # 模型目录（或文件）的 sha256 短哈希，进参数指纹；{path, pair} 时再并上 pair，{path, group} 时并上组名
+    method_fingerprint(name, spec)            # "<方法>=<指纹>"，进 `methods_sha`；4d 拿同一个函数比对（spec 是字符串时与之前逐位相同）
+    lib_fingerprint(库文件)                    # 书级刻例库（book_knn／near_knn）钉版指纹＝文件 sha256 前 16 位；这类方法（`lib = True`）
+                                              # 的 method_fingerprint 就是它，与第四步参数指纹 bk／nk 段同值
+    m.model_sha                               # 模型版本，写进 3b 产物 `PageNear.models` 与收尾 `near.methods.*.model`
 
 - `m.patch`（类属性，可缺）：方法吃哪种字块图。`"raw"`（缺省）＝原图灰度按 `bbox_page` 裁块；`"char_patch"`＝第二步
   切字缓存里的字块图（`ctx.image("char_patch", patch_key)`，第四步 seed_admit 各判官读的就是这个）。
@@ -46,11 +52,181 @@
 - `sims`：几何判成 八 → `{八: 1, 人: 0, 入: 0}`；走逻辑回归 → `{入: σ(s), 人: 1−σ(s), 八: 0}`（s＝`judge` 给的决策值，
   已按 3 位小数取整，同第四步 `evidence.rr_shape.score`）；弃权里没算出 s 的（无墨、组外字护栏、几何不明、NaN）→ `{}`。
   分差不够（`abstain:low_margin`）仍给 sims，弃权记在证据里。
-- `evidence`：`{char, why, nn, score, geo}`，与第四步 `evidence.rr_shape` 同键同值（`char` 是现役判法的结论，弃权为 None）。
+- `evidence`：`{method: "rr_shape", char, why, nn, score, geo}`，后五键与第四步 `evidence.rr_shape` 同键同值（`char` 是现役判法的结论，弃权为 None）。**4d 的读口就是这里**（`seed_admit_shapes._near_from_3b`，开关 `group_flow_near_from_3b`，cv #1999）：按 `NearMethodOut.method` 冒号前是 `rr_shape` 取，证据带 `error` 的格不取；模型对不对比 `methods_sha` 里的 `rr_shape=<指纹>`。
 - 校准：模型文件旁边的 `<文件名去 .json>.calib.json`（给目录时是目录里的 `calib.json`），格式
   `{"format": "near-calib/1", "knots": {"入": [[σ(s)…], [p…]]}, "rule": {"八": p}}`：逻辑回归那一路按 knots 映 `入` 的 p、`人`＝1−p；
   几何判 八 的那一路 p 取 `rule.八`。**现在没有校准表**（`calibrate` 返回 None，收尾不出 p）；要标就拿训练脚本按册留出那一遍的
   (s, 放行字) 做保序回归，或人裁样本。
+
+## wu_shape（嗚鳴，第四步 group_flow 的书级刻形判法搬来，2026-11-28）
+
+包的是 `groups.wu_shape.judge`（seed_admit `_wu_shape_pass` 用的同一个函数），吃 `char_patch` 字块图。模型就是第四步那份
+书级模型文件（数据目录 `config/groups/wu_shape.json`，`schema: wu_shape/1`），书配置直接指它：
+`wu: {ref: wu, trigger: cands, methods: {wu_shape: config/groups/wu_shape.json}}`；也可以给目录，目录里放 `model.json`。
+
+- `sims`：`{鳴: p, 嗚: 1−p}`（p＝`judge` 给的 鳴 概率，已按 4 位小数取整，同第四步 `evidence.wu_shape.p`；1−p 也取 4 位）；
+  取不出右半（`abstain:no_ink`）→ `{}`。p 在门槛中间（`abstain:low_p`）仍给 sims，弃权记在证据里。
+- `evidence`：`{method: "wu_shape", char, why, p}`，后三键＝`judge()` 返回的整个 dict（第四步 `evidence.wu_shape` 存的就是它，
+  无墨弃权没有 `p`）。4d 读时去掉 `method` 就是第四步要存的那份。模型对不对比 `methods_sha` 里的 `wu_shape=<指纹>`
+  （`method_fingerprint("wu_shape", group_flow_wu_shape)`）；`model_sha` 与第四步参数指纹 `ws` 段同算法（`wu_shape.fingerprint`）。
+- 现役第四步只判**本格字（库首位）是 嗚鳴** 的格（整理本／字组／库前几名有 嗚鳴 都不算）；3b 用 `trigger: cands` 罩住它
+  （3a 首位或前 topk 名里有 嗚鳴 就跑），多跑的格 4d 不读。
+- 校准：模型文件旁边的 `<文件名去 .json>.calib.json`（给目录时是目录里的 `calib.json`），格式
+  `{"format": "near-calib/1", "knots": {"鳴": [[p…], [校准 p…]]}}`，`嗚`＝1−p。**现在没有校准表**（`calibrate` 返回 None，收尾不出 p）。
+
+## hou_shape（候𠋫，第四步 group_flow 的书级刻形判法搬来，2026-11-28）
+
+包的是 `groups.hou_shape.judge`（seed_admit `_hou_shape_pass` 主遍与 `group_flow_hou_shape_late` 晚跑遍用的同一个函数），
+吃 `char_patch` 字块图。模型就是第四步那份书级文件（数据目录 `config/groups/hou_shape.json`），书配置直接指它：
+`hou: {ref: hou, trigger: cands, methods: {hou_shape: config/groups/hou_shape.json}}`；也可以给目录，目录里放 `model.json`。
+两种 schema：
+
+- `hou_shape/2`（小网）：`judge` 给 候 的概率 p（4 位）→ `sims`＝`{候: p, 𠋫: 1−p}`，同 wu_shape。
+- `hou_shape/1`（几何量）：`judge` 给 亻 右边第二竖的相对长 v（4 位），`v < lo` 判 候、`v ≥ hi` 判 𠋫、其间弃权。v 不是概率，
+  3b 用一个**与现役判定一致的单调映射**出分：`候 = σ(ln9 · (lo + hi − 2v) / (hi − lo))`、`𠋫 = 1 − 候`（各取 4 位）。
+  v＝lo 时 候＝0.9、v＝(lo+hi)/2 时 0.5、v＝hi 时 0.1，所以现役判 候 的格 候 ≥ 0.9、判 𠋫 的格 候 ≤ 0.1，弃权的格在 (0.1, 0.9)，
+  最高分的字总是现役判的那个字；v 越长越像 𠋫，保序（校准表可直接拿它做保序回归）。`hi − lo < 0.001`（几乎没有中间档）时按判出的字给 1／0（弃权 0.5）。
+- 无墨弃权（`abstain:no_ink`）→ `{}`；弃权在中间（`abstain:mid`）仍给 sims。
+- `evidence`：`{method: "hou_shape", char, why, v|p}`，后三键＝`judge()` 整个返回值（第四步 `evidence.hou_shape` 存的那份）。
+  4d 读时去掉 `method`；`model_sha` 与第四步参数指纹 `hs` 段同算法（`hou_shape.fingerprint`），`methods_sha` 里是 `hou_shape=<指纹>`。
+- 现役第四步只碰**已放行**、字是 候／𠋫 的非人裁格，只改字、不改放行；晚跑遍（`group_flow_hou_shape_late`，5c vis_ruling
+  放行之后）判法同一个，只是补判主遍时还没放行、没 `evidence.hou_shape` 的格。3b 不知道放行，按 3a 候选触发（`trigger: cands`，
+  登记表 hou 组是 侯俟候𠉀𠋫），给的是原样判法结论；哪些格用、主遍还是晚跑遍、改不改字，都留在 4d。
+  3b 也会在 侯／俟 格上出分（方法只认 候／𠋫，那些分没意义），4d 不读这些格。
+- 校准：`<模型去 .json>.calib.json`（给目录时 `calib.json`），`{"format": "near-calib/1", "knots": {"候": [[分…], [p…]]}}`，
+  按 `sims.候` 映、𠋫＝1−p。**现在没有校准表**（`calibrate` 返回 None，收尾不出 p）。
+
+## part_shape（剌刺／疎踈／攢攅 等差在一块部件的字对，第四步 group_flow 的书级部件刻形判法搬来，2026-11-28）
+
+包的是 `groups.part_shape.judge`（seed_admit `_part_shape_pass` 用的同一个函数，按这一对的部件框 `box` 截部件、同一组网），
+吃 `char_patch` 字块图。模型是第四步那份书级文件（数据目录 `config/groups/part_shape.json`，`schema: part_shape/1`，**一份挂多对**），
+所以书配置要写明是哪一对：
+
+    ci: {ref: ci, trigger: cands, methods: {part_shape: {path: config/groups/part_shape.json, pair: [剌, 刺]}}}
+
+`pair` 两个字须是模型里某一对的两个字（次序不论，sims 的方向按模型里的 `chars`）；文件里只有一对时可以只写路径字符串。
+一个组挂一对；一份文件里的几对要各开一个组（各自的 `ref`）。
+
+- `sims`：`{chars[1]: p, chars[0]: 1−p}`（p＝`judge` 给的 chars[1] 概率，已取 4 位，同第四步 `evidence.part_shape.p`），同 wu_shape；
+  取不出部件（`abstain:no_ink`）→ `{}`；门槛中间（`abstain:low_p`）仍给 sims。
+- `evidence`：`{method: "part_shape", char, why, p, pair}`，后几键＝`judge()` 整个返回值（第四步 `evidence.part_shape` 存的那份，
+  `pair` 是两字拼起来，如 `剌刺`）。4d 读时去掉 `method`。
+- 指纹：`method_fingerprint("part_shape", {path, pair})`＝`part_shape=<模型文件（＋同名校准表）指纹与 pair（按码位排）合起来的短哈希>`，
+  `methods_sha` 里是 `<组>:part_shape=<指纹>`；4d 用 `group_flow_part_shape` 和本格所在那一对（`part_shape.pair_of(model, 字)["chars"]`）
+  调同一个函数比对。`model_sha`＝`part_shape.fingerprint(模型文件)`，与第四步参数指纹 `pt` 段同算法。
+- 现役第四步只判**本格字（库首位）落在某一对里**的格；3b 用 `trigger: cands` 罩住。登记表里 剌刺 是注册组 `ci`，
+  疎踈、攢攅 是单立字对 `p:疎踈`、`p:攅攢`。
+- 校准：模型文件旁边 `<去 .json>.calib.json`，`{"format": "near-calib/1", "knots": {chars[1]: [[p…], [校准 p…]]}}`，
+  按字取，几对共用一份表也行。**现在没有校准表**（`calibrate` 返回 None，收尾不出 p）。
+
+## pair_shape（两字刻形二选一：史记 之矣 /1、全唐文 大太／王玉／還遺 /2，第四步 group_flow 的书级判法搬来，2026-11-28）
+
+包的是 `groups.pair_shape.judge`（seed_admit `_pair_shape_pass` 用的同一个函数），吃 `char_patch` 字块图。模型是第四步那份书级文件，
+**一对一个文件**（数据目录 `config/groups/pair_shape_<拼音>.json`；`group_flow_pair_shape` 单个，`group_flow_pair_shapes` 是 `{两字: 文件}`
+可挂多对），两种 schema：`pair_shape/1`（48px HOG＋PCA 近邻组外护栏＋逻辑回归）、`pair_shape/2`（主笔画紧框墨量图＋逻辑回归，
+组外判别 `other` 或多类 `multi`）。书配置照 part_shape 写 `{path, pair}`（`pair` 只用来核对是不是这个文件的两个字、并进指纹），
+每对开一个组（登记表组 `dt` 大太、`wyu` 王玉、`yh` 還遺；之矣 是 11-28 为此补进登记表的 `p:之矣`）：
+
+    dt: {ref: dt, trigger: cands, methods: {pair_shape: {path: config/groups/pair_shape_dt.json, pair: [大, 太]}}}
+    zy: {ref: "p:之矣", trigger: cands, methods: {pair_shape: {path: config/groups/pair_shape_zhiyi.json, pair: [之, 矣]}}}
+
+- `sims`：同 rr_shape，用 `judge` 给的决策值 s（已取 3 位，`score>0` 给 chars[1]）：`{chars[1]: σ(s), chars[0]: 1−σ(s)}`（各取 4 位；
+  多类模型的 s＝log p(chars[1]) − log p(chars[0])，σ(s) 就是只看这两类时 chars[1] 的概率）。没算出 s 的弃权（无墨、/1 的近邻组外护栏、
+  NaN）→ `{}`；算出了 s 的弃权（分差不够、/2 的组外判别或多类最像组外字）仍给 sims，弃权记在证据里。**`other`／`margin`／`top`
+  只进证据、不进 sims**。
+- `evidence`：`{method: "pair_shape", **judge()}`，即 `char, why` 加 `nn`（/1）、`score`、`other`（/2 组外判别）、`margin`／`top`（/2 多类），
+  judge 出了哪几个键就是哪几个，与第四步 `evidence.pair_shape`（`_pair_shape_pass` 的 trail）逐键同值。4d 读时去掉 `method`；
+  第四步另加的 `nm_5b`（护栏 never_match 格的 5-b 首位）是 4d 的事，3b 不出。
+- **只搬判法**：现役第四步的触发（库首位或整理本字在这一对里、整理本是第三个字不判、字组流程已给字不越过）、`veto`（已放行格
+  |s|≥`veto_thr` 降审，`group_flow_pair_shape_veto`）、`nm_5b`、坐标对位全部留在 4d。3b 用 `trigger: cands` 罩住
+  （3a 首位或前 topk 名里有这两字之一就跑），多跑的格 4d 不读。
+- 指纹：`method_fingerprint("pair_shape", {path, pair})`，同 part_shape（文件＋同名校准表的指纹并上 pair，按码位排）；`methods_sha`
+  里是 `<组>:pair_shape=<指纹>`。4d 用书级参数里那个文件和它的 `chars` 调同一个函数比对。`model_sha`＝`pair_shape.fingerprint(文件)`，
+  与第四步参数指纹 `ps`／`pp` 段里每个文件的那段同算法。
+- 校准：`<去 .json>.calib.json`，`{"format": "near-calib/1", "knots": {chars[1]: [[σ(s)…], [p…]]}}`。**现在没有校准表**（收尾不出 p）。
+
+## book_knn（字组书级刻形近邻：门族 閒間 等，第四步 group_flow 的 `_book_knn_pass` 搬来，2026-11-28）
+
+包的是 `groups.book_knn`（本书已放行格当刻例、整字 HOG 投 PCA 做 k 近邻），吃 `char_patch` 字块图。库是第四步那份书级文件
+（数据目录 `config/groups/book_knn/<组>.json`，`schema: book_knn/1`），一组一个，书配置直接指它：
+
+    men: {ref: men, trigger: cands, methods: {book_knn: config/groups/book_knn/men.json}}
+
+**拆成两段**（CV3／CV4 11-28 定）：现役 `book_knn.judge(图, 模型, ref)` 只在 B 档用整理本对位字 ref，3b 看不到整理本，所以
+
+- 前段 `book_knn_measure(特征, 模型)`（3b 出）：＝`judge_feat(特征, 模型, None)`——票数 `votes`、距离比 `ratio`、`nn`、多数字 `pick`、
+  A 档结论（`agree`／`tier: A`）或弃权（`no_ink`／`nan`／`out_of_group`／`background`／`low_margin`）；`low_margin` 时另给
+  `b_ok`＝「整理本字若是 pick，B 档门槛过不过」（拿 `ref=pick` 再调一次 `judge_feat` 得，比的是未取整的距离比）。
+- 后段 `book_knn_settle(前段, ref)`（4d 调）：`low_margin`＋`b_ok`＋`ref == pick` → `{char: pick, why: agree_ref, tier: B}`，其余原样；
+  出来的 dict 与现役 `judge(图, 模型, ref)` 逐键同值、同舍入、键次序同第四步 `evidence.book_knn`（测试按 A／B／各弃权档逐键比，
+  并跑 `_book_knn_pass` 比 `evidence.book_knn`）。**现役第四步判法一行没动**，仍走 `judge`。
+- 本格自己若是库里的刻例（训练时它已放行），现役运行时不屏蔽（库里没有格 id，`judge_feat` 的 `exclude` 只给训练留出用），3b 照现役，也不屏蔽。
+
+- `sims`：`{pick: 票数/k}`（4 位）；没有 pick 或 pick 是背景刻例 `~` → `{}`。没有校准表（`calibrate` 返回 None）。
+- `evidence`：`{method: "book_knn", char, why, tier, pick, votes, ratio, nn[, b_ok]}`；4d 用 `book_knn_settle(evidence, 整理本字)` 得
+  第四步要存的 `evidence.book_knn`（`method`／`b_ok` 自动去掉）。
+- 指纹（库钉版）：`lib_fingerprint(库文件)`＝文件 sha256 前 16 位，与第四步参数指纹 `bk` 段（`book_knn.fingerprint`）同值；
+  `method_fingerprint("book_knn", 路径)`＝`book_knn=<lib_fingerprint>`，`methods_sha` 里是 `<组>:book_knn=<指纹>`，`model_sha` 也是它。
+  4d 拿 `group_flow_book_knn[组]` 调 `lib_fingerprint` 比，不一致本地现算并计数、不报错。
+- 触发：现役第四步只判**字组流程归进这一组（`evidence.group.id`）且仍待审**的格；3b 用 `trigger: cands` 罩（3a 首位或前 topk 名里有
+  组内任一字就跑）。罩不住的格（字组靠整理本字归组、3a 前 topk 名里没有组字），4d 本地现算并计数。
+
+## near_knn（形近护栏格书级刻形近邻，第四步 `_near_knn_pass` 搬来，2026-11-28）
+
+包的是 `groups.near_knn`（本书已放行格当刻例、整字 HOG 投 PCA；候选内近邻＋全库近邻两证），吃 `char_patch` 字块图。库是第四步那份
+书级文件（数据目录 `config/groups/near_knn.json`，`schema: near_knn/1`），一本书一个；挂在保留伪组 `_guard` 上（`trigger: guard`，
+触发见 `steps/glyph_near.py` 模块头「护栏触发」）：
+
+    _guard: {trigger: guard, gap: true, methods: {near_knn: config/groups/near_knn.json}}
+
+现役 `near_knn.judge(图, 库, 候选)` 的候选是 4d 才知道的「本格字、整理本字、库首位（gap 时库前三）」，所以 3b 不判，只出量：
+
+- `near_knn_measure(特征, 库, 3a 的字)`（3b 出）：与候选无关的 `full`／`full_votes`（全库 k 近邻多数字与票数）、`nn`（3 位）、
+  `out_of_book`（`nn > guard`，比未取整的 nn）；`chars`＝看过的 3a 字（首位＋全部候选，去重保序）；`dists`＝其中库里够 `min_n` 格的字
+  → 它的库格到本格的距离升序前 k 个（float32 原值）。无墨 → `{char: None, why: abstain:no_ink}`；距离有非有限值 → `nan: True`。
+- `near_knn_settle(量, 库, 候选)`（4d 调）：照 `judge_feat` 的次序判（无墨 → 候选不足 → nan → 护栏 → 票／比 → 全库同意），候选内近邻
+  ＝各候选字前 k 个距离合起来按（距离, 候选次序, 字内次序）排的前 k 个（＝现役 `argsort(kind="stable")` 的次序），距离比按 float32 除；
+  出来的 dict 与现役 `judge` 逐键同值、同舍入。候选里有库里够格的字、3b 却没给它距离（整理本字不在 3a 前几名等）→ None，4d 本地现算并计数。
+  只读库的门槛与各字格数，不读图。
+- 候选比票之外的 `ref_gate`（gap 出口闸）、`skip_chars`／`skip_groups`、异体边挡法、`via: near_gap` 全留在 4d。
+- `sims`：3a 各字（够格的）合起来的前 k 个近邻里各字的票份额（4 位），够格的字不到两个 → `{}`；没有校准表。
+- `evidence`：`{method: "near_knn", full, full_votes, nn, out_of_book, chars, dists}`（或无墨／nan 那两种）。
+- 指纹：同 book_knn，`lib_fingerprint(库文件)`＝第四步参数指纹 `nk` 段（`near_knn.fingerprint`），`methods_sha` 里是 `_guard:near_knn=<指纹>`。
+
+## stroke_veto（己／已巳、千／干 笔画反向护栏，第四步 `_stroke_veto_pass` 的看图判法搬来，2026-11-28）
+
+包的是 `groups.stroke_veto.judge`（seed_admit `_stroke_veto_pass` 用的同一个函数：通用模板配准、量「接不接」的笔画特征、
+类统计似然比判），吃 `char_patch` 字块图。模型是第四步那份书级文件（数据目录 `config/groups/stroke_veto.json`，`schema: stroke_veto/1`，
+**一份挂几组**：`jys` 己 对 已巳、`qg` 千 对 干），书配置写明是哪一组（`group`＝模型里的组名），3b 组键就用模型组名：
+
+    jys: {ref: jys, trigger: cands, methods: {stroke_veto: {path: config/groups/stroke_veto.json, group: jys}}}
+    qg:  {ref: zy, chars: [千, 干], trigger: cands, methods: {stroke_veto: {path: config/groups/stroke_veto.json, group: qg}}}
+
+登记表：`jys`（己已巳，注册组，near）原样对上；千干 在注册组 `zy`（于千子干）里，`ref: zy` 再用 `chars: [千, 干]` 盖掉成员
+（于、子 是极常见字，不盖的话凡候选里有 于／子 的格都要配准一次，4d 一格不读）。文件里只有一组时可以只写路径字符串。
+**2026-11-28 起登记表 jys 的 `handling.methods` 为 []**（Sheldon 11-27：己已巳只做文意、不做字形区分），书配置照上面写 jys 那行会被
+3b 警告、跳过（`near_registry.resolve`，计入 `PageNear.skipped_methods`）；方法本身仍认模型里的 jys 组，只是 3b 不再给它跑。
+
+- 判法：现役 `judge(图, 组)` → `{x, cls, why, llr}`：`cls` 是**类名**（`classes` 把字映到类，jys 的 已／巳 本书刻法相同并成一类 `已巳`）；
+  似然比领先量 `llr`（2 位）≥ `t` 才给类，`why: llr`；不够 → `abstain`（有 `llr`）；离两类都远（`max_z`）→ `out`（无 `llr`）；
+  贴坏、无墨 → `bad_fit`（只有 `cls`／`why`）。
+- `sims`：只认两类的组（`build` 出的都是两类；别的报错）。`llr` 是两类对数似然差，σ(llr) 就是等先验下领先那一类的概率：
+  领先类的字各给 `σ(llr)`、另一类的字各给 `1−σ(llr)`（4 位，llr 用 judge 已取 2 位的那个）。判出了类 → 领先类＝`cls`，
+  所以最高分的字总是现役判出的类（t ≥ 0 时 σ(llr) ≥ σ(t)）；`abstain` 时 judge 不出方向，3b 拿同一张图再量一遍特征
+  （`stroke_veto.features`，确定性，同一个值）按对数似然定领先类，分在 [0.5, σ(t)) 之间；`out`／`bad_fit` 没有 llr → `{}`。
+  jys 的 已、巳 同分（方法分不开这两个字，**不是**说它们是同一个字：登记表里 己已巳 仍是三个字、type near）。
+- `evidence`：`{method: "stroke_veto", group: 模型组名, **judge()}`，后几键＝`judge()` 整个返回值（同键同值同舍入）。
+  第四步降审时写进 `evidence.stroke_veto` 的是 `{group, cls, llr, x}`（llr／x 缺则 None），`stroke_veto_trail(证据)` 由 3b 证据得出与它
+  逐键相等的那份；判不判降审（`cls` 非空且≠放行字的类）、`channels` 过滤、人裁格不碰，都留在 4d。
+- 触发：现役只看**已放行**、放行字在模型某组里（且通道在 `channels` 里）的格，3b 看不到放行，用 `trigger: cands` 罩（3a 首位或前 topk
+  名里有组内字就跑）。罩不住的格：放行字被前面的通道改成了 3a 首位与前 topk 名之外的字（整理本对位放行、字组流程、刻形判法改字等），
+  和备选切法列——4d 本地现算并计数。多跑的格（没放行、通道不在 `channels`）4d 不读。
+- 指纹：`method_fingerprint("stroke_veto", {path, group})`＝模型文件（＋同名校准表）指纹与组名合起来的短哈希，`methods_sha` 里是
+  `<组>:stroke_veto=<指纹>`；4d 用 `SeedAdmitParams.stroke_veto`（已解析成绝对路径）和 `stroke_veto.group_of(模型, 放行字)` 的组名调
+  同一个函数比对。`model_sha`＝`stroke_veto.fingerprint(模型文件)`，与第四步参数指纹 `stroke_veto_fingerprint` 同值。
+- 校准：`<去 .json>.calib.json`，`{"format": "near-calib/1", "knots": {字: [[σ(llr)…], [p…]]}}`，按该字的分映 p、另一类＝1−p。
+  只在两类都是单字时出 p（qg）；jys 的 已巳 是合类，组内各字的 p 分不开，`calibrate` 一律 None（只当证据，不把 已、巳 归一）。
+  **现在没有校准表**（收尾不出 p）。
 """
 from __future__ import annotations
 
@@ -59,6 +235,7 @@ import inspect
 import json
 import math
 import re
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -225,13 +402,15 @@ class CnnSmall:
     def fingerprint(self) -> str:
         return _dir_fingerprint(self.dir)
 
+    @property
+    def model_sha(self) -> str:
+        return self.fingerprint()
+
 
 class RrShape:
     """入人八 书级刻形判法（`groups.rr_shape`）包成 3b 方法，见模块头「rr_shape」。"""
 
     patch = "char_patch"
-    CHARS = ("人", "入", "八")
-
     def __init__(self, path: Path):
         p = Path(path)
         self.src = p
@@ -259,7 +438,7 @@ class RrShape:
         out = []
         for g in patches:
             v = rr_shape.judge(g, self.model)
-            trail = {k: v[k] for k in ("char", "why", "nn", "score", "geo") if k in v}
+            trail = {"method": "rr_shape", **{k: v[k] for k in ("char", "why", "nn", "score", "geo") if k in v}}
             out.append({"sims": self.sims_of(v), "evidence": trail})
         return out
 
@@ -279,27 +458,595 @@ class RrShape:
     def fingerprint(self) -> str:
         return _dir_fingerprint(self.src)
 
+    @property
+    def model_sha(self) -> str:
+        """模型文件的版本，与第四步参数指纹里的 `rs` 段同算法（`rr_shape.fingerprint`），4d 拿它对 `group_flow_rr_shape`。"""
+        from . import rr_shape
+        return rr_shape.fingerprint(str(self.path))
 
-METHODS = {"cnn_small": CnnSmall, "rr_shape": RrShape}
 
-_CACHE: dict[tuple[str, str], object] = {}
+def _load_calib(p: Path) -> dict | None:
+    """方法的校准表：给目录时是目录里的 `calib.json`，给文件时是同名 `<去 .json>.calib.json`；没有 → None。"""
+    cal = p / "calib.json" if p.is_dir() else _sibling_calib(p)
+    d = json.loads(cal.read_text(encoding="utf-8")) if cal.is_file() else None
+    if d is not None and d.get("format") != "near-calib/1":
+        raise ValueError(f"{cal} format 不是 near-calib/1：{d.get('format')!r}")
+    return d
 
 
-def load_method(name: str, model_dir: str):
-    """方法名＋模型目录（或单个模型文件）→ 方法对象（按解析后的路径缓存）。"""
+class WuShape:
+    """嗚鳴 书级刻形判法（`groups.wu_shape`）包成 3b 方法，见模块头「wu_shape」。"""
+
+    patch = "char_patch"
+
+    def __init__(self, path: Path):
+        p = Path(path)
+        self.src = p
+        self.path = p / "model.json" if p.is_dir() else p
+        from . import wu_shape
+        self.model = wu_shape.load(str(self.path))
+        self.chars = tuple(self.model.get("chars", ["嗚", "鳴"]))
+        self.calib = _load_calib(p)
+
+    def sims_of(self, v: dict) -> dict[str, float]:
+        """`wu_shape.judge` 的结果 → `{鳴: p, 嗚: 1−p}`（p 用 judge 已取整的那个值，不另跑模型）；没有 p → `{}`。"""
+        q = v.get("p")
+        if q is None:
+            return {}
+        wu, ming = self.chars
+        return {ming: float(q), wu: round(1.0 - float(q), 4)}
+
+    def score(self, patches: list[np.ndarray], book_id: str, ctx=None, cells: list | None = None) -> list[dict]:
+        from . import wu_shape
+        out = []
+        for g in patches:
+            v = wu_shape.judge(g, self.model)
+            out.append({"sims": self.sims_of(v), "evidence": {"method": "wu_shape", **v}})
+        return out
+
+    def calibrate(self, sims: dict[str, float]) -> dict[str, float] | None:
+        wu, ming = self.chars
+        kn = (self.calib or {}).get("knots", {}).get(ming)
+        if not kn or ming not in sims:
+            return None
+        xs, ys = kn
+        p = float(np.interp(sims[ming], xs, ys))
+        return {ming: round(p, 4), wu: round(1.0 - p, 4)}
+
+    def fingerprint(self) -> str:
+        return _dir_fingerprint(self.src)
+
+    @property
+    def model_sha(self) -> str:
+        """模型文件的版本，与第四步参数指纹里的 `ws` 段同算法（`wu_shape.fingerprint`）。"""
+        from . import wu_shape
+        return wu_shape.fingerprint(str(self.path))
+
+
+class HouShape:
+    """候𠋫 书级刻形判法（`groups.hou_shape`，schema /1 几何量、/2 小网）包成 3b 方法，见模块头「hou_shape」。"""
+
+    patch = "char_patch"
+
+    def __init__(self, path: Path):
+        p = Path(path)
+        self.src = p
+        self.path = p / "model.json" if p.is_dir() else p
+        from . import hou_shape
+        self.model = hou_shape.load(str(self.path))
+        self.chars = tuple(self.model.get("chars", ["候", "𠋫"]))
+        self.calib = _load_calib(p)
+
+    def sims_of(self, v: dict) -> dict[str, float]:
+        """`hou_shape.judge` 的结果 → `{候: q, 𠋫: 1−q}`（只用 judge 已取整的 p 或 v，不另跑模型）；都没有 → `{}`。"""
+        hou, alt = self.chars
+        if v.get("p") is not None:
+            q = float(v["p"])
+        elif v.get("v") is not None:
+            lo, hi = float(self.model["lo"]), float(self.model["hi"])
+            if hi - lo >= 1e-3:                 # v 已取 4 位：中间档够宽，取整挪不过 0.5
+                z = math.log(9.0) * (lo + hi - 2.0 * float(v["v"])) / (hi - lo)
+                q = round(1.0 / (1.0 + math.exp(-min(50.0, max(-50.0, z)))), 4)     # 截到 ±50：窄中间档时 exp 不溢出
+            else:                               # 几乎没有中间档：按判出的字给分
+                q = {hou: 1.0, alt: 0.0}.get(v.get("char"), 0.5)
+        else:
+            return {}
+        return {hou: q, alt: round(1.0 - q, 4)}
+
+    def score(self, patches: list[np.ndarray], book_id: str, ctx=None, cells: list | None = None) -> list[dict]:
+        from . import hou_shape
+        out = []
+        for g in patches:
+            v = hou_shape.judge(g, self.model)
+            out.append({"sims": self.sims_of(v), "evidence": {"method": "hou_shape", **v}})
+        return out
+
+    def calibrate(self, sims: dict[str, float]) -> dict[str, float] | None:
+        hou, alt = self.chars
+        kn = (self.calib or {}).get("knots", {}).get(hou)
+        if not kn or hou not in sims:
+            return None
+        xs, ys = kn
+        p = float(np.interp(sims[hou], xs, ys))
+        return {hou: round(p, 4), alt: round(1.0 - p, 4)}
+
+    def fingerprint(self) -> str:
+        return _dir_fingerprint(self.src)
+
+    @property
+    def model_sha(self) -> str:
+        """模型文件的版本，与第四步参数指纹里的 `hs` 段同算法（`hou_shape.fingerprint`）。"""
+        from . import hou_shape
+        return hou_shape.fingerprint(str(self.path))
+
+
+def _pair_fingerprint(path: Path, pair) -> str:
+    """{path, pair} 写法的指纹：模型文件（＋同名校准表）的指纹与这一对（按码位排，次序不论）合起来的 sha256 短哈希。"""
+    h = hashlib.sha256()
+    h.update(_dir_fingerprint(path).encode())
+    h.update(("|pair:" + "".join(sorted(str(c) for c in pair))).encode())
+    return h.hexdigest()[:16]
+
+
+class PartShape:
+    """剌刺／疎踈 等部件刻形判法（`groups.part_shape`，一份模型挂多对）包成 3b 方法，取其中一对，见模块头「part_shape」。"""
+
+    patch = "char_patch"
+
+    def __init__(self, path: Path, pair=None):
+        p = Path(path)
+        self.src = p
+        self.path = p / "model.json" if p.is_dir() else p
+        from . import part_shape
+        model = part_shape.load(str(self.path))
+        if pair is None:
+            if len(model["pairs"]) != 1:
+                raise ValueError(f"part_shape：{self.path} 挂了 {len(model['pairs'])} 对，书配置要写 "
+                                 f"{{path, pair: [字, 字]}} 指明哪一对")
+            self.pair = model["pairs"][0]
+            self.want = None
+        else:
+            want = [str(c) for c in pair]
+            hit = [pr for pr in model["pairs"] if sorted(pr["chars"]) == sorted(want)]
+            if len(want) != 2 or not hit:
+                raise ValueError(f"part_shape：{self.path} 里没有 {''.join(want)} 这一对"
+                                 f"（有 {[''.join(pr['chars']) for pr in model['pairs']]}）")
+            self.pair = hit[0]
+            self.want = want
+        self.chars = tuple(self.pair["chars"])
+        self.calib = _load_calib(p)
+
+    def sims_of(self, v: dict) -> dict[str, float]:
+        """`part_shape.judge` 的结果 → `{chars[1]: p, chars[0]: 1−p}`（p 用 judge 已取整的那个值）；没有 p → `{}`。"""
+        q = v.get("p")
+        if q is None:
+            return {}
+        a, b = self.chars
+        return {b: float(q), a: round(1.0 - float(q), 4)}
+
+    def score(self, patches: list[np.ndarray], book_id: str, ctx=None, cells: list | None = None) -> list[dict]:
+        from . import part_shape
+        out = []
+        for g in patches:
+            v = part_shape.judge(g, self.pair)
+            out.append({"sims": self.sims_of(v), "evidence": {"method": "part_shape", **v}})
+        return out
+
+    def calibrate(self, sims: dict[str, float]) -> dict[str, float] | None:
+        a, b = self.chars
+        kn = (self.calib or {}).get("knots", {}).get(b)
+        if not kn or b not in sims:
+            return None
+        xs, ys = kn
+        p = float(np.interp(sims[b], xs, ys))
+        return {b: round(p, 4), a: round(1.0 - p, 4)}
+
+    def fingerprint(self) -> str:
+        return _dir_fingerprint(self.src) if self.want is None else _pair_fingerprint(self.src, self.want)
+
+    @property
+    def model_sha(self) -> str:
+        """模型文件的版本，与第四步参数指纹里的 `pt` 段同算法（`part_shape.fingerprint`）。"""
+        from . import part_shape
+        return part_shape.fingerprint(str(self.path))
+
+
+class PairShape:
+    """两字刻形二选一（`groups.pair_shape`，schema /1 HOG、/2 墨量图）包成 3b 方法，见模块头「pair_shape」。"""
+
+    patch = "char_patch"
+
+    def __init__(self, path: Path, pair=None):
+        p = Path(path)
+        self.src = p
+        self.path = p / "model.json" if p.is_dir() else p
+        from . import pair_shape
+        self.model = pair_shape.load(str(self.path))
+        self.chars = tuple(self.model["chars"])
+        self.want = None if pair is None else [str(c) for c in pair]
+        if self.want is not None and sorted(self.want) != sorted(self.chars):
+            raise ValueError(f"pair_shape：{self.path} 是 {''.join(self.chars)} 的模型，书配置写的 pair 是 {''.join(self.want)}")
+        self.calib = _load_calib(p)
+
+    def sims_of(self, v: dict) -> dict[str, float]:
+        """`pair_shape.judge` 的结果 → `{chars[1]: σ(s), chars[0]: 1−σ(s)}`（s 用 judge 已取整的 score）；没有 s → `{}`。"""
+        s = v.get("score")
+        if s is None:
+            return {}
+        a, b = self.chars
+        q = round(1.0 / (1.0 + math.exp(-min(50.0, max(-50.0, float(s))))), 4)    # 截到 ±50：多类的对数概率差可能很大
+        return {b: q, a: round(1.0 - q, 4)}
+
+    def score(self, patches: list[np.ndarray], book_id: str, ctx=None, cells: list | None = None) -> list[dict]:
+        from . import pair_shape
+        out = []
+        for g in patches:
+            v = pair_shape.judge(g, self.model)
+            out.append({"sims": self.sims_of(v), "evidence": {"method": "pair_shape", **v}})
+        return out
+
+    def calibrate(self, sims: dict[str, float]) -> dict[str, float] | None:
+        a, b = self.chars
+        kn = (self.calib or {}).get("knots", {}).get(b)
+        if not kn or b not in sims:
+            return None
+        xs, ys = kn
+        p = float(np.interp(sims[b], xs, ys))
+        return {b: round(p, 4), a: round(1.0 - p, 4)}
+
+    def fingerprint(self) -> str:
+        return _dir_fingerprint(self.src) if self.want is None else _pair_fingerprint(self.src, self.want)
+
+    @property
+    def model_sha(self) -> str:
+        """模型文件的版本，与第四步参数指纹里 `ps`／`pp` 段同算法（`pair_shape.fingerprint`）。"""
+        from . import pair_shape
+        return pair_shape.fingerprint(str(self.path))
+
+
+def lib_fingerprint(src) -> str:
+    """书级刻例库（book_knn／near_knn 的模型文件：本书已放行格当刻例的 PCA 库）钉好的那一版的指纹：文件内容 sha256 前 16 位。
+
+    `src` 是库文件路径（`str`／`Path`；相对路径照 `resolve_dir` 先找数据目录再找仓根；给目录时取目录里的 `model.json`）。
+    与第四步参数指纹 `bk`／`nk` 段（`book_knn.fingerprint`／`near_knn.fingerprint`）**同算法同值**；3b 把它写进 `methods_sha`
+    （`<组>:book_knn=<指纹>`），4d 拿它现用的那份库（`group_flow_book_knn[组]`，已解析成绝对路径）调同一个函数比对，
+    不一致时本地现算。文件不在 → `""`（同 `book_knn.fingerprint`）。"""
+    p = resolve_dir(str(src))
+    if p.is_dir():
+        p = p / "model.json"
+    return hashlib.sha256(p.read_bytes()).hexdigest()[:16] if p.is_file() else ""
+
+
+BOOK_KNN_KEYS = ("char", "why", "tier", "pick", "votes", "ratio", "nn")
+"""第四步 `evidence.book_knn` 的键（`seed_admit_shapes._book_knn_pass` 的 trail），`book_knn_settle` 按这个次序出。"""
+
+
+def book_knn_measure(f, model: dict) -> dict:
+    """book_knn 前段「出原始量」：HOG 特征 → 不看整理本时 `book_knn.judge_feat` 的结果（票数、距离比、nn、pick、A 档结论或弃权），
+    再加 `b_ok`（只在 `abstain:low_margin` 时有）：整理本对位字若恰是 pick，B 档（`ref_votes_min`／`ref_ratio_max`）过不过。
+
+    `judge_feat` 只在 B 档那一句用到 `ref`，且只看 `ref == pick`，所以 `b_ok` 直接拿 `ref=pick` 再调一次 `judge_feat` 算
+    （比的是未取整的距离比，与现役同一个判断），不另写一份门槛。"""
+    from . import book_knn
+    v = book_knn.judge_feat(f, model, None)
+    if v["why"] == "abstain:low_margin":
+        v["b_ok"] = book_knn.judge_feat(f, model, v["pick"])["why"] == "agree_ref"
+    return v
+
+
+def book_knn_settle(ev: dict, ref: str | None) -> dict:
+    """book_knn 后段「定档」：前段的量（`book_knn_measure` 的结果，或 3b 证据 `NearMethodOut.evidence`，多的 `method` 键不管）
+    ＋整理本对位字 → 与现役 `book_knn.judge(图, 模型, ref)` 逐键相同的 dict（键次序同 `BOOK_KNN_KEYS`，即第四步 `evidence.book_knn`）。
+    只有前段弃权在 `low_margin`、`b_ok` 为真、整理本字＝pick 时升 B 档（`agree_ref`），其余原样。不读模型。"""
+    v = {k: ev[k] for k in BOOK_KNN_KEYS if k in ev}
+    if ev.get("why") == "abstain:low_margin" and ev.get("b_ok") and ref is not None and ref == ev.get("pick"):
+        v.update(char=ev["pick"], why="agree_ref", tier="B")
+    return v
+
+
+class BookKnn:
+    """字组书级刻形近邻（`groups.book_knn`）包成 3b 方法，只出前段（A 档）；B 档由 4d 用 `book_knn_settle` 定，见模块头「book_knn」。"""
+
+    patch = "char_patch"
+    lib = True                       # 方法指纹＝刻例库文件指纹（`lib_fingerprint`），不是模型目录指纹
+
+    def __init__(self, path: Path):
+        p = Path(path)
+        self.src = p
+        self.path = p / "model.json" if p.is_dir() else p
+        from . import book_knn
+        self.model = book_knn.load(str(self.path))
+
+    def sims_of(self, v: dict) -> dict[str, float]:
+        """前段结果 → `{pick: 票数/k}`（4 位）：只给近邻多数字的票份额；没有 pick、pick 是背景刻例 `~` → `{}`。"""
+        from . import book_knn
+        pick = v.get("pick")
+        if pick is None or pick == book_knn.BACKGROUND:
+            return {}
+        return {str(pick): round(int(v["votes"]) / int(self.model["k"]), 4)}
+
+    def score(self, patches: list[np.ndarray], book_id: str, ctx=None, cells: list | None = None) -> list[dict]:
+        from .rr_shape import features
+        out = []
+        for g in patches:
+            v = book_knn_measure(features(g)[0], self.model)
+            out.append({"sims": self.sims_of(v), "evidence": {"method": "book_knn", **v}})
+        return out
+
+    def calibrate(self, sims: dict[str, float]) -> dict[str, float] | None:
+        return None                  # 没有校准表：票份额只当证据
+
+    def fingerprint(self) -> str:
+        return lib_fingerprint(self.path)
+
+    @property
+    def model_sha(self) -> str:
+        """库文件的版本，与第四步参数指纹 `bk` 段同算法（`book_knn.fingerprint`）。"""
+        return self.fingerprint()
+
+
+NEAR_KNN_KEYS = ("char", "why", "pick", "votes", "ratio", "full", "full_votes", "nn")
+"""第四步 `evidence.near_knn` 的量（`seed_admit_shapes._near_knn_pass` 的 trail，`via` 是 4d 另加的）。"""
+
+
+def near_knn_measure(f, model: dict, chars) -> dict:
+    """near_knn 3b 出的量：HOG 特征＋3a 的字（首位与候选）→ 与候选无关的全库量＋每个字各自的近邻距离。
+
+    - `full`／`full_votes`：全库 k 近邻的多数字与票数；`nn`：离全库最近 5 格的平均距离（3 位，同现役）；`out_of_book`：`nn > guard`
+      （比的是未取整的 nn，同现役）；
+    - `chars`：看过的 3a 字（去重保序）；`dists`：其中库里够 `min_n` 格的字 → 它的库格到本格的距离**升序前 k 个**（float32 原值，
+      次序同 `argsort(kind="stable")`）。现役候选内近邻取「候选字的库格合起来的前 k 个」，每个字至多贡献 k 个，所以前 k 个够用；
+    - 无墨 → `{char: None, why: abstain:no_ink}`；距离有非有限值 → `nan: True`（现役先判候选够不够、再判 nan，留给定档按次序判）。"""
+    if f is None:
+        return {"char": None, "why": "abstain:no_ink"}
+    cs = [c for c in dict.fromkeys(chars or ()) if c]
+    z = (np.asarray(f, np.float32) - model["pca_mean"]) @ model["pca"].T
+    d = np.sqrt(((model["bank"] - z) ** 2).sum(1))
+    if not np.all(np.isfinite(d)):
+        return {"nan": True, "chars": cs}
+    lab, k, by = model["labels"], int(model["k"]), model["_by"]
+    of = np.argsort(d, kind="stable")[:k]
+    full, fvotes = Counter(lab[of].tolist()).most_common(1)[0]
+    nn = float(d[of[:5]].mean())
+    dists = {}
+    for c in cs:
+        if c in by and len(by[c]) >= model.get("min_n", 5):
+            dc = d[by[c]]
+            dists[c] = [float(x) for x in dc[np.argsort(dc, kind="stable")[:k]]]
+    return {"full": full, "full_votes": int(fvotes), "nn": round(nn, 3), "out_of_book": bool(nn > model["guard"]),
+            "chars": cs, "dists": dists}
+
+
+def near_knn_settle(ev: dict, model: dict, cands) -> dict | None:
+    """near_knn 定档：3b 的量（`near_knn_measure` 的结果或 3b 证据）＋4d 的候选（本格字、整理本字、库首位／库前三）→ 与现役
+    `near_knn.judge(图, 模型, cands)` 逐键同值的 dict（同舍入；距离比按 float32 除，同现役）。候选里有库里够格数的字、
+    3b 却没给它的距离（不在 3a 前几名）→ None：4d 本地现算。只用模型的门槛与各字格数，不读图、不算距离。"""
+    if ev.get("why") == "abstain:no_ink":
+        return {"char": None, "why": "abstain:no_ink"}
+    by = model["_by"]
+    cs = [c for c in dict.fromkeys(cands) if c and c in by and len(by[c]) >= model.get("min_n", 5)]
+    if len(cs) < 2:
+        return {"char": None, "why": "abstain:few_cands"}
+    if ev.get("nan"):
+        return {"char": None, "why": "abstain:nan"}
+    dists = ev.get("dists")
+    if not isinstance(dists, dict) or any(c not in dists for c in cs):
+        return None
+    k = int(model["k"])
+    pool = sorted((np.float32(x), i, j, c) for i, c in enumerate(cs) for j, x in enumerate(dists[c]))
+    top, votes = Counter(c for _, _, _, c in pool[:k]).most_common(1)[0]
+    lo_top = np.float32(dists[top][0])
+    lo_oth = min(np.float32(dists[c][0]) for c in cs if c != top)
+    ratio = float(lo_top / lo_oth) if lo_oth > 0 else 0.0
+    out = {"pick": top, "votes": int(votes), "ratio": round(ratio, 3), "full": ev["full"],
+           "full_votes": int(ev["full_votes"]), "nn": ev["nn"], "cands": cs}
+    if ev["out_of_book"]:
+        return {**out, "char": None, "why": "abstain:out_of_book"}
+    if votes < model["votes_min"] or ratio >= model["ratio_max"]:
+        return {**out, "char": None, "why": "abstain:low_margin"}
+    if ev["full"] != top or int(ev["full_votes"]) < model["full_votes_min"]:
+        return {**out, "char": None, "why": "abstain:full_dissent"}
+    return {**out, "char": top, "why": "agree"}
+
+
+class NearKnn:
+    """形近护栏格书级刻形近邻（`groups.near_knn`）包成 3b 方法，挂在保留伪组 `_guard` 上，见模块头「near_knn」。"""
+
+    patch = "char_patch"
+    lib = True                       # 方法指纹＝刻例库文件指纹（`lib_fingerprint`）
+
+    def __init__(self, path: Path):
+        p = Path(path)
+        self.src = p
+        self.path = p / "model.json" if p.is_dir() else p
+        from . import near_knn
+        self.model = near_knn.load(str(self.path))
+
+    def sims_of(self, v: dict) -> dict[str, float]:
+        """3a 各字（够格数的）合起来的前 k 个近邻里各字的票份额（4 位）；够格的字不到两个 → `{}`。"""
+        dists = v.get("dists") or {}
+        if len(dists) < 2:
+            return {}
+        k = int(self.model["k"])
+        pool = sorted((np.float32(x), i, j, c) for i, (c, xs) in enumerate(dists.items()) for j, x in enumerate(xs))
+        cnt = Counter(c for _, _, _, c in pool[:k])
+        return {c: round(n / k, 4) for c, n in cnt.items()}
+
+    def score(self, patches: list[np.ndarray], book_id: str, ctx=None, cells: list | None = None) -> list[dict]:
+        from .rr_shape import features
+        out = []
+        for i, g in enumerate(patches):
+            cell = (cells or [{}] * len(patches))[i] or {}
+            chars = [cell.get("char"), *(c for c, _ in (cell.get("candidates") or []))]
+            v = near_knn_measure(features(g)[0], self.model, chars)
+            out.append({"sims": self.sims_of(v), "evidence": {"method": "near_knn", **v}})
+        return out
+
+    def calibrate(self, sims: dict[str, float]) -> dict[str, float] | None:
+        return None                  # 没有校准表：票份额只当证据
+
+    def fingerprint(self) -> str:
+        return lib_fingerprint(self.path)
+
+    @property
+    def model_sha(self) -> str:
+        """库文件的版本，与第四步参数指纹 `nk` 段同算法（`near_knn.fingerprint`）。"""
+        return self.fingerprint()
+
+
+STROKE_VETO_KEYS = ("group", "cls", "llr", "x")
+"""第四步降审时写进 `evidence.stroke_veto` 的键（`seed_admit_shapes._stroke_veto_pass`），`stroke_veto_trail` 按这个次序出。"""
+
+
+def stroke_veto_trail(ev: dict) -> dict:
+    """3b stroke_veto 证据（`{method, group, **judge()}`）→ 第四步降审时写进 `evidence.stroke_veto` 的那份
+    `{group, cls, llr, x}`（llr／x 缺则 None，同现役 `v.get`），逐键相等。只搬字段，不判降不降。"""
+    return {k: ev.get(k) for k in STROKE_VETO_KEYS}
+
+
+def _group_fingerprint(path: Path, group: str) -> str:
+    """{path, group} 写法的指纹：模型文件（＋同名校准表）的指纹与组名合起来的 sha256 短哈希。"""
+    h = hashlib.sha256()
+    h.update(_dir_fingerprint(path).encode())
+    h.update(("|group:" + str(group)).encode())
+    return h.hexdigest()[:16]
+
+
+class StrokeVeto:
+    """笔画反向护栏的看图判法（`groups.stroke_veto`，一份模型挂几组）包成 3b 方法，取其中一组，见模块头「stroke_veto」。"""
+
+    patch = "char_patch"
+
+    def __init__(self, path: Path, group=None):
+        p = Path(path)
+        self.src = p
+        self.path = p / "model.json" if p.is_dir() else p
+        from . import stroke_veto
+        model = stroke_veto.load(str(self.path))
+        groups = model["groups"]
+        if group is None:
+            if len(groups) != 1:
+                raise ValueError(f"stroke_veto：{self.path} 挂了 {len(groups)} 组 {sorted(groups)}，书配置要写 "
+                                 f"{{path, group: 组名}} 指明哪一组")
+            self.group = next(iter(groups))
+            self.want = None
+        else:
+            if str(group) not in groups:
+                raise ValueError(f"stroke_veto：{self.path} 里没有组 {group!r}（有 {sorted(groups)}）")
+            self.group = self.want = str(group)
+        self.gm = groups[self.group]
+        cls_order = list(dict.fromkeys(self.gm["classes"].values()))
+        if len(cls_order) != 2:
+            raise ValueError(f"stroke_veto：{self.path} 组 {self.group} 有 {len(cls_order)} 类 {cls_order}，3b 方法只认两类的组")
+        self.classes: tuple[str, str] = (cls_order[0], cls_order[1])
+        self.members = {c: [ch for ch, k in self.gm["classes"].items() if k == c] for c in self.classes}
+        self.calib = _load_calib(p)
+
+    def lead_class(self, g: np.ndarray, v: dict) -> str | None:
+        """领先的类：判出了类就是 `cls`；似然比不够（`abstain`）时 judge 不给方向，拿同一张图再量一遍特征按对数似然定
+        （`llr_decide` 的次序，同分取前者）；没有 llr（`out`／`bad_fit`）→ None。"""
+        if v.get("llr") is None:
+            return None
+        if v.get("cls") is not None:
+            return v["cls"]
+        from . import stroke_veto
+        x, _bad = stroke_veto.features(g, self.gm)
+        if x is None:                   # 不会发生（judge 刚量出过同一张图），防字块被改
+            return None
+        ll = self.gm["_stats"].loglik(x)
+        return sorted(ll, key=ll.get, reverse=True)[0]
+
+    def sims_of(self, v: dict, lead: str | None) -> dict[str, float]:
+        """`judge` 的结果＋领先类 → 领先类的字各 σ(llr)、另一类的字各 1−σ(llr)（4 位；llr 用 judge 已取 2 位的那个）；没有 → `{}`。"""
+        if lead is None or v.get("llr") is None:
+            return {}
+        q = round(1.0 / (1.0 + math.exp(-min(50.0, max(-50.0, float(v["llr"]))))), 4)
+        other = self.classes[1] if lead == self.classes[0] else self.classes[0]
+        out = {ch: q for ch in self.members[lead]}
+        out.update({ch: round(1.0 - q, 4) for ch in self.members[other]})
+        return out
+
+    def score(self, patches: list[np.ndarray], book_id: str, ctx=None, cells: list | None = None) -> list[dict]:
+        from . import stroke_veto
+        out = []
+        for g in patches:
+            v = stroke_veto.judge(g, self.gm)
+            out.append({"sims": self.sims_of(v, self.lead_class(g, v)),
+                        "evidence": {"method": "stroke_veto", "group": self.group, **v}})
+        return out
+
+    def calibrate(self, sims: dict[str, float]) -> dict[str, float] | None:
+        """两类都是单字（qg）才出 p；有合类（jys 的 已巳）时各字的 p 分不开 → None（不把异义形近字归一）。"""
+        if any(len(v) != 1 for v in self.members.values()):
+            return None
+        (a,), (b,) = self.members[self.classes[0]], self.members[self.classes[1]]
+        knots = (self.calib or {}).get("knots") or {}
+        pos = next((c for c in (a, b) if c in knots), None)
+        if pos is None or pos not in sims:
+            return None
+        xs, ys = knots[pos]
+        p = float(np.interp(sims[pos], xs, ys))
+        neg = b if pos == a else a
+        return {pos: round(p, 4), neg: round(1.0 - p, 4)}
+
+    def fingerprint(self) -> str:
+        return _dir_fingerprint(self.src) if self.want is None else _group_fingerprint(self.src, self.want)
+
+    @property
+    def model_sha(self) -> str:
+        """模型文件的版本，与第四步参数指纹 `stroke_veto_fingerprint` 同算法（`stroke_veto.fingerprint`）。"""
+        from . import stroke_veto
+        return stroke_veto.fingerprint(str(self.path))
+
+
+METHODS = {"cnn_small": CnnSmall, "rr_shape": RrShape, "wu_shape": WuShape, "hou_shape": HouShape,
+           "part_shape": PartShape, "pair_shape": PairShape, "book_knn": BookKnn, "near_knn": NearKnn,
+           "stroke_veto": StrokeVeto}
+SPEC_KEYS = ("path", "pair", "group")
+
+_CACHE: dict[tuple, object] = {}
+
+
+def parse_spec(spec) -> tuple[str, dict]:
+    """书配置里一个方法的写法 → (模型路径, 其余参数)。字符串＝模型目录或文件；dict＝`{path, pair}` 或 `{path, group}`（不能两个都写）。"""
+    if isinstance(spec, (str, Path)):
+        return str(spec), {}
+    if isinstance(spec, dict):
+        bad = set(spec) - set(SPEC_KEYS)
+        if bad or "path" not in spec or ("pair" in spec and "group" in spec):
+            raise ValueError(f"glyph_near 方法写法 {spec!r} 不认识：要 {{path, pair}} 或 {{path, group}}（多了 {sorted(bad)}）")
+        kw = {k: (list(v) if k == "pair" else str(v) if k == "group" else v) for k, v in spec.items() if k != "path"}
+        return str(spec["path"]), kw
+    raise ValueError(f"glyph_near 方法写法 {spec!r} 不认识：写模型路径字符串或 {{path, pair}}")
+
+
+def load_method(name: str, spec):
+    """方法名＋模型目录（或单个模型文件，或 `{path, pair}`）→ 方法对象（按解析后的路径＋参数缓存）。"""
     cls = METHODS.get(name)
     if cls is None:
         raise ValueError(f"glyph_near：不认识的方法 {name!r}（已登记：{sorted(METHODS)}）")
-    d = resolve_dir(model_dir)
-    key = (name, str(d))
+    path, kw = parse_spec(spec)
+    d = resolve_dir(path)
+    key = (name, str(d), json.dumps(kw, ensure_ascii=False, sort_keys=True))
     m = _CACHE.get(key)
     if m is None:
         if not d.exists():
             raise FileNotFoundError(f"glyph_near 方法 {name} 的模型目录不存在：{d}")
-        m = cls(d)
+        m = cls(d, **kw)
         _CACHE[key] = m
     return m
 
 
-def method_fingerprint(name: str, model_dir: str) -> str:
-    return f"{name}={_dir_fingerprint(resolve_dir(model_dir))}"
+def method_fingerprint(name: str, spec) -> str:
+    """`<方法>=<指纹>`，进 3b `methods_sha`；4d 比对模型版本也调它。spec 是字符串时＝模型目录（或文件）的指纹（与 11-28 之前逐位相同）；
+    `{path, pair}` 时＝文件指纹并上这一对（按码位排，次序不论）；`{path, group}`（stroke_veto）时＝文件指纹并上组名；
+    书级刻例库方法（`lib = True`，book_knn）＝`lib_fingerprint`。"""
+    path, kw = parse_spec(spec)
+    d = resolve_dir(path)
+    if getattr(METHODS.get(name), "lib", False):
+        return f"{name}={lib_fingerprint(d)}"
+    if kw.get("pair") is not None:
+        return f"{name}={_pair_fingerprint(d, kw['pair'])}"
+    if kw.get("group") is not None:
+        return f"{name}={_group_fingerprint(d, kw['group'])}"
+    return f"{name}={_dir_fingerprint(d)}"

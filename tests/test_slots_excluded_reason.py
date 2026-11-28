@@ -86,11 +86,11 @@ def test_seed_admit_attaches_human_char_to_excluded_cell(tmp_path, monkeypatch):
 
     def ev(slot, seq):
         return make_event("b", seq, "confirm",
-                          EventTarget(step="seed_admit", unit="cell", key=f"tbook:1:1:{slot}", book="tbook",
+                          EventTarget(step="char_decide", unit="cell", key=f"tbook:1:1:{slot}", book="tbook",
                                       page=1, col=1, slot=slot),
                           {"v": "confirm", "shape": "手"}, source_format="server")
     EventLog(fb).append([ev(1, 1), ev(3, 2)])
-    sa = STEPS["seed_admit"].run_page(ctx, 1)["seed_admit"]
+    sa = STEPS["char_decide"].run_page(ctx, 1)["char_decide"]
     by = {r.slot: r for cc in sa.columns for r in cc.chars}
     assert all(by[s].admit is False and by[s].channel is None and by[s].doubts == ["excluded"]
                for s in (1, 2, 3))

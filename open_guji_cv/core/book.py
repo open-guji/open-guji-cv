@@ -124,17 +124,17 @@ class BookSpec:
     #: 回退只需把这个开关改回 false 重跑 `seed_admit`，不用撤库。
     iron_gate: bool = True   # 2026-10-23 sheldon 定缺省开（20 册全开）
     #: Step9-9.3 对勘的**证人**（整理本）清单（yaml 的 `references:`）。
-    #: 每项 `{file, quality: best|mid|low, label, line_is_column}`。
+    #: 每项 `{file, label, form, punct, script, accuracy, accuracy_evidence}`（四维见 `core/ref_profile.py`；
+    #: 旧键 `quality`／`line_is_column` 2026-11-28 起不再读）。
     #: 空 = 退回单证人（与 `align_ref` 同一份默认语料）。
     #:
-    #: `quality` 用于多证人不一致时**加权**，不是简单多数——三份整理本来历与
-    #: 质量分级见 overview 仓 `Step9-结果整理/05-整理本清单.md`（唯一真相源）。
-    #: `line_is_column` 标记「这份证人的一行 ＝ 我们刻本的一列」：四库光盘版
+    #: `accuracy` 定证人排序与多证人不一致时的**加权**，也定 seed_admit 的参校本信任档。
+    #: `form: column` 标记「这份证人的一行 ＝ 我们刻本的一列」：四库光盘版
     #: 实测如此（vol01 列首命中行首 94.7%、命中者列长相等 87.2%），据此可以做
     #: **独立于字符对齐**的丢格检测，见 `report/witness.py::col_verdict`。
     references: list[dict] = field(default_factory=list)
     #: 参校本属性（yaml 的 `reference_profile:`，2026-11-08，`core/ref_profile.py`）：按页段写 `kind: column|text|none`，
-    #: 段用 `ref:` 指 `references[]` 里哪一份（质量看那一份的 `quality`）。未声明 = 每页 `column`、`declared=False`，
+    #: 段用 `ref:` 指 `references[]` 里哪一份（准确度看那一份的 `accuracy`，段上可压低）。未声明 = 每页 `column`、`declared=False`，
     #: 各步行为与加这个字段之前逐位相同。**不进任何 Step 的 `book_deps`**（会让所有册指纹变），要进指纹用 `page_token`。
     reference_profile: RefProfile = field(default_factory=lambda: UNDECLARED)
     #: 书级 5b 字表（yaml 的 `rare_charset:`，2026-11-08）：Step5-b 候选字表用的语料文件（同 `references[].file` 的写法），

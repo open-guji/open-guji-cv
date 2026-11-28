@@ -26,8 +26,8 @@ def _run(tmp_path, monkeypatch, *, top, align, codepoints, params=None, cov=0.97
         PAGE, BOOK, col=COL, recs=[dict(slot=2, char=top, margin=0.9, source="context")]))
     write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(PAGE, BOOK, recs=[
         dict(slot=1, align_char="書"), dict(slot=2, align_char=align, align_op="replace")], col=COL))
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"patch_missing": "skip", **(params or {})})
-    return STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns[0].chars[1]
+    ctx.params["char_decide"] = SeedAdmitParams(**{"patch_missing": "skip", **(params or {})})
+    return STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns[0].chars[1]
 
 
 PAIRS = [("卷", "巻"), ("別", "别"), ("出", "岀"), ("晚", "晩"), ("内", "內")]

@@ -1882,6 +1882,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     adopt_rel: float = 0.0,
                     jiazhu_cc_min: float = jiazhu_split.CC_MIN,
                     jiazhu_span_t: float = jiazhu_split.SPAN_T,
+                    jiazhu_edge_trim: float = 0.0,
                     grid_adjust=None,
                     jiazhu_heads=None,
                     half_a_left=None,
@@ -2010,6 +2011,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       ≤`GLYPH_LINE_MAJ`）；仍拿不准、被劈块高过 `GLYPH_LINE_TALL` 格（两字粘成一块）、某列上下墨重叠，都不动。
     - `jiazhu_cc_min`（px，缺省 `jiazhu_split.CC_MIN`；2026-11-18 A22 U3）：雙行小注段噪点否决门槛，书级 `row_segment.jiazhu_cc_min`。
     - `jiazhu_span_t`（缺省 `jiazhu_split.SPAN_T`；2026-11-19 MJ）：雙行小注单格判据的墨跨度/列距下限，书级 `row_segment.jiazhu_span_t`。
+    - `jiazhu_edge_trim`（×格高，0＝关；2026-11-28 CV2，全唐文）：单格判据落空时，上下各去掉这么多格高再量一次——
+      格线相位偏几像素、上一字的字脚伸进本格顶上时，整宽的字脚把中缝填死（053 75:3「學」脚压住「字闕」）。书级 `row_segment.jiazhu_edge_trim`。
     - `adopt_rel`（倍数，0＝关；2026-11-18，脉经）：L3 扩池后绝对门槛没有可选候选、现选分歧 ≥ `ADOPT_REL_MIN` 时，
       取分歧 ≤ min(`ADOPT_REL_CAP`, adopt_rel×现选分歧) 的扩池候选（干净格线仍只换不穿墨的），见 `_adopt_expanded`。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
@@ -2178,29 +2181,38 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     one_half: set[int] = set()
     if detect_jiazhu:
         ruler = float(ref_w) if ref_w else float(dst_w)
-        entries = [
-            (p, jiazhu_split.gap_center(patches[p], ruler, ink_threshold, span_t=jiazhu_span_t)
-                if p in nonblank else None)
-            for p in sorted(patches)
-        ]
+        # `jiazhu_edge_trim`：单格判据落空、去掉上下边再量量得出的格，段判据与书级钩子都看去边后的图块（`jzp`），发格仍照原格
+        jzp = dict(patches)
+
+        def _gc(p_):
+            pt = patches[p_]
+            r = jiazhu_split.gap_center(pt, ruler, ink_threshold, span_t=jiazhu_span_t)
+            if r is None and jiazhu_edge_trim > 0:
+                t = int(round(jiazhu_edge_trim * (period or 0)))
+                if t > 0 and pt.shape[0] > 3 * t:
+                    r = jiazhu_split.gap_center(pt[t:pt.shape[0] - t], ruler, ink_threshold, span_t=jiazhu_span_t)
+                    if r is not None:
+                        jzp[p_] = pt[t:pt.shape[0] - t]
+            return r
+        entries = [(p, _gc(p) if p in nonblank else None) for p in sorted(patches)]
         runs = jiazhu_split.link_runs(entries, cc_min=jiazhu_cc_min)
         # 人指认的雙行小注：不看判据，从中间拆（见 `forced_jiazhu` 说明）。**必须在 `adopt_run_tails`
         # 之前并进 runs**：紧随其后的奇数字末行（右半单字）才会被当段尾收成 `jiazhu_a`，而不是自成單行小注。
         for pos in sorted(nonblank):
             if forced_jiazhu and _pos_to_slot(pos, n_raised) in forced_jiazhu and pos not in runs:
-                cx_forced = jiazhu_split.forced_split_center(patches[pos], ink_threshold)
+                cx_forced = jiazhu_split.forced_split_center(jzp[pos], ink_threshold)
                 if cx_forced is not None and (jiazhu_pair_ok is None
-                                              or jiazhu_pair_ok(patches[pos], ink_threshold, forced=True)):
+                                              or jiazhu_pair_ok(jzp[pos], ink_threshold, forced=True)):
                     runs[pos] = cx_forced
         # 列中间立着一条细竖线（界行墨）= 两列正文被当成了一列（Step1 列切错，vol03 p49c3 / p107c4），
         # 不是夹注列：段端收编不做，免得把两列正文的一行行收成「小注」（用户 09-29 实审点出 49:3:15–16）。
         # 只是护栏，不改 link_runs 自己认下的段；Step1 切对之后这道闸自然不触发。
         if jiazhu_heads is not None and not _mid_rule_line(col_ink):
-            runs.update(jiazhu_heads(entries, runs, patches, eligible=nonblank, ink_threshold=ink_threshold,
+            runs.update(jiazhu_heads(entries, runs, jzp, eligible=nonblank, ink_threshold=ink_threshold,
                                      ruler=ruler))
         if not _mid_rule_line(col_ink):
             runs, tail_a = jiazhu_split.adopt_run_tails(
-                runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
+                runs, jzp, eligible=nonblank, ink_threshold=ink_threshold)
         # 人指认的整宽正文：从段里摘掉（见 `forced_main` 说明）。放在段端收编之后——收编是从段端往下
         # 一格看，先摘的话被摘格的下一格不会再被收；它被收进来正是要摘掉的那一型（段多延一格）。
         main_pos = {pos for pos in patches if forced_main and _pos_to_slot(pos, n_raised) in forced_main}
@@ -2209,7 +2221,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             tail_a.discard(pos)
         if jiazhu_pair_ok is not None:      # 书级：不是并排两字的格从段里摘掉（段尾收编的右半单字不查）
             for pos in [q for q in runs if q not in tail_a]:
-                if not jiazhu_pair_ok(patches[pos], ink_threshold, forced=False):
+                if not jiazhu_pair_ok(jzp[pos], ink_threshold, forced=False):
                     runs.pop(pos, None)
         # 表说只有一半有字的夹注格：并进段（缝取段的中位数），发格时只发墨多的一半
         if half_notes and runs:
@@ -2218,7 +2230,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 if _pos_to_slot(pos, n_raised) in half_notes and pos not in main_pos:
                     runs.setdefault(pos, cx_mid)
                     one_half.add(pos)
-        suspect = jiazhu_split.suspect_full_width_cells(runs, patches, ink_threshold)
+        suspect = jiazhu_split.suspect_full_width_cells(runs, jzp, ink_threshold)
         # 單行小注（小字只占右半、左半空着）：zongmu 两册没有这种版式，原判据
         # 测不到（跨度比正文还窄，方向相反），bxgb 大量用它给人名作注。
         # 只在非空白、且不属于双行段的格上找。**不并进 `runs`/`tail_a`**——
@@ -2228,11 +2240,11 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         # 奇数字末行（7a+6b 必然一体）——用户 2026-09-20 定：不会有两段"独立"
         # 的注紧挨着，所以这里不存在"單行注被当段尾收走"的歧义。
         solo = jiazhu_split.solo_notes(
-            {p: patches[p] for p in nonblank if p not in main_pos}, runs, ruler, ink_threshold)
+            {p: jzp[p] for p in nonblank if p not in main_pos}, runs, ruler, ink_threshold)
         for pos in sorted(nonblank):
             if forced_solo and _pos_to_slot(pos, n_raised) in forced_solo \
                     and pos not in runs and pos not in solo:
-                solo[pos] = jiazhu_split.right_half_left_edge(patches[pos], ink_threshold)
+                solo[pos] = jiazhu_split.right_half_left_edge(jzp[pos], ink_threshold)
         # 表说只有一半有字、判据又认成單行小注的格（列里没有雙行段时，如小写靠右的「臣」）：表说它是夹注的一半，
         # 按半格发（缝取小注左缘，只发墨多的那半），不发 jiazhu_solo
         if half_notes:

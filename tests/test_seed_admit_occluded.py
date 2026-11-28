@@ -71,7 +71,7 @@ def _run_seed(tmp_path, monkeypatch, *, params=None, coord=None, fallback=None, 
     img, cells = _page_and_cells()
     ctx = make_ctx(tmp_path, make_book(BOOK), raw={PAGE: img}, monkeypatch=monkeypatch)
     if params is not None:
-        ctx = RunContext(ctx.book, ctx.store, ctx.cache, params={"seed_admit": params},
+        ctx = RunContext(ctx.book, ctx.store, ctx.cache, params={"char_decide": params},
                          log=lambda s: None)
         ctx._raw[PAGE] = img
     # 列 3：slot 3 在印章里（库 same 0.999，平时 match_solo 直接放行）；slot 2 是印章切出的假格；
@@ -93,7 +93,7 @@ def _run_seed(tmp_path, monkeypatch, *, params=None, coord=None, fallback=None, 
     write_product(ctx, "align_ref", PAGE,
                   align_ref=PageAlignRef(page=PAGE, anchored=bool(align), coord=coord, chars=align or [],
                                          coord_fallback=fallback or {}))
-    sa = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    sa = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
     return {r.slot: r for cc in sa.columns for r in cc.chars}, sa
 
 

@@ -13,7 +13,7 @@ from open_guji_cv.products.manifest import ManifestEntry
 def test_version_info_shape():
     info = api.version_info()
     assert info["contract_version"] == CONTRACT_VERSION
-    assert "seed_admit" in info["steps"] and len(info["steps"]) >= 19
+    assert "char_decide" in info["steps"] and len(info["steps"]) >= 19
 
 
 def test_manifest_fields_carry_contract_and_manager(monkeypatch):

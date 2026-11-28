@@ -1,0 +1,291 @@
+{
+ "version": 1,
+ "source": "guji-manager review/pending_reasons.yaml（python -m guji_manager.review.pending_reason --json 精简）",
+ "renamed": {
+  "ref_replaced": "ref_ocr_diff",
+  "ref_mismatch": "ref_final_diff",
+  "group_form_open": "variant_form_open"
+ },
+ "reasons": {
+  "seg_page_unaligned": {
+   "code": "S01",
+   "category": "segmentation",
+   "route": "algo",
+   "owner": "CV2",
+   "reviewer": "human",
+   "priority": 20
+  },
+  "seg_col_unaligned": {
+   "code": "S02",
+   "category": "segmentation",
+   "route": "algo",
+   "owner": "CV2",
+   "reviewer": "human",
+   "priority": 21
+  },
+  "col_width_out_of_band": {
+   "code": "S03",
+   "category": "segmentation",
+   "route": "algo",
+   "owner": "CV2",
+   "reviewer": "human",
+   "priority": 22
+  },
+  "manual_cells_remapped": {
+   "code": "S05",
+   "category": "segmentation",
+   "route": "human",
+   "owner": "CV2",
+   "reviewer": "human",
+   "priority": 9
+  },
+  "seg_defect": {
+   "code": "S04",
+   "category": "segmentation",
+   "route": "human",
+   "owner": "CV2",
+   "reviewer": "human",
+   "priority": 10
+  },
+  "occluded_with_ref": {
+   "code": "D01",
+   "category": "occlusion",
+   "route": "algo",
+   "owner": "GM4",
+   "reviewer": "llm_then_human",
+   "priority": 11
+  },
+  "occluded_no_ref": {
+   "code": "D02",
+   "category": "occlusion",
+   "route": "human",
+   "owner": "GM4",
+   "reviewer": "human",
+   "priority": 12
+  },
+  "hard_pair": {
+   "code": "H01",
+   "category": "hard_pair",
+   "route": "deferred",
+   "owner": "CV4",
+   "reviewer": "none",
+   "priority": 30
+  },
+  "group_abstain": {
+   "code": "Z01",
+   "category": "group",
+   "route": "llm",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 40
+  },
+  "group_conflict": {
+   "code": "Z02",
+   "category": "group",
+   "route": "llm",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 41
+  },
+  "group_demoted": {
+   "code": "Z03",
+   "category": "group",
+   "route": "llm",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 42
+  },
+  "group_ref_dissent": {
+   "code": "Z04",
+   "category": "group",
+   "route": "llm",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 43
+  },
+  "group_weak": {
+   "code": "Z05",
+   "category": "group",
+   "route": "llm",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 44
+  },
+  "group_unconfirmed": {
+   "code": "Z07",
+   "category": "group",
+   "route": "llm",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 46
+  },
+  "near_form_guard": {
+   "code": "N01",
+   "category": "near_form",
+   "route": "llm",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 56
+  },
+  "variant_pair": {
+   "code": "V01",
+   "category": "variant",
+   "route": "human",
+   "owner": "CV4",
+   "reviewer": "human",
+   "priority": 55
+  },
+  "variant_form_open": {
+   "code": "V02",
+   "category": "variant",
+   "route": "algo",
+   "owner": "CV4",
+   "reviewer": "human",
+   "priority": 45
+  },
+  "lib_missing": {
+   "code": "L01",
+   "category": "glyph_lib",
+   "route": "human",
+   "owner": "CV4",
+   "reviewer": "human",
+   "priority": 51
+  },
+  "lib_sparse_dissent": {
+   "code": "L02",
+   "category": "glyph_lib",
+   "route": "llm",
+   "owner": "CV3",
+   "reviewer": "llm_then_human",
+   "priority": 58
+  },
+  "lib_sparse_agree": {
+   "code": "L03",
+   "category": "glyph_lib",
+   "route": "human",
+   "owner": "CV3",
+   "reviewer": "human",
+   "priority": 57
+  },
+  "lib_unrecognized": {
+   "code": "L04",
+   "category": "glyph_lib",
+   "route": "algo",
+   "owner": "CV3",
+   "reviewer": "llm_then_human",
+   "priority": 61
+  },
+  "garble_gate": {
+   "code": "L05",
+   "category": "glyph_lib",
+   "route": "algo",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 52
+  },
+  "glyph_pending": {
+   "code": "R03",
+   "category": "reference",
+   "route": "deferred",
+   "owner": "CV4",
+   "reviewer": "none",
+   "priority": 49
+  },
+  "ref_lacuna": {
+   "code": "R01",
+   "category": "reference",
+   "route": "algo",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 50
+  },
+  "ref_gap": {
+   "code": "R02",
+   "category": "reference",
+   "route": "llm",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 53
+  },
+  "ref_ocr_diff": {
+   "code": "P01",
+   "category": "mismatch",
+   "route": "llm",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 60
+  },
+  "ref_final_diff": {
+   "code": "P02",
+   "category": "mismatch",
+   "route": "llm",
+   "owner": "CV4",
+   "reviewer": "llm_then_human",
+   "priority": 62
+  },
+  "ruling_conflict": {
+   "code": "X01",
+   "category": "review",
+   "route": "human",
+   "owner": "CV4",
+   "reviewer": "human",
+   "priority": 5
+  },
+  "vision_flagged": {
+   "code": "X02",
+   "category": "review",
+   "route": "human",
+   "owner": "GM2",
+   "reviewer": "human",
+   "priority": 6
+  },
+  "machine_changed": {
+   "code": "X03",
+   "category": "review",
+   "route": "human",
+   "owner": "GM4",
+   "reviewer": "human",
+   "priority": 7
+  },
+  "recheck": {
+   "code": "X04",
+   "category": "review",
+   "route": "human",
+   "owner": "GM4",
+   "reviewer": "human",
+   "priority": 8
+  },
+  "anchor_miss": {
+   "code": "A01",
+   "category": "anchor",
+   "route": "deferred",
+   "owner": "GM3",
+   "reviewer": "none",
+   "priority": 900
+  },
+  "add_del": {
+   "code": "A02",
+   "category": "anchor",
+   "route": "deferred",
+   "owner": "GM3",
+   "reviewer": "none",
+   "priority": 901
+  },
+  "anchor_drift": {
+   "code": "A03",
+   "category": "anchor",
+   "route": "deferred",
+   "owner": "GM3",
+   "reviewer": "none",
+   "priority": 902
+  },
+  "unknown": {
+   "code": "X99",
+   "category": "review",
+   "route": "human",
+   "owner": "GM2",
+   "reviewer": "human",
+   "priority": 999
+  }
+ }
+}

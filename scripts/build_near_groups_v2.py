@@ -16,7 +16,15 @@
 - 注册字组表（`groups/registry.py` 的 `FLOW_GROUPS`）每组一条，组 id 照旧；
 - 字对来源（手工、人裁、字体 τ≥`confusable.FONT_TAU`、`near_groups.json`、书级 pair_clf）按无序对去重，`src` 记全部来源；
   两个字同在某个注册组里的对挂到那个组（同在几个组就挂几个）的 `pairs` 下，其余每对单立一组，id 为 `p:<两字按码位序>`；
-- 剔除名单 `config/near_groups_drop.tsv` 里的对，没有手工／人裁来源的不收（同 `build_near_groups.py merge`）。
+- 剔除名单 `config/near_groups_drop.tsv` 里的对，没有手工／人裁／刻形（shape）来源的不收（同 `build_near_groups.py merge`）；
+- 单立字对组的类型按规则定（`near_groups.json` 的 src 有 variant → variant，否则 near），`config/near_groups/type_override.json`
+  人定覆盖（2026-11-28 Sheldon：pair_clf 来的 侣侶 记 variant、凊淸 保持 near）；
+- 来源 7（2026-11-28）`config/near_groups/shape_pairs.json`：第四步书级刻形判法挂着、别处没登记的字对（史记 之矣），
+  src＝`shape`，只为 3b `glyph_near` 的书配置能 `ref` 到一个组；现役读口按 src 取 hand／human／font，不读它。
+- 类型只有 `variant`（异体，同义异码）与 `near`（形近异义）两类（2026-11-28 Sheldon 定，不再有 fold）：注册组 kind=variant →
+  variant，其余 → near（原「fold」组，即带 `families` 的 near_form 组，归 near；组内异体归并照旧写在 `fold` 字段）。
+- 每组的处理方式 `handling`（2026-11-28 Sheldon 定「每组自定」）：先按缺省规则（`default_handling`，即现役行为）生成，
+  再拿人定表 `config/near_groups/handling.json` 逐键盖；字段与规则见 `doc/3-识字/形近字组登记表.md` 第三节。
 
 本脚本只生成表。第二期（2026-11-28）起 `confusable.NEVER_MATCH_FAMILIES`／`partners()` 从本表派生，所以手工表不能再从
 `confusable` 读（会读回自己），改读真源 `config/near_groups/hand.json`；改了任何来源都要重跑本脚本，否则现役护栏跟不上。
@@ -33,14 +41,28 @@ sys.path.insert(0, str(ROOT))
 
 FORMAT = "near_groups/2"
 OUT = ROOT / "config" / "near_groups" / "v2.json"
-TYPES = {"near": "异字形近（组内是不同的字）", "variant": "同字异码（组内是同一个字的不同码位／写法）",
-         "fold": "折叠组（组内既有不同的字，又有某字的异体；fold 把异体折到它归的字）"}
+TYPES = {"near": "形近异义（组内是不同的字；组内若另有某字的异体，`fold` 字段把异体归到它归的字）",
+         "variant": "异体，同义异码（组内是同一个字的不同码位／写法）"}
+#: `handling` 的键（次序即写进表的次序）；`note` 只在人定表写了时带上
+HANDLING_KEYS = ("methods", "context", "aspect", "action", "threshold")
+ACTIONS = ("admit", "evidence")
+#: 3b 看图方法里，现役第四步会因它的结论放行或改字的（stroke_veto 只降审；near_knn 挂保留伪组 `_guard`，不对应登记表组）
+ADMIT_METHODS = frozenset({"cnn_small", "rr_shape", "wu_shape", "hou_shape", "part_shape", "pair_shape", "book_knn"})
+#: 第四步 group_flow 里看图的解法：`groups/flow.IMG_SOLVERS` 加 `near_p`（读 3b cnn_small 的校准 p）
+FLOW_IMG_EXTRA = frozenset({"near_p"})
+HANDLING = ROOT / "config" / "near_groups" / "handling.json"
 PAIR_PREFIX = "p:"
 DOC = ("形近字组登记表（scripts/build_near_groups_v2.py 生成，勿手改；读口 open_guji_cv/groups/near_registry.py，"
        "schema 与来源见 doc/3-识字/形近字组登记表.md）。groups 的键是组 id：注册字组表的组 id 照旧，其余字对单立 p:<两字>。"
        "src：registry＝注册字组表、hand＝config/near_groups/hand.json（手工核过的形近否决对）、human＝config/confusable_human.json、"
-       "font＝字体形近表 τ≥font_tau、near_groups＝config/near_groups.json、pair_clf:<书>＝该书的按对分类器文件。"
-       "methods＝第四步 group_flow 的方法数组（按顺序）；books＝按书覆盖（哪本书开哪些方法、用哪个模型文件）。")
+       "font＝字体形近表 τ≥font_tau、near_groups＝config/near_groups.json、"
+       "shape＝config/near_groups/shape_pairs.json（第四步书级刻形判法的字对，只给 3b ref，现役护栏与分流不读）、"
+       "pair_clf:<书>＝该书的按对分类器文件。"
+       "type 只有 near（形近异义）与 variant（异体，同义异码）两类；fold＝组内异体 → 它归的字（near 组里的异体归并）。"
+       "methods＝第四步 group_flow 的方法数组（按顺序）；handling＝本组处理方式：handling.methods 允许用的 3b 看图方法"
+       "（[]＝不做字形区分）、context 收尾走不走文意、aspect 4d 宽高比一路开不开、action admit（看图结论可放行／改字）或 evidence"
+       "（只出证据）、threshold 组门槛（null 未定）；缺省规则见文档，人定值在 config/near_groups/handling.json。"
+       "books＝按书覆盖（哪本书开哪些方法、用哪个模型文件）。")
 
 
 def pair_key(a: str, b: str) -> str:
@@ -63,7 +85,7 @@ def read_drop(path: Path) -> set[str]:
 
 
 def repo_pair_sources(root: Path = ROOT) -> dict[str, dict]:
-    """仓内四处字对来源 → {对: {"src": {标签…}, …附带字段}}。"""
+    """仓内字对来源（手工、人裁、字体、near_groups.json、刻形判法字对 shape）→ {对: {"src": {标签…}, …附带字段}}。"""
     from open_guji_cv.clustering.confusable import FONT_TAU, hand_pairs
     cfg = root / "config"
     acc: dict[str, dict] = {}
@@ -92,8 +114,12 @@ def repo_pair_sources(root: Path = ROOT) -> dict[str, dict]:
             if e.get("near"):
                 extra["near"] = dict(sorted(e["near"].items()))
             add(k[0], k[1], "near_groups", **extra)
+    shape = cfg / "near_groups" / "shape_pairs.json"            # 来源 7：第四步书级刻形判法的字对，只进登记表（2026-11-28）
+    if shape.exists():
+        for e in json.loads(shape.read_text(encoding="utf-8")).get("pairs") or ():
+            add(str(e["a"]), str(e["b"]), "shape")
     drop = read_drop(cfg / "near_groups_drop.tsv")
-    return {k: e for k, e in acc.items() if not (k in drop and not {"hand", "human"} & e["src"])}
+    return {k: e for k, e in acc.items() if not (k in drop and not {"hand", "human", "shape"} & e["src"])}
 
 
 def registry_groups() -> list[dict]:
@@ -108,10 +134,7 @@ def registry_groups() -> list[dict]:
         f = g.flow
         fams = tuple(f.families) if f and f.families else ()
         fold = {c: fam[0] for fam in fams for c in fam[1:]}
-        if g.kind == "variant":
-            typ = "variant"
-        else:
-            typ = "fold" if fold else "near"
+        typ = "variant" if g.kind == "variant" else "near"     # 只分两类（2026-11-28）；原 fold 组归 near，异体归并仍在 `fold`
         rec = {"id": gid, "chars": sorted(g.members), "type": typ, "name": g.name}
         if fold:
             rec["fold"] = dict(sorted(fold.items()))
@@ -177,14 +200,92 @@ def _merge_pair(dst: dict, e: dict) -> None:
             dst[k] = v
 
 
+def read_type_override(path: Path) -> dict[str, str]:
+    """单立字对组的类型人定覆盖 `config/near_groups/type_override.json` → {对: 类型}（键按码位序重排）。没有文件 → {}。"""
+    if not Path(path).exists():
+        return {}
+    out = {}
+    for k, e in (json.loads(Path(path).read_text(encoding="utf-8")).get("types") or {}).items():
+        t = str(e["type"] if isinstance(e, dict) else e)
+        if t not in TYPES:
+            raise ValueError(f"{path}：{k} 的 type {t!r} 不认识（应为 {sorted(TYPES)}）")
+        out[pair_key(k[0], k[1:])] = t
+    return out
+
+
+def _flow_img() -> frozenset:
+    from open_guji_cv.groups.flow import IMG_SOLVERS
+    return frozenset(IMG_SOLVERS) | FLOW_IMG_EXTRA
+
+
+def default_handling(g: dict, methods: list | None = None) -> dict:
+    """一组的缺省处理方式（＝现役行为，2026-11-28）：
+    - `methods`：[]（看图方法要人定，写在 handling.json）；
+    - `context`：第四步 group_flow 的方法（`methods`／`review_methods`／`form_methods`）里有文意 `ctx` → true；
+    - `aspect`：false（现役宽高比只有 seed_admit `_fold_pass` 对日曰一组，日曰在 handling.json 里定 true）；
+    - `action`：group_flow 有看图解法（`flow.IMG_SOLVERS`＋`near_p`），或 `methods` 里有现役会放行／改字的 3b 方法
+      （`ADMIT_METHODS`）→ admit，否则 evidence；
+    - `threshold`：null。
+    `methods` 给了就按它算 action（人定表里写了 methods 没写 action 时用）。"""
+    flow = set(g.get("methods") or ()) | set(g.get("review_methods") or ()) | set(g.get("form_methods") or ())
+    ms = list(methods or ())
+    admit = bool(flow & _flow_img()) or bool(set(ms) & ADMIT_METHODS)
+    return {"methods": ms, "context": "ctx" in flow, "aspect": False, "action": "admit" if admit else "evidence",
+            "threshold": None}
+
+
+def read_handling(path: Path) -> dict[str, dict]:
+    """人定处理方式 `config/near_groups/handling.json` → {组 id: {键: 值}}（只含写了的键）。没有文件 → {}。
+    键、方法名、取值不认识就报错。"""
+    if not Path(path).exists():
+        return {}
+    from open_guji_cv.groups.near_methods import METHODS
+    out = {}
+    for gid, e in (json.loads(Path(path).read_text(encoding="utf-8")).get("groups") or {}).items():
+        bad = set(e) - set(HANDLING_KEYS) - {"note"}
+        if bad:
+            raise ValueError(f"{path}：组 {gid} 不认识的键 {sorted(bad)}（可写 {HANDLING_KEYS} 与 note）")
+        if "methods" in e:
+            ms = e["methods"]
+            if not isinstance(ms, list) or set(ms) - set(METHODS):
+                raise ValueError(f"{path}：组 {gid} 的 methods {ms!r} 里有 3b 不认识的方法（可用 {sorted(METHODS)}）")
+        for k in ("context", "aspect"):
+            if k in e and not isinstance(e[k], bool):
+                raise ValueError(f"{path}：组 {gid} 的 {k} 要写 true／false：{e[k]!r}")
+        if "action" in e and e["action"] not in ACTIONS:
+            raise ValueError(f"{path}：组 {gid} 的 action {e['action']!r} 不认识（应为 {ACTIONS}）")
+        th = e.get("threshold")
+        if th is not None and (isinstance(th, bool) or not isinstance(th, (int, float))):
+            raise ValueError(f"{path}：组 {gid} 的 threshold 要写数或 null：{th!r}")
+        out[gid] = dict(e)
+    return out
+
+
+def _handling(g: dict, over: dict | None) -> dict:
+    over = over or {}
+    h = default_handling(g, over.get("methods"))
+    for k in HANDLING_KEYS:
+        if k in over:
+            h[k] = list(over[k]) if k == "methods" else over[k]
+    if over.get("note"):
+        h["note"] = over["note"]
+    return h
+
+
 def build(reg: list[dict], pairs: dict[str, dict], book_pairs: dict[str, tuple[dict, dict]] | None = None,
-          book_gn: dict[str, dict] | None = None, font_tau: float | None = None) -> dict:
+          book_gn: dict[str, dict] | None = None, font_tau: float | None = None,
+          type_override: dict[str, str] | None = None, handling: dict[str, dict] | None = None) -> dict:
     """纯函数：注册组 ＋ 字对来源 ＋ 书级输入 → `near_groups/2` 整张表（dict，键序确定）。
 
     - `reg`：`registry_groups()` 的形状；`pairs`：{对: {"src": {标签}, …}}；
-    - `book_pairs`：{书: (字对来源, {对: 档})}；`book_gn`：{书: glyph_near 的 groups dict}。"""
+    - `book_pairs`：{书: (字对来源, {对: 档})}；`book_gn`：{书: glyph_near 的 groups dict}；
+    - `type_override`：{对: 类型}，单立字对组的类型人定覆盖（只管 `p:` 组；对没进表就不起作用）；
+    - `handling`：{组 id: {键: 值}}，处理方式人定值（`read_handling`），盖过 `default_handling`；组 id 不在表里报错
+      （书级输入并进来的单立字对组也可以写）。"""
     book_pairs = book_pairs or {}
+    handling = handling or {}
     book_gn = book_gn or {}
+    type_override = type_override or {}
     allp: dict[str, dict] = {}
     for k, e in pairs.items():
         _merge_pair(allp.setdefault(k, {}), e)
@@ -210,8 +311,8 @@ def build(reg: list[dict], pairs: dict[str, dict], book_pairs: dict[str, tuple[d
         if not gids:
             gid = PAIR_PREFIX + key
             ng = e.get("ng_src") or ()
-            groups[gid] = {"chars": [key[0], key[1]], "type": "variant" if "variant" in ng else "near",
-                           "methods": [], "src": []}
+            typ = type_override.get(key) or ("variant" if "variant" in ng else "near")
+            groups[gid] = {"chars": [key[0], key[1]], "type": typ, "methods": [], "src": []}
             gids = [gid]
         for gid in gids:
             g = groups[gid]
@@ -237,6 +338,12 @@ def build(reg: list[dict], pairs: dict[str, dict], book_pairs: dict[str, tuple[d
             gid = min(hit, key=lambda x: (len(groups[x]["chars"]), x))
             b = groups[gid].setdefault("books", {}).setdefault(book, {})
             b["glyph_near"] = {"id": gn_id, **{k: spec[k] for k in ("methods", "trigger", "delta", "topk") if k in spec}}
+
+    unknown = sorted(set(handling) - set(groups))
+    if unknown:
+        raise ValueError(f"handling 里的组 {unknown} 登记表里没有（组 id 写错了？）")
+    for gid, g in groups.items():
+        g["handling"] = _handling(g, handling.get(gid))
 
     order = sorted(groups, key=lambda g: (g.startswith(PAIR_PREFIX), g))
     groups = {gid: dict(sorted(groups[gid].items())) for gid in order}
@@ -271,7 +378,9 @@ def build_from_repo(pair_clf: dict[str, Path] | None = None, glyph_near: dict[st
     from open_guji_cv.clustering.confusable import FONT_TAU
     bp = {b: book_pair_clf(b, p) for b, p in (pair_clf or {}).items()}
     bg = {b: book_glyph_near(p) for b, p in (glyph_near or {}).items()}
-    return build(registry_groups(), repo_pair_sources(ROOT), bp, bg, font_tau=FONT_TAU)
+    return build(registry_groups(), repo_pair_sources(ROOT), bp, bg, font_tau=FONT_TAU,
+                 type_override=read_type_override(ROOT / "config" / "near_groups" / "type_override.json"),
+                 handling=read_handling(HANDLING))
 
 
 def dumps(table: dict) -> str:

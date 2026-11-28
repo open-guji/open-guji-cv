@@ -146,8 +146,8 @@ def test_no_ref_kind_maps_to_seed_admit_and_swaps_params_on_those_pages_only():
     """无参校本页（脉经 林億序／牒文，2026-11-19）：page_kinds.no_ref → seed_admit.no_ref_pages，
     这些页上叠 no_ref_params，别的页原样；都没配时不进 dump（指纹不动）。"""
     from open_guji_cv.steps.seed_admit import SeedAdmitParams, no_ref_page_params
-    assert PK.to_params(PK.load_page_kinds({"no_ref": ["5-7"]})) == {"seed_admit": {"no_ref_pages": ["5-7"]}}
-    assert make_book(page_kinds={"no_ref": [51, 52]}).params["seed_admit"] == {"no_ref_pages": [51, 52]}
+    assert PK.to_params(PK.load_page_kinds({"no_ref": ["5-7"]})) == {"char_decide": {"no_ref_pages": ["5-7"]}}
+    assert make_book(page_kinds={"no_ref": [51, 52]}).params["char_decide"] == {"no_ref_pages": [51, 52]}
     base = SeedAdmitParams()
     assert "no_ref_pages" not in base.model_dump() and "no_ref_params" not in base.model_dump()
     p = SeedAdmitParams(no_ref_pages=["5-7"], no_ref_params={"solo_5b_cov": 0.95, "solo_5b_min_n": 1})

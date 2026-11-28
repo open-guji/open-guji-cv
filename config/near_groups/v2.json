@@ -1,19 +1,17 @@
 {
  "format": "near_groups/2",
- "_doc": "形近字组登记表（scripts/build_near_groups_v2.py 生成，勿手改；读口 open_guji_cv/groups/near_registry.py，schema 与来源见 doc/3-识字/形近字组登记表.md）。groups 的键是组 id：注册字组表的组 id 照旧，其余字对单立 p:<两字>。src：registry＝注册字组表、hand＝config/near_groups/hand.json（手工核过的形近否决对）、human＝config/confusable_human.json、font＝字体形近表 τ≥font_tau、near_groups＝config/near_groups.json、pair_clf:<书>＝该书的按对分类器文件。methods＝第四步 group_flow 的方法数组（按顺序）；books＝按书覆盖（哪本书开哪些方法、用哪个模型文件）。",
+ "_doc": "形近字组登记表（scripts/build_near_groups_v2.py 生成，勿手改；读口 open_guji_cv/groups/near_registry.py，schema 与来源见 doc/3-识字/形近字组登记表.md）。groups 的键是组 id：注册字组表的组 id 照旧，其余字对单立 p:<两字>。src：registry＝注册字组表、hand＝config/near_groups/hand.json（手工核过的形近否决对）、human＝config/confusable_human.json、font＝字体形近表 τ≥font_tau、near_groups＝config/near_groups.json、shape＝config/near_groups/shape_pairs.json（第四步书级刻形判法的字对，只给 3b ref，现役护栏与分流不读）、pair_clf:<书>＝该书的按对分类器文件。type 只有 near（形近异义）与 variant（异体，同义异码）两类；fold＝组内异体 → 它归的字（near 组里的异体归并）。methods＝第四步 group_flow 的方法数组（按顺序）；handling＝本组处理方式：handling.methods 允许用的 3b 看图方法（[]＝不做字形区分）、context 收尾走不走文意、aspect 4d 宽高比一路开不开、action admit（看图结论可放行／改字）或 evidence（只出证据）、threshold 组门槛（null 未定）；缺省规则见文档，人定值在 config/near_groups/handling.json。books＝按书覆盖（哪本书开哪些方法、用哪个模型文件）。",
  "types": {
-  "near": "异字形近（组内是不同的字）",
-  "variant": "同字异码（组内是同一个字的不同码位／写法）",
-  "fold": "折叠组（组内既有不同的字，又有某字的异体；fold 把异体折到它归的字）"
+  "near": "形近异义（组内是不同的字；组内若另有某字的异体，`fold` 字段把异体归到它归的字）",
+  "variant": "异体，同义异码（组内是同一个字的不同码位／写法）"
  },
  "font_tau": 0.988,
- "n_groups": 619,
+ "n_groups": 620,
  "n_registry": 185,
- "n_pair_groups": 434,
- "n_pairs": 572,
+ "n_pair_groups": 435,
+ "n_pairs": 573,
  "n_by_type": {
-  "fold": 6,
-  "near": 291,
+  "near": 298,
   "variant": 322
  },
  "n_groups_by_src": {
@@ -21,13 +19,15 @@
   "hand": 20,
   "human": 38,
   "near_groups": 521,
-  "registry": 185
+  "registry": 185,
+  "shape": 1
  },
  "n_pairs_by_src": {
   "font": 78,
   "hand": 20,
   "human": 42,
-  "near_groups": 572
+  "near_groups": 572,
+  "shape": 1
  },
  "books": [],
  "groups": {
@@ -38,6 +38,13 @@
     "跋"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -76,6 +83,13 @@
     "𡚁"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -99,6 +113,13 @@
     "𠮓"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -138,6 +159,13 @@
     "别"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -178,6 +206,13 @@
     "叅"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids"
@@ -221,6 +256,13 @@
     "册"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids"
@@ -260,6 +302,13 @@
     "策"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -284,6 +333,13 @@
     "讖"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids",
@@ -309,6 +365,13 @@
     "敕"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -332,6 +395,13 @@
     "岀"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -408,6 +478,13 @@
     "邊"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids",
     "ctx"
@@ -529,6 +606,16 @@
     "剌"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [
+     "part_shape"
+    ],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "剌刺：第四步 _part_shape_pass 搬进 3b（cv #2011）"
+   },
    "methods": [
     "ctx"
    ],
@@ -570,6 +657,13 @@
     "寶"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -593,6 +687,13 @@
     "𥙷"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -616,6 +717,13 @@
     "歩"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -639,6 +747,13 @@
     "楚"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -662,6 +777,13 @@
     "鬭"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -685,6 +807,13 @@
     "瀆"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -708,6 +837,13 @@
     "髮"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -731,6 +867,13 @@
     "𡚱"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -769,6 +912,13 @@
     "𦯳"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -792,6 +942,13 @@
     "鳳"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -815,6 +972,13 @@
     "𫯠"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -838,6 +1002,13 @@
     "𦤎"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -861,6 +1032,13 @@
     "髙"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -884,6 +1062,13 @@
     "𣹢"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -907,6 +1092,13 @@
     "橫"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -930,6 +1122,13 @@
     "懷"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -953,6 +1152,13 @@
     "𮎰"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -976,6 +1182,13 @@
     "𡽪"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -999,6 +1212,13 @@
     "𢚩"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1022,6 +1242,13 @@
     "𭔃"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1045,6 +1272,13 @@
     "𤇍"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1068,6 +1302,13 @@
     "荊"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1106,6 +1347,13 @@
     "究"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1130,6 +1378,13 @@
     "寇"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1155,6 +1410,13 @@
     "寬"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1178,6 +1440,13 @@
     "𥠖"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1201,6 +1470,13 @@
     "棃"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1224,6 +1500,13 @@
     "濓"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1262,6 +1545,13 @@
     "廉"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1302,6 +1592,13 @@
     "𪋤"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1325,6 +1622,13 @@
     "禄"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1348,6 +1652,13 @@
     "貎"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1371,6 +1682,13 @@
     "每"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1395,6 +1713,13 @@
     "𡨋"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1418,6 +1743,13 @@
     "黙"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1457,6 +1789,13 @@
     "憑"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1480,6 +1819,13 @@
     "渉"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1503,6 +1849,13 @@
     "繩"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1526,6 +1879,13 @@
     "夀"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1549,6 +1909,13 @@
     "𫐠"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1574,6 +1941,13 @@
     "𣗳"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1597,6 +1971,13 @@
     "豎"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1620,6 +2001,13 @@
     "雙"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1643,6 +2031,13 @@
     "搜"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1681,6 +2076,13 @@
     "𪧐"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1705,6 +2107,13 @@
     "𮟏"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1728,6 +2137,13 @@
     "沓"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1751,6 +2167,13 @@
     "泰"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1774,6 +2197,13 @@
     "曉"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1797,6 +2227,13 @@
     "𢹂"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1820,6 +2257,13 @@
     "虛"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1861,6 +2305,13 @@
     "緖"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1899,6 +2350,13 @@
     "尋"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1922,6 +2380,13 @@
     "顔"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1960,6 +2425,13 @@
     "艷"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -1983,6 +2455,13 @@
     "𣻌"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2006,6 +2485,13 @@
     "𫆀"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2044,6 +2530,13 @@
     "𠋣"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2067,6 +2560,13 @@
     "飲"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2091,6 +2591,13 @@
     "𨼆"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2130,6 +2637,13 @@
     "𭬚"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2153,6 +2667,13 @@
     "鬱"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2191,6 +2712,13 @@
     "𫟍"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2214,6 +2742,13 @@
     "贊"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2252,6 +2787,13 @@
     "𬃷"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2275,6 +2817,13 @@
     "增"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2298,6 +2847,13 @@
     "真"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2337,6 +2893,13 @@
     "𥨥"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -2360,6 +2923,13 @@
     "抵"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -2402,6 +2972,13 @@
     "點"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids",
@@ -2442,6 +3019,16 @@
     "太"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [
+     "pair_shape"
+    ],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "大太：全唐文 pair_shape/2（cv #2015）"
+   },
    "methods": [
     "ctx",
     "ids"
@@ -2495,6 +3082,13 @@
     "顛"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "freq"
    ],
@@ -2517,6 +3111,13 @@
     "面"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx",
     "ids"
@@ -2566,6 +3167,13 @@
     "𤼵"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -2588,6 +3196,13 @@
     "傳"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx",
     "ids"
@@ -2628,6 +3243,13 @@
     "逢"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "ctx"
    ],
@@ -2665,6 +3287,13 @@
     "橅"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -2688,6 +3317,13 @@
     "蓋"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -2726,6 +3362,13 @@
     "名"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -2759,6 +3402,16 @@
    "form_methods": [
     "top1"
    ],
+   "handling": {
+    "methods": [
+     "cnn_small"
+    ],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "宫宮官：殿本 3b gong 组 cnn_small（ZM 11-26 训，models/glyph_near_gong），第四步 group_flow near_p 读它的校准 p"
+   },
    "methods": [
     "near_p",
     "ctx"
@@ -2820,7 +3473,7 @@
     "near_groups",
     "registry"
    ],
-   "type": "fold"
+   "type": "near"
   },
   "guang": {
    "chars": [
@@ -2831,6 +3484,13 @@
     "賔"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -2854,6 +3514,13 @@
     "關"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -2893,6 +3560,16 @@
    "form_methods": [
     "top1"
    ],
+   "handling": {
+    "methods": [
+     "hou_shape"
+    ],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "候𠋫：第四步 _hou_shape_pass 搬进 3b（cv #2007）；现役只改已放行格的字"
+   },
    "methods": [
     "ctx"
    ],
@@ -2957,7 +3634,7 @@
     "near_groups",
     "registry"
    ],
-   "type": "fold"
+   "type": "near"
   },
   "hui": {
    "canon": "彚",
@@ -2966,6 +3643,13 @@
     "彚"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "freq"
    ],
@@ -2989,6 +3673,13 @@
     "回"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -3031,6 +3722,13 @@
     "𫉬"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -3069,6 +3767,13 @@
     "卽"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "freq"
    ],
@@ -3092,6 +3797,13 @@
     "劔"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -3115,6 +3827,13 @@
     "教"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids"
@@ -3157,6 +3876,13 @@
     "覊"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -3180,6 +3906,13 @@
     "旣"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "freq"
    ],
@@ -3202,6 +3935,13 @@
     "申"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx",
     "ids"
@@ -3247,6 +3987,13 @@
     "巻"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -3270,6 +4017,13 @@
     "絶"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids"
@@ -3313,6 +4067,14 @@
     "巳"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null,
+    "note": "己已巳：Sheldon 11-27 定只做文意、不做任何字形区分；不配看图方法（cv #2024 给的 stroke_veto 对 jys 的证据去掉），目标值（CV4 11-28）"
+   },
    "methods": [
     "ctx"
    ],
@@ -3393,6 +4155,13 @@
     "刋"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "freq"
    ],
@@ -3432,6 +4201,13 @@
     "freq",
     "top1"
    ],
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "ctx"
    ],
@@ -3448,7 +4224,7 @@
    "src": [
     "registry"
    ],
-   "type": "fold"
+   "type": "near"
   },
   "kou": {
    "chars": [
@@ -3461,6 +4237,13 @@
     "圜"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -3500,6 +4283,13 @@
     "夔"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -3523,6 +4313,13 @@
     "郞"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -3562,6 +4359,13 @@
     "𩔖"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -3600,6 +4404,13 @@
     "𨽾"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -3638,6 +4449,13 @@
     "雨"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "ctx"
    ],
@@ -3679,6 +4497,13 @@
     "𤢪"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -3702,6 +4527,13 @@
     "歴"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids"
@@ -3745,6 +4577,13 @@
     "呂"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids"
@@ -3787,6 +4626,13 @@
     "諭"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx",
     "ids"
@@ -3832,6 +4678,13 @@
     "本"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "ctx"
    ],
@@ -3896,6 +4749,16 @@
     "闢"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [
+     "book_knn"
+    ],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "门族（閒間 等）：全唐文书级刻例近邻 _book_knn_pass 搬进 3b（cv #2019）"
+   },
    "methods": [
     "ids",
     "ctx"
@@ -4145,6 +5008,13 @@
     "密"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4183,6 +5053,13 @@
     "𫎇"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4205,6 +5082,13 @@
     "自"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "ctx"
    ],
@@ -4248,6 +5132,13 @@
     "内"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -4287,6 +5178,13 @@
     "寧"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4310,6 +5208,13 @@
     "𣲖"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4333,6 +5238,13 @@
     "竒"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4371,6 +5283,13 @@
     "啟"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids"
@@ -4400,6 +5319,13 @@
     "舍"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4425,6 +5351,13 @@
     "𨜊"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "freq"
    ],
@@ -4448,6 +5381,13 @@
     "清"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "freq"
    ],
@@ -4487,6 +5427,13 @@
     "青"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "freq"
    ],
@@ -4509,6 +5456,13 @@
     "目"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "ctx"
    ],
@@ -4553,6 +5507,16 @@
     "八"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [
+     "rr_shape"
+    ],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "入人八：第四步 _rr_shape_pass 搬进 3b（cv #2000）"
+   },
    "methods": [
     "ctx",
     "rr_img",
@@ -4628,6 +5592,14 @@
     "曰"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": true,
+    "action": "admit",
+    "threshold": null,
+    "note": "日曰：Sheldon 11-27 定不配 3b 看图方法、走文意；4d 宽高比（seed_admit fold_aspect 窄宽判）按现役开着（Sheldon 11-28 订正：这一路不关，各书可在书级覆盖，本值只是缺省）；action 按缺省规则（现役 group_flow 有 ry_shape、宽高比会放行 → admit）"
+   },
    "methods": [
     "ctx",
     "ry_shape"
@@ -4681,6 +5653,13 @@
     "喪"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4703,6 +5682,13 @@
     "卜"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx",
     "ids"
@@ -4744,6 +5730,13 @@
     "刪"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4786,6 +5779,13 @@
     "尚"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4809,6 +5809,13 @@
     "慎"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids",
@@ -4836,6 +5843,13 @@
     "𫝑"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4859,6 +5873,13 @@
     "疏"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4897,6 +5918,13 @@
     "説"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "freq"
    ],
@@ -4919,6 +5947,13 @@
     "士"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ss_bars"
    ],
@@ -4960,6 +5995,13 @@
     "𮅕"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -4983,6 +6025,13 @@
     "歲"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -5006,6 +6055,13 @@
     "𤨏"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -5029,6 +6085,13 @@
     "由"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -5082,6 +6145,13 @@
     "朱"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -5142,6 +6212,13 @@
     "士"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx",
     "bars",
@@ -5199,6 +6276,13 @@
     "freq",
     "top1"
    ],
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "ctx"
    ],
@@ -5215,7 +6299,7 @@
    "src": [
     "registry"
    ],
-   "type": "fold"
+   "type": "near"
   },
   "wan": {
    "canon": "晚",
@@ -5224,6 +6308,13 @@
     "晩"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -5247,6 +6338,13 @@
     "爲"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "freq"
    ],
@@ -5270,6 +6368,13 @@
     "微"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -5309,6 +6414,13 @@
     "衞"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -5349,6 +6461,13 @@
     "間"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx",
     "ids"
@@ -5399,6 +6518,13 @@
     "末"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx",
     "bars"
@@ -5451,6 +6577,16 @@
     "鳴"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [
+     "wu_shape"
+    ],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "嗚鳴：第四步 _wu_shape_pass 搬进 3b（cv #2006）"
+   },
    "methods": [
     "ctx"
    ],
@@ -5489,6 +6625,13 @@
     "戍"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "ctx"
    ],
@@ -5558,6 +6701,16 @@
     "王"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [
+     "pair_shape"
+    ],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "王玉：全唐文 pair_shape/2（cv #2015）"
+   },
    "methods": [
     "ctx",
     "ids"
@@ -5605,6 +6758,13 @@
     "必"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -5628,6 +6788,13 @@
     "陷"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -5666,6 +6833,13 @@
     "鄕"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -5744,6 +6918,13 @@
     "齋"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -5885,6 +7066,13 @@
     "敘"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids"
@@ -5927,6 +7115,13 @@
     "𨕖"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -5952,6 +7147,13 @@
     "廵"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -6006,6 +7208,13 @@
     "ids",
     "top1"
    ],
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx"
    ],
@@ -6047,7 +7256,7 @@
     "near_groups",
     "registry"
    ],
-   "type": "fold"
+   "type": "near"
   },
   "yao": {
    "canon": "謠",
@@ -6056,6 +7265,13 @@
     "謡"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -6078,6 +7294,16 @@
     "還"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [
+     "pair_shape"
+    ],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "還遺：全唐文 pair_shape/2（cv #2015）"
+   },
    "methods": [
     "ctx",
     "ids"
@@ -6122,6 +7348,13 @@
     "𢑴"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids"
@@ -6213,6 +7446,13 @@
     "隂"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -6250,6 +7490,13 @@
     "二"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx",
     "ids",
@@ -6289,6 +7536,13 @@
     "圖"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx",
     "ids"
@@ -6328,6 +7582,13 @@
     "子"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "ctx"
    ],
@@ -6381,6 +7642,13 @@
     "freq",
     "top1"
    ],
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ctx",
     "ids"
@@ -6420,7 +7688,7 @@
     "near_groups",
     "registry"
    ],
-   "type": "fold"
+   "type": "near"
   },
   "zhen": {
    "canon": "鎭",
@@ -6429,6 +7697,13 @@
     "鎮"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -6452,6 +7727,13 @@
     "徵"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "codepoint"
    ],
@@ -6492,6 +7774,13 @@
     "旨"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "freq",
     "ids",
@@ -6520,6 +7809,13 @@
     "𢰅"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -6558,6 +7854,13 @@
     "準"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null
+   },
    "methods": [
     "ids"
    ],
@@ -6595,6 +7898,13 @@
     "文"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [],
+    "context": true,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "ctx"
    ],
@@ -6633,6 +7943,13 @@
     "湽"
    ],
    "combine": "first",
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [
     "freq"
    ],
@@ -6657,6 +7974,16 @@
     "干"
    ],
    "combine": "agree",
+   "handling": {
+    "methods": [
+     "stroke_veto"
+    ],
+    "context": true,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "于千子干：stroke_veto 的 qg 组（千／干）挂在这里（3b 书配置 ref: zy、chars: [千, 干]），cv #2024"
+   },
    "methods": [
     "zy_strokes",
     "ctx",
@@ -6765,6 +8092,13 @@
     "㓨",
     "刺"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "㓨刺": {
@@ -6790,6 +8124,13 @@
     "㕔",
     "𠫊"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "㕔𠫊": {
@@ -6815,6 +8156,13 @@
     "㝛",
     "宿"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "㝛宿": {
@@ -6841,6 +8189,13 @@
     "㝢",
     "寓"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "㝢寓": {
@@ -6866,6 +8221,13 @@
     "㫖",
     "者"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "㫖者": {
@@ -6891,6 +8253,13 @@
     "䍐",
     "罕"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "䍐罕": {
@@ -6916,6 +8285,13 @@
     "䘏",
     "卹"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "䘏卹": {
@@ -6942,6 +8318,13 @@
     "䙝",
     "褻"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "䙝褻": {
@@ -6967,6 +8350,13 @@
     "䝉",
     "蒙"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "䝉蒙": {
@@ -6992,6 +8382,13 @@
     "䟽",
     "疎"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "䟽疎": {
@@ -7017,6 +8414,13 @@
     "䴡",
     "麗"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "䴡麗": {
@@ -7042,6 +8446,13 @@
     "七",
     "匕"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "七匕": {
@@ -7066,6 +8477,13 @@
     "七",
     "𠤎"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "七𠤎": {
@@ -7091,6 +8509,13 @@
     "上",
     "土"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "上土": {
@@ -7116,6 +8541,13 @@
     "且",
     "旦"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "且旦": {
@@ -7146,6 +8578,13 @@
     "丙",
     "内"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "丙内": {
@@ -7171,6 +8610,13 @@
     "中",
     "申"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "中申": {
@@ -7196,6 +8642,13 @@
     "丸",
     "九"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "丸九": {
@@ -7221,6 +8674,13 @@
     "丹",
     "舟"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "丹舟": {
@@ -7246,6 +8706,13 @@
     "主",
     "王"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "主王": {
@@ -7271,6 +8738,13 @@
     "乂",
     "人"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "乂人": {
@@ -7296,6 +8770,13 @@
     "乃",
     "仍"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "乃仍": {
@@ -7316,11 +8797,46 @@
    ],
    "type": "near"
   },
+  "p:之矣": {
+   "chars": [
+    "之",
+    "矣"
+   ],
+   "handling": {
+    "methods": [
+     "pair_shape"
+    ],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "之矣：史记 pair_shape/1（cv #2015）"
+   },
+   "methods": [],
+   "pairs": {
+    "之矣": {
+     "src": [
+      "shape"
+     ]
+    }
+   },
+   "src": [
+    "shape"
+   ],
+   "type": "near"
+  },
   "p:乎平": {
    "chars": [
     "乎",
     "平"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "乎平": {
@@ -7350,6 +8866,13 @@
     "乗",
     "乘"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "乗乘": {
@@ -7375,6 +8898,13 @@
     "亍",
     "于"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "亍于": {
@@ -7400,6 +8930,13 @@
     "井",
     "并"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "井并": {
@@ -7425,6 +8962,13 @@
     "交",
     "父"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "交父": {
@@ -7450,6 +8994,13 @@
     "亮",
     "鳧"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "亮鳧": {
@@ -7475,6 +9026,13 @@
     "什",
     "仆"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "什仆": {
@@ -7500,6 +9058,13 @@
     "今",
     "令"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "今令": {
@@ -7525,6 +9090,13 @@
     "仕",
     "士"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "仕士": {
@@ -7549,6 +9121,13 @@
     "仙",
     "山"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "仙山": {
@@ -7574,6 +9153,13 @@
     "伺",
     "司"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "伺司": {
@@ -7599,6 +9185,13 @@
     "伽",
     "加"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "伽加": {
@@ -7624,6 +9217,13 @@
     "但",
     "問"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "但問": {
@@ -7649,6 +9249,13 @@
     "但",
     "間"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "但間": {
@@ -7674,6 +9281,13 @@
     "但",
     "閭"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "但閭": {
@@ -7699,6 +9313,13 @@
     "何",
     "河"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "何河": {
@@ -7723,6 +9344,13 @@
     "佛",
     "彿"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "佛彿": {
@@ -7748,6 +9376,13 @@
     "來",
     "末"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "來末": {
@@ -7772,6 +9407,13 @@
     "來",
     "来"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "來来": {
@@ -7797,6 +9439,13 @@
     "例",
     "列"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "例列": {
@@ -7822,6 +9471,13 @@
     "侍",
     "待"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "侍待": {
@@ -7847,6 +9503,13 @@
     "便",
     "更"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "便更": {
@@ -7872,6 +9535,13 @@
     "促",
     "足"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "促足": {
@@ -7897,6 +9567,13 @@
     "俎",
     "爼"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "俎爼": {
@@ -7922,6 +9599,13 @@
     "俘",
     "孚"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "俘孚": {
@@ -7947,6 +9631,13 @@
     "俸",
     "奉"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "俸奉": {
@@ -7972,6 +9663,13 @@
     "偁",
     "稱"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "偁稱": {
@@ -7997,6 +9695,13 @@
     "健",
     "徤"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "健徤": {
@@ -8022,6 +9727,13 @@
     "傚",
     "效"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "傚效": {
@@ -8048,6 +9760,13 @@
     "傳",
     "𫝊"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "傳𫝊": {
@@ -8073,6 +9792,13 @@
     "像",
     "象"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "像象": {
@@ -8098,6 +9824,13 @@
     "僑",
     "喬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "僑喬": {
@@ -8123,6 +9856,13 @@
     "僧",
     "憎"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "僧憎": {
@@ -8148,6 +9888,13 @@
     "儀",
     "義"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "儀義": {
@@ -8173,6 +9920,13 @@
     "儆",
     "敬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "儆敬": {
@@ -8198,6 +9952,13 @@
     "優",
     "憂"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "優憂": {
@@ -8223,6 +9984,13 @@
     "優",
     "擾"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "優擾": {
@@ -8248,6 +10016,13 @@
     "儲",
     "諸"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "儲諸": {
@@ -8273,6 +10048,13 @@
     "允",
     "充"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "允充": {
@@ -8298,6 +10080,13 @@
     "允",
     "尢"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "允尢": {
@@ -8323,6 +10112,13 @@
     "元",
     "无"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "元无": {
@@ -8348,6 +10144,13 @@
     "兒",
     "見"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "兒見": {
@@ -8373,6 +10176,13 @@
     "兖",
     "兗"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "兖兗": {
@@ -8398,6 +10208,13 @@
     "兢",
     "競"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "兢競": {
@@ -8423,6 +10240,13 @@
     "兦",
     "匹"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "兦匹": {
@@ -8448,6 +10272,13 @@
     "全",
     "金"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "全金": {
@@ -8472,6 +10303,13 @@
     "公",
     "分"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "公分": {
@@ -8497,6 +10335,13 @@
     "六",
     "大"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "六大": {
@@ -8525,6 +10370,13 @@
     "其",
     "具"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "其具": {
@@ -8549,6 +10401,13 @@
     "其",
     "某"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "其某": {
@@ -8574,6 +10433,13 @@
     "具",
     "異"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "具異": {
@@ -8599,6 +10465,13 @@
     "冐",
     "冒"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "冐冒": {
@@ -8625,6 +10498,13 @@
     "冗",
     "宂"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "冗宂": {
@@ -8650,6 +10530,13 @@
     "冡",
     "冢"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "冡冢": {
@@ -8678,6 +10565,13 @@
     "冤",
     "寃"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "冤寃": {
@@ -8704,6 +10598,13 @@
     "冰",
     "氷"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "冰氷": {
@@ -8729,6 +10630,13 @@
     "冲",
     "沖"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "冲沖": {
@@ -8754,6 +10662,13 @@
     "决",
     "決"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "决決": {
@@ -8781,6 +10696,13 @@
     "况",
     "況"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "况況": {
@@ -8806,6 +10728,13 @@
     "准",
     "淮"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "准淮": {
@@ -8831,6 +10760,13 @@
     "凉",
     "涼"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "凉涼": {
@@ -8856,6 +10792,13 @@
     "凌",
     "淩"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "凌淩": {
@@ -8881,6 +10824,13 @@
     "几",
     "凡"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "几凡": {
@@ -8908,6 +10858,13 @@
     "凡",
     "凢"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "凡凢": {
@@ -8933,6 +10890,13 @@
     "刀",
     "刁"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "刀刁": {
@@ -8959,6 +10923,13 @@
     "刖",
     "別"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "刖別": {
@@ -8984,6 +10955,13 @@
     "删",
     "剛"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "删剛": {
@@ -9009,6 +10987,13 @@
     "刪",
     "剛"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "刪剛": {
@@ -9034,6 +11019,13 @@
     "剋",
     "尅"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "剋尅": {
@@ -9059,6 +11051,13 @@
     "剝",
     "剥"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "剝剥": {
@@ -9084,6 +11083,13 @@
     "勅",
     "勑"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "勅勑": {
@@ -9109,6 +11115,13 @@
     "動",
     "勤"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "動勤": {
@@ -9134,6 +11147,13 @@
     "十",
     "干"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "十干": {
@@ -9159,6 +11179,13 @@
     "千",
     "壬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "千壬": {
@@ -9184,6 +11211,13 @@
     "卑",
     "畢"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "卑畢": {
@@ -9209,6 +11243,13 @@
     "卑",
     "𤰞"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "卑𤰞": {
@@ -9234,6 +11275,13 @@
     "卓",
     "車"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "卓車": {
@@ -9259,6 +11307,13 @@
     "協",
     "恊"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "協恊": {
@@ -9284,6 +11339,13 @@
     "卣",
     "鹵"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "卣鹵": {
@@ -9309,6 +11371,13 @@
     "卬",
     "卯"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "卬卯": {
@@ -9334,6 +11403,13 @@
     "卯",
     "卵"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "卯卵": {
@@ -9359,6 +11435,13 @@
     "却",
     "卻"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "却卻": {
@@ -9383,6 +11466,13 @@
     "卻",
     "郤"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "卻郤": {
@@ -9409,6 +11499,13 @@
     "卿",
     "鄕"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "卿鄕": {
@@ -9434,6 +11531,13 @@
     "厎",
     "底"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "厎底": {
@@ -9460,6 +11564,13 @@
     "厦",
     "廈"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "厦廈": {
@@ -9486,6 +11597,13 @@
     "厯",
     "歷"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "厯歷": {
@@ -9511,6 +11629,13 @@
     "収",
     "收"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "収收": {
@@ -9536,6 +11661,13 @@
     "司",
     "同"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "司同": {
@@ -9561,6 +11693,13 @@
     "吉",
     "告"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "吉告": {
@@ -9586,6 +11725,13 @@
     "含",
     "舍"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "含舍": {
@@ -9613,6 +11759,13 @@
     "吳",
     "呉"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "吳呉": {
@@ -9639,6 +11792,13 @@
     "吾",
     "悟"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "吾悟": {
@@ -9664,6 +11824,13 @@
     "呈",
     "里"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "呈里": {
@@ -9689,6 +11856,13 @@
     "哀",
     "衷"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "哀衷": {
@@ -9714,6 +11888,13 @@
     "員",
     "貢"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "員貢": {
@@ -9739,6 +11920,13 @@
     "唇",
     "脣"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "唇脣": {
@@ -9764,6 +11952,13 @@
     "單",
     "憚"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "單憚": {
@@ -9789,6 +11984,13 @@
     "嚴",
     "巖"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "嚴巖": {
@@ -9814,6 +12016,13 @@
     "四",
     "因"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "四因": {
@@ -9838,6 +12047,13 @@
     "回",
     "囬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "回囬": {
@@ -9863,6 +12079,13 @@
     "因",
     "困"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "因困": {
@@ -9888,6 +12111,13 @@
     "圖",
     "圗"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "圖圗": {
@@ -9913,6 +12143,13 @@
     "垂",
     "埀"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "垂埀": {
@@ -9938,6 +12175,13 @@
     "埋",
     "理"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "埋理": {
@@ -9963,6 +12207,13 @@
     "埤",
     "𡌨"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "埤𡌨": {
@@ -9988,6 +12239,13 @@
     "墆",
     "滯"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "墆滯": {
@@ -10013,6 +12271,13 @@
     "壊",
     "壞"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "壊壞": {
@@ -10038,6 +12303,13 @@
     "壬",
     "干"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "壬干": {
@@ -10063,6 +12335,13 @@
     "壬",
     "王"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "壬王": {
@@ -10089,6 +12368,13 @@
     "壯",
     "牡"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "壯牡": {
@@ -10114,6 +12400,13 @@
     "壺",
     "壼"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "壺壼": {
@@ -10139,6 +12432,13 @@
     "夢",
     "夣"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "夢夣": {
@@ -10164,6 +12464,13 @@
     "大",
     "犬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "大犬": {
@@ -10189,6 +12496,13 @@
     "天",
     "夭"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "天夭": {
@@ -10214,6 +12528,13 @@
     "夫",
     "夬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "夫夬": {
@@ -10242,6 +12563,13 @@
     "夫",
     "失"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "夫失": {
@@ -10271,6 +12599,13 @@
     "奏",
     "秦"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "奏秦": {
@@ -10296,6 +12631,13 @@
     "奕",
     "弈"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "奕弈": {
@@ -10321,6 +12663,13 @@
     "奥",
     "奧"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "奥奧": {
@@ -10347,6 +12696,13 @@
     "奸",
     "好"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "奸好": {
@@ -10372,6 +12728,13 @@
     "嬴",
     "贏"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "嬴贏": {
@@ -10396,6 +12759,13 @@
     "字",
     "宇"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "字宇": {
@@ -10426,6 +12796,13 @@
     "季",
     "李"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "季李": {
@@ -10451,6 +12828,13 @@
     "孼",
     "孽"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "孼孽": {
@@ -10476,6 +12860,13 @@
     "宄",
     "究"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "宄究": {
@@ -10501,6 +12892,13 @@
     "宣",
     "直"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "宣直": {
@@ -10525,6 +12923,13 @@
     "寇",
     "𡨥"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "寇𡨥": {
@@ -10550,6 +12955,13 @@
     "富",
     "當"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "富當": {
@@ -10575,6 +12987,13 @@
     "富",
     "童"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "富童": {
@@ -10600,6 +13019,13 @@
     "寓",
     "萬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "寓萬": {
@@ -10625,6 +13051,13 @@
     "寕",
     "寧"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "寕寧": {
@@ -10650,6 +13083,13 @@
     "寖",
     "寢"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "寖寢": {
@@ -10675,6 +13115,13 @@
     "實",
     "寶"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "實寶": {
@@ -10700,6 +13147,13 @@
     "専",
     "專"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "専專": {
@@ -10726,6 +13180,13 @@
     "尢",
     "尤"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "尢尤": {
@@ -10751,6 +13212,13 @@
     "尸",
     "戸"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "尸戸": {
@@ -10776,6 +13244,13 @@
     "尼",
     "足"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "尼足": {
@@ -10801,6 +13276,13 @@
     "山",
     "岀"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "山岀": {
@@ -10826,6 +13308,13 @@
     "岐",
     "歧"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "岐歧": {
@@ -10852,6 +13341,13 @@
     "峡",
     "峽"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "峡峽": {
@@ -10877,6 +13373,13 @@
     "嵗",
     "歳"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "嵗歳": {
@@ -10902,6 +13405,13 @@
     "嶪",
     "業"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "嶪業": {
@@ -10927,6 +13437,13 @@
     "巂",
     "雟"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "巂雟": {
@@ -10953,6 +13470,13 @@
     "巨",
     "臣"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "巨臣": {
@@ -10978,6 +13502,13 @@
     "巽",
     "異"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "巽異": {
@@ -11003,6 +13534,13 @@
     "帥",
     "師"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "帥師": {
@@ -11028,6 +13566,13 @@
     "并",
     "幷"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "并幷": {
@@ -11058,6 +13603,13 @@
     "幹",
     "斡"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "幹斡": {
@@ -11083,6 +13635,13 @@
     "幹",
     "榦"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "幹榦": {
@@ -11108,6 +13667,13 @@
     "庚",
     "庾"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "庚庾": {
@@ -11133,6 +13699,13 @@
     "庭",
     "廷"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "庭廷": {
@@ -11158,6 +13731,13 @@
     "廏",
     "廐"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "廏廐": {
@@ -11184,6 +13764,13 @@
     "廣",
     "贋"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "廣贋": {
@@ -11208,6 +13795,13 @@
     "廩",
     "稟"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "廩稟": {
@@ -11233,6 +13827,13 @@
     "廬",
     "盧"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "廬盧": {
@@ -11258,6 +13859,13 @@
     "延",
     "廷"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "延廷": {
@@ -11287,6 +13895,13 @@
     "廸",
     "迪"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "廸迪": {
@@ -11312,6 +13927,13 @@
     "廼",
     "迺"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "廼迺": {
@@ -11337,6 +13959,13 @@
     "廿",
     "甘"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "廿甘": {
@@ -11362,6 +13991,13 @@
     "強",
     "强"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "強强": {
@@ -11386,6 +14022,13 @@
     "弻",
     "弼"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "弻弼": {
@@ -11411,6 +14054,13 @@
     "彥",
     "彦"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "彥彦": {
@@ -11437,6 +14087,13 @@
     "彼",
     "披"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "彼披": {
@@ -11462,6 +14119,13 @@
     "往",
     "徃"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "往徃": {
@@ -11487,6 +14151,13 @@
     "往",
     "柱"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "往柱": {
@@ -11512,6 +14183,13 @@
     "待",
     "持"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "待持": {
@@ -11537,6 +14215,13 @@
     "徒",
     "徙"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "徒徙": {
@@ -11562,6 +14247,13 @@
     "復",
     "複"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "復複": {
@@ -11588,6 +14280,13 @@
     "徹",
     "撤"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "徹撤": {
@@ -11613,6 +14312,13 @@
     "徹",
     "澈"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "徹澈": {
@@ -11638,6 +14344,13 @@
     "志",
     "忘"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "志忘": {
@@ -11663,6 +14376,13 @@
     "志",
     "忠"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "志忠": {
@@ -11688,6 +14408,13 @@
     "怙",
     "恬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "怙恬": {
@@ -11713,6 +14440,13 @@
     "悚",
     "束"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "悚束": {
@@ -11738,6 +14472,13 @@
     "悽",
     "淒"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "悽淒": {
@@ -11763,6 +14504,13 @@
     "情",
     "靑"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "情靑": {
@@ -11788,6 +14536,13 @@
     "惜",
     "愔"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "惜愔": {
@@ -11813,6 +14568,13 @@
     "惟",
     "推"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "惟推": {
@@ -11838,6 +14600,13 @@
     "意",
     "童"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "意童": {
@@ -11863,6 +14632,13 @@
     "慨",
     "概"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "慨概": {
@@ -11888,6 +14664,13 @@
     "懍",
     "懷"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "懍懷": {
@@ -11913,6 +14696,13 @@
     "戍",
     "成"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "戍成": {
@@ -11938,6 +14728,13 @@
     "戴",
     "載"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "戴載": {
@@ -11963,6 +14760,13 @@
     "户",
     "戸"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "户戸": {
@@ -11988,6 +14792,13 @@
     "折",
     "析"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "折析": {
@@ -12013,6 +14824,13 @@
     "抵",
     "牴"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "抵牴": {
@@ -12038,6 +14856,13 @@
     "括",
     "栝"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "括栝": {
@@ -12063,6 +14888,13 @@
     "持",
     "特"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "持特": {
@@ -12088,6 +14920,13 @@
     "挺",
     "梃"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "挺梃": {
@@ -12114,6 +14953,13 @@
     "换",
     "換"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "换換": {
@@ -12138,6 +14984,13 @@
     "採",
     "棌"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "採棌": {
@@ -12163,6 +15016,13 @@
     "探",
     "揆"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "探揆": {
@@ -12188,6 +15048,13 @@
     "掲",
     "揭"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "掲揭": {
@@ -12214,6 +15081,13 @@
     "揀",
     "棟"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "揀棟": {
@@ -12238,6 +15112,13 @@
     "搆",
     "構"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "搆構": {
@@ -12264,6 +15145,13 @@
     "摠",
     "總"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "摠總": {
@@ -12289,6 +15177,13 @@
     "摳",
     "樞"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "摳樞": {
@@ -12315,6 +15210,13 @@
     "摸",
     "模"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "摸模": {
@@ -12340,6 +15242,13 @@
     "摽",
     "標"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "摽標": {
@@ -12366,6 +15275,13 @@
     "撙",
     "樽"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "撙樽": {
@@ -12391,6 +15307,13 @@
     "撲",
     "樸"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "撲樸": {
@@ -12416,6 +15339,13 @@
     "撿",
     "檢"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "撿檢": {
@@ -12441,6 +15371,13 @@
     "擇",
     "澤"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "擇澤": {
@@ -12465,6 +15402,13 @@
     "擭",
     "獲"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "擭獲": {
@@ -12490,6 +15434,16 @@
     "攅",
     "攢"
    ],
+   "handling": {
+    "methods": [
+     "part_shape"
+    ],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "攢攅：同 ci，part_shape 一份文件挂多对"
+   },
    "methods": [],
    "pairs": {
     "攅攢": {
@@ -12516,6 +15470,13 @@
     "支",
     "文"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "支文": {
@@ -12541,6 +15502,13 @@
     "救",
     "敕"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "救敕": {
@@ -12566,6 +15534,13 @@
     "敶",
     "陳"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "敶陳": {
@@ -12591,6 +15566,13 @@
     "斂",
     "歛"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "斂歛": {
@@ -12616,6 +15598,13 @@
     "斲",
     "斵"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "斲斵": {
@@ -12642,6 +15631,13 @@
     "早",
     "旱"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "早旱": {
@@ -12667,6 +15663,13 @@
     "早",
     "皁"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "早皁": {
@@ -12692,6 +15695,13 @@
     "旬",
     "甸"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "旬甸": {
@@ -12717,6 +15727,13 @@
     "昂",
     "昴"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "昂昴": {
@@ -12742,6 +15759,13 @@
     "昂",
     "昻"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "昂昻": {
@@ -12767,6 +15791,13 @@
     "明",
     "眀"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "明眀": {
@@ -12792,6 +15823,13 @@
     "春",
     "舂"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "春舂": {
@@ -12820,6 +15858,13 @@
     "晝",
     "畫"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "晝畫": {
@@ -12848,6 +15893,13 @@
     "晞",
     "睎"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "晞睎": {
@@ -12873,6 +15925,13 @@
     "晧",
     "皓"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "晧皓": {
@@ -12898,6 +15957,13 @@
     "暕",
     "陳"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "暕陳": {
@@ -12923,6 +15989,13 @@
     "曰",
     "目"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "曰目": {
@@ -12948,6 +16021,13 @@
     "更",
     "頁"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "更頁": {
@@ -12973,6 +16053,13 @@
     "書",
     "畫"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "書畫": {
@@ -12998,6 +16085,13 @@
     "曼",
     "蔓"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "曼蔓": {
@@ -13023,6 +16117,13 @@
     "月",
     "用"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "月用": {
@@ -13047,6 +16148,13 @@
     "望",
     "朢"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "望朢": {
@@ -13072,6 +16180,13 @@
     "未",
     "禾"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "未禾": {
@@ -13096,6 +16211,13 @@
     "未",
     "米"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "未米": {
@@ -13120,6 +16242,13 @@
     "未",
     "耒"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "未耒": {
@@ -13147,6 +16276,13 @@
     "末",
     "朱"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "末朱": {
@@ -13172,6 +16308,13 @@
     "朿",
     "束"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "朿束": {
@@ -13198,6 +16341,13 @@
     "朿",
     "東"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "朿東": {
@@ -13223,6 +16373,13 @@
     "朿",
     "柬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "朿柬": {
@@ -13248,6 +16405,13 @@
     "杞",
     "杷"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "杞杷": {
@@ -13273,6 +16437,13 @@
     "杞",
     "祀"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "杞祀": {
@@ -13298,6 +16469,13 @@
     "杞",
     "𣏌"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "杞𣏌": {
@@ -13323,6 +16501,13 @@
     "束",
     "東"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "束東": {
@@ -13348,6 +16533,13 @@
     "束",
     "柬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "束柬": {
@@ -13373,6 +16565,13 @@
     "杪",
     "秒"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "杪秒": {
@@ -13398,6 +16597,13 @@
     "東",
     "柬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "東柬": {
@@ -13424,6 +16630,13 @@
     "杲",
     "果"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "杲果": {
@@ -13449,6 +16662,13 @@
     "柏",
     "栢"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "柏栢": {
@@ -13474,6 +16694,13 @@
     "柳",
     "栁"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "柳栁": {
@@ -13500,6 +16727,13 @@
     "栗",
     "粟"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "栗粟": {
@@ -13525,6 +16759,13 @@
     "根",
     "桹"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "根桹": {
@@ -13550,6 +16791,13 @@
     "棱",
     "稜"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "棱稜": {
@@ -13575,6 +16823,13 @@
     "概",
     "槪"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "概槪": {
@@ -13601,6 +16856,13 @@
     "榖",
     "穀"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "榖穀": {
@@ -13626,6 +16888,13 @@
     "歲",
     "歳"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "歲歳": {
@@ -13652,6 +16921,13 @@
     "歴",
     "歷"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "歴歷": {
@@ -13680,6 +16956,13 @@
     "殷",
     "設"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "殷設": {
@@ -13705,6 +16988,13 @@
     "毌",
     "母"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "毌母": {
@@ -13730,6 +17020,13 @@
     "水",
     "氷"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "水氷": {
@@ -13755,6 +17052,13 @@
     "氷",
     "永"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "氷永": {
@@ -13780,6 +17084,13 @@
     "汗",
     "汙"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "汗汙": {
@@ -13805,6 +17116,13 @@
     "決",
     "泱"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "決泱": {
@@ -13830,6 +17148,13 @@
     "治",
     "沿"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "治沿": {
@@ -13855,6 +17180,13 @@
     "治",
     "洽"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "治洽": {
@@ -13884,6 +17216,13 @@
     "泉",
     "𭽖"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "泉𭽖": {
@@ -13909,6 +17248,13 @@
     "法",
     "注"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "法注": {
@@ -13933,6 +17279,13 @@
     "注",
     "註"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "注註": {
@@ -13959,6 +17312,13 @@
     "泰",
     "秦"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "泰秦": {
@@ -13984,6 +17344,13 @@
     "洄",
     "𭰁"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "洄𭰁": {
@@ -14009,6 +17376,13 @@
     "淫",
     "滛"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "淫滛": {
@@ -14034,6 +17408,13 @@
     "温",
     "溫"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "温溫": {
@@ -14060,6 +17441,13 @@
     "潁",
     "穎"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "潁穎": {
@@ -14085,6 +17473,13 @@
     "潁",
     "頴"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "潁頴": {
@@ -14110,6 +17505,13 @@
     "濛",
     "蒙"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "濛蒙": {
@@ -14135,6 +17537,13 @@
     "烏",
     "鳥"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "烏鳥": {
@@ -14160,6 +17569,13 @@
     "煇",
     "輝"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "煇輝": {
@@ -14185,6 +17601,13 @@
     "熏",
     "薰"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "熏薰": {
@@ -14210,6 +17633,13 @@
     "燿",
     "耀"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "燿耀": {
@@ -14235,6 +17665,13 @@
     "爪",
     "瓜"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "爪瓜": {
@@ -14261,6 +17698,13 @@
     "犄",
     "猗"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "犄猗": {
@@ -14286,6 +17730,13 @@
     "狶",
     "豨"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "狶豨": {
@@ -14311,6 +17762,13 @@
     "猶",
     "獨"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "猶獨": {
@@ -14335,6 +17793,13 @@
     "璩",
     "瓌"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "璩瓌": {
@@ -14360,6 +17825,13 @@
     "瓉",
     "瓚"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "瓉瓚": {
@@ -14385,6 +17857,13 @@
     "甍",
     "舋"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "甍舋": {
@@ -14410,6 +17889,13 @@
     "由",
     "白"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "由白": {
@@ -14435,6 +17921,13 @@
     "畏",
     "長"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "畏長": {
@@ -14460,6 +17953,13 @@
     "疎",
     "疏"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "疎疏": {
@@ -14485,6 +17985,16 @@
     "疎",
     "踈"
    ],
+   "handling": {
+    "methods": [
+     "part_shape"
+    ],
+    "context": false,
+    "aspect": false,
+    "action": "admit",
+    "threshold": null,
+    "note": "疎踈：同 ci，part_shape 一份文件挂多对"
+   },
    "methods": [],
    "pairs": {
     "疎踈": {
@@ -14511,6 +18021,13 @@
     "白",
     "臼"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "白臼": {
@@ -14536,6 +18053,13 @@
     "皁",
     "皂"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "皁皂": {
@@ -14561,6 +18085,13 @@
     "皋",
     "皐"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "皋皐": {
@@ -14586,6 +18117,13 @@
     "皋",
     "臯"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "皋臯": {
@@ -14611,6 +18149,13 @@
     "皐",
     "臯"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "皐臯": {
@@ -14637,6 +18182,13 @@
     "盡",
     "𥁞"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "盡𥁞": {
@@ -14662,6 +18214,13 @@
     "睢",
     "雎"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "睢雎": {
@@ -14688,6 +18247,13 @@
     "睦",
     "陸"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "睦陸": {
@@ -14713,6 +18279,13 @@
     "瞻",
     "贍"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "瞻贍": {
@@ -14738,6 +18311,13 @@
     "確",
     "礭"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "確礭": {
@@ -14763,6 +18343,13 @@
     "祅",
     "祆"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "祅祆": {
@@ -14789,6 +18376,13 @@
     "祖",
     "租"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "祖租": {
@@ -14814,6 +18408,13 @@
     "祼",
     "裸"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "祼裸": {
@@ -14839,6 +18440,13 @@
     "禕",
     "褘"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "禕褘": {
@@ -14864,6 +18472,13 @@
     "稹",
     "積"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "稹積": {
@@ -14889,6 +18504,13 @@
     "穀",
     "縠"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "穀縠": {
@@ -14914,6 +18536,13 @@
     "穎",
     "頴"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "穎頴": {
@@ -14942,6 +18571,13 @@
     "穎",
     "顥"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "穎顥": {
@@ -14967,6 +18603,13 @@
     "章",
     "韋"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "章韋": {
@@ -14992,6 +18635,13 @@
     "童",
     "重"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "童重": {
@@ -15017,6 +18667,13 @@
     "符",
     "苻"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "符苻": {
@@ -15042,6 +18699,13 @@
     "第",
     "苐"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "第苐": {
@@ -15067,6 +18731,13 @@
     "筭",
     "算"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "筭算": {
@@ -15092,6 +18763,13 @@
     "箕",
     "萁"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "箕萁": {
@@ -15118,6 +18796,13 @@
     "管",
     "菅"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "管菅": {
@@ -15143,6 +18828,13 @@
     "箸",
     "著"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "箸著": {
@@ -15170,6 +18862,13 @@
     "簫",
     "蕭"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "簫蕭": {
@@ -15195,6 +18894,13 @@
     "簿",
     "薄"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "簿薄": {
@@ -15221,6 +18927,13 @@
     "籍",
     "藉"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "籍藉": {
@@ -15246,6 +18959,13 @@
     "米",
     "采"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "米采": {
@@ -15271,6 +18991,13 @@
     "統",
     "綂"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "統綂": {
@@ -15296,6 +19023,13 @@
     "縦",
     "縱"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "縦縱": {
@@ -15321,6 +19055,13 @@
     "績",
     "繽"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "績繽": {
@@ -15346,6 +19087,13 @@
     "繈",
     "襁"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "繈襁": {
@@ -15371,6 +19119,13 @@
     "纉",
     "纘"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "纉纘": {
@@ -15396,6 +19151,13 @@
     "纏",
     "纒"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "纏纒": {
@@ -15421,6 +19183,13 @@
     "罰",
     "罸"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "罰罸": {
@@ -15446,6 +19215,13 @@
     "翃",
     "翊"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "翃翊": {
@@ -15471,6 +19247,13 @@
     "翱",
     "翺"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "翱翺": {
@@ -15496,6 +19279,13 @@
     "翻",
     "飜"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "翻飜": {
@@ -15521,6 +19311,13 @@
     "耤",
     "藉"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "耤藉": {
@@ -15546,6 +19343,13 @@
     "聴",
     "聽"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "聴聽": {
@@ -15572,6 +19376,13 @@
     "胎",
     "貽"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "胎貽": {
@@ -15597,6 +19408,13 @@
     "胥",
     "骨"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "胥骨": {
@@ -15622,6 +19440,13 @@
     "脈",
     "脉"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "脈脉": {
@@ -15647,6 +19472,13 @@
     "脯",
     "酺"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "脯酺": {
@@ -15672,6 +19504,13 @@
     "與",
     "興"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "與興": {
@@ -15696,6 +19535,13 @@
     "與",
     "輿"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "與輿": {
@@ -15721,6 +19567,13 @@
     "茶",
     "荼"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "茶荼": {
@@ -15746,6 +19599,13 @@
     "草",
     "革"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "草革": {
@@ -15771,6 +19631,13 @@
     "荘",
     "莊"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "荘莊": {
@@ -15796,6 +19663,13 @@
     "莘",
     "萃"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "莘萃": {
@@ -15821,6 +19695,13 @@
     "萁",
     "蓂"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "萁蓂": {
@@ -15846,6 +19727,13 @@
     "蔭",
     "隂"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "蔭隂": {
@@ -15871,6 +19759,13 @@
     "藴",
     "蘊"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "藴蘊": {
@@ -15897,6 +19792,13 @@
     "虗",
     "虛"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "虗虛": {
@@ -15922,6 +19824,13 @@
     "蟾",
     "贍"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "蟾贍": {
@@ -15947,6 +19856,13 @@
     "衞",
     "衡"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "衞衡": {
@@ -15972,6 +19888,13 @@
     "表",
     "衷"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "表衷": {
@@ -15997,6 +19920,13 @@
     "衮",
     "袞"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "衮袞": {
@@ -16022,6 +19952,13 @@
     "裦",
     "褒"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "裦褒": {
@@ -16047,6 +19984,13 @@
     "裦",
     "襃"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "裦襃": {
@@ -16072,6 +20016,13 @@
     "褒",
     "襃"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "褒襃": {
@@ -16098,6 +20049,13 @@
     "覧",
     "覽"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "覧覽": {
@@ -16123,6 +20081,13 @@
     "覯",
     "觀"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "覯觀": {
@@ -16148,6 +20113,13 @@
     "覲",
     "觀"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "覲觀": {
@@ -16173,6 +20145,13 @@
     "觧",
     "鮮"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "觧鮮": {
@@ -16198,6 +20177,13 @@
     "詀",
     "詁"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "詀詁": {
@@ -16223,6 +20209,13 @@
     "請",
     "講"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "請講": {
@@ -16248,6 +20241,13 @@
     "諌",
     "諫"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "諌諫": {
@@ -16273,6 +20273,13 @@
     "諝",
     "謂"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "諝謂": {
@@ -16298,6 +20305,13 @@
     "諡",
     "謚"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "諡謚": {
@@ -16324,6 +20338,13 @@
     "讃",
     "讚"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "讃讚": {
@@ -16350,6 +20371,13 @@
     "變",
     "𬽠"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "變𬽠": {
@@ -16375,6 +20403,13 @@
     "貝",
     "貞"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "貝貞": {
@@ -16400,6 +20435,13 @@
     "貢",
     "質"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "貢質": {
@@ -16425,6 +20467,13 @@
     "責",
     "貴"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "責貴": {
@@ -16450,6 +20499,13 @@
     "買",
     "賈"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "買賈": {
@@ -16475,6 +20531,13 @@
     "賛",
     "贇"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "賛贇": {
@@ -16500,6 +20563,13 @@
     "賴",
     "頼"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "賴頼": {
@@ -16525,6 +20595,13 @@
     "贑",
     "贛"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "贑贛": {
@@ -16550,6 +20627,13 @@
     "躋",
     "隮"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "躋隮": {
@@ -16575,6 +20659,13 @@
     "輒",
     "輙"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "輒輙": {
@@ -16600,6 +20691,13 @@
     "輨",
     "轄"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "輨轄": {
@@ -16625,6 +20723,13 @@
     "辦",
     "辨"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "辦辨": {
@@ -16650,6 +20755,13 @@
     "辨",
     "辯"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "辨辯": {
@@ -16675,6 +20787,13 @@
     "迥",
     "迴"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "迥迴": {
@@ -16700,6 +20819,13 @@
     "迥",
     "逈"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "迥逈": {
@@ -16726,6 +20852,13 @@
     "逺",
     "遠"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "逺遠": {
@@ -16751,6 +20884,13 @@
     "遙",
     "遥"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "遙遥": {
@@ -16776,6 +20916,13 @@
     "邢",
     "邪"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "邢邪": {
@@ -16801,6 +20948,13 @@
     "那",
     "郍"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "那郍": {
@@ -16826,6 +20980,13 @@
     "邰",
     "郃"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "邰郃": {
@@ -16851,6 +21012,13 @@
     "郷",
     "鄉"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "郷鄉": {
@@ -16876,6 +21044,13 @@
     "郷",
     "鄕"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "郷鄕": {
@@ -16901,6 +21076,13 @@
     "鈎",
     "鈞"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "鈎鈞": {
@@ -16928,6 +21110,13 @@
     "鈎",
     "鉤"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "鈎鉤": {
@@ -16955,6 +21144,13 @@
     "鉞",
     "鋮"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "鉞鋮": {
@@ -16980,6 +21176,13 @@
     "錢",
     "餞"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "錢餞": {
@@ -17005,6 +21208,13 @@
     "鍾",
     "鐘"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "鍾鐘": {
@@ -17032,6 +21242,13 @@
     "鐡",
     "鐵"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "鐡鐵": {
@@ -17057,6 +21274,13 @@
     "閈",
     "閉"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "閈閉": {
@@ -17083,6 +21307,13 @@
     "閎",
     "閬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "閎閬": {
@@ -17108,6 +21339,13 @@
     "閎",
     "閼"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "閎閼": {
@@ -17133,6 +21371,13 @@
     "閣",
     "閤"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "閣閤": {
@@ -17158,6 +21403,13 @@
     "閬",
     "闐"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "閬闐": {
@@ -17183,6 +21435,13 @@
     "閱",
     "閲"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "閱閲": {
@@ -17210,6 +21469,13 @@
     "閻",
     "𨶒"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "閻𨶒": {
@@ -17235,6 +21501,13 @@
     "闇",
     "闍"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "闇闍": {
@@ -17260,6 +21533,13 @@
     "闔",
     "闥"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "闔闥": {
@@ -17285,6 +21565,13 @@
     "陣",
     "陳"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "陣陳": {
@@ -17310,6 +21597,13 @@
     "陵",
     "陸"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "陵陸": {
@@ -17335,6 +21629,13 @@
     "隲",
     "騭"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "隲騭": {
@@ -17360,6 +21661,13 @@
     "隷",
     "隸"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "隷隸": {
@@ -17386,6 +21694,13 @@
     "隷",
     "𨽾"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "隷𨽾": {
@@ -17411,6 +21726,13 @@
     "隸",
     "𨽻"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "隸𨽻": {
@@ -17436,6 +21758,13 @@
     "雕",
     "離"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "雕離": {
@@ -17461,6 +21790,13 @@
     "雪",
     "雲"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "雪雲": {
@@ -17486,6 +21822,13 @@
     "鞠",
     "鞫"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "鞠鞫": {
@@ -17511,6 +21854,13 @@
     "頠",
     "顏"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "頠顏": {
@@ -17536,6 +21886,13 @@
     "顧",
     "顯"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "顧顯": {
@@ -17561,6 +21918,13 @@
     "飇",
     "飈"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "飇飈": {
@@ -17587,6 +21951,13 @@
     "駁",
     "駮"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "駁駮": {
@@ -17612,6 +21983,13 @@
     "鳧",
     "鳬"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "鳧鳬": {
@@ -17637,6 +22015,13 @@
     "鶚",
     "鷂"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "鶚鷂": {
@@ -17662,6 +22047,13 @@
     "麪",
     "麵"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "麪麵": {
@@ -17687,6 +22079,13 @@
     "𨽻",
     "𨽾"
    ],
+   "handling": {
+    "methods": [],
+    "context": false,
+    "aspect": false,
+    "action": "evidence",
+    "threshold": null
+   },
    "methods": [],
    "pairs": {
     "𨽻𨽾": {

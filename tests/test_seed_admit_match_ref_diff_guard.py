@@ -27,8 +27,8 @@ def _run(tmp_path, monkeypatch, *, verdict: str, params: dict | None = None):
         page=PAGE, anchored=True,
         chars=[AlignRec(id=f"{BOOK}:{PAGE}:{COL}:{SLOT}", col=COL, slot=SLOT,
                         align_char="字", align_op="equal")]))
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"shadow_veto": False, "group_flow": ("jys",), **(params or {})})
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    ctx.params["char_decide"] = SeedAdmitParams(**{"shadow_veto": False, "group_flow": ("jys",), **(params or {})})
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 

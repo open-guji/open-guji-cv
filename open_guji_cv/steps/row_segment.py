@@ -1050,6 +1050,17 @@ class RowSegmentParams(BaseModel):
     #: 按表格网少违一格（7 对 8），无先验格网落选，下半格线错位多出空格。开着时：无先验格网违表＋劈字不多于中选格网 `layout_off_tol`
     #: 格以内、且劈字、格高不匀、穿字（逐项按序比）严格更好，就改取它。书级；0＝关（缺省，不进参数哈希）。
     layout_off_tol: int = 0
+    #: **无先验格网总出场**（2026-11-27，CV2；全唐文开 `border_detect.vline_track` 后）：缺省只有现有候选格网个个都劈字
+    #: （`_split_chars` ≥1）时才试无先验格网（`layout_off`）。劈字只数高 0.3–1.5 格的连通体，多块拼成的字（碑、百、於）被按表
+    #: 多切一格数不出来，竖线跟踪让 period 动 1–3px 后按表格网劈字数掉到 0，无先验格网连出场都没有（039 31:9、055 49:1、
+    #: 067 64:6）。开时总试，出场后仍按原条件（字数比表少、格高不更不匀）入候选，选不选照旧按打分（配 `layout_off_tol`）。
+    #: 书级；False＝关（缺省，不进参数哈希）。
+    layout_off_always: bool = False
+    #: **列端框线格的贴框距离**（2026-11-27，CV2；全唐文开 `border_detect.vline_track` 后）：列端格「只有版框线」
+    #: （`seg/profile.frame_only_edge_cells`）要求格里的墨全落在离上／下版框线这么多格高以内。全唐文上框粗条下隔 25–40px
+    #: 一道细线，列图上细线离 border_top 正在 0.2 格高（约 40px）的刀刃上：竖线跟踪让 period 动 1–3px，046 47:4、55:7、
+    #: 57:2、80:1 等首格细线就从「记空」翻成「字」（frame_line 字进 char_index）。书级；0.2＝缺省（不进参数哈希）。
+    frame_edge_near: float = 0.2
     #: **字间界线判官**（2026-11-26，CV2；`impl/keben/boundary_net`）：`models/<名>/model.pt` 的小 CNN 看切线上下各一格，判是不是两字之间；
     #: 挑定格网后、终切前，只重排「上下都是正文字」的内部线（格数不变，现线判官分 < `boundary_net_p` 才许挪到隔着墨的另一条缝）。
     #: 治写本高字字内白缝当字缝（史記 42:66:4「而｜佗」等）。书级（模型按书训，名字带版本号）；空＝关（缺省，不进参数哈希）。
@@ -1097,6 +1108,10 @@ class RowSegmentParams(BaseModel):
     #: 缺省 0.75 是殿本标定（正文字跨度中位 0.59）；脉经字宽，正文字跨度中位 0.79、73% 过 0.75，左右结构的字（肺、脉、謂、師）
     #: 中缝一宽就被劈成 a/b，取 0.82。只影响切分（`segment_column`），交接闸的 `column_frac` 不变。书级参数；0.75＝缺省（不进参数哈希）。
     jiazhu_span_t: float = 0.75
+    #: **雙行小注单格判据去边重量**（2026-11-28，CV2；全唐文开 `border_detect.vline_track` 后）：单格判据落空时上下各去掉这么多
+    #: ×格高再量一次。格线相位偏几像素、上一字的字脚伸进本格顶上，整宽的字脚把中缝填死，这一格量不出缝（053 75:3「學」脚压住
+    #: 「字闕」，整段小注少一格）。书级；0＝关（缺省，不进参数哈希）。
+    jiazhu_edge_trim: float = 0.0
     #: **切点修整串一键开**（2026-11-18 A22 统一优化 U2）：史記 r76–r80 定下、脉经照抄的五个切点开关一组开，
     #: 没单写的项取 `CUT_REPAIR` 里的值（单写了的照单写的）。书配置只写 `cut_repair: true` 一行。缺省关（不进参数哈希）。
     cut_repair: bool = False
@@ -1256,6 +1271,10 @@ class RowSegmentParams(BaseModel):
                 d.pop("row_pitch", None)
             if not self.layout_off_tol:
                 d.pop("layout_off_tol", None)
+            if self.frame_edge_near == 0.2:
+                d.pop("frame_edge_near", None)
+            if not self.layout_off_always:
+                d.pop("layout_off_always", None)
             if not self.boundary_net:
                 d.pop("boundary_net", None)
                 d.pop("boundary_net_p", None)
@@ -1276,6 +1295,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_cc_min", None)
             if self.jiazhu_span_t == 0.75:
                 d.pop("jiazhu_span_t", None)
+            if not self.jiazhu_edge_trim:
+                d.pop("jiazhu_edge_trim", None)
             d.pop("cut_repair", None)          # 展开后的各项照常进 dump，开关本身不进（同值的老写法指纹一致）
             if self.page_map == "off":
                 d.pop("page_map", None)
@@ -1418,6 +1439,8 @@ class RowSegmentStep(Step):
             raise ValueError(f"row_segment.jiazhu_cc_min：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         if p.jiazhu_span_t != 0.75 and "jiazhu_span_t" not in inspect.signature(segment_column).parameters:
             raise ValueError(f"row_segment.jiazhu_span_t：本册套书的 {RB.__name__}.segment_column 没有这个参数")
+        if p.jiazhu_edge_trim and "jiazhu_edge_trim" not in inspect.signature(segment_column).parameters:
+            raise ValueError(f"row_segment.jiazhu_edge_trim：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
             if getattr(p, k_) and k_ not in inspect.signature(segment_column).parameters:
                 raise ValueError(f"row_segment.{k_}：本册套书的 {RB.__name__}.segment_column 没有这个参数")
@@ -1602,6 +1625,7 @@ class RowSegmentStep(Step):
                        if getattr(p, k_) and final},
                     **({"jiazhu_cc_min": p.jiazhu_cc_min} if p.jiazhu_cc_min != 500 else {}),
                     **({"jiazhu_span_t": p.jiazhu_span_t} if p.jiazhu_span_t != 0.75 else {}),
+                    **({"jiazhu_edge_trim": p.jiazhu_edge_trim} if p.jiazhu_edge_trim else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:
@@ -1780,7 +1804,9 @@ class RowSegmentStep(Step):
                     if _split_out(best) - _split_out(plain_) >= STAIN_GRID_MARGIN:
                         best, stained = None, False
                 if best is None:
-                    if min(s_[1] for s_ in scores) > 0:
+                    # 缺省只在现有候选个个都劈字时才请无先验格网出场；`layout_off_always`（书级）开时不看这一条——劈字只数像一个字的大连通体，
+                    # 多块拼成的字（碑、百、於）被按表多切一格也数不出来（全唐文开竖线跟踪后 039 31:9、055 49:1、067 64:6）
+                    if p.layout_off_always or min(s_[1] for s_ in scores) > 0:
                         r3 = _seg(n_body_col, (gate_raised, gc.top_slack, {}, None, None))
                         # 无先验格网格高不能比现有候选更不匀：少的那个字若是空白被压矮、两字并进一格挤出来的，不是表多了字
                         if (r3 is not None and _n_chars(r3.cells) < len(occ)
@@ -1888,7 +1914,7 @@ class RowSegmentStep(Step):
                     hit = _frame_only_edge_cells(img if img.ndim == 2 else img.mean(axis=2), [(c.y0, c.y1) for c in byy],
                                                  gc.content_x, base.get("border_top"),
                                                  r.bottom_bar_y if r.bottom_bar_y is not None else base.get("border_bottom"),
-                                                 gate.period, p.ink_threshold)
+                                                 gate.period, p.ink_threshold, near_frac=p.frame_edge_near)
                     if _edge_fo_hook is not None:      # 书级补认（row_hooks.edge_frame_only），与缺省判据取并集
                         hit = sorted(set(hit) | set(_edge_fo_hook(
                             img if img.ndim == 2 else img.mean(axis=2), [(c.y0, c.y1) for c in byy],

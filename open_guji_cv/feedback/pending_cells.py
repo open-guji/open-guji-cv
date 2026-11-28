@@ -42,11 +42,13 @@ def _human_settled_excluded(ch: dict) -> bool:
     return bool(ev.get("human_char") or ev.get("damaged") or why.startswith("human:"))
 
 
-def _pending_row(cell: str) -> dict:
-    """待审格一行。`pending_reason`／`pending_reason_detail`／`form_src`（P3a-1，2026-11-28）：收尾步（char_decide）将来直接写
-    送审原因与选形来源；**本版值一律 None**（产物仍是 seed_admit，没有这些字段），manager 读到 None 就走 `reasons_for_pending` 反推。
-    cv 将来直写的原因集合见 `doc/4-定字/pending_reason.md`。"""
-    return {"cell": cell, "review": "pending", "pending_reason": None, "pending_reason_detail": None, "form_src": None}
+def _pending_row(cell: str, ch: dict | None = None) -> dict:
+    """待审格一行。`pending_reason`／`pending_reason_detail`／`form_src`：收尾步（seed_admit，改名后 char_decide）直接写在产物格上的
+    送审原因与选形来源（P3a-2，2026-11-28），有就带上，旧产物没有就是 None——manager 读到 None（或 unknown）就走 `reasons_for_pending` 反推。
+    cv 只写第四步名下的原因，见 `doc/4-定字/pending_reason.md`。"""
+    ch = ch or {}
+    return {"cell": cell, "review": "pending", "pending_reason": ch.get("pending_reason"),
+            "pending_reason_detail": ch.get("pending_reason_detail"), "form_src": ch.get("form_src")}
 
 
 def cell_sort_key(cell: str) -> list:
@@ -80,7 +82,7 @@ def machine_pending(products: Path, book: str) -> tuple[list[dict], int, set[str
                 continue
             if "excluded" in (ch.get("doubts") or []):
                 n_review += 1
-            cells.append(_pending_row(cid[len(prefix):]))
+            cells.append(_pending_row(cid[len(prefix):], ch))
     return cells, n_review, every
 
 
