@@ -19,19 +19,22 @@ def test_every_pipeline_yaml_loads():
 
 
 def test_pipeline_follows_seg_set():
-    assert default_pipeline_id(make_book(seg_set="beixing")) == "modern_body"
-    assert default_pipeline_id(make_book(seg_set="zengguang_youxue")) == "keben_free"
-    assert default_pipeline_id(make_book(seg_set="shiji_wyg")) == "keben_body_v2"
-    assert default_pipeline_id(make_book(edition="modern")) == "modern_body"
-    assert default_pipeline_id(make_book()) == "keben_body_v2"
-    # 旧写法 pipeline: 仍然优先
-    assert default_pipeline_id(make_book(seg_set="beixing", pipeline="keben_body_v2")) == "keben_body_v2"
+    """2026-11-28 三链合一：只有 guji_default 一条链，版式按套书／edition／旧 pipeline: 推。"""
+    assert default_pipeline_id(make_book(seg_set="beixing")) == "guji_default@print"
+    assert default_pipeline_id(make_book(seg_set="zengguang_youxue")) == "guji_default@free"
+    assert default_pipeline_id(make_book(seg_set="shiji_wyg")) == "guji_default@grid"
+    assert default_pipeline_id(make_book(edition="modern")) == "guji_default@print"
+    assert default_pipeline_id(make_book()) == "guji_default@grid"
+    # 旧写法 pipeline: 仍然优先（旧链 id 当版式认）
+    assert default_pipeline_id(make_book(seg_set="beixing", pipeline="keben_body_v2")) == "guji_default@grid"
+    # layout: 最优先
+    assert default_pipeline_id(make_book(seg_set="beixing", pipeline="keben_body_v2", layout="free")) == "guji_default@free"
 
 
-def test_every_seg_set_has_a_pipeline():
-    assert set(S.SEG_SET_PIPELINE) == set(S.SEG_SETS)
-    for pid in S.SEG_SET_PIPELINE.values():
-        load_pipeline(pid)
+def test_every_seg_set_has_a_layout():
+    assert set(S.SEG_SET_LAYOUT) == set(S.SEG_SETS)
+    for lay in S.SEG_SET_LAYOUT.values():
+        load_pipeline(f"guji_default@{lay}")
 
 
 def test_seg_set_defaults_replace_pipeline_params():
@@ -123,7 +126,7 @@ def test_slot_expansion_keeps_step_lists(pid):
 
 def test_skeleton_is_not_a_pipeline():
     assert SKELETON_ID not in list_pipelines()
-    assert sorted(list_pipelines()) == sorted(_EXPECT)
+    assert sorted(list_pipelines()) == ["guji_default@free", "guji_default@grid", "guji_default@print"]
 
 
 def _skeleton():
@@ -148,5 +151,5 @@ def test_chain_cannot_mix_steps_and_slots(tmp_path):
 
 
 def test_every_chain_has_a_seg_set():
-    """每条链至少被一套书的 SEG_SET_PIPELINE 指到，没有悬空的链 yaml。"""
-    assert set(list_pipelines()) == set(S.SEG_SET_PIPELINE.values())
+    """默认链的每个版式都有缺省套书，没有悬空的版式。"""
+    assert {f"guji_default@{lay}" for lay in S.LAYOUT_SEG_SET} == set(list_pipelines())

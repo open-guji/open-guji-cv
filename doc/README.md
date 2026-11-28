@@ -16,7 +16,7 @@ cv 只做 guji-manager 第二步 `pipeline` 里的「跑 CV 管线」，管线�
 cv 自己的命令行入口是 `guji-cv`（`python -m open_guji_cv` 同）；guji-manager 通过总入口 `guji pipeline …` 调同一批命令。大步工具可带前缀：`guji-cv layout preclean …`、`guji-cv read rare …`。
 
 ```bash
-guji-cv pipeline keben_body_v2 vol04 -w <工作区> --pages 9 --from layout --to cut   # 跑一段，可写大步名或步骤 id
+guji-cv pipeline guji_default vol04 -w <工作区> --pages 9 --from layout --to cut   # 跑一段，可写大步名或步骤 id
 guji-cv step row_segment vol04 -w <工作区> --pages 9                       # 只跑一步
 guji-cv status vol04 -w <工作区> --pages all                               # 各步新鲜／过期／缺失
 guji-cv version --json                                                           # 装着的 cv 版本与契约版本

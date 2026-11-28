@@ -26,7 +26,7 @@ from pathlib import Path
 from .core import hooks
 from .utils.image_io import imread as cv_imread  # 中文路径安全的读图（裸 cv2.imread 遇中文路径静默返回 None）
 
-DEFAULT_PIPELINE = "keben_body_v2"
+DEFAULT_PIPELINE = "guji_default"   # 2026-11-28 三链合一；按册的版式展开，旧链 id 仍认
 
 
 # ── handlers ─────────────────────────────────────────────────────────
@@ -34,8 +34,8 @@ def _engine(book_id: str, pipeline_id: str, params: str | None = None, quiet: bo
     from .core.book import load_book
     from .core.engine import Engine
     from .core.pipeline import load_pipeline
-    pl = load_pipeline(pipeline_id)
     book = load_book(book_id)
+    pl = load_pipeline(pipeline_id, book=book)     # `guji_default` 按册的版式展开；旧链 id／`链@版式` 照写的来
     overrides = json.loads(params) if params else None
     from .core.book_config import run_override_params
     ov_params = run_override_params()           # `--override` 里的 params：当调用方显式参数，压过册 yaml
@@ -360,7 +360,7 @@ def cmd_book(args) -> None:
         from .core.pipeline import base_param_layers, load_pipeline
         _bk = load_book(args.book)
         pl = load_pipeline(_bk.default_pipeline_id())
-        pl_id, base_layers = pl.id, base_param_layers(pl, _bk)
+        pl_id, base_layers = pl.ref, base_param_layers(pl, _bk)
     except Exception:
         pl_id, base_layers = None, []
     psrc = params_provenance(path, base_layers=base_layers)
@@ -1270,7 +1270,7 @@ def register_subcommands(sub: argparse._SubParsersAction, plugins: bool = True) 
     p = sub.add_parser("pipeline", help="跑一条 pipeline（或其中一段）",
                        epilog="装了 guji-manager 时 pipeline 也是第二步「自动化流程」的命令前缀："
                               "`guji pipeline <命令> …` 等于 `guji <命令> …`，`guji pipeline commands` 列出本步命令。")
-    p.add_argument("pipeline", help=f"pipeline id，如 {DEFAULT_PIPELINE}")
+    p.add_argument("pipeline", help=f"pipeline id，如 {DEFAULT_PIPELINE}（按册的版式展开；也可写 guji_default@free，旧 id keben_body_v2 等照认）")
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
     p.add_argument("--from", dest="from_step", default=None,
                    help="起始：步骤 id 或大步名（layout 版面／cut 切字／read 识字／decide 定字）")

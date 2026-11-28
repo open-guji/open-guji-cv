@@ -913,7 +913,7 @@ class Engine:
                 grow, gpage_state = self._page_status_row(gate_step, pages, gate_upstream_fresh, code_ok)
                 seen[gate.id] = gpage_state
                 out[gate.id] = grow
-        return {"book": self.book.id, "pipeline": self.pipeline.id, "pages": pages, "steps": out}
+        return {"book": self.book.id, "pipeline": self.pipeline.id, "layout": getattr(self.pipeline, "layout", None), "pages": pages, "steps": out}
 
     # ── 执行 ─────────────────────────────────────────────────────────
     def _run_one_step(self, step: Step, pages: list[int], report: RunReport,
@@ -1256,7 +1256,7 @@ class Engine:
         self._perf = None
         if _perf.enabled():
             self._perf = _perf.RunPerf(self.store.root, self.book.id, {
-                "pipeline": self.pipeline.id, "steps": list(steps), "n_pages": len(pages),
+                "pipeline": self.pipeline.id, "layout": getattr(self.pipeline, "layout", None), "steps": list(steps), "n_pages": len(pages),
                 "force": force, "jobs": jobs, "code_rev": self._rev,
                 **{k: self._cv.get(k) for k in ("cv_version", "cv_commit", "cv_override")}})
         stopped = True

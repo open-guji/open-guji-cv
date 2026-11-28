@@ -1,4 +1,5 @@
-"""Pipeline：按版面选的 DAG，来自 pipelines/<id>.yaml。
+"""Pipeline：一条 DAG，来自 pipelines/<id>.yaml。2026-11-28 起只有一条默认链 `guji_default`，
+按册的版式（grid／free／print）展开（`load_pipeline`）；旧链 id 当别名认。
 
 边由 consumes / produces 推出；yaml 里的 steps 顺序必须是一个合法拓扑序
 （上游在前），加载时校验，不自动重排——顺序本身是人写给人看的。
@@ -70,6 +71,14 @@ class Pipeline:
     #: 大步收尾（2026-11-27 用户定）：大步名 → 收尾步骤 id。由骨架 `finals:` 来，只收本管线里有的；
     #: 收尾必须是该大步的最后一步（`expand_finals` 校验），在本大步其他步骤之后、下一大步之前跑。
     finals: dict[str, str] = field(default_factory=dict)
+    #: 版式（2026-11-28 三链合一）：`guji_default` 按哪个版式展开的（grid／free／print）；没有版式的管线（测试自造）为 None。
+    #: 只决定链里放哪几步，不进指纹。
+    layout: str | None = None
+
+    @property
+    def ref(self) -> str:
+        """能原样交回 `load_pipeline` 的引用：有版式写 `链@版式`，否则就是 id。"""
+        return f"{self.id}@{self.layout}" if self.layout else self.id
 
     def final_of(self, stage: str) -> str | None:
         """大步 `stage` 的收尾步骤 id；没有给 None。"""
@@ -226,7 +235,7 @@ class Pipeline:
 
     def to_dict(self) -> dict:
         return {
-            "id": self.id, "title": self.title, "selector": self.selector,
+            "id": self.id, "layout": self.layout, "ref": self.ref, "title": self.title, "selector": self.selector,
             "steps": [STEPS[s].describe() for s in self.steps],
             "edges": [{"from": a, "to": b, "kind": k} for a, b, k in self.edges()],
             "notes": self.notes,
@@ -306,15 +315,39 @@ def expand_finals(skeleton: dict, stages: dict[str, list[str]]) -> dict[str, str
     return out
 
 
-def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
+def load_pipeline(pid: str, pipelines_dir: Path | None = None, *, layout: str | None = None, book=None) -> Pipeline:
+    """加载管线。`pid` 可写：
+
+    - `guji_default@<版式>`：默认链按这个版式展开；
+    - 旧链 id `keben_body_v2`／`keben_free`／`modern_body`（2026-11-28 三链合一后的别名）：等于 `guji_default@grid|free|print`；
+    - `guji_default`：版式取 `layout`，没给就按 `book` 定（`seg_set.layout_of`），都没有就 grid。
+
+    yaml 里写了 `layouts:` 的管线按版式取那一块的 `slots:`／`title`／`notes`；其余与以前相同。"""
     import open_guji_cv.steps  # noqa: F401  —— 触发 Step 注册
+    from .seg_set import layout_of, split_ref, validate_layout
 
     pdir = pipelines_dir or PIPELINES_DIR
+    if not (pdir / f"{pid}.yaml").exists():
+        base, ref_layout = split_ref(pid)
+        pid = base or pid
+        if ref_layout is not None:
+            layout = ref_layout                 # 引用里写死的版式优先（旧 id 的含义不变）
     path = pdir / f"{pid}.yaml"
     if not path.exists():
         raise FileNotFoundError(f"没有这条 pipeline: {path}")
     from .yaml_cache import load_yaml_cached
     d = load_yaml_cached(path)
+    lay: str | None = None
+    if "layouts" in d:
+        variants = d.get("layouts") or {}
+        lay = validate_layout(layout) or (layout_of(book) if book is not None else "grid")
+        if lay not in variants:
+            raise ValueError(f"pipeline {pid} 没有版式 {lay!r}，有 {list(variants)}")
+        v = variants[lay] or {}
+        d = {k: x for k, x in d.items() if k != "layouts"}
+        d.update({k: v[k] for k in ("slots", "steps", "params", "needs", "notes") if k in v})
+        if v.get("title"):
+            d["title"] = f"{d.get('title', pid)}：{v['title']}"
     stages: dict[str, list[str]] = {}
     finals: dict[str, str] = {}
     if "slots" in d:                  # 链 yaml 只写槽位，步骤顺序由骨架展开
@@ -338,7 +371,7 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
         selector=d.get("selector") or {}, needs=d.get("needs") or {},
         notes=d.get("notes", ""),
         params={str(k): dict(v) for k, v in params_raw.items()},
-        stages=stages, finals=finals,
+        stages=stages, finals=finals, layout=lay,
     )
     p.validate()
     for sid in p.params:
@@ -347,43 +380,46 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
     return p
 
 
+def pipeline_for(book, pid: str | None = None, pipelines_dir: Path | None = None) -> Pipeline:
+    """这册书该跑的管线：`pid` 不给按册推（`default_pipeline_id`）；给了 `guji_default` 也按册的版式展开。"""
+    return load_pipeline(pid or default_pipeline_id(book, pipelines_dir), pipelines_dir, book=book)
+
+
 def list_pipelines(pipelines_dir: Path | None = None) -> list[str]:
+    """能交给 `load_pipeline` 的引用。写了 `layouts:` 的管线每个版式列一条（`guji_default@grid` …），
+    这样按管线遍历步骤（大步表、状态矩阵）不会漏掉别的版式里的步。"""
     d = pipelines_dir or PIPELINES_DIR
-    return sorted(p.stem for p in d.glob("*.yaml") if not p.stem.startswith("_")) if d.exists() else []
+    if not d.exists():
+        return []
+    from .yaml_cache import load_yaml_cached
+    out: list[str] = []
+    for p in sorted(d.glob("*.yaml")):
+        if p.stem.startswith("_"):
+            continue
+        try:
+            lays = (load_yaml_cached(p) or {}).get("layouts")
+        except Exception:      # noqa: BLE001 —— 坏 yaml 照列名字，加载时再报
+            lays = None
+        out.extend(f"{p.stem}@{k}" for k in lays) if lays else out.append(p.stem)
+    return out
 
 
-DEFAULT_PIPELINE_ID = "keben_body_v2"
+DEFAULT_PIPELINE_ID = "guji_default"
 
 
 def default_pipeline_id(book, pipelines_dir: Path | None = None) -> str:
-    """这册书默认走哪条管线（2026-11-03 管线重组方案 B 第一期起以套书为准）：
+    """这册书走哪条管线，返回能原样交回 `load_pipeline` 的引用（2026-11-28 三链合一）：
 
-    1. 册 yaml 显式写了 `pipeline:` 的照它（旧写法，兼容留着）；
-    2. 写了 `seg_set:` 的按套书推（`core/seg_set.SEG_SET_PIPELINE`）；
-    3. 都没写，按 `edition` 找 `selector.edition` 相同的那条（唯一时）；找不到或多于一条都退回
-       `keben_body_v2`——刻本链是历史默认，不能因为多了一条现代链就变。"""
+    - 册 yaml 显式写了别的 `pipeline:`（不是旧链 id，如测试自造的管线）照它；
+    - 其余一律 `guji_default@<版式>`，版式按 `seg_set.layout_of`（`layout:` ＞ 旧 `pipeline:` ＞ seg_set ＞ 书仓 base ＞
+      edition ＞ grid）。"""
+    from .seg_set import LEGACY_PIPELINES, layout_of
     explicit = getattr(book, "pipeline", None)
-    if explicit:
+    if explicit and explicit not in LEGACY_PIPELINES and "@" not in explicit and explicit != DEFAULT_PIPELINE_ID:
         return explicit
-    from .seg_set import SEG_SET_PIPELINE, _book_code
-    ss = getattr(book, "seg_set", None)
-    if ss and ss in SEG_SET_PIPELINE:
-        return SEG_SET_PIPELINE[ss]
-    bc = _book_code()
-    if bc is not None and ss in (None, bc.name):
-        return bc.pipeline              # 书仓 code/code.yaml 的 base（2026-11-09 书级代码）
-    edition = getattr(book, "edition", None)
-    hits = []
-    for pid in list_pipelines(pipelines_dir):
-        try:
-            pl = load_pipeline(pid, pipelines_dir)
-        except Exception:      # noqa: BLE001 —— 一条坏 yaml 不该让选默认管线炸
-            continue
-        if pl.selector.get("edition") == edition:
-            hits.append(pid)
-    if edition == "keben" or len(hits) != 1:
-        return DEFAULT_PIPELINE_ID
-    return hits[0]
+    if explicit and "@" in explicit:
+        return explicit
+    return f"{DEFAULT_PIPELINE_ID}@{layout_of(book)}"
 
 
 def base_param_layers(pipeline: Pipeline, book) -> list[tuple[str, dict[str, dict]]]:
@@ -392,7 +428,7 @@ def base_param_layers(pipeline: Pipeline, book) -> list[tuple[str, dict[str, dic
     2026-11-03 管线重组方案 B 第一期：同一份 Step 代码在不同套书下的缺省参数写在套书目录里，
     不再写在管线 yaml（现有三条管线的 `params:` 已搬空，这一层只为兼容留着）。"""
     from .seg_set import seg_set_for_run, seg_set_params
-    ss = seg_set_for_run(book, pipeline.id)
+    ss = seg_set_for_run(book, pipeline.id, getattr(pipeline, "layout", None))
     from .decide_names import fold_admit_params
     sp = fold_admit_params(seg_set_params(ss))         # 收尾步新旧名并认（P3a-1）
     for sid in sp:
