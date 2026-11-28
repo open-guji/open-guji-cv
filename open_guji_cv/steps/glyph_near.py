@@ -47,7 +47,7 @@
 ## 给 4d 的（2026-11-28，CV4《4d 接 3b 看图方法-接口要求》）
 
 - 方法证据原样落进 `NearMethodOut.evidence`（rr_shape：`{char, why, nn, score, geo}`，与 `rr_shape.judge()` 同键同值、同舍入；
-  wu_shape：`{char, why, p}`＝`wu_shape.judge()` 整个返回值），外加 `method`，收尾把它抄进每格 `near.methods[方法名]`；
+  wu_shape／hou_shape：`{char, why, p|v}`＝`judge()` 整个返回值），外加 `method`，收尾把它抄进每格 `near.methods[方法名]`；
 - 本页跑过的方法用的模型版本记在 `PageNear.models`（`{"方法:组": 方法.model_sha}`），收尾也抄进 `near.methods[方法名].model`。
 
 ## 指纹
