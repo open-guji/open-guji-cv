@@ -41,7 +41,7 @@ class PageGroupDecision(BaseModel):
     """3b 看图判法的原样结论快照 `{方法: [{k: 键, ev: 证据}…]}`，键与 `seed_admit_shapes._near_from_3b／_near_by_model_from_3b` 同形：
     普通方法 `[格 id]`；part_shape `[格 id, [字, 字]]`；pair_shape／book_knn／near_knn／stroke_veto `[格 id, 模型指纹]`。"""
     handling: dict[str, dict] = Field(default_factory=dict)
-    """按组的处理方式（登记表 `handling`：看图方法、文意、门槛、放行或只出证据）。**本版留空、收尾不读**，登记表字段定稿后在这里记快照。"""
+    """按组的处理方式（登记表 `handling`：看图方法、文意、门槛、放行或只出证据）。本页所在书的定稿快照（`GroupDecisionParams.resolved`，登记表缺省＋书级覆盖）。**本版只记、收尾不读**。"""
 
     def by_id(self) -> dict[str, GroupDecisionRec]:
         return {r.id: r for r in self.cells}

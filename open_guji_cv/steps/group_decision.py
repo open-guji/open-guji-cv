@@ -48,6 +48,10 @@ class GroupDecisionParams(BaseModel):
     """开不开 4d（书级）。缺省关：收尾照旧在自己里面现算。"""
     seed: dict = Field(default_factory=dict)
     """本步读的 seed_admit 参数摘要，**自动填**（`seed_fields()`），进参数指纹。"""
+    handling: dict[str, dict] = Field(default_factory=dict)
+    """书级处理方式覆盖 `{组 id: {context, aspect, action, threshold}}`（书配置优先、登记表缺省；键与取值由 `near_registry.handling_of(over=)` 校验，`methods` 不许写）。"""
+    resolved: dict[str, dict] = Field(default_factory=dict)
+    """`handling` 叠到登记表之后的**定稿快照**，**自动填**（`resolve_handling()`），进参数指纹：登记表一改、书级覆盖一改，产物就过期。"""
 
 
 def near_snapshot(ctx: RunContext, page: int, p) -> dict[str, list[dict]]:
@@ -62,6 +66,25 @@ def near_snapshot(ctx: RunContext, page: int, p) -> dict[str, list[dict]]:
         got = (_near_from_3b(ctx, page, m, getattr(p, path), by_pair=by_pair, use_gd=False) if path
                else _near_by_model_from_3b(ctx, page, m, use_gd=False))
         out[m] = pack_near(m, got)
+    return out
+
+
+def resolve_handling(p) -> dict[str, dict]:
+    """本书涉及的组（`group_flow`＋`fold_groups` 里登记表有的）的处理方式定稿：登记表缺省 ＋ 书级 `handling` 覆盖。
+    书级覆盖里写了不在登记表的组、或键值不合规，报错（见 `near_registry.handling_of`）。"""
+    from ..groups import near_registry as nr
+    reg = nr.load()
+    over = dict(getattr(p, "handling", None) or {})
+    bad = sorted(g for g in over if g not in reg)
+    if bad:
+        raise ValueError(f"group_decision.handling 写了登记表里没有的组：{bad}")
+    seed = getattr(p, "seed", None) or {}
+    gids = set(seed.get("group_flow") or ()) | set(seed.get("fold_groups") or ()) | set(over)
+    out: dict[str, dict] = {}
+    for g in sorted(gids):
+        if g in reg:
+            h = reg.handling_of(g, over.get(g))
+            out[g] = {**h, "methods": list(h["methods"])}
     return out
 
 
@@ -125,7 +148,7 @@ class GroupDecisionStep(Step):
                    "open_guji_cv.steps.seed_admit_reasons", "open_guji_cv.steps.seed_admit_page_params", "open_guji_cv.steps.decide",
                    "open_guji_cv.steps.seed_admit_common", "open_guji_cv.steps.seed_admit_params", "open_guji_cv.steps.cell_state",
                    "open_guji_cv.steps.seed_admit_shapes",   # 读 3b 快照的两个读口住在这里（_near_from_3b／_near_by_model_from_3b）
-                   "open_guji_cv.groups.flow", "open_guji_cv.groups.registry", "open_guji_cv.groups.near_methods",
+                   "open_guji_cv.groups.flow", "open_guji_cv.groups.registry", "open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_registry",
                    "open_guji_cv.products.kinds.group_decision"),
         enabled_by="enabled",
     )
@@ -135,7 +158,12 @@ class GroupDecisionStep(Step):
             return p
         sp = ctx.params_for(STEPS["seed_admit"])
         seed = {k: getattr(sp, k) for k in seed_fields()}
-        return p if p.seed == seed else type(p)(enabled=p.enabled, seed=seed)
+        q = p if p.seed == seed else p.model_copy(update={"seed": seed})
+        res = resolve_handling(q)
+        return q if q.resolved == res else q.model_copy(update={"resolved": res})
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
-        return {"group_decision": detect_page(ctx, page, page_params(ctx, page))}
+        gp = ctx.params_for(STEPS["group_decision"])
+        out = detect_page(ctx, page, page_params(ctx, page))
+        out.handling = {g: dict(h) for g, h in gp.resolved.items()}
+        return {"group_decision": out}

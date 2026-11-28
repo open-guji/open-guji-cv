@@ -193,6 +193,37 @@ def test_book_params_fills_seed_digest(tmp_path, monkeypatch):
     assert STEPS["group_decision"].book_params(gd.GroupDecisionParams(), ctx).seed == {}
 
 
+def test_handling_snapshot_resolved_and_in_product(tmp_path, monkeypatch):
+    from open_guji_cv.groups import near_registry as nr
+    ctx = _ctx2(tmp_path, monkeypatch, SeedAdmitParams(group_flow=("ry",)), gd.GroupDecisionParams(enabled=True))
+    _fill(ctx)
+    step = STEPS["group_decision"]
+    p = step.book_params(gd.GroupDecisionParams(enabled=True), ctx)
+    base = nr.handling_of("ry")
+    assert p.resolved["ry"] == {**base, "methods": list(base["methods"])}
+    # 书级覆盖叠上去；覆盖一变，参数（指纹）就变
+    p2 = step.book_params(gd.GroupDecisionParams(enabled=True, handling={"ry": {"aspect": not base["aspect"]}}), ctx)
+    assert p2.resolved["ry"]["aspect"] is (not base["aspect"]) and p2.resolved != p.resolved
+    # 非法覆盖：methods、不认识的组、坏取值都报错
+    for bad in ({"ry": {"methods": ["x"]}}, {"no_such_group": {"aspect": True}}, {"ry": {"action": "zzz"}}):
+        with pytest.raises(ValueError):
+            step.book_params(gd.GroupDecisionParams(enabled=True, handling=bad), ctx)
+    # 关着不解析（不读登记表、不报错）
+    assert step.book_params(gd.GroupDecisionParams(handling={"no_such_group": {}}), ctx).resolved == {}
+
+
+def test_handling_snapshot_written_to_product_and_finale_never_reads_it(tmp_path, monkeypatch):
+    ctx = _ctx2(tmp_path, monkeypatch, SeedAdmitParams(group_flow=("ry",)), gd.GroupDecisionParams(enabled=True))
+    _fill(ctx)
+    step = STEPS["group_decision"]
+    ctx.params["group_decision"] = step.book_params(ctx.params["group_decision"], ctx)   # 引擎跑前会做的这一步
+    out = step.run_page(ctx, PAGE)["group_decision"]
+    assert "ry" in out.handling and out.handling["ry"]["methods"] == list(out.handling["ry"]["methods"])
+    import open_guji_cv.steps.seed_admit as sa, open_guji_cv.steps.seed_admit_groups as sg, open_guji_cv.steps.seed_admit_shapes as ss
+    for m in (sa, sg, ss):
+        assert ".handling" not in inspect.getsource(m), f"{m.__name__} 不该读 handling 快照（本版只记）"
+
+
 # ── GM3 要的断言：vis_ruling 及其后的次序、vis_ctx／ask／group 的位置不变 ─────────────────
 def _calls_in_order(src_func) -> list[str]:
     import textwrap
