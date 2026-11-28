@@ -302,7 +302,7 @@ def rare_priors(chars: list[str]) -> list[tuple[str, float]]:
 @register_step
 class ContextDecideStep(Step):
     spec = StepSpec(
-        id="context_decide", title="Step6 上下文裁决", version="1.0", unit="cell",
+        id="context_decide", title="4b 上下文裁决", version="1.0", unit="cell",
         consumes=("glyph_match",), optional_consumes=("rare_candidates", "glyph_candidate"),
         optional_consumes_when=(("rare_candidates", "rare_5b_on"), ("glyph_candidate", "cand_3c_on")),
         produces=("context_decision",),
