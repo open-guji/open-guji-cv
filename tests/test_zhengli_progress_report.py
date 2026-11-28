@@ -34,7 +34,7 @@ def test_counts_and_rate():
               {"kind": "comment", "target": {}, "payload": {}}]
     res = pr.compute("vol06", sheet, events, CHAR, {"text_version": "0.4.0"}, None, None)
     f = res["fields"]
-    assert f["pending_review"] == 2 and f["pending_rev"] == "006-r5"
+    assert f["pending_review"] == 2 and "pending_rev" not in f   # D1 已无 pending_rev 列（11-28）
     assert f["human_judged"] == 3 and f["cells_total"] == 10
     assert f["extra"]["a32_judged_drifted"] == 1
     assert f["stage"] == "fine"
