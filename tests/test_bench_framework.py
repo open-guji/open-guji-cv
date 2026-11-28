@@ -124,3 +124,27 @@ def test_needs_accepts_bench5b():
     from open_guji_cv.eval import bench as B
     B.BenchSpec(id="t-5b", title="t", steps=("glyph_match",), owner="CV3", gold="x", needs=("bench5b",),
                 primary="acc", run=lambda c: c.work, score=lambda c, p: None)
+
+
+def test_dataset_guards_applied_by_framework(tmp_path):
+    """dataset guards/*.yaml 按 bench＋书登记的护栏由 execute 统一判，且只判一次（CV3 提议，11-28）。"""
+    ds = tmp_path / "ds"
+    (ds / "guards").mkdir(parents=True)
+    (ds / "guards" / "t.yaml").write_text(
+        "guards:\n  - {bench: t, ws: bk, metric: bad, dir: max, limit: 0}\n"
+        "  - {bench: t, ws: other, metric: bad, dir: max, limit: 99}\n", encoding="utf-8")
+    ctx = _ctx(tmp_path, [{"id": 1, "ok": True}, {"id": 2, "ok": False}])
+    ctx.res["dataset"] = str(ds)
+    r = B.execute(_spec(), ctx)
+    dg = [g for g in r.guards if g.get("src") == "dataset guards"]
+    assert len(dg) == 1 and dg[0]["status"] == "regressed" and r.status == "regressed"
+    B.apply_dataset_guards(r, ctx)
+    assert len([g for g in r.guards if g.get("src") == "dataset guards"]) == 1
+
+
+def test_cost_per_book():
+    s = _spec(cost={"qtw": "heavy", "default": "light"})
+    assert s.cost_of("qtw") == "heavy" and s.cost_of("siku") == "light" and s.cost_of() == "heavy"
+    assert _spec().cost_of("x") == "light"
+    with pytest.raises(ValueError):
+        _spec(cost={"qtw": "slow"})

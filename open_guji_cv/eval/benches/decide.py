@@ -164,6 +164,7 @@ def _run_rough(ctx: BenchCtx) -> Path:
     from guji_manager.exp import rough_bench as RB     # noqa: PLC0415 —— 评分口径在 manager 里，不复制
     shard = _shard(ctx)
     variants = {"B": {"params": ctx.params}} if ctx.params else None
+    _fetch_rough_snapshots(RB.load_bench(shard), ctx.work / "snap", str(ctx.res["ws"]))
     res = RB.run(shard, ctx.work / "snap", ws=str(ctx.res["ws"]), variants=variants, root=ctx.work / "exp",
                  jobs=int(ctx.args.get("jobs", 2)), name="rough", log=print)
     base = shard / "report.json"
@@ -171,6 +172,18 @@ def _run_rough(ctx: BenchCtx) -> Path:
     out = ctx.work / "rough.json"
     out.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
     return out
+
+
+def _fetch_rough_snapshots(bench: dict, snap: Path, ws: str) -> None:
+    """冻结包缺哪册就按 bench.yaml 的标签取哪册。manager 的 `rough_bench.ensure_snapshot` 还在调已搬走的 `python -m open_guji_cv products`，
+    所以这里先取好（同 decide_bench/run.py 的取法），`RB.run` 里的 ensure_snapshot 见到就跳过。"""
+    for vol, label in bench["snapshot_packs"].items():
+        if any((Path(snap) / vol / s).is_dir() for s in ("char_decide", "seed_admit")):
+            continue
+        r = subprocess.run([_guji(), "products", "pack", "fetch", vol, "-w", ws, "--label", label, "--to", str(snap)],
+                           env=_env(), capture_output=True, text=True, check=False, cwd=ws)
+        if r.returncode:
+            raise RuntimeError(f"取粗校快照 {vol}←{label} 失败：{(r.stdout + r.stderr)[-300:]}")
 
 
 def rough_metrics(res: dict) -> tuple[dict, list[str]]:

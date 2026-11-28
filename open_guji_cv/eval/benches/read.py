@@ -20,7 +20,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..bench import BenchCtx, BenchResult, BenchSpec, Guard, register, skipped
+# dataset 护栏 11-28 挪进框架（`execute` 自动判）；这两个名字留着兼容旧调用
+from ..bench import (  # noqa: F401
+    BenchCtx,
+    BenchResult,
+    BenchSpec,
+    Guard,
+    apply_dataset_guards,
+    dataset_guards,
+    register,
+    skipped,
+)
 
 REPO = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO / "scripts"
@@ -76,36 +86,6 @@ def _need_models(ctx: BenchCtx, rel: str) -> Path | None:
     return _skip(ctx, f"缺模型 {rel}：设好 R2 读令牌后 `guji model fetch`（或跑一次 guji pipeline 自动取回）")
 
 
-def dataset_guards(bench_id: str, book: str, dataset: str | Path | None) -> list[dict]:
-    """dataset `guards/*.yaml` 里 `bench: <id>` 且 `ws: <书id>` 的护栏（`metric`、`dir`、`limit`、`baseline`…）。"""
-    if not dataset:
-        return []
-    d = Path(dataset) / "guards"
-    if not d.is_dir():
-        return []
-    import yaml
-    out = []
-    for f in sorted(d.glob("*.yaml")):
-        for g in (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("guards") or []:
-            if g.get("bench") == bench_id and str(g.get("ws")) == book:
-                out.append(g)
-    return out
-
-
-def apply_dataset_guards(r: BenchResult, ctx: BenchCtx) -> BenchResult:
-    """按护栏表逐条判（同 `bench.apply_guards` 的口径）；越线 → regressed，指标缺了记 unverified（不算过）。"""
-    for g in dataset_guards(r.bench, ctx.book, ctx.res.get("dataset")):
-        gd = Guard(str(g["metric"]), g["dir"], float(g["limit"]))
-        v = r.metrics.get(gd.metric)
-        st = gd.check(v)
-        r.guards.append({"metric": gd.metric, "dir": gd.dir, "limit": gd.limit, "value": v, "status": st,
-                         "baseline": g.get("baseline"), "src": "dataset guards"})
-        if st in ("regressed", "unverified") and r.status == "ok":
-            r.status = "regressed"
-            r.reason = r.reason or f"护栏 {gd.metric}：{v}（{'≤' if gd.dir == 'max' else '≥'} {gd.limit}）"
-    return r
-
-
 def _pct(x):
     return None if x is None else round(100.0 * x, 2)
 
@@ -157,12 +137,12 @@ def advset_score(ctx: BenchCtx, pred: Path) -> BenchResult:
     items = [{"id": q, "ok": q not in bad_near, "variant_same": q in bad_var} for q in qids]
     r = BenchResult("read-3a-advset", ctx.book, ctx.vols, m, "形近误认", items=items, n=len(qids),
                     env={"sim_model": d.get("sim_model")})
-    return apply_dataset_guards(r, ctx)
+    return r
 
 
 register(BenchSpec(
     id="read-3a-advset", title="3a 库外拒识（库里没有的字被判 same，形近层题数）", steps=("glyph_match",), owner="CV3",
-    gold=ADVSET, needs=("gold",), primary="形近误认", run=advset_run, score=advset_score, mode="run", cost="heavy",
+    gold=ADVSET, needs=("gold",), primary="形近误认", run=advset_run, score=advset_score, mode="run", cost={QTW: "heavy", "default": "light"},
     guards=(Guard("flip_worse", "max", 0),), suites=("read", "read-3a"), item_key="id", item_ok="ok",
     args={"sim_model": "相似度模型（缺省按书：全唐文 models/glyph_sim_qtw/model.pt，殿本、史記覆盖分；cov＝只覆盖分）",
           "workers": "进程数（缺省 4）"}))
@@ -205,7 +185,7 @@ def damaged_score(ctx: BenchCtx, pred: Path) -> BenchResult:
               "false_same": bad.get(it["query_id"], False)} for it in its]
     r = BenchResult("read-3a-damaged", ctx.book, ctx.vols, m, "误放", items=items, n=len(items),
                     env={"sim_model": d.get("sim_model")})
-    return apply_dataset_guards(r, ctx)
+    return r
 
 
 register(BenchSpec(
@@ -271,7 +251,7 @@ def near_score(ctx: BenchCtx, pred: Path) -> BenchResult:
     items = _read_jsonl(Path(ctx.work) / "near-rows.jsonl")
     r = BenchResult("read-3b-near", ctx.book, ctx.vols, m, "组内误判", items=items, n=len(items),
                     env={"methods_sha": d.get("methods_sha", {}).get(bk)})
-    return apply_dataset_guards(r, ctx)
+    return r
 
 
 register(BenchSpec(
@@ -331,7 +311,7 @@ def _rare_score(bench_id: str, primary: str, ctx: BenchCtx, pred: Path) -> Bench
     items = _read_jsonl(Path(ctx.work) / "oov-rows.jsonl")
     r = BenchResult(bench_id, ctx.book, ctx.vols, m, primary, items=items, n=len(items),
                     env={"ckpt": d.get("ckpt"), "charset": d.get("charset")})
-    return apply_dataset_guards(r, ctx)
+    return r
 
 
 def rare_score(ctx: BenchCtx, pred: Path) -> BenchResult:
@@ -353,3 +333,113 @@ register(BenchSpec(
     steps=("rare_candidates",), owner="CV3", gold=RARE_FIRSTSEEN, needs=("gold", "torch"), primary="emb top10",
     run=rare_run, score=rare_firstseen_score, mode="run", cost="heavy", guards=(Guard("flip_worse", "max", 0),),
     suites=("read", "read-rare"), item_key="id", item_ok="ok", args=_RARE_ARGS))
+
+
+# ------------------------------------------------------------------ 3a 匹配判据操作点（match_pairs）
+PAIRS = {SIKU: "glyph-match/pairs-siku-v2", SHIJI: "glyph-match/pairs-shiji", QTW: "glyph-match/pairs-qtw"}
+
+
+def pairs_run(ctx: BenchCtx) -> Path:
+    if (s := _need_script(ctx, "eval_match_pairs.py")):
+        return s
+    out, rows = Path(ctx.work) / "pairs.json", Path(ctx.work) / "pairs-rows.jsonl"
+    _script(ctx, "eval_match_pairs.py", [ctx.res["gold"], "--out", str(out), "--rows", str(rows)], "pairs.log")
+    return out
+
+
+def pairs_score(ctx: BenchCtx, pred: Path) -> BenchResult:
+    if (r := _skipped("read-3a-pairs", ctx, pred)):
+        return r
+    d = json.loads(Path(pred).read_text(encoding="utf-8"))
+    k, bo = d.get("knn") or {}, d.get("best_operating_point") or {}
+    m = {"knn 精度": _pct(k.get("precision")), "knn 召回": _pct(k.get("recall")), "knn 误放": k.get("fp"),
+         "P≥0.999 最大召回": _pct(bo.get("recall")), "P≥0.999 闸": bo.get("cov_high"), "操作点": d.get("cov_high"),
+         "对数": d.get("n_pairs"), "排除对数": d.get("n_pairs_excluded")}
+    for og in ("random", "near_form"):
+        if isinstance(d.get(og), dict):
+            m[f"{og} 误放"] = d[og].get("fp")
+    items = _read_jsonl(Path(ctx.work) / "pairs-rows.jsonl")
+    r = BenchResult("read-3a-pairs", ctx.book, ctx.vols, m, "knn 精度", items=items, n=len(items))
+    return r
+
+
+register(BenchSpec(
+    id="read-3a-pairs", title="3a 匹配判据操作点（knn 对群精度／召回、P≥0.999 下最大召回；random、形近层误放）",
+    steps=("glyph_match",), owner="CV3", gold=PAIRS, needs=("gold",), primary="knn 精度", run=pairs_run,
+    score=pairs_score, mode="run", guards=(Guard("flip_worse", "max", 0),), suites=("read", "read-3a"),
+    item_key="id", item_ok="ok"))
+
+
+# ------------------------------------------------------------------ 3a 前置：字块归一化回归门（normalize）
+def normalize_run(ctx: BenchCtx) -> Path:
+    if (s := _need_script(ctx, "eval_normalize.py")):
+        return s
+    out = Path(ctx.work) / "normalize.json"
+    try:
+        _script(ctx, "eval_normalize.py", [ctx.res["gold"], "--out", str(out)], "normalize.log")
+    except RuntimeError:
+        if not out.exists():                               # 回归门没过脚本退出 1，报告照写；没写报告才是跑崩
+            raise
+    return out
+
+
+def normalize_score(ctx: BenchCtx, pred: Path) -> BenchResult:
+    if (r := _skipped("read-normalize", ctx, pred)):
+        return r
+    d = json.loads(Path(pred).read_text(encoding="utf-8"))
+    g, kd = d["gate"], d.get("known_defect") or {}
+    m = {"回归门失败": len(g["failed"]), "回归门通过率": _pct(g["passed"] / g["n"]) if g["n"] else None,
+         "已知缺陷层变了": len(kd.get("changed") or [])}
+    items = [{"id": s["sample"], "ok": bool(s.get("passed", True)), "status": s.get("status"), "tier": s.get("tier")}
+             for s in d.get("samples") or []]
+    r = BenchResult("read-normalize", ctx.book, ctx.vols, m, "回归门失败", items=items, n=len(items))
+    return r
+
+
+register(BenchSpec(
+    id="read-normalize", title="字块归一化（normalize_patch）golden 回归门：失败样本数、已知缺陷层有没有变",
+    steps=("glyph_match",), owner="CV3", gold={SIKU: "char-normalization"}, needs=("gold",), primary="回归门失败",
+    run=normalize_run, score=normalize_score, mode="run",
+    guards=(Guard("flip_worse", "max", 0), Guard("已知缺陷层变了", "max", 0)), suites=("read", "read-3a"),
+    item_key="id", item_ok="ok"))
+
+
+# ------------------------------------------------------------------ 老评测器里不再接的（deprecated）
+def _gone(ctx: BenchCtx) -> Path:
+    raise RuntimeError("deprecated bench，不跑")
+
+
+def _gone_score(ctx: BenchCtx, pred: Path) -> BenchResult:
+    raise RuntimeError("deprecated bench，不跑")
+
+
+#: 11-28 在云端会话逐个试跑过（ai-team domain/CV/CV3/bench盘点-2026-11-28.md 第四节）。登记同名 bench 后
+#: manager 老评测器清单不再列它，`guji bench list` 显示理由；分片留在测试集仓不删。
+_SUPERSEDED = "；现行量法见 read-3a-e2e（match_bench）、read-3a-pairs、read-3a-advset"
+_RARE_GONE = ("；旧生僻字候选 rare_candidates 退役中（读口迁 3c），按图候选召回由 read-3c-cands（3c r5 全字表）"
+              "与 read-rare（三书人裁 unseen／oov 层）量")
+_DEPRECATED = {
+    "match_triplets": ("glyph-match/triplets", "3a 三元组排序（殿本 09 月旧集，只量排序）",
+                       "能跑（4 秒），但集是殿本 vol01–02 旧库的三元组，排序由 match_bench 的 rank1 按三书量" + _SUPERSEDED),
+    "match_pairs": ("glyph-match/pairs", "3a 匹配阈值（殿本旧集，不分书）",
+                    "能跑，已由按书的 pairs-siku-v2／shiji／qtw（read-3a-pairs）取代" + _SUPERSEDED),
+    "guard_ceiling": ("glyph-match/triplets", "3a 护栏天花板",
+                      "研究工具，不是回归集：要先手跑 eval_match_pairs --dump 出 npz，注册表跑不起"),
+    "db_match": ("char-clustering", "3a 库匹配（旧协议，殿本 vol01–02）",
+                 "能跑（4 分钟），只报覆盖率、没有分母，量法已由 match_bench（归一图端到端，按书留一）取代" + _SUPERSEDED),
+    "db_match_books": ("char-clustering", "3a 库匹配·三书人裁（册内增量协议）",
+                       "能跑（3 分钟），只报覆盖率；同一批三书人裁分片由 match_bench 量 same 精度与 novel 误放" + _SUPERSEDED),
+    "rare_char": ("rare-char", "（旧）生僻字识别", "要整理本语料，干净环境跑不起" + _RARE_GONE),
+    "zero_shot": ("glyph-bench", "（旧）零样本拆字识别", "只出样本数 n、解析不到指标（研究脚本）" + _RARE_GONE),
+    "zero_shot_fusion": ("glyph-bench", "（旧）零样本融合", "要整理本语料，干净环境跑不起" + _RARE_GONE),
+    "oov": ("glyph-bench", "（旧）类外字 emb 检索（cache/oov_bench 314 条）",
+            "要先建全字表向量索引，900 秒超时；同口径由 read-rare 的 oov 层按三书量" + _RARE_GONE),
+    "degradation": ("glyph-bench", "（旧）退化稳定性（oov_bench 加模糊、断墨等）",
+                    "能跑（7 分钟），但集是 09 月殿本库长出的 314 条、只出整体数没有逐条结果；真实残损由 read-3a-damaged 量" + _RARE_GONE),
+    "struct_rerank": ("rare-char", "（旧）部件袋重排", "要 OCR 引擎或 GPU，干净环境跑不起" + _RARE_GONE),
+    "struct_heads": ("rare-char", "（旧）结构头", "要 OCR 引擎或 GPU，干净环境跑不起" + _RARE_GONE),
+}
+
+for _id, (_shard, _what, _why) in _DEPRECATED.items():
+    register(BenchSpec(id=_id, title=f"（旧）{_what}" if not _what.startswith("（旧）") else _what, steps=(),
+                       owner="CV3", gold={}, needs=(), primary="", run=_gone, score=_gone_score, deprecated=_why))

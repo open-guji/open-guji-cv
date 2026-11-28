@@ -13,7 +13,7 @@
 只在带 `--pair-clf` 时并进来；提交的 v2.json 不带任何书级输入，所以 `books` 全空。
 
 合并规则：
-- 注册字组表（`groups/registry.py` 的 `FLOW_GROUPS`）每组一条，组 id 照旧；
+- 注册字组表（`groups/registry.py` 的 `FLOW_GROUPS`；组数据真源 `config/near_groups/registry.json`，FlowSpec 在 registry.py）每组一条，组 id 照旧；
 - 字对来源（手工、人裁、字体 τ≥`confusable.FONT_TAU`、`near_groups.json`、书级 pair_clf）按无序对去重，`src` 记全部来源；
   两个字同在某个注册组里的对挂到那个组（同在几个组就挂几个）的 `pairs` 下，其余每对单立一组，id 为 `p:<两字按码位序>`；
 - 剔除名单 `config/near_groups_drop.tsv` 里的对，没有手工／人裁／刻形（shape）来源的不收（同 `build_near_groups.py merge`）；
