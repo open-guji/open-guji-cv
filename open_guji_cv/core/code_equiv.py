@@ -694,6 +694,12 @@ _LAYOUT_ALIAS_1128 = ("row_segment.load_layout 认册 yaml 的 aliases（CV0 202
                       "单测 tests/test_dzg_layout.py::test_load_layout_reads_old_volume_name_via_aliases（无 aliases／读不到册配置都只认本名）。"
                       "哈希按合入时 origin/dev 重算。")
 
+_PAGEMAP_ALIAS_1128 = ("row_segment_pagemap／utils.daizhige 认册 yaml 的 aliases（CV0 2026-11-28，殿本改名演练：corpus 钉位表、改格表、daizhige 表仍写 vol01）："
+                       "_book_lines／_pin_lines／_corpus_lines 过滤由 `== book` 改为 `in names_for(book)`，没写 aliases 时 names＝{本册名}，逐行同真；"
+                       "apply_overrides 新增 as_vol，调用处传本册名——没 aliases 时覆盖行已按本册过滤、o['vol'] 恒等于本册名，键与补行逐字段相同；"
+                       "指纹里哈希的 _book_lines 行仍是表里原样的行，不变。产物逐字节不变；目前只有改了名的册写 aliases。"
+                       "单测 tests/test_volume_alias.py::test_names_for、test_pagemap_overrides_old_name_land_on_current_book。哈希按合入时 origin/dev 重算。")
+
 _TRK_CLIP_1127 = ("vline_track 淡线兜底 _trk_gray_line 取行号只封上界（np.minimum(…, h-1)）：原先行号 ≥ 页高必抛 IndexError、该页失败，"
                   "没抛错的页行号都 < 页高，min 是恒等，产物逐字节同（负行号照旧）。汉书 26 册 13 页（1,2,3,4,6,20,50,80,110,140,165,175 对 v0.9.9 border_detect 逐字节同；"
                   "p5 原 120px 窄条由报错改为跑通）；单测 test_gray_fallback_page_shorter_than_frame。2026-11-27（CV0，WYG #18261）")
@@ -2909,6 +2915,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="f824d42d1404c02ed897097ee1388709b508ce820bddda3bad8df4a2f012c984",
           old="f4812f0b455a1f3cfb40fe24a6a844d5c7ddbf9b5708842ad327c3a2a1baa690",
           evidence=_LAYOUT_ALIAS_1128),
+    # 钉位表／改格表／daizhige 表认册旧名 aliases（CV0 11-28，册号位数统一）
+    Equiv(module="open_guji_cv.steps.row_segment_pagemap",
+          new="c6b35d48094df0e01a4eb6c6e99523c39823591a36a987909f1952e8c573645a",
+          old="a71017d111945b477cb9f65b464ea8e277b998a552688559ed7c96a182ef228a",
+          evidence=_PAGEMAP_ALIAS_1128),
+    Equiv(module="open_guji_cv.utils.daizhige",
+          new="2071cbefb24aa5fdc3cedeee17f8bc77b8d3f036150ca1aa35af6cf84614a483",
+          old="1c41134dcc1add33b4e65c712fd75226b2cf2c7ffc33ff64a817006f4b8320d1",
+          evidence=_PAGEMAP_ALIAS_1128),
 )
 
 
