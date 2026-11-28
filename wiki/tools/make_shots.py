@@ -51,6 +51,13 @@ C = {
     "review": (40, 40, 220),     # 落人审：红
     "chord": (210, 180, 0),      # 界行两端连成的直线（对照折线）：青
     "yolo": (200, 90, 20),       # yolo-tool 原生单字框：蓝
+    "st_seal": (180, 50, 200),   # 4c 格况 seal：品红
+    "st_occluded": (0, 140, 255),  # 4c occluded：橙
+    "st_seg_bad": (40, 40, 220),   # 4c seg_bad：红
+    "st_non_char": (120, 120, 120),  # 4c non_char：深灰
+    "st_blank": (170, 170, 170),   # 4c blank：灰
+    "gate_fail": (40, 40, 220),    # decide_gate fail：红
+    "gate_flag": (0, 170, 255),    # decide_gate flag：橙黄
 }
 COL_TINTS = [(255, 220, 180), (180, 230, 255)]  # 列带交替底色（浅蓝 / 浅橙）
 
@@ -243,7 +250,11 @@ def layer_admit(bk, page, img, th):
     W = img.shape[1]
     box = {c["id"]: c for c in _chars(bk, page)}
     tint = img.copy()
-    for col in bk.prod("seed_admit", page)["seed_admit"]["columns"]:
+    try:                       # 收尾 2026-11-28 改名 char_decide；新产物在新名下，旧包在 seed_admit 下
+        adm = bk.prod("char_decide", page)["char_decide"]
+    except SystemExit:
+        adm = bk.prod("seed_admit", page)["seed_admit"]
+    for col in adm["columns"]:
         for a in col["chars"]:
             c = box.get(a["id"])
             if c is None:
@@ -291,7 +302,42 @@ def layer_ocr(bk, page, img, th):
         cv2.polylines(img, [pts], True, C["head"], th + 1)
 
 
-LAYERS = {"border": layer_border, "columns": layer_columns, "cells": layer_cells,
+def layer_cell_state(bk, page, img, th):
+    """4c 格况：state 不是 char 的格按状态着色（品红 seal、橙 occluded、红 seg_bad、深灰 non_char）。"""
+    W = img.shape[1]
+    box = {c["id"]: c for c in _chars(bk, page)}
+    tint = img.copy()
+    for r in bk.prod("cell_state", page)["cell_state"]["cells"]:
+        c = box.get(r["id"])
+        if c is None or r.get("state", "char") == "char":
+            continue
+        color = C.get("st_" + r["state"], C["flag"])
+        p0, p1 = _rect(c, W)
+        cv2.rectangle(img, p0, p1, color, th + 1)
+        cv2.rectangle(tint, p0, p1, color, -1)
+    img[:] = blend(img, tint, 0.3)
+
+
+def layer_gate(bk, page, img, th):
+    """定字 gate：格级检测项画框（红 fail、橙黄 flag），列级检测项画整列的紧框外接框。"""
+    W = img.shape[1]
+    chars = list(_chars(bk, page))
+    box = {c["id"]: c for c in chars}
+    for chk in bk.prod("decide_gate", page)["decide_gate"]["checks"]:
+        color = C["gate_" + chk["level"]]
+        key = str(chk.get("key"))
+        if chk.get("unit") == "cell" and key in box:
+            p0, p1 = _rect(box[key], W)
+            cv2.rectangle(img, p0, p1, color, th + 2)
+        elif chk.get("unit") == "col":
+            cs = [c for c in chars if str(c.get("col")) == key.split(":")[-1]]
+            if cs:
+                rs = [_rect(c, W) for c in cs]
+                cv2.rectangle(img, (min(r[0][0] for r in rs) - 6, min(r[0][1] for r in rs) - 6),
+                              (max(r[1][0] for r in rs) + 6, max(r[1][1] for r in rs) + 6), color, th + 2)
+
+
+LAYERS = {"cell_state": layer_cell_state, "gate": layer_gate, "border": layer_border, "columns": layer_columns, "cells": layer_cells,
           "shrink": layer_shrink, "seal": layer_seal, "admit": layer_admit,
           "free": layer_free, "ocr": layer_ocr, "chord": layer_chord, "yolo": layer_yolo,
           "tight": layer_tight}
@@ -354,7 +400,7 @@ def vstack(imgs, gap=16):
     return np.vstack(rows)
 
 
-def column_pair(bk, page, col):
+def column_pair(bk, page, col, only_strip=False):
     """一列：原图上的那一条（按列窗外接矩形裁）＋ Step2 拉直后的列图。"""
     from open_guji_cv.core.spec import column_key
     raw = bk.raw(page)
@@ -364,8 +410,67 @@ def column_pair(bk, page, col):
           for k in ("left_line", "right_line") for y in (win["top_y"], win["bottom_y"])]
     x0, x1 = max(0, min(xs) - 8), min(W, max(xs) + 8)
     strip = raw[int(win["top_y"]):int(win["bottom_y"]), x0:x1]
+    if only_strip:
+        return strip
     warped = bk.materialize("column_image", column_key(page, col))
     return hstack([strip, warped], gap=40)
+
+
+def column_steps(bk, page, col):
+    """一列走过切字前三小步：原图上的一条 | 2a 去噪列图 | 2b 抹了界行 | 2c 抹了列端版框。"""
+    from open_guji_cv.core.spec import column_key
+    strip = column_pair(bk, page, col, only_strip=True)
+    k = column_key(page, col)
+    views = [strip] + [bk.materialize(kind, k) for kind in ("column_raw", "column_banded", "column_image")]
+    h = max(v.shape[0] for v in views)
+    return hstack([frame(v) for v in views], gap=28, h=h)
+
+
+def _font(size):
+    from PIL import ImageFont
+    for f in ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"):
+        if os.path.exists(f):
+            return ImageFont.truetype(f, size)
+    raise SystemExit("没有中文字体（装 fonts-wqy-zenhei）")
+
+
+def text_img(lines, size=26, width=None, pad=8):
+    """几行字渲成白底图（PIL；cv2 写不了中文）。"""
+    from PIL import ImageDraw
+    f = _font(size)
+    w = width or max(int(f.getlength(t)) for t in lines) + 2 * pad
+    h = len(lines) * int(size * 1.35) + 2 * pad
+    im = Image.new("RGB", (w, h), (255, 255, 255))
+    d = ImageDraw.Draw(im)
+    for i, t in enumerate(lines):
+        d.text((pad, pad + i * int(size * 1.35)), t, font=f, fill=(30, 30, 30))
+    return cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR)
+
+
+def cands_row(bk, page, cid, k=5):
+    """一格：2e 字块 | 识字收尾的前 k 个候选（字、p、证据来自哪几路）。"""
+    patch = frame(fit_h(cell_crop(bk, page, cid, "cell_shrink"), 120))
+    rec = None
+    for col in bk.prod("glyph_analyzer", page)["glyph_analyzer"]["columns"]:
+        for r in col.get("cells", col.get("chars", [])):
+            if r["id"] == cid:
+                rec = r
+    if rec is None:
+        raise SystemExit(f"{cid} 没有识字收尾记录")
+    lines = []
+    for c in rec["cands"][:k]:
+        ev = c.get("evidence") or {}
+        parts = []
+        for n, key in (("3a", "a"), ("3c", "c")):
+            if key in ev:
+                parts.append(f"{n} {ev[key]['sim']:.3f}")
+        if "b" in ev:
+            parts.append("3b " + " ".join(f"{v:.2f}" for v in ev["b"].values() if isinstance(v, (int, float))))
+        if "v" in ev:
+            parts.append("3e")
+        p = c.get("p")
+        lines.append(f'{c["char"]}   ' + ("p=%.2f  " % p if p is not None else "") + "  ".join(parts))
+    return hstack([patch, text_img(lines)], gap=16)
 
 
 def cell_crop(bk, page, cid, step, pad=6):
@@ -499,6 +604,11 @@ def render(shot: dict, books: dict, data_dirs: dict) -> np.ndarray:
         return vstack([hstack(views[i:i + n], gap=gap) for i in range(0, len(views), n)], gap=gap)
     if kind == "column":
         return column_pair(bk(), shot["page"], shot["col"])
+    if kind == "column_steps":   # 一列走过 2a、2b、2c
+        return column_steps(bk(), shot["page"], shot["col"])
+    if kind == "cands":          # 几格的识字收尾候选
+        b = bk()
+        return vstack([cands_row(b, int(cid.split(":")[1]), cid, shot.get("k", 5)) for cid in shot["ids"]], gap=20)
     if kind == "vline":        # 一条界行附近的竖条，横向放大 xscale 倍看弯：每幅一组图层
         b, page = bk(), shot["page"]
         W = b.raw(page).shape[1]
