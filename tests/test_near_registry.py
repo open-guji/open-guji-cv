@@ -111,6 +111,59 @@ def test_repo_pair_sources_drop_list_spares_hand_and_human(tmp_path):
     assert got[k("壬", "癸")]["src"] == {"hand"}
 
 
+def test_repo_pair_sources_shape_pairs(tmp_path):
+    """来源 7 `shape_pairs.json`（第四步刻形判法的字对，2026-11-28）：src＝shape，剔除名单也不剔。"""
+    cfg = tmp_path / "config"
+    (cfg / "near_groups").mkdir(parents=True)
+    for f, d in (("confusable_human.json", {"pairs": {}}), ("confusable_font_degraded.json", {"pairs": {}}),
+                 ("near_groups.json", {"pairs": {"之矣": {"src": ["lib:x"]}}})):
+        (cfg / f).write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+    (cfg / "near_groups_drop.tsv").write_text("之矣\t假对\n", encoding="utf-8")
+    (cfg / "near_groups" / "hand.json").write_text(json.dumps({"pairs": []}), encoding="utf-8")
+    (cfg / "near_groups" / "shape_pairs.json").write_text(json.dumps({"pairs": [{"a": "矣", "b": "之"}]}, ensure_ascii=False),
+                                                         encoding="utf-8")
+    got = B.repo_pair_sources(tmp_path)
+    assert got["之矣"]["src"] == {"shape", "near_groups"}
+    (cfg / "near_groups" / "shape_pairs.json").unlink()                  # 没这个文件：照旧（被剔除名单剔掉）
+    assert "之矣" not in B.repo_pair_sources(tmp_path)
+
+
+def test_type_override_for_pair_groups(tmp_path):
+    """单立字对组的类型人定覆盖（Sheldon 11-28）：pair_clf 来的 侣侶 记 variant、凊淸 保持 near；成员、来源、别的组不变。"""
+    ov = B.read_type_override(B.ROOT / "config" / "near_groups" / "type_override.json")
+    assert ov == {"侣侶": "variant", "凊淸": "near"}
+    f = tmp_path / "clf.json"
+    f.write_text(json.dumps({"pairs": {"侣侶": {"a": "侣", "b": "侶", "tier": 2}, "凊淸": {"a": "凊", "b": "淸", "tier": 1},
+                                       "戊庚": {"a": "戊", "b": "庚", "tier": 1}}}, ensure_ascii=False), encoding="utf-8")
+    bp = {"qtw": B.book_pair_clf("qtw", f)}
+    plain = B.build(REG, {}, bp)
+    got = B.build(REG, {}, bp, type_override=ov)
+    assert plain["groups"]["p:侣侶"]["type"] == "near" and got["groups"]["p:侣侶"]["type"] == "variant"
+    assert got["groups"]["p:凊淸"]["type"] == "near" and got["groups"]["p:" + B.pair_key("戊", "庚")]["type"] == "near"
+    for gid in plain["groups"]:                                         # 除 type 外逐键相同
+        assert {k: v for k, v in got["groups"][gid].items() if k != "type"} == \
+            {k: v for k, v in plain["groups"][gid].items() if k != "type"}
+    assert got["n_by_type"] == {**plain["n_by_type"], "near": plain["n_by_type"]["near"] - 1,
+                                "variant": plain["n_by_type"].get("variant", 0) + 1}
+    assert B.build(REG, {}, type_override=ov) == B.build(REG, {})       # 对没进表：不起作用（仓里的表不带 pair_clf）
+    bad = tmp_path / "ov.json"
+    bad.write_text(json.dumps({"types": {"甲乙": "weird"}}), encoding="utf-8")
+    with pytest.raises(ValueError):
+        B.read_type_override(bad)
+
+
+def test_committed_v2_has_zhiyi_for_3b_only():
+    """之矣 只为 3b 的 pair_shape 方法进登记表：有组 `p:之矣` 可 ref，现役护栏／对手表一个都不多。"""
+    from open_guji_cv.clustering import confusable as C
+    from open_guji_cv.groups import near_registry as NR
+    g = NR.load().get("p:之矣")
+    assert g.chars == ("之", "矣") and g.type == "near" and g.src == ("shape",)
+    assert NR.load().glyph_near_spec("p:之矣") == {"chars": ["之", "矣"], "methods": {}}
+    for src in ("hand", "human", "font"):
+        assert ("之", "矣") not in C.registry_pairs(src)
+    assert "矣" not in C.partners().get("之", frozenset())
+
+
 # ── 读口 ──────────────────────────────────────────────────────────────
 
 
