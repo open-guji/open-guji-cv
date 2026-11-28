@@ -95,6 +95,7 @@ def _gd_near(ctx, page: int, method: str):
     return gd.near_map(method)
 
 
+# 保留本地现算（C2 查过，不删）：3b 没跑、备选切法列、模型指纹不一致三种情形都退回本地现算，不是 4d 缺席才用。
 def _near_from_3b(ctx, page: int, method: str, model_path: str, by_pair: bool = False, use_gd: bool = True) -> dict:
     """3b `glyph_near` 里某个看图方法的原样判法结果：{格 id: 证据（去掉 `method` 键）}（CV4 11-28，第四步重构 4d 接 3b）。
 
