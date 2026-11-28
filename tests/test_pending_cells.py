@@ -41,7 +41,8 @@ def patches(tmp_path: Path, shades: dict[str, int]):
 
 def test_machine_pending_same_rule_as_pending_list(tmp_path):
     cells, n, every = PC.machine_pending(make_products(tmp_path), "vol01")
-    assert cells == [{"cell": "1:1:2", "review": "pending"}, {"cell": "1:2:1a", "review": "pending"}]
+    none = {"pending_reason": None, "pending_reason_detail": None, "form_src": None}      # P3a-1：字段在，值本版留 None
+    assert cells == [{"cell": "1:1:2", "review": "pending", **none}, {"cell": "1:2:1a", "review": "pending", **none}]
     assert n == 2 and every == {"1:1:1", "1:1:2", "1:1:3", "1:2:1a"}
 
 

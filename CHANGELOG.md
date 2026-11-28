@@ -145,6 +145,12 @@
 
 ## [未发版]
 
+## [0.9.14] - 2026-11-28
+
+PATCH（L0）＝v0.9.13＋#2008（cherry-pick 78b8621，第四步收尾 seed_admit→char_decide 兼容读口，给 manager 两名并认）。对 v0.9.13 全部 32 步 code_hash 全同，不需 code_equiv；底库 b35 不变；各书不过期。另把 `tests/test_zhengli_pending_list.py` 期望补上待审格行新带的三个 None 字段（#2008 引入，dev 上同样红）。
+
+- PATCH（产物逐字节不变，各书不过期：改动都在不属于任何 Step `code_deps` 的模块，`check_fp_change` 对 dev 0 步变；CV4 P3a-1 2026-11-28，Sheldon 定收尾步改名 `char_decide`）：`seed_admit`→`char_decide` 的**兼容读口**，产物仍写 `seed_admit`，Step id／产物种类／参数类不动。① 新 `core/decide_names.py`（`ADMIT_STEPS=("char_decide","seed_admit")`、`LEGACY_ADMIT_STEP`、`ADMIT_STEP_ACTIVE`〔改名那一版只翻这一个常量〕、`fold_admit_params`、`final_page_dict`、`final_dir`）；② 产物读口 `steps/decide_final.read_final(ctx, page)`、`products/final_read.read_final_store`，新目录与新页键优先、并存以 `char_decide/` 为准（`guji-cv status` 并存警告），pending-cells、slots、glyph_ledger、alt_view、llm_queue、ids_retrain、seg_screen_run、shadow/offline 的读点全改新旧并认；③ 事件读口 `feedback/decide_events`（`decided_view`／`ruling_by_u`／`invalidate_final`：两个步名当同一步、后到覆盖按写入时间、失效两个目录都标；D1 历史事件不改写）；④ 参数键 `params.char_decide.*` 与 `params.seed_admit.*` 都认（册配置、管线 yaml、套书缺省、`--params`／`--override`、page_kinds），同一层同时写报错；⑤ 新命令 `guji-cv decide migrate-name <册>`（`products/migrate_final.py`：目录与页顶层键原地改名不删、manifest 换 sha 并按新名 Step 换算指纹、下游 `upstream` 键换名、sha 清单存 `_migrate_char_decide.json`；本版只能 `--dry-run`，改名那一版起才能真迁）；⑥ `pending-cells` 每格加 `pending_reason`／`pending_reason_detail`／`form_src`（本版值一律 None，cv 将来直写的 15 个原因见 `doc/4-定字/pending_reason.md`）；⑦ `steps/char_decide` 导入入口（与 `SeedAdmitStep` 同一个类）；`manager_api` 导出以上读口。新测 `tests/test_decide_name_compat.py`（页键、ask／vis_ctx 位置不变，新旧事件名查询结果相同，参数并存报错，迁移只改名不删）。
+
 ## [0.9.13] - 2026-11-28
 
 - 新表／读口（不进任何 Step 指纹，现役代码不改读，L0；CV3 W1 第一期 2026-11-28，Sheldon 定方向）：形近字组登记表 `config/near_groups/v2.json`（格式 `near_groups/2`），由 `scripts/build_near_groups_v2.py` 从六处来源确定性合成（注册字组表 185 组＋手工 20／人裁 42／字体 78／`near_groups.json` 572 对，去重后 619 组，类型 near／variant／fold，记 `src`；书级 pair_clf 与 3b 组用 `--pair-clf`／`--glyph-near` 出书级版本）；读口 `groups/near_registry.py`（按字查组、按类型过滤、转 3b 书配置、展开 `ref`，没写 `ref` 原样返回）。守卫 `tests/test_near_registry.py`。来源清单与第二期要改的读口见 `doc/3-识字/形近字组登记表.md`。

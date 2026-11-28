@@ -21,11 +21,13 @@ import json
 import sys
 from pathlib import Path
 
+from ..core.decide_names import final_dir, final_page_dict
+
 PENDING = "abstain:llm_pending"
 
 
 def _cells(page_doc: dict):
-    body = page_doc.get("seed_admit", page_doc)
+    body = final_page_dict(page_doc, strict=False)
     for col in body.get("columns") or []:
         for r in col.get("chars") or []:
             yield r
@@ -110,7 +112,7 @@ def main(argv=None) -> int:
         else:
             from ..products.store import default_products_root
             root = default_products_root()
-        files = [f for b in a.books for f in sorted((root / b / "seed_admit").glob("p*.json"))]
+        files = [f for b in a.books for f in sorted(((final_dir(root, b) or root / b / "seed_admit")).glob("p*.json"))]
         rows = collect(files)
         Path(a.out).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
         print(f"{len(files)} 页 → 待裁 {len(rows)} 问（{sum(len(r['cells']) for r in rows)} 格）→ {a.out}", file=sys.stderr)

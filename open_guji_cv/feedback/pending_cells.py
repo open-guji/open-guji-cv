@@ -25,6 +25,8 @@ import re
 from pathlib import Path
 from typing import Callable, Iterable
 
+from ..core.decide_names import ADMIT_STEP_ACTIVE, ADMIT_STEPS, final_dir, final_page_dict
+
 SCHEMA = "guji-pending-cells/0.1"
 PATCH_KIND = "char_patch"
 _CELL = re.compile(r"(\d+):(\d+):(-?\d+)([ab]?)")
@@ -40,22 +42,29 @@ def _human_settled_excluded(ch: dict) -> bool:
     return bool(ev.get("human_char") or ev.get("damaged") or why.startswith("human:"))
 
 
+def _pending_row(cell: str) -> dict:
+    """待审格一行。`pending_reason`／`pending_reason_detail`／`form_src`（P3a-1，2026-11-28）：收尾步（char_decide）将来直接写
+    送审原因与选形来源；**本版值一律 None**（产物仍是 seed_admit，没有这些字段），manager 读到 None 就走 `reasons_for_pending` 反推。
+    cv 将来直写的原因集合见 `doc/4-定字/pending_reason.md`。"""
+    return {"cell": cell, "review": "pending", "pending_reason": None, "pending_reason_detail": None, "form_src": None}
+
+
 def cell_sort_key(cell: str) -> list:
     return [int(x) if x.lstrip("-").isdigit() else x for x in re.split(r"(-?\d+)", cell) if x != ""]
 
 
 def _iter_chars(seed_dir: Path):
     for f in sorted(Path(seed_dir).glob("p*.json")):
-        s = json.loads(f.read_text(encoding="utf-8"))["seed_admit"]
+        s = final_page_dict(json.loads(f.read_text(encoding="utf-8")))     # 页顶层键 char_decide／seed_admit 都认
         yield s, [ch for col in s["columns"] for ch in col["chars"]]
 
 
 def machine_pending(products: Path, book: str) -> tuple[list[dict], int, set[str]]:
     """产物里机器没放行的格。返回 (待审格, 应有格数, 全册格号)。应有格数＝页头 `n_review` 之和＋排除名单上
     没人定过而照样上单的格；与待审格数不等说明产物不一致，调用方应停。格号不以 `<册>:` 开头 → ValueError。"""
-    seed_dir = Path(products) / book / "seed_admit"
-    if not seed_dir.is_dir():
-        raise FileNotFoundError(f"没有 {seed_dir}")
+    seed_dir = final_dir(products, book)                      # char_decide/ 优先，其次 seed_admit/
+    if seed_dir is None:
+        raise FileNotFoundError(f"没有 {Path(products) / book / ADMIT_STEP_ACTIVE}（也没有 {'／'.join(ADMIT_STEPS)} 任一目录）")
     prefix = f"{book}:"
     cells: list[dict] = []
     n_review = 0
@@ -71,7 +80,7 @@ def machine_pending(products: Path, book: str) -> tuple[list[dict], int, set[str
                 continue
             if "excluded" in (ch.get("doubts") or []):
                 n_review += 1
-            cells.append({"cell": cid[len(prefix):], "review": "pending"})
+            cells.append(_pending_row(cid[len(prefix):]))
     return cells, n_review, every
 
 
@@ -158,7 +167,7 @@ def pending_cells(products: Path, book: str, *, extra: Iterable[str] = (), image
                 missing.append(cell)
                 continue
         have.add(cell)
-        cells.append({"cell": cell, "review": "pending"})
+        cells.append(_pending_row(cell))
     cells.sort(key=lambda c: cell_sort_key(c["cell"]))
     fps: dict[str, str] = {}
     sprites: dict[str, dict] = {}
