@@ -377,9 +377,10 @@ def test_merge_cell_keeps_near_p():
 
 
 #: 加 3e 之前（origin/dev 5910584e）的 `merge_cell` 在下面这格上的输出，逐字节冻结：没开 3e 时收尾产物必须与它相同
+#: （B3 11-28 起 `evidence.b` 不再记 group，冻结串同步去掉；其余逐字节不变）
 _FROZEN = ('{"id":"tbook:1:1:1","slot":1,"sub":null,"cands":[{"char":"于","p":0.7,"evidence":{"a":{"sim":0.9,"algo":"elastic"},'
-           '"b":{"group":"zy","cnn_small:zy":0.7}}},{"char":"千","p":0.3,"evidence":{"a":{"sim":0.8,"algo":"elastic"},'
-           '"b":{"group":"zy","cnn_small:zy":0.3}}},{"char":"言","p":null,"evidence":{"a":{"sim":0.5,"algo":"elastic"}}}],'
+           '"b":{"cnn_small:zy":0.7}}},{"char":"千","p":0.3,"evidence":{"a":{"sim":0.8,"algo":"elastic"},'
+           '"b":{"cnn_small:zy":0.3}}},{"char":"言","p":null,"evidence":{"a":{"sim":0.5,"algo":"elastic"}}}],'
            '"p_map":{},"p_src":"near:cnn_small:zy","near":{"zy":{"trigger":"cands","methods":{"cnn_small":{"method":"cnn_small",'
            '"fold":"fold1","model":"m1"}},"p":{"于":0.7,"千":0.3},"p_src":"near:cnn_small:zy"}}}')
 

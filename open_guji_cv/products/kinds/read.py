@@ -131,6 +131,9 @@ class FinalRec(BaseModel):
     p_map: dict[str, float] = Field(default_factory=dict)
     #: p 从哪来，如 "near:cnn_small:gong"；没有任何校准来源时为空串
     p_src: str = ""
+    #: 真字不在 `cands` 里的概率（「都不对」）。要通用打分器（设计第 5 期）才给得出，现在恒 None、不落盘；
+    #: 不从 `p_map` 推，也不拿 1−Σp 顶（组内校准的 p 只在组内归一）
+    p_other: float | None = None
     #: 3d `cell_traits` 的原始分 {键: 分}（cut、border、residue、stain、merged、blank…；未校准、**不是概率**，
     #: 标定以后才进 `p_map`）。3d 没跑为空，空的不落盘（没开 3d 的书收尾产物逐字节不变）。
     traits: dict[str, float] = Field(default_factory=dict)
@@ -161,6 +164,8 @@ class FinalRec(BaseModel):
                 d.pop("near", None)
             if not d.get("vis"):
                 d.pop("vis", None)
+            if d.get("p_other") is None:
+                d.pop("p_other", None)
         return d
 
 

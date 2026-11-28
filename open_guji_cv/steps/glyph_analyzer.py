@@ -2,7 +2,7 @@
 
 在本大步各小步（3a `glyph_match`、3b `glyph_near`、3c `glyph_candidate`、3d `cell_traits`、3e `glyph_vis`）都跑完之后跑，把它们汇总成每格一条：
 
-    cands: [{char, p, evidence: {a: {...}, b: {...}}}, …]     按 p（再按 3a 分）降序
+    cands: [{char, p, evidence: {a: {...}, b: {...}, c: {...}, v: {...}}}, …]     按 p（再按 3a 分）降序
     p_map: {cut: …, border: …, residue: …, …}                 其他特征的概率；只放有校准来源的键
     p_src: "near:cnn_small:gong"                               p 从哪来
     traits: {cut: 0.12, border: 0.8, …}                        3d 原始分（未校准；3d 没跑不落盘）
@@ -27,8 +27,8 @@
 
 ## 一格多组（2026-11-28，3b 一格可触发几个组）
 
-- `cands[].evidence.b`：各组各方法的分照旧按「方法:组」记（键本身带组，不撞）；`b.group` 是第一个给这个字分的组（按组 id 排），
-  这个字几个组都给了分时另有 `b.groups: [组…]`。只有一个组时与之前逐键一致。
+- `cands[].evidence.b`：各组各方法给这个字的分，键「方法:组」（键本身带组，不撞）。B3 定稿（11-28）起不再另记 `b.group`／`b.groups`
+  （从键的冒号后读得出）；`same_as` 照旧（异体不分的字跟它归的字）。字段定稿见 `doc/3-识字/收尾产物.md`。
 - **p 的合并规则（保守）**：每组取第一个出校准 p 的方法（同之前）。**只有一个组出了 p** → 照旧落到候选上，`p_src`＝`near:方法:组`；
   **两个以上组都出了 p** → 候选 p 全为 None、`p_src` 空（各组的 p 各自在组内归一，拼不成这一格的一个分布；谁也不挑，
   第四步按「没有 p」走，既不按 p 放行也不按 p 降审），各组的 p 只留在 `near[组].p`／`near[组].p_src` 里当证据。
@@ -51,7 +51,7 @@ from ..core.spec import StepSpec
 from ..core.step import STEPS, RunContext, Step, register_step
 from ..products.kinds.read import ColumnFinal, FinalCand, FinalRec, PageFinal
 
-MODEL = "glyph-analyzer/0"
+MODEL = "glyph-analyzer/1"
 
 
 class GlyphAnalyzerParams(BaseModel):
@@ -121,10 +121,7 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
                 if fc is None:
                     fc = cands[c] = FinalCand(char=c)
                     order.append(c)
-                b = fc.evidence.setdefault("b", {"group": nr.group})
-                if b["group"] != nr.group and nr.group not in b.get("groups", ()):
-                    b.setdefault("groups", [b["group"]]).append(nr.group)    # 这个字几个组都给了分
-                b[mo.method] = s
+                fc.evidence.setdefault("b", {})[mo.method] = s      # 键「方法:组」本身带组（B3：不另记 group／groups）
             if got is None:
                 m = calibrators.get(mo.method)
                 ps = m.calibrate(mo.sims) if m is not None else None
@@ -190,7 +187,7 @@ def _vis_of(v, cands: dict, order: list) -> dict:
 @register_step
 class GlyphAnalyzerStep(Step):
     spec = StepSpec(
-        id="glyph_analyzer", title="3 识字收尾（汇总）", version="0.2", unit="cell",
+        id="glyph_analyzer", title="3 识字收尾（汇总）", version="0.3", unit="cell",
         consumes=("glyph_match",), produces=("glyph_analyzer",),
         optional_consumes=("glyph_near", "glyph_candidate", "cell_traits", "glyph_vis"),
         params=GlyphAnalyzerParams,

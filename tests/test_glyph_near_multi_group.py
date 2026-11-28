@@ -80,7 +80,7 @@ def _merge_cell_v01(match_rec, near_rec, calibrators, topk, algo):
                 if fc is None:
                     fc = cands[c] = FinalCand(char=c)
                     order.append(c)
-                fc.evidence.setdefault("b", {"group": near_rec.group})[mo.method] = s
+                fc.evidence.setdefault("b", {})[mo.method] = s        # B3（11-28）起 b 不再记 group，键「方法:组」自带组
             m = calibrators.get(mo.method)
             ps = m.calibrate(mo.sims) if m is not None else None
             if ps and not p_src:
@@ -154,9 +154,8 @@ def test_multi_group_one_calibrated_gives_its_p():
         r = merge_cell(_match_rec([("官", 0.9), ("宫", 0.89)]), arg, cal, 5, "elastic")
         by = {c.char: c for c in r.cands}
         assert r.p_src == "near:cnn_small:gong" and by["宫"].p == 0.9 and by["官"].p == 0.1 and by["宦"].p is None
-        assert by["官"].evidence["b"] == {"group": "gong", "groups": ["gong", "guan"], "cnn_small:gong": 0.2,
-                                         "xx:guan": 0.6}
-        assert by["宦"].evidence["b"] == {"group": "guan", "xx:guan": 0.4}
+        assert by["官"].evidence["b"] == {"cnn_small:gong": 0.2, "xx:guan": 0.6}      # 几个组都给了分：键自带组（B3）
+        assert by["宦"].evidence["b"] == {"xx:guan": 0.4}
         assert r.near == {"gong": {"trigger": "member", "methods": {"cnn_small": {"method": "cnn_small", "fold": "fold1"}},
                                    "p": {"宫": 0.9, "官": 0.1}, "p_src": "near:cnn_small:gong"},
                           "guan": {"trigger": "cands", "methods": {"xx": {"method": "xx", "char": "官"}}}}
@@ -218,7 +217,7 @@ def test_glyph_near_multi_group_end_to_end(tmp_path, model_file):
                        "rx": {"trigger": "member", "methods": {"rr_shape": {**trail, "model": sha}}}}
     assert c1.p_src == "" and all(c.p is None for c in c1.cands)
     by = {c.char: c.evidence.get("b") for c in c1.cands}
-    assert by["人"]["groups"] == ["rr", "rx"] and set(by["人"]) == {"group", "groups", "rr_shape:rr", "rr_shape:rx"}
+    assert set(by["人"]) == {"rr_shape:rr", "rr_shape:rx"}
     assert list(fin["tbook:1:1:2"].near) == ["rr"] and list(fin["tbook:1:1:3"].near) == ["rx"]
     assert fin["tbook:1:1:3"].near["rx"]["methods"]["rr_shape"]["error"] == "patch_missing"
     assert fin["tbook:1:1:4"].near == {} and "near" not in fin["tbook:1:1:4"].model_dump(mode="json")
