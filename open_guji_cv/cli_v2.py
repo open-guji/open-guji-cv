@@ -441,6 +441,22 @@ def _ref_profile_report(book_id: str) -> dict:
         return {"error": str(e)}
 
 
+def cmd_rename_seal(args) -> None:
+    """册改名（manager `ops.rename_volume --apply`）刚做完时跑一次：把只因改名改写了文件而变的参数指纹封存进改名标记，
+    之后 `status` 把这些页算作改名（rename_only）。封存之后这些文件再变，照常过期。"""
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    pages = eng.book.resolve_pages(args.pages)
+    keys = {k.strip() for k in args.keys.split(",") if k.strip()} if args.keys else None
+    sealed = eng.seal_rename(pages=pages, keys=keys)
+    if args.json:
+        print(json.dumps(sealed, ensure_ascii=False))
+        return
+    if not sealed:
+        print(f"{eng.book.id}：没有只差参数指纹的步，不用封存")
+    for sid, kv in sealed.items():
+        print(f"  {sid:16s} 封存 " + "、".join(f"{k} {a}→{b}" for k, (a, b) in kv.items()))
+
+
 def cmd_status(args) -> None:
     eng = _engine(args.book, args.pipeline, quiet=True)
     _guard_cv_version(eng.book, warn_only=True)
@@ -890,6 +906,7 @@ COMMANDS_V2 = {
     "pipeline": cmd_pipeline,
     "step": cmd_step,
     "status": cmd_status,
+    "rename-seal": cmd_rename_seal,
     "book": cmd_book,
     "rare": cmd_rare,
     "variants": cmd_variants,
@@ -1340,6 +1357,14 @@ def register_subcommands(sub: argparse._SubParsersAction, plugins: bool = True) 
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     p.add_argument("--pages", default="dev_set")
+    p.add_argument("--json", action="store_true")
+    _add_override(p)
+
+    p = sub.add_parser("rename-seal", help="册改名后封存只因改名而变的参数指纹（status 据此算 rename_only）")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all")
+    p.add_argument("--keys", default=None, help="只封这几个参数指纹（逗号分隔），如 exclusions_fingerprint；不给＝全部 *_fingerprint")
     p.add_argument("--json", action="store_true")
     _add_override(p)
 
