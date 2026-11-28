@@ -1,6 +1,6 @@
 # 殿本《四庫全書總目》换图源：siku-qiefen-v2（设计稿 v4，A31，2026-10-26，GUJI-748）
 
-> **口径提示（2026-11-28）**：本文写于「待审单按 rev／批号整张出、整张换单（`republish.py`／`proof_cycle.py`／`auto_cycle.py`）」的年代，这些做法已退役。现行：待审条目无 rev／批次，每格独立，身份（书,册,u）；出单走 `guji land`；来源由 `level`／`by`／`channel` 三字段说明（裁定事件，见 [裁定事件规范](../formats/裁定事件规范.md)）；口径真源见 guji-manager `doc/数据库/待审条目与裁定事件.md`。下文涉及 rev／整张换单／换单门的段落仅作历史记录。
+> **口径提示（2026-11-28）**：本文写于「待审单按 rev／批号整张出、整张换单（`republish.py`／`proof_cycle.py`／`auto_cycle.py`）」的年代，这些做法已退役。现行：待审条目无 rev／批次，每格独立，身份（书,册,u）；`guji land` 按条目对账、网站经 Worker 按章现拼出单（无整张单）；来源由 `level`／`by`／`channel` 三字段说明（裁定事件，见 [裁定事件规范](../formats/裁定事件规范.md)）；口径真源见 guji-manager `doc/数据库/待审条目与裁定事件.md`。下文涉及 rev／整张换单／换单门的段落仅作历史记录。
 
 > 用户 10-26 定：99 册整套换成 open-guji-core/file_archive release `siku-qiefen-v2` 的图，**按新包重编页号**，每册给下游一张「旧页号→新页号」对照表。网站不做旧 `#页:列:格` 深链跳转（用户定，A41 转述）。
 > 研究结论（页对应、变换精度、试跑数据）见 Claude 文档 https://claude.ai/artifact/5eEUAkUN72C7uWrMa9KZ1m ；
