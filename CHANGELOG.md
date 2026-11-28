@@ -145,6 +145,8 @@
 
 ## [未发版]
 
+## [0.9.13] - 测试中
+
 - 新表／读口（不进任何 Step 指纹，现役代码不改读，L0；CV3 W1 第一期 2026-11-28，Sheldon 定方向）：形近字组登记表 `config/near_groups/v2.json`（格式 `near_groups/2`），由 `scripts/build_near_groups_v2.py` 从六处来源确定性合成（注册字组表 185 组＋手工 20／人裁 42／字体 78／`near_groups.json` 572 对，去重后 619 组，类型 near／variant／fold，记 `src`；书级 pair_clf 与 3b 组用 `--pair-clf`／`--glyph-near` 出书级版本）；读口 `groups/near_registry.py`（按字查组、按类型过滤、转 3b 书配置、展开 `ref`，没写 `ref` 原样返回）。守卫 `tests/test_near_registry.py`。来源清单与第二期要改的读口见 `doc/3-识字/形近字组登记表.md`。
 - PATCH（缺省关，产物逐字节不变，code_equiv 登记；CV0 2026-11-27，Sheldon「四维＋准确度分档」）：册配置 `references[]` 新键 `form`／`punct`／`script`／`accuracy`／`accuracy_evidence`（写错值就报，`form` 与 `line_is_column` 矛盾也报），`reference_profile` 段可写 `accuracy`（只许压低）；`seed_admit` 新开关 `trust_from_accuracy`：开时按本页参照的 accuracy 推信任档（very_high/high → `reference_trust`，mid → `ref_lib_coord`，只往上推），`script: trad|simp` 的页关照录异体、`edge_pair_to: ref` 退回 freq；本册摘要进 `ref_accuracy` 指纹。门槛与实测见 `doc/design/参校本四维与准确度分档.md`。
 - PATCH（各书产物不过期，第四步逐字节不变；CV2 2026-11-27，Sheldon 定「折线只存拐点」，已通知 CV0/CV3/CV4/A30）：`products/kinds/cells.py` 折线落盘改游程——格的 `seam_top`／`seam_bottom`、切点候选的 `y` 在产物 JSON 里存 `{"n": 长度, "runs": [[x, y], …]}`（无损，只存变化点），载入时展开回逐 x 表，旧产物照读；直接读 JSON 的脚本用 `cells.seam_ys()`。史記 42 册 40 页 row_segment 产物 13.9MB→6.1MB。本模块不在 code_deps 里，指纹不变；新跑的 row_segment 字节会变，跨此改动做 `code_equiv check` 比 row_segment 要以本版为基线。
