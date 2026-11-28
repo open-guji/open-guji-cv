@@ -12,7 +12,8 @@
           gong:                                   # 组 id
             chars: [宫, 宮, 官]
             fold: {宮: 宫}                         # 异体不分：触发判断时当同一个字（可缺）
-            methods: {cnn_small: models/glyph_near_gong}   # 方法名 → 模型目录（相对路径先找数据目录、再找仓根）
+            methods: {cnn_small: models/glyph_near_gong}   # 方法名 → 模型目录（相对路径先找数据目录、再找仓根）；
+                                                  # 一份文件挂多对的方法写 {path, pair}，如 {part_shape: {path: config/groups/part_shape.json, pair: [剌, 刺]}}
             trigger: member                       # member：3a 首位在组里就跑；close（缺省）：首位在组里且组内另一字分差 ≤ delta；
                                                   # cands：3a 首位或候选前 topk 名里有组内任一字就跑（从第四步搬来的判法用它罩住 4d 的触发格）
             delta: 0.03
@@ -31,6 +32,17 @@
 同组里另写的键盖过表（`near_registry.expand_refs`，按本册 id 展开，在 `book_params` 里做，指纹与 run_page 同一份）。
 **一个 `ref` 都没写的书参数原样不动**，参数哈希逐位不变。
 
+## 一格多组（2026-11-28，CV3／CV4 定）
+
+一格可以同时触发几个组（如 `trigger: cands` 的组字有重叠、或前几名候选分属两个组），**每个组各出一条 `NearRec`**
+（同格 id、`group` 不同，列里按格序再按组 id 排）。之前一格只进按组 id 排第一个触发的组。读口（`products/kinds/read.py`）：
+
+- `PageNear.by_id()`：`{格 id: NearRec}`，一格一条，取按组 id 排第一个的（＝之前的行为，老读者不改也照旧）；
+- `PageNear.by_id_all()`：`{格 id: [NearRec…]}`，每个组一条、按组 id 排；
+- `PageNear.get(格 id, 组)`：某格某组那条，没触发 → None。
+
+`trigger_groups()` 给全部触发的组；`trigger_group()` 仍只给第一个。
+
 ## 字块
 
 方法吃哪种图由方法的 `patch` 定（`near_methods` 模块头）：
@@ -46,13 +58,14 @@
 
 ## 给 4d 的（2026-11-28，CV4《4d 接 3b 看图方法-接口要求》）
 
-- 方法证据原样落进 `NearMethodOut.evidence`（rr_shape：`{char, why, nn, score, geo}`，与 `rr_shape.judge()` 同键同值、同舍入），
-  收尾把它抄进每格 `near.methods[方法名]`；
+- 方法证据原样落进 `NearMethodOut.evidence`（rr_shape：`{char, why, nn, score, geo}`，与 `rr_shape.judge()` 同键同值、同舍入；
+  wu_shape／hou_shape：`{char, why, p|v}`＝`judge()` 整个返回值），外加 `method`，收尾把它抄进每格 `near.methods[方法名]`；
 - 本页跑过的方法用的模型版本记在 `PageNear.models`（`{"方法:组": 方法.model_sha}`），收尾也抄进 `near.methods[方法名].model`。
 
 ## 指纹
 
 `methods_sha`（自动填）＝各组各方法模型目录里全部文件的 sha256，进参数指纹：换模型、换校准表，本步与收尾过期。
+`{path, pair}` 写法的方法另把 pair 并进指纹（`near_methods.method_fingerprint`；字符串写法的指纹逐位不变）。
 """
 from __future__ import annotations
 
@@ -92,12 +105,20 @@ def _canon(c: str, fold: dict) -> str:
 
 
 def trigger_group(cands: list, top_char: str | None, groups: dict) -> tuple[str, str] | None:
-    """3a 的候选 [(字, 分)…]（按分降序）→ (组 id, 触发方式)；哪个组都不触发返回 None。按组 id 排序取第一个触发的。"""
+    """3a 的候选 [(字, 分)…]（按分降序）→ (组 id, 触发方式)；哪个组都不触发返回 None。按组 id 排序取第一个触发的
+    （一格多组之前 3b 只认这一个；现在 3b 用 `trigger_groups`，这个留给只要一个组的读者）。"""
+    got = trigger_groups(cands, top_char, groups)
+    return got[0] if got else None
+
+
+def trigger_groups(cands: list, top_char: str | None, groups: dict) -> list[tuple[str, str]]:
+    """3a 的候选 [(字, 分)…]（按分降序）→ 触发的每个组 [(组 id, 触发方式)…]，按组 id 排序；哪个组都不触发返回 []。"""
     ranked = [(str(c), float(s)) for c, s in (cands or [])]
     top = ranked[0][0] if ranked else top_char
     if not top:
-        return None
+        return []
     top_s = ranked[0][1] if ranked else 1.0
+    out: list[tuple[str, str]] = []
     for gid in sorted(groups):
         g = groups[gid] or {}
         fold = dict(g.get("fold") or {})
@@ -107,30 +128,32 @@ def trigger_group(cands: list, top_char: str | None, groups: dict) -> tuple[str,
             pool = {_canon(c, fold) for c, _ in ranked[:int(g.get("topk", 5))]}
             pool |= {_canon(c, fold) for c in (top, top_char) if c}
             if pool & members:
-                return gid, "cands"
+                out.append((gid, "cands"))
             continue
         if _canon(top, fold) not in members:
             continue
         if mode == "member":
-            return gid, "member"
+            out.append((gid, "member"))
+            continue
         delta = float(g.get("delta", 0.03))
         topk = int(g.get("topk", 3))
         rivals = [c for c, s in ranked[1:topk]
                   if _canon(c, fold) in members and _canon(c, fold) != _canon(top, fold) and top_s - s <= delta]
         if rivals:
-            return gid, "close"
-    return None
+            out.append((gid, "close"))
+    return out
 
 
 @register_step
 class GlyphNearStep(Step):
     spec = StepSpec(
-        id="glyph_near", title="3b 形近字组分析", version="0.1", unit="cell",
+        id="glyph_near", title="3b 形近字组分析", version="0.2", unit="cell",
         consumes=("glyph_match", "char_index", "char_patch"), produces=("glyph_near",),
         params=GlyphNearParams,
         needs=("model",),
         code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_registry",
-                   "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.rr_shape"),
+                   "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.part_shape",
+                   "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.wu_shape"),
         enabled_by="groups",
     )
 
@@ -149,14 +172,15 @@ class GlyphNearStep(Step):
         chars = ctx.product("char_index", page)
         crec = {r.id: r for cc in chars.columns for r in cc.chars}
 
-        hits: list[tuple[int, object, str, str]] = []          # (列, MatchRec, 组, 触发方式)
+        hits: list[tuple[int, object, str, str]] = []          # (列, MatchRec, 组, 触发方式)；一格触发几个组就几条
         for cm in match.columns:
             for r in cm.chars:
-                t = trigger_group(r.candidates, r.char, p.groups)
-                if t and crec.get(r.id) is not None and crec[r.id].bbox_page is not None:
+                if crec.get(r.id) is None or crec[r.id].bbox_page is None:
+                    continue
+                for t in trigger_groups(r.candidates, r.char, p.groups):
                     hits.append((cm.col, r, *t))
 
-        recs: dict[str, NearRec] = {}
+        recs: dict[tuple[str, str], NearRec] = {}               # (格 id, 组) → NearRec
         models: dict[str, str] = {}
         if hits:
             methods = {gid: [(name, load_method(name, mdir))
@@ -164,12 +188,15 @@ class GlyphNearStep(Step):
                        for gid in {h[2] for h in hits}}
             need_raw = any(getattr(m, "patch", "raw") == "raw" for ms in methods.values() for _, m in ms)
             raw = ctx.raw_page(page) if need_raw else None
+            crops: dict[str, object] = {}                       # 格 id → 原图裁块（几个组共用一块）
             by_group: dict[str, list[tuple[int, object, object]]] = {}    # 组 → [(列, MatchRec, 原图裁块|None)]
             for col, r, gid, how in hits:
-                patch = crop_patch(raw, crec[r.id].bbox_page) if raw is not None else None
-                recs[r.id] = NearRec(id=r.id, slot=r.slot, sub=r.sub, group=gid, trigger=how)
-                by_group.setdefault(gid, []).append((col, r, patch if patch is not None and patch.size else None))
-            for gid, items in by_group.items():
+                if r.id not in crops:
+                    patch = crop_patch(raw, crec[r.id].bbox_page) if raw is not None else None
+                    crops[r.id] = patch if patch is not None and patch.size else None
+                recs[(r.id, gid)] = NearRec(id=r.id, slot=r.slot, sub=r.sub, group=gid, trigger=how)
+                by_group.setdefault(gid, []).append((col, r, crops[r.id]))
+            for gid, items in sorted(by_group.items()):
                 for name, m in methods[gid]:
                     use, missing = self._patches(ctx, page, m, items, crec)
                     models[f"{name}:{gid}"] = str(getattr(m, "model_sha", "") or m.fingerprint())
@@ -177,14 +204,14 @@ class GlyphNearStep(Step):
                         cells = [self._cell(page, it[0], it[1], crec[it[1].id]) for it, _ in use]
                         outs = score(m, [pt for _, pt in use], ctx.book.id, ctx=ctx, cells=cells)
                         for ((_, r, _), _), o in zip(use, outs):
-                            recs[r.id].methods.append(NearMethodOut(method=f"{name}:{gid}", sims=o["sims"],
-                                                                    evidence=o.get("evidence") or {}))
+                            recs[(r.id, gid)].methods.append(NearMethodOut(method=f"{name}:{gid}", sims=o["sims"],
+                                                                           evidence=o.get("evidence") or {}))
                     for r, why in missing:
-                        recs[r.id].methods.append(NearMethodOut(method=f"{name}:{gid}",
-                                                                evidence={"error": "patch_missing", "detail": why}))
+                        recs[(r.id, gid)].methods.append(NearMethodOut(method=f"{name}:{gid}",
+                                                                       evidence={"error": "patch_missing", "detail": why}))
         cols = []
         for cm in match.columns:
-            got = [recs[r.id] for r in cm.chars if r.id in recs]
+            got = [recs[(r.id, g)] for r in cm.chars for g in sorted(p.groups) if (r.id, g) in recs]
             if got:
                 cols.append(ColumnNear(col=cm.col, chars=got))
         return {"glyph_near": PageNear(page=page, methods_sha=p.methods_sha, columns=cols, models=models)}

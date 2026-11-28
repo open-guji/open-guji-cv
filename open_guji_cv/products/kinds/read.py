@@ -26,6 +26,8 @@ class NearMethodOut(BaseModel):
 
 
 class NearRec(BaseModel):
+    """3b 一格在**一个**字组下的结果。一格触发几个组就有几条（同 `id`、不同 `group`，按组 id 排序紧挨着放；2026-11-28 起，
+    之前一格只进按组 id 排第一个触发的组）。"""
     id: str
     slot: int
     sub: str | None = None
@@ -57,7 +59,29 @@ class PageNear(BaseModel):
         return d
 
     def by_id(self) -> dict[str, NearRec]:
-        return {r.id: r for c in self.columns for r in c.chars}
+        """{格 id: NearRec}，一格一条：触发了几个组的格取**按组 id 排第一个**的那条（＝2026-11-28 一格多组之前 3b 只出的那条，
+        老读口照旧能用）。要全部组用 `by_id_all`／`get`。"""
+        out: dict[str, NearRec] = {}
+        for c in self.columns:
+            for r in c.chars:
+                out.setdefault(r.id, r)
+        return out
+
+    def by_id_all(self) -> dict[str, list[NearRec]]:
+        """{格 id: [NearRec…]}，一格触发的每个组一条，按组 id 排序。"""
+        out: dict[str, list[NearRec]] = {}
+        for c in self.columns:
+            for r in c.chars:
+                out.setdefault(r.id, []).append(r)
+        return {k: sorted(v, key=lambda r: r.group) for k, v in out.items()}
+
+    def get(self, cell_id: str, group: str) -> NearRec | None:
+        """某格在某组下的 NearRec；这格没触发这个组 → None。"""
+        for c in self.columns:
+            for r in c.chars:
+                if r.id == cell_id and r.group == group:
+                    return r
+        return None
 
 
 class CandRec(BaseModel):
@@ -105,9 +129,18 @@ class FinalRec(BaseModel):
     #: 3d `cell_traits` 的原始分 {键: 分}（cut、border、residue、stain、merged、blank…；未校准、**不是概率**，
     #: 标定以后才进 `p_map`）。3d 没跑为空，空的不落盘（没开 3d 的书收尾产物逐字节不变）。
     traits: dict[str, float] = Field(default_factory=dict)
-    #: 3b 触发了的格：`{group, trigger, methods: {方法名: {method, …方法证据原样, model}}}`（2026-11-28，给 4d 取看图判法结果；
-    #: rr_shape 的证据是 `{char, why, nn, score, geo}`，与第四步 `rr_shape.judge()` 同键同值）。没触发为空，空的不落盘
+    #: 3b 触发了的格，按组：`{组: {trigger, methods: {方法名: {method, …方法证据原样, model}}, [p, p_src]}}`（2026-11-28 一格多组起；
+    #: 给 4d 取看图判法结果，rr_shape 的证据是 `{char, why, nn, score, geo}`，与第四步 `rr_shape.judge()` 同键同值）。
+    #: 这组有方法出了校准 p 才有 `p`（{字: p}）与 `p_src`（`near:方法:组`）。没触发为空，空的不落盘。
+    #: 读旧文件（之前是一格一组的 `{group, trigger, methods}`）用 `near_groups()`，两种都认
     near: dict = Field(default_factory=dict)
+
+    def near_groups(self) -> dict[str, dict]:
+        """`near` 按组 → `{组: {trigger, methods, …}}`；旧形状（`{group, trigger, methods}`，glyph_analyzer 0.1）也转成这样。"""
+        n = self.near or {}
+        if isinstance(n.get("group"), str) and isinstance(n.get("methods"), dict):
+            return {n["group"]: {"trigger": n.get("trigger", ""), "methods": n["methods"]}}
+        return n
 
     @model_serializer(mode="wrap")
     def _drop_empty_traits(self, handler):

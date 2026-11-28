@@ -1,0 +1,7 @@
+{
+ "format": "near_groups_shape/1",
+ "_doc": "第四步书级刻形判法挂着、别处没登记的字对（形近字组登记表的来源 7，src=shape；2026-11-28 起）。只进登记表 config/near_groups/v2.json，给 3b glyph_near 的书配置 ref 用；现役护栏（confusable.NEVER_MATCH_FAMILIES／partners()）、5a.1 分流都不读（它们按 src 取 hand／human／font）。改了重跑 python scripts/build_near_groups_v2.py。",
+ "pairs": [
+  {"a": "之", "b": "矣", "note": "史记 之／矣 书级两字刻形判法 pair_shape/1（groups/pair_shape.py，2026-11-03；seed_admit group_flow_pair_shape）；3b 挂 pair_shape 方法要一个组，11-28 补进"}
+ ]
+}

@@ -1,0 +1,8 @@
+{
+ "format": "near_groups_type/1",
+ "_doc": "单立字对组（p:<两字>）的类型人定覆盖（形近字组登记表；2026-11-28 Sheldon 定）。键是两字按码位序拼起来；生成脚本按规则定的类型（near_groups.json 的 src 有 variant → variant，否则 near）被这里盖过。只改 type，不改成员、来源；现役读口按 src 派生，不读 type。改了重跑 python scripts/build_near_groups_v2.py。",
+ "types": {
+  "侣侶": {"type": "variant", "note": "全唐文 pair_clf 来的对：侣／侶 是异体（Sheldon 11-28）"},
+  "凊淸": {"type": "near", "note": "全唐文 pair_clf 来的对：凊／淸 不完全是异体，保持 near（Sheldon 11-28）"}
+ }
+}

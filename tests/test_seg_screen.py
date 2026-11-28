@@ -137,6 +137,16 @@ def test_seg_primitive_frame_only_edge_cells():
     assert frame_only_edge_cells(g, spans, (0, 100), 100.0, None, 100.0) == []
 
 
+def test_seg_primitive_frame_only_edge_cells_near_frac():
+    """首格细线离上框 23–28px：缺省 0.2 格高（20px）够不着，near_frac=0.3 认成框线（全唐文上框下的细线，CV2 11-27）。"""
+    from open_guji_cv.seg.profile import frame_only_edge_cells
+    g = _img(500)
+    g[123:129, 5:95] = 0
+    spans = [(100, 200), (200, 300), (300, 400)]
+    assert frame_only_edge_cells(g, spans, (0, 100), 100.0, 400.0, 100.0) == []
+    assert frame_only_edge_cells(g, spans, (0, 100), 100.0, 400.0, 100.0, near_frac=0.3) == [0]
+
+
 # ── ①c 漏切块 ────────────────────────────────────────────────────────────
 
 def _orph_col():

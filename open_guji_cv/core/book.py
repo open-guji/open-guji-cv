@@ -678,6 +678,8 @@ def _load_book_params(raw) -> dict[str, dict]:
         return {}
     if not isinstance(raw, dict) or any(not isinstance(v, dict) for v in raw.values()):
         raise ValueError("书 yaml 的 params: 必须是 {step_id: {字段: 值}}")
+    from .decide_names import fold_admit_params      # 收尾步 char_decide／seed_admit 新旧键并认（P3a-1）；同时写报错
+    raw = fold_admit_params(raw)
     return {str(k): dict(v) for k, v in raw.items()}
 
 

@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+from ..products.final_read import read_final_store
 from .signals import CellEvidence
 
 
@@ -20,7 +21,7 @@ def page_evidence(st, book: str, page: int) -> dict[str, CellEvidence]:
         rc = {r["id"]: r for c in st.read(book, "rare_candidates", key, "rare_candidates").model_dump()["columns"]
               for r in (c.get("chars") or [])}
     al = {r["id"]: r for r in st.read(book, "align_ref", key, "align_ref").model_dump()["chars"]}
-    sa = {r["id"]: r for c in st.read(book, "seed_admit", key, "seed_admit").model_dump()["columns"]
+    sa = {r["id"]: r for c in read_final_store(st, book, key).model_dump()["columns"]
           for r in (c.get("chars") or [])}
     out = {}
     for i, rec in sa.items():
