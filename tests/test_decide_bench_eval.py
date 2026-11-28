@@ -137,3 +137,11 @@ def test_rough_set_routing(tmp_path):
     assert D._vols(ctx) == ["vol04", "vol05"]
     assert D._book_vols(rb, "988g3f0wsu", []) == []                       # 粗校只有殿本
     assert set(D.plan(tmp_path / "decide-bench" / "small", "96mid1ogzk", [])) >= {"vol04", "vol05"}
+
+
+def test_group_check_metrics(tmp_path):
+    from open_guji_cv.eval.benches import decide as D
+    assert D.group_check_metrics(tmp_path / "none.json")["d4_human_checked"] is None        # 缺数据不假装 0
+    (tmp_path / "g.json").write_text(json.dumps({"checked": 10, "mismatch": 3, "drift": 2, "mismatch_cells": []}), encoding="utf-8")
+    m = D.group_check_metrics(tmp_path / "g.json")
+    assert (m["d4_human_checked"], m["d4_human_mismatch"], m["d4_human_mismatch_real"]) == (10, 3, 1)

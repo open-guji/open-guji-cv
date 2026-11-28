@@ -118,7 +118,39 @@ def run(ctx: BenchCtx) -> Path:
     cmd = [sys.executable, str(here / "run.py"), "--shard", str(_shard(ctx)), "--ws", f"{dws(ctx.book)}={ctx.res['ws']}",
            "--work", str(ctx.work), "--name", "bench", "--books", ",".join(vols), "--no-warm-check", "--guji", _guji()]
     _call(cmd, ctx, "run.log")
+    _group_check(ctx, vols)
     return ctx.work / "bench-A.jsonl"
+
+
+def _group_check(ctx: BenchCtx, vols: list[str]) -> None:
+    """d4 的「人裁核对」一节（原 manager `guji groups status` 的口径）：放行、非人裁通道、`char-groups/labels/unified.jsonl` 里有人裁字的格，
+    放行字与人裁字不同记 mismatch，人裁字不在本组里记 drift（格号漂移，不算放错）。读本次产物，写 `group-check.json`；
+    缺数据（没有 unified.jsonl、manager 不在环境里）就不写，score 里这几个键为 None，不假装通过。"""
+    labels = Path(ctx.res["dataset"]) / "char-groups" / "labels" / "unified.jsonl"
+    if not labels.exists():
+        return
+    try:
+        from guji_manager.eval import group_status as GS     # noqa: PLC0415 —— 口径在 manager，不复制
+    except ImportError:
+        return
+    prods = [ctx.work / "exp" / f"bench-{dws(ctx.book)}-{v}" / "A" for v in vols]
+    d = GS.collect([p for p in prods if p.exists()], labels, None)
+    tot: dict = {}
+    mism: list = []
+    for g in d["groups"].values():
+        for k in ("checked", "mismatch", "drift"):
+            tot[k] = tot.get(k, 0) + g["total"].get(k, 0)
+        mism += g["mismatch"]
+    (ctx.work / "group-check.json").write_text(json.dumps({**tot, "mismatch_cells": mism}, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def group_check_metrics(path: Path) -> dict:
+    """`group-check.json` → d4_human_*；文件不在＝None（缺数据）。同一格可属多组，计数是「组×格」。"""
+    if not Path(path).exists():
+        return {"d4_human_checked": None, "d4_human_mismatch": None, "d4_human_drift": None, "d4_human_mismatch_real": None}
+    g = json.loads(Path(path).read_text(encoding="utf-8"))
+    return {"d4_human_checked": g["checked"], "d4_human_mismatch": g["mismatch"], "d4_human_drift": g["drift"],
+            "d4_human_mismatch_real": g["mismatch"] - g["drift"]}
 
 
 def _run_rough(ctx: BenchCtx) -> Path:
@@ -216,7 +248,7 @@ def score(ctx: BenchCtx, pred: Path) -> BenchResult:
     m = {"wrong_admit": c["放错字"], "variant_admit": c["放成异体"], "admit_rate": round(adm / n, 4),
          "review_top1_ok": round(c["拦住·首选对"] / rv, 4) if rv else None, "missing": c["缺格"],
          "missing_rate": round(c["缺格"] / n, 4),
-         "outcomes": dict(c), **_sections(rows)}
+         "outcomes": dict(c), **_sections(rows), **group_check_metrics(pred.parent / "group-check.json")}
     items = [{"id": r["id"], "ok": r["outcome"] in OK, "outcome": r["outcome"], "algo": r.get("algo"),
               "truth": r.get("truth"), "rule": r.get("rule"), "errloc": r.get("errloc"),
               **({"cmp_skip": True} if r["outcome"] == "缺格" else {})} for r in rows]
