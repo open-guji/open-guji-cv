@@ -3048,6 +3048,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='df9b7b767ba9a6c2de43cc3aecb7fe5b9e567f8f88dea4884b061cea0f486553',
           old='3c9bc0ebfe44f461a07190f1e6abc352c7ea15917da3ead3972cedf3efc54585',
           evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
+    Equiv(module='open_guji_cv.steps.glyph_match',
+          new='95e97024e0f17a7cb2a5d2b4b56b1f9ee54c736f8d15be5426b79900a3ba98fb',
+          old='90028714f203801241758f220bdcf3a0910c6d348dbb2a889c1bba18976a2b79',
+          evidence='四大步验收 L10（CV3 2026-11-28）：只把 StepSpec.title 显示名从旧号改成新编号（Step5-a 库匹配→3a 字形库匹配），title 不进产物、不进参数，运行逻辑一字不动，产物逐字节不变按构造成立'),
+    Equiv(module='open_guji_cv.steps.rare_candidates',
+          new='f6aab5e7da1e89138f0284120d6cbbed4d2423a9c69bf6d347a616324f4dd49a',
+          old='d3509fcba80364ca8f152a30fc5902b9947c2949dacacbf83a35fc7a719ad20d',
+          evidence='四大步验收 L10（CV3 2026-11-28）：只把 StepSpec.title 显示名从旧号改成新编号（Step5-b 生僻字候选→（旧）生僻字候选），title 不进产物、不进参数，运行逻辑一字不动，产物逐字节不变按构造成立'),
 )
 
 
