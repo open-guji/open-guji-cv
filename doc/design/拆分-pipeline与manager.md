@@ -56,7 +56,7 @@
 
 | 灰区 | 倾向 | 理由 |
 |---|---|---|
-| `feedback.consumers`（事件→裁决表） | **manager**，裁决表格式归 pipeline | 人裁事件落成裁决表是「外界输入的整理」，Step 只读表。要核 `consumers` 是否在 Step 运行时被调（闭包里有边，经 `core.step`） |
+| `feedback.consumers`（事件→裁决表） | **manager**，裁决表格式归 pipeline | 裁定事件落成裁决表是「外界输入的整理」，Step 只读表。要核 `consumers` 是否在 Step 运行时被调（闭包里有边，经 `core.step`） |
 | `groups` 的 `group_flow`（统一流程） | pipeline | 它决定哪些格放行 |
 | `hanzi` 的离线 sqlite | pipeline 读、manager 管构建与更新 | 构建脚本 `build_hanzi_db.py` 属 manager，库文件按版本钉 |
 
@@ -113,7 +113,7 @@ guji-cv version [--json]                 # cv_version、cv_commit、contract 版
 |---|---|---|
 | 册配置 `books/<册>.yaml` + `config/book_defaults.yaml` | 工作区 | BookSpec 的字段集合与分层规则归 pipeline；manager 改册 yaml 只改「身份、图源、钉版」这类 manager 字段，其余字段原样透传。加 `schema_version` |
 | 产物 `products/<册>/<步>/…` 与 `manifest` | 工作区 | `products.kinds.*` 是 schema；manifest 增加 `contract_version` |
-| 人裁事件 / 裁决表 | `feedback/` | 事件格式（`feedback.events`）与裁决表格式归 pipeline；生产归 manager |
+| 裁定事件 / 裁决表 | `feedback/` | 事件格式（`feedback.events`）与裁决表格式归 pipeline；生产归 manager |
 | 工作区布局与路径解析 | `core.workspace` | 归 pipeline；manager 用同一份（`from open_guji_cv.api import workspace`） |
 
 `contract_version` 单独编号（整数），**只在上面四样的格式变时加一**，与 pipeline 版本号无关。manager 声明 `supports_contract = [a, b]`，装的 pipeline 超出范围就拒跑（同现在 `cv_version` 钉版护栏的写法）。

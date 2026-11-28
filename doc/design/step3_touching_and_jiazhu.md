@@ -430,7 +430,7 @@ vol02 dev_set 是**故意堆难页**的，逐页看：
 
 | 金标 | 条数 | 来源 | 现役能否直接评 |
 |---|---|---|---|
-| `char-segmentation/instances`（缺陷四分类） | 614，其中 **56 条来自人裁事件**（vol01 p11–p56 各批） | 控制台「缺陷」按钮 → 事件 → `gold_add` | 能（`instance_quality` / `recrop` 已注册） |
+| `char-segmentation/instances`（缺陷四分类） | 614，其中 **56 条来自裁定事件**（vol01 p11–p56 各批） | 控制台「缺陷」按钮 → 事件 → `gold_add` | 能（`instance_quality` / `recrop` 已注册） |
 | `char-segmentation/row-boundaries`（逐像素格线） | 2 页 × 9 列 × 22 条 | 2026-09-03 前人工拖拽 | **坐标系是旧链路**，本轮写了互相关重锚定评测（§3.5） |
 | `char-segmentation/cell-truncation`（格线三选一） | 23 条（vol02 4/19/27/109） | 人工 | 坐标系是旧链路（col_height 2366 vs 现役 2407），未重锚定 |
 | `char-segmentation/jiazhu-tail`（夹注段端） | 57 条（vol02 43 页 + vol01 3 页） | 人工 | 能，但涉及页多为旧产物，本轮已重跑 48 页 |

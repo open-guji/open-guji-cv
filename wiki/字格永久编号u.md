@@ -60,14 +60,14 @@ params:
 
 ## 用哪个 cv 版本
 
-| 书 | 最早能开的版本 | 换单导出带 u 的版本 |
+| 书 | 最早能开的版本 | 整理脚本导出带 u 的版本 |
 |---|---|---|
 | 跟 dev／v0.9 的书（脈經、北行等） | v0.9.1 | dev 本来就走 manager 导出 |
-| 殿本 patch 线 | v0.7.102 | v0.7.108 起 `republish` 带 u，v0.7.110 起 `proof_cycle`／`zl` 也带 |
+| 殿本 patch 线 | v0.7.102 | v0.7.108 起整理脚本导出带 u（`zl` 自 v0.7.110） |
 | 史記 patch 线 | v0.7.103 | v0.7.107／v0.7.112 |
 | 全唐文 patch 线 | v0.7.104 | v0.7.109／v0.7.111 |
 
-**换单导出**指整理脚本（`scripts/zhengli/republish.py`、`proof_cycle.py`、`zl.py`）出 book-text 用的 char 导出。上表版本起它们改调 guji-manager 的导出器（要 manager ≥0.6.20，`proof_cycle`／`zl` 要 ≥0.6.21），册有身份账时每格带 `u`（char v0.6）。版本不够时出的导出不带 u，推 book-text 会报「旧版已有 u，新版把 u 全丢了」。遇到先升 cv、把 `_cycle/*/export` 重出一遍。这几处只改脚本，产物指纹不变，钉旧版的册不用改钉。
+**整理脚本导出**指整理脚本（`scripts/zhengli/zl.py` 等；`republish.py`、`proof_cycle.py` 已于 2026-11-27 退役删除）出 book-text 用的 char 导出。上表版本起它们改调 guji-manager 的导出器（要 manager ≥0.6.20，`zl` 要 ≥0.6.21），册有身份账时每格带 `u`（char v0.6）。版本不够时出的导出不带 u，推 book-text 会报「旧版已有 u，新版把 u 全丢了」。遇到先升 cv、把 `_cycle/*/export` 重出一遍。这几处只改脚本，产物指纹不变，钉旧版的册不用改钉。
 
 ## 两件 cv **不**按 u 做的事
 
@@ -87,7 +87,7 @@ params:
 |---|---|
 | 开了 `ruling_by_u` 但没有任何 `ruling_key: "u"` | 账里有没有本页**当前**切分那一行（`guji uid show <册> --cell <格号>`）；裁定库里有没有带 `u` 的裁定；有没有从 `seed_admit` 起 force 重跑 |
 | 重跑后人裁格退回待审，`human_unbound.event` 以 `~u` 结尾、`status: unanchored` | 那条 `~u` 件没有锚框，补锚（manager `guji uid anchor-fill`）后重跑 |
-| 推 book-text 报 u 全丢了 | cv 版本是否到上表「换单导出带 u」那一列；导出是不是旧版出的 |
+| 推 book-text 报 u 全丢了 | cv 版本是否到上表「整理脚本导出带 u」那一列；导出是不是旧版出的 |
 | 标 main 后账尾没有新行 | 切分没变时只记一行册级 `src=sync`；什么都没有就 `guji uid sync <册> --label <包>` 补 |
 
 相关页：[4 定字](4-定字)、[字组与异体](字组与异体)、[产物与数据](产物与数据)。

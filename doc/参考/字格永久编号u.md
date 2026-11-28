@@ -41,14 +41,14 @@ params:
 
 ## 四、各版本线
 
-| 线 | 带 `ruling_by_u` 的最早版本 | 换单导出带 u 的版本 | 配 manager |
+| 线 | 带 `ruling_by_u` 的最早版本 | 整理脚本导出带 u 的版本 | 配 manager |
 |---|---|---|---|
 | dev／v0.9.x（脈經、北行等跟 0.9 的书） | dev #1848＋#1856；0.9 线 v0.9.1 | dev 本就走 manager 导出 | — |
-| 殿本 patch 线 | v0.7.102（现行 v0.7.105／106） | v0.7.108（republish）、v0.7.110（proof_cycle、zl） | ≥0.6.20／≥0.6.21 |
-| 史記 patch 线 | v0.7.103 | v0.7.107（republish）、v0.7.112（proof_cycle、zl） | ≥0.6.20／≥0.6.21 |
-| 全唐文 patch 线 | v0.7.104 | v0.7.109（republish）、v0.7.111（proof_cycle、zl） | ≥0.6.20／≥0.6.21 |
+| 殿本 patch 线 | v0.7.102（现行 v0.7.105／106） | v0.7.108 起（`zl` 自 v0.7.110） | ≥0.6.20／≥0.6.21 |
+| 史記 patch 线 | v0.7.103 | v0.7.107 起（`zl` 自 v0.7.112） | ≥0.6.20／≥0.6.21 |
+| 全唐文 patch 线 | v0.7.104 | v0.7.109 起（`zl` 自 v0.7.111） | ≥0.6.20／≥0.6.21 |
 
-**换单导出**：patch 线的 `scripts/zhengli/republish.py`、`proof_cycle.py`、`zl.py` 出 char 导出改走 guji-manager 的 `guji_manager.output.guji_format_export`；册有身份账时 char 每格带 `u`（book-text char v0.6，顶层 `u_max`、`u_retired`）。没装 manager 才退回 cv 自带的 `scripts/export_guji_format.py`（**不写 u**）。用旧版导出推 book-text，`local_check` 会报「旧版已有 u，新版把 u 全丢了」，`guji feedback swap book-text` 推标点也会报 u 对不上：遇到先查 cv 版本够不够上表、`_cycle/*/export` 是不是旧版出的（要重出）。这几处改动只动脚本，23 步指纹不变，钉旧版的册不用改钉。
+**整理脚本导出**：patch 线出 char 导出的整理脚本（`scripts/zhengli/zl.py` 等；`republish.py`、`proof_cycle.py` 已于 2026-11-27 随整张换单退役删除）改走 guji-manager 的 `guji_manager.output.guji_format_export`；册有身份账时 char 每格带 `u`（book-text char v0.6，顶层 `u_max`、`u_retired`）。没装 manager 才退回 cv 自带的 `scripts/export_guji_format.py`（**不写 u**）。用旧版导出推 book-text，`local_check` 会报「旧版已有 u，新版把 u 全丢了」，`guji feedback swap book-text` 推标点也会报 u 对不上：遇到先查 cv 版本够不够上表、`_cycle/*/export` 是不是旧版出的（要重出）。这几处改动只动脚本，23 步指纹不变，钉旧版的册不用改钉。
 
 ## 五、字形库刻例键为什么不按 u 改
 
