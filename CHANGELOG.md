@@ -145,6 +145,13 @@
 
 ## [未发版]
 
+- PATCH（产物逐字节不变，code_equiv 登记；CV0 2026-11-28，脉经第 2 册缺文小注）：`reference_profile` 的 `kind: none` 段可写 `cols`（列级无参照，可与页段重叠）；align_ref 在这些列不出对位字、坐标对位与提示，产物写 `none_cols`；`page_token` 只在声明页加 `|nc:…`。manager 待审原因据此按格认「参照缺是设计」。
+## [0.9.15] - 2026-11-28
+
+PATCH（L0）＝v0.9.14＋#2018（cherry-pick ea984c7，reference_profile 列级无参照 cols，脉经第 2 册用）。#1979（trust_from_accuracy）v0.9.13 起已在，不另带。对 v0.9.14 全部 32 步 code_hash 全同（align_ref 登 code_equiv `_NONE_COLS_1128`）；底库 b35 不变；没写 cols 的册不过期，写了 cols 的页从 align_ref 起过期（page_token 加 |nc:）。
+
+- PATCH（产物逐字节不变，code_equiv 登记；CV0 2026-11-28，脉经第 2 册缺文小注）：`reference_profile` 的 `kind: none` 段可写 `cols`（列级无参照，可与页段重叠）；align_ref 在这些列不出对位字、坐标对位与提示，产物写 `none_cols`；`page_token` 只在声明页加 `|nc:…`。manager 待审原因据此按格认「参照缺是设计」。
+
 ## [0.9.14] - 2026-11-28
 
 PATCH（L0）＝v0.9.13＋#2008（cherry-pick 78b8621，第四步收尾 seed_admit→char_decide 兼容读口，给 manager 两名并认）。对 v0.9.13 全部 32 步 code_hash 全同，不需 code_equiv；底库 b35 不变；各书不过期。另把 `tests/test_zhengli_pending_list.py` 期望补上待审格行新带的三个 None 字段（#2008 引入，dev 上同样红）。

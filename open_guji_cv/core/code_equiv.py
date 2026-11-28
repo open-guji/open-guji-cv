@@ -711,6 +711,12 @@ _MBJ_MARKS_1128 = ("切字：朱楓林集藏书印／墨点格旗 cell_shrink.in
                    "GUJI_CORPUS_DRIFT=warn，2026-11-28（CV2，MBJ 印章墨点骑线字）")
 
 
+_NONE_COLS_1128 = ("reference_profile 列级无参照段 cols（CV0 2026-11-28，脉经第 2 册缺文小注）：align_ref.run_page 只在本页声明了 cols 时"
+                   "（_none_cols 非空）去掉这些列的对位并写 PageAlignRef.none_cols；没声明的页原样返回、none_cols 空不落盘，"
+                   "page_token 只在声明页加 |nc:…（tests/test_ref_none_cols.py、test_ref_profile_steps.py）。中心库现无册写 cols。"
+                   "哈希按合入时 origin/dev 重算。")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.steps.column_end",
           new="5ff011688402af99e9afecfe4bb381016b1c892805a7b93f5de3c80d59d9af33",
@@ -2951,6 +2957,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="2741e0048a40bba40cefdac9bebf011fcad3a020baeb9c2c454f96c5aa49615e",
           old="98fdf5949dc19daa7d1e913c39e02a2d6a9f5fc3683d8d9586957b882317aac0",
           evidence=_MBJ_MARKS_1128),
+    # reference_profile 列级无参照 cols（CV0 11-28）
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="1208d13d6d057505ed9a3ec385895367f6f7fa9ae4a0b5fed72a5013021487c8",
+          old="66b4b39a9704d4d6fd516910d7b7ed9493393287cfb4b2a394e9f4121ba6ab2e",
+          evidence=_NONE_COLS_1128),
 )
 
 

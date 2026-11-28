@@ -165,3 +165,14 @@ def test_layout_prior_missing_book_only_blocks_undeclared():
     assert not RS._ref_declared(make_book())
     assert RS._ref_declared(make_book(references=REFS, reference_profile=_prof({"default": "column",
                                                                               "segments": [{"pages": [1], "kind": "none"}]})))
+
+
+def test_align_ref_none_cols_drop_alignment(tmp_path, monkeypatch, ws):
+    """列级无参照（CV0 11-28）：声明的列不出对位字、产物记 none_cols；别的页照旧。"""
+    prof = _prof({"segments": [{"pages": [PAGE], "kind": "none", "cols": [COL]}]})
+    ctx = _ctx(tmp_path, monkeypatch, prof)
+    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert ar.none_cols == [COL] and not ar.chars and not ar.coord
+    (tmp_path / "b").mkdir()
+    base = STEPS["align_ref"].run_page(_ctx(tmp_path / "b", monkeypatch), PAGE)["align_ref"]
+    assert base.chars and not base.none_cols
