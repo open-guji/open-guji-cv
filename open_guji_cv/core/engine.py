@@ -749,6 +749,10 @@ class Engine:
                 now_parts = param_parts(self._params(step), step.spec.soft_params, step.spec.path_params)
                 diff = sorted(k for k in {*now_parts, *entry.param_parts}
                               if now_parts.get(k) != entry.param_parts.get(k))
+                # 改名时封存过的字段（`seal_rename`）旧→新对得上，不是这一页过期的原因，不列（MJ 11-28：列出来易误读）
+                sealed = (self._rename_marker().get("sealed") or {}).get(step.spec.id) or {}
+                diff = [k for k in diff
+                        if list(sealed.get(k) or ()) != [entry.param_parts.get(k), now_parts.get(k)]] or diff
                 if diff:
                     return "参数变了：" + "、".join(diff)
             return "参数变了"
