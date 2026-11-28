@@ -65,6 +65,7 @@ from ..products.alt_view import read_view as _read_view   # alt_cut：读挑中�
 from dataclasses import dataclass, field
 
 from ..core.spec import page_key
+from ..products.final_read import read_final_store
 from ..errors import ProductMissing
 from ..products.kinds.cells import CellRec, PageCells
 from ..products.kinds.recog import AdmitRec, PageAdmit
@@ -139,7 +140,7 @@ def page_slots(store: ProductStore, book: str, page: int,
     key = page_key(page)
     step = cells_step(book)
     cells: PageCells | None = _read_view(store, book, step, key, CELLS_KIND)  # type: ignore[assignment]
-    admit: PageAdmit | None = store.read(book, ADMIT_STEP, key, ADMIT_KIND)  # type: ignore[assignment]
+    admit: PageAdmit | None = read_final_store(store, book, key)  # type: ignore[assignment]   # char_decide／seed_admit 新旧目录都认
     if admit is None:
         raise ProductMissing(f"{book} 第 {page} 页没有 {ADMIT_STEP} 产物（先跑到 Step7）")
     if cells is None:

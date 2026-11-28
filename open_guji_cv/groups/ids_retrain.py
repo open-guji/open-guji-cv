@@ -42,6 +42,8 @@ def _imread_gray(path):
 
 import numpy as np
 
+from ..core.decide_names import final_dir, final_page_dict
+
 OK_CHANNELS = ("human", "match_ref", "ref_lib", "book_knn", "near_knn", "match_replace", "match_solo")
 
 
@@ -55,8 +57,8 @@ def gather(prod: Path, imgs: Path, g: str, per_vol: int = 10, cap: int = 100, ch
     by: dict = collections.defaultdict(list)
     for vd in sorted(glob.glob(str(prod / "*"))):
         book = Path(vd).name
-        for f in sorted(glob.glob(f"{vd}/seed_admit/p*.json")):
-            for col in json.load(open(f, encoding="utf-8"))["seed_admit"]["columns"]:
+        for f in sorted(glob.glob(f"{final_dir(prod, book) or vd + '/seed_admit'}/p*.json")):
+            for col in final_page_dict(json.load(open(f, encoding="utf-8")))["columns"]:
                 for r in col["chars"]:
                     if r.get("admit") and r.get("char") in classes and r.get("channel") in channels and not r.get("doubts"):
                         by[(book, r["char"])].append(r)
@@ -96,8 +98,8 @@ def audit_cells(prod: Path, imgs: Path, g: str, n: int = 700):
     mem = GROUPS[g].members
     rows = []
     for vd in sorted(glob.glob(str(prod / "*"))):
-        for f in glob.glob(f"{vd}/seed_admit/p*.json"):
-            for col in json.load(open(f, encoding="utf-8"))["seed_admit"]["columns"]:
+        for f in glob.glob(f"{final_dir(prod, Path(vd).name) or vd + '/seed_admit'}/p*.json"):
+            for col in final_page_dict(json.load(open(f, encoding="utf-8")))["columns"]:
                 rows += [(Path(vd).name, r) for r in col["chars"] if r.get("admit") and r.get("char") in mem and r.get("channel") in AUDIT_CHANNELS]
     random.Random(1).shuffle(rows)
     out = []
@@ -227,7 +229,7 @@ def prepare(ws: Path, work: Path, vols: list | None = None) -> tuple[Path, Path]
     for v, (label, _) in sorted(latest.items()):
         if vols and v not in vols:
             continue
-        if not (prod / v / "seed_admit").exists():
+        if final_dir(prod, v) is None:
             guji("products", "pack", "fetch", v, "-w", str(ws), "--label", label, "--to", str(prod))
         if not (imgs / v).exists():
             src = json.loads((prod / v / "_source.json").read_text(encoding="utf-8"))

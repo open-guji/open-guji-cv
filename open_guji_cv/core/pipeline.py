@@ -327,6 +327,8 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
     params_raw = d.get("params") or {}
     if not isinstance(params_raw, dict) or any(not isinstance(v, dict) for v in params_raw.values()):
         raise ValueError(f"pipeline {pid} 的 params: 必须是 {{step_id: {{字段: 值}}}}")
+    from .decide_names import fold_admit_params
+    params_raw = fold_admit_params(params_raw)         # 收尾步新旧名并认（P3a-1）
     p = Pipeline(
         id=d.get("id", pid), title=d.get("title", pid),
         steps=[str(s) for s in d.get("steps", [])],
@@ -388,7 +390,8 @@ def base_param_layers(pipeline: Pipeline, book) -> list[tuple[str, dict[str, dic
     不再写在管线 yaml（现有三条管线的 `params:` 已搬空，这一层只为兼容留着）。"""
     from .seg_set import seg_set_for_run, seg_set_params
     ss = seg_set_for_run(book, pipeline.id)
-    sp = seg_set_params(ss)
+    from .decide_names import fold_admit_params
+    sp = fold_admit_params(seg_set_params(ss))         # 收尾步新旧名并认（P3a-1）
     for sid in sp:
         if sid not in STEPS:
             raise ValueError(f"套书 {ss} 的 defaults.yaml params: 里有未注册的 Step {sid!r}")
@@ -410,7 +413,11 @@ LEGACY_PARAM_COPIES: dict[str, tuple[str, ...]] = {
 
 
 def rehome_params(layer: dict[str, dict]) -> dict[str, dict]:
-    """把一层参数里的旧位置字段搬到新 Step 名下；新位置已写的字段优先。原字典不改。"""
+    """把一层参数里的旧位置字段搬到新 Step 名下；新位置已写的字段优先。原字典不改。
+
+    收尾步改名（P3a-1，2026-11-28）：`char_decide:` 与 `seed_admit:` 两个键都认，并成现在生效的名字；同层同时写报错。"""
+    from .decide_names import fold_admit_params
+    layer = fold_admit_params(layer)
     out = {sid: dict(kv) for sid, kv in layer.items()}
     for old, news in LEGACY_PARAM_COPIES.items():
         kv = layer.get(old)
