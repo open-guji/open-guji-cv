@@ -35,7 +35,7 @@ _NEAR_SPECS = {
 
 #: 本步读的 `SeedAdmitParams` 字段（进本步指纹）：字组流程全部 `group_flow*`，加上面几个入口、宽高比、整理本字用到的。
 _SEED_EXTRA = ("fold_groups", "fold_aspect", "consensus_fallback", "reference_trust", "no_ref_params", "no_ref_pages",
-               "trust_from_accuracy", "ref_accuracy")
+               "ref_accuracy")
 
 
 def seed_fields() -> tuple[str, ...]:
