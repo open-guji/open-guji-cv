@@ -555,25 +555,25 @@ def _near_p_map(p, ctx, page: int) -> dict:
             for col in pf.columns for rec in col.chars if any(c.p is not None for c in rec.cands)}
 
 
-def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0,
-                     patch_missing: dict | None = None) -> int:
-    """字组统一流程（`SeedAdmitParams.group_flow`）：见 `groups/flow.py`。→ 放行数净增（补放减降级）。"""
-    from ..groups.context import WIDTH
-    from ..groups.flow import FlowConfig, group_flow_pass
+def _entry_config(p):
+    """只够 `groups.flow.entry` 用的 `FlowConfig`（4d `group_decision` 出入口归属用；CV4 P3c 2026-11-28）：取值与 `_flow_config` 里同名字段逐个相同，
+    但不装文意表、裁定库缓存、字频这些入口不读的东西（`tests/test_group_decision.py` 核对两者入口读的字段一致）。"""
+    from ..groups.flow import FlowConfig
+    return FlowConfig(groups=tuple(p.group_flow), delta=p.group_flow_delta, min_cov=p.group_flow_min_cov, joint=True,
+                      tolerate_extra={g: str(v) for g, v in p.group_flow_tolerate_extra.items()},
+                      ref_alias=dict(p.group_flow_ref_alias), ref_free_groups=frozenset(p.group_flow_ref_free),
+                      lift_ref_guard=True, provisional=p.group_flow_provisional, coord_outside_skip=True,
+                      pv_ref_gap=p.group_flow_pv_ref_gap, pv_ref_cov=p.group_flow_pv_ref_cov,
+                      provisional_to=dict(p.group_flow_provisional_to),
+                      lift_shape_ref=p._rt_lift_shape_ref(),
+                      top1_cov=p.group_flow_top1_cov)
+
+
+def _flow_config(p, ctx=None, page: int = 0):
+    """字组统一流程的 `FlowConfig`（`_group_flow_pass` 与 4d `group_decision` 共用；CV4 P3c 2026-11-28 从 `_group_flow_pass` 原样抽出，不改取值）。"""
+    from ..groups.flow import FlowConfig
     from ..groups.freq import load as _load_freq, load_vols as _load_vols
-    from ..groups.registry import FLOW_GROUPS as GROUPS
-    from ..utils.jiazhu_order import sort_by_reading
-    # 读序展平，剔除排除名单格（与建 L2 表的 `research/m7/ctx/l2_make_book.py` 同一取法，表键才对得上）
-    seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)
-           if not (r.doubts and "excluded" in r.doubts)]
-    # 2026-10-31（A24 查 ctx_l2 没挂上）：本进程记一次文意各层的挂载情况（L2 小头、L3 在线、密钥有无），
-    # 日志里一眼看得出 L2 小头／L3 在线有没有进来
-    if not _FLOW_MOUNT_LOGGED:
-        _FLOW_MOUNT_LOGGED.append(True)
-        import os
-        _log.warning("文意挂载：L2 小头 %s；L3 在线 %s；GUJI_ANTHROPIC_API_KEY %s", sorted(p.group_flow_models) or "无",
-                     sorted(_l3_online(p)) or "无", "已设" if os.environ.get("GUJI_ANTHROPIC_API_KEY") else "未设")
-    cfg = FlowConfig(groups=tuple(p.group_flow), delta=p.group_flow_delta, min_cov=p.group_flow_min_cov,
+    return FlowConfig(groups=tuple(p.group_flow), delta=p.group_flow_delta, min_cov=p.group_flow_min_cov,
                      top1_cov=p.group_flow_top1_cov, freq_major=p.group_flow_freq_major,
                      freq_vols=_load_vols(p.group_flow_freq) if p.group_flow_freq else {},
                      freq_min_vols=p.group_flow_freq_min_vols,
@@ -601,6 +601,27 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      pv_ref_gap=p.group_flow_pv_ref_gap, pv_ref_cov=p.group_flow_pv_ref_cov,
                      # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
                      canon=(ctx.book.canonical_char if (ctx is not None and ctx.book.codepoints) else None))
+
+
+def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0,
+                     patch_missing: dict | None = None) -> int:
+    """字组统一流程（`SeedAdmitParams.group_flow`）：见 `groups/flow.py`。→ 放行数净增（补放减降级）。"""
+    from ..groups.context import WIDTH
+    from ..groups.flow import FlowConfig, group_flow_pass
+    from ..groups.freq import load as _load_freq, load_vols as _load_vols
+    from ..groups.registry import FLOW_GROUPS as GROUPS
+    from ..utils.jiazhu_order import sort_by_reading
+    # 读序展平，剔除排除名单格（与建 L2 表的 `research/m7/ctx/l2_make_book.py` 同一取法，表键才对得上）
+    seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)
+           if not (r.doubts and "excluded" in r.doubts)]
+    # 2026-10-31（A24 查 ctx_l2 没挂上）：本进程记一次文意各层的挂载情况（L2 小头、L3 在线、密钥有无），
+    # 日志里一眼看得出 L2 小头／L3 在线有没有进来
+    if not _FLOW_MOUNT_LOGGED:
+        _FLOW_MOUNT_LOGGED.append(True)
+        import os
+        _log.warning("文意挂载：L2 小头 %s；L3 在线 %s；GUJI_ANTHROPIC_API_KEY %s", sorted(p.group_flow_models) or "无",
+                     sorted(_l3_online(p)) or "无", "已设" if os.environ.get("GUJI_ANTHROPIC_API_KEY") else "未设")
+    cfg = _flow_config(p, ctx, page)
 
     def blocked(r) -> bool:
         m = mmap.get(r.id)
