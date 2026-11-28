@@ -34,7 +34,7 @@ SEED_FIELDS = (
     "occluded_gate", "occluded_ref_empty_blank", "occluded_manual_seal_blank", "occluded_seal_align_yield",
     "seal_blank_page", "lane_seal",
     "seg_box_check", "ink_marks", "lane_header_formula", "lane_header_formula_re", "consensus_fallback",
-    "no_ref_params", "no_ref_pages", "trust_from_accuracy", "ref_accuracy",
+    "no_ref_params", "no_ref_pages", "ref_accuracy",
 )
 
 

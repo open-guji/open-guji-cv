@@ -105,6 +105,10 @@ Kind = Literal[
     "ctx_ruling",     # 形近字组文意 L3 在线：大模型对一个窗口（前后各 20 字）判的字（payload: source="llm", group, char|None,
                       #   conf, why, model, prompt_ver, ctx{left,right,hash}, cell, tok）。**不是人裁**：actor="model"，存
                       #   `<feedback>/rulings/<批次>.jsonl`，不进 events/；管线 L3 先查它，有就按它来、没有才问大模型。
+    # ── 第三步看图大模型的答案缓存（2026-11-28，CV3／CV4；目录 GM4 定）。见 feedback/vis_glyph.py。
+    "vis_glyph",      # 大模型**只看字块图**判的「刻形像哪个候选」（payload: source="llm", img_sha, prompt_sha, cands, char|None,
+                      #   other, conf, why, model, cell, legacy）。**不是人裁、不算钉**：actor="model"，按图寻址
+                      #   （target unit="glyph_img"、key=img_sha，格号只在 payload.cell），存 `<feedback>/vis_glyph/`，不进 events/、rulings/。
     # ── 插图块（GUJI-740，2026-10-24）。见 feedback/figures.py。
     "figure_region",  # 控制台在页上画的插图框：占若干列、半页或整页的图（payload: box=[x,y,w,h] canvas 像素、
                       #   col（图块右边第一列）、span、alt、fig（图 id，可空）；v="delete" 撤掉）。
@@ -179,7 +183,7 @@ def event_level(e) -> str | None:
 
     先认 `payload.level`（`machine` 给 None）；没有的：`actor` 不是 model 的算 human，是 model 的按批次名查
     `HUMAN_MODEL_BATCHES`（在表里算 human，其余算 ai）。"""
-    if getattr(e, "kind", None) in ("vision_check", "ctx_ruling"):
+    if getattr(e, "kind", None) in ("vision_check", "ctx_ruling", "vis_glyph"):
         return None
     p = getattr(e, "payload", None) or {}
     if p.get("source") in MODEL_JUDGMENT_SOURCES:

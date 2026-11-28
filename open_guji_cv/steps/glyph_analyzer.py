@@ -1,6 +1,6 @@
 """第三步识字的收尾 `glyph_analyzer`（2026-11-27，第三步重构；设计见 ai-team《第三步识字重构设计》第四节）。
 
-在本大步各小步（3a `glyph_match`、3b `glyph_near`、3c `glyph_candidate`、3d `cell_traits`）都跑完之后跑，把它们汇总成每格一条：
+在本大步各小步（3a `glyph_match`、3b `glyph_near`、3c `glyph_candidate`、3d `cell_traits`、3e `glyph_vis`）都跑完之后跑，把它们汇总成每格一条：
 
     cands: [{char, p, evidence: {a: {...}, b: {...}}}, …]     按 p（再按 3a 分）降序
     p_map: {cut: …, border: …, residue: …, …}                 其他特征的概率；只放有校准来源的键
@@ -10,6 +10,9 @@
                                                                3b 各组各方法这一格的证据原样＋模型版本（3b 没触发不落盘；
                                                                rr_shape 是 {char, why, nn, score, geo}，同第四步 rr_shape.judge）；
                                                                这组出了校准 p 才有 p／p_src。读旧文件用 `FinalRec.near_groups()`
+    vis: {group, trigger, status, char, other, conf, why, model, prompt_sha, cache_hit, legacy, img_sha}
+                                                               3e 看图大模型（只看图）这一格的结论（3e 没触发不落盘）；
+                                                               答出字时那个候选另有 evidence.v = {conf, model, prompt_sha, cache_hit, legacy}
 
 **第三步不判断放不放行**，第四步只读这里的 p 定放行（Sheldon 11-26）。
 
@@ -30,6 +33,13 @@
   **两个以上组都出了 p** → 候选 p 全为 None、`p_src` 空（各组的 p 各自在组内归一，拼不成这一格的一个分布；谁也不挑，
   第四步按「没有 p」走，既不按 p 放行也不按 p 降审），各组的 p 只留在 `near[组].p`／`near[组].p_src` 里当证据。
 - `near`：按组 `{组: {trigger, methods, [p, p_src]}}`（之前是一格一组的 `{group, trigger, methods}`）。
+
+## 3e 看图大模型（2026-11-28，CV3／CV4）
+
+- 3e 这格有 `VisRec` 才写 `vis`（空不落盘）；答出字（hit／asked 且不是「其他」）时那个候选写 `evidence.v`，字不在 cands 里就补一条
+  `FinalCand(char, p=None)` 排在最后（同 3c 补候选）。「其他」、弃权、pending、skipped 只在 `vis` 里。
+- **不出 p**：大模型的 high／mid／low 没校准；`p`、`p_src`、候选排序一概不因 `vis` 改变。
+- 没开 3e 的书：`vis_rec` 为 None，收尾产物与加 3e 之前逐字节相同（`core/code_equiv.py` 登记，测试 `test_glyph_vis` 守着）。
 
 `enabled: false`（缺省）＝不跑（`StepSpec.enabled_by`）。
 """
@@ -72,11 +82,12 @@ def _near_list(near_rec) -> list:
 
 
 def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, cand_rec=None, cand_k: int = 10,
-               traits_rec=None, near_models: dict | None = None) -> FinalRec:
+               traits_rec=None, near_models: dict | None = None, vis_rec=None) -> FinalRec:
     """一格：3a 记录 ＋（可选）3b、3c、3d 记录 → FinalRec。`calibrators`：{方法全名: 方法对象}（有 `calibrate`）。
     `near_rec`：这格 3b 各组的 [NearRec…]（`PageNear.by_id_all()` 的一项；单条 NearRec 也认）。
     3d `traits_rec` 的原始分原样放进 `traits`（未校准，不进 `p_map`）。3b 各方法的证据原样放进 `near[组].methods[方法名]`，
-    `near_models`（3b 产物的 `PageNear.models`）给了就带上 `model`。多组时 p 怎么合见模块头「一格多组」。"""
+    `near_models`（3b 产物的 `PageNear.models`）给了就带上 `model`。多组时 p 怎么合见模块头「一格多组」。
+    `vis_rec`：这格 3e 的 `VisRec`（没有为 None），见模块头「3e 看图大模型」。"""
     cands: dict[str, FinalCand] = {}
     order: list[str] = []
     for c, s in (match_rec.candidates or [])[:topk]:
@@ -133,6 +144,7 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
         for a, b in (getattr(m, "merge", None) or {}).items():
             if a in cands and b in ps:
                 cands[a].evidence.setdefault("b", {})["same_as"] = b
+    vis = _vis_of(vis_rec, cands, order) if vis_rec is not None else {}
     rank = {c: i for i, c in enumerate(order)}
     # 异体不分的字（same_as）p 记 None：概率只算在它归的字上一次，各候选 p 之和不超过 1
     for fc in cands.values():
@@ -155,7 +167,24 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
             near[nr.group]["p"] = dict(gp[nr.group][1])
             near[nr.group]["p_src"] = f"near:{gp[nr.group][0]}"
     return FinalRec(id=match_rec.id, slot=match_rec.slot, sub=match_rec.sub, cands=out, p_src=p_src, traits=traits,
-                    near=near)
+                    near=near, vis=vis)
+
+
+def _vis_of(v, cands: dict, order: list) -> dict:
+    """3e 一格 → `FinalRec.vis`；答出字时给那个候选写 `evidence.v`（不在 cands 里就补一条，p 为 None）。"""
+    out = {"group": v.group, "trigger": list(v.trigger), "status": v.status, "char": v.char, "other": v.other,
+           "conf": v.conf, "why": v.why, "model": v.model, "prompt_sha": v.prompt_sha, "cache_hit": v.cache_hit,
+           "legacy": v.legacy, "img_sha": v.img_sha}
+    if v.groups:
+        out["groups"] = list(v.groups)
+    if v.char and v.status in ("hit", "asked"):
+        fc = cands.get(v.char)
+        if fc is None:
+            fc = cands[v.char] = FinalCand(char=v.char)
+            order.append(v.char)
+        fc.evidence["v"] = {"conf": v.conf, "model": v.model, "prompt_sha": v.prompt_sha, "cache_hit": v.cache_hit,
+                            "legacy": v.legacy}
+    return out
 
 
 @register_step
@@ -163,7 +192,7 @@ class GlyphAnalyzerStep(Step):
     spec = StepSpec(
         id="glyph_analyzer", title="3 识字收尾（汇总）", version="0.2", unit="cell",
         consumes=("glyph_match",), produces=("glyph_analyzer",),
-        optional_consumes=("glyph_near", "glyph_candidate", "cell_traits"),
+        optional_consumes=("glyph_near", "glyph_candidate", "cell_traits", "glyph_vis"),
         params=GlyphAnalyzerParams,
         code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.clustering.sim_cnn"),
         enabled_by="enabled",
@@ -187,6 +216,11 @@ class GlyphAnalyzerStep(Step):
         except Exception:  # noqa: BLE001 —— 可选上游：3d 没开或没跑就当没有这一路
             traits = None
         traits_by = traits.by_id() if traits is not None else {}
+        try:
+            vis = ctx.product("glyph_vis", page)
+        except Exception:  # noqa: BLE001 —— 可选上游：3e 没开或没跑就当没有这一路
+            vis = None
+        vis_by = vis.by_id() if vis is not None else {}
 
         calibrators: dict[str, object] = {}
         if near_by:
@@ -199,7 +233,8 @@ class GlyphAnalyzerStep(Step):
 
         cols = [ColumnFinal(col=cm.col, chars=[merge_cell(r, near_by.get(r.id), calibrators, p.topk, algo, cand_by.get(r.id),
                                                           traits_rec=traits_by.get(r.id),
-                                                          near_models=near.models if near is not None else None)
+                                                          near_models=near.models if near is not None else None,
+                                                          vis_rec=vis_by.get(r.id))
                                                for r in cm.chars])
                 for cm in match.columns]
         return {"glyph_analyzer": PageFinal(page=page, model=MODEL, columns=cols)}
