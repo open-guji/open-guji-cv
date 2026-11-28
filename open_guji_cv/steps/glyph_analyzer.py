@@ -191,7 +191,7 @@ class GlyphAnalyzerStep(Step):
         consumes=("glyph_match",), produces=("glyph_analyzer",),
         optional_consumes=("glyph_near", "glyph_candidate", "cell_traits", "glyph_vis"),
         params=GlyphAnalyzerParams,
-        code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.clustering.sim_cnn"),
+        code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_methods._base", "open_guji_cv.groups.near_methods.cnn_small", "open_guji_cv.groups.near_methods.rr_shape", "open_guji_cv.groups.near_methods.wu_shape", "open_guji_cv.groups.near_methods.hou_shape", "open_guji_cv.groups.near_methods.part_shape", "open_guji_cv.groups.near_methods.pair_shape", "open_guji_cv.groups.near_methods.book_knn", "open_guji_cv.groups.near_methods.near_knn", "open_guji_cv.groups.near_methods.stroke_veto", "open_guji_cv.groups.near_methods.flow_shape", "open_guji_cv.groups.near_methods.pair_clf", "open_guji_cv.clustering.sim_cnn"),
         enabled_by="enabled",
     )
 
