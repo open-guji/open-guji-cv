@@ -214,7 +214,7 @@ def test_glyph_near_rr_shape_end_to_end(tmp_path, model_file):
     pn = out["glyph_near"]
     sha = rr_shape.fingerprint(str(model_file))                             # 与第四步参数指纹 rs 段同算法
     assert pn.models == {"rr_shape:rr": sha}
-    # 4d（cv #1999 `_rr_shape_from_3b`）比的是 methods_sha 里的 `rr_shape=<指纹>`，与它按 group_flow_rr_shape 算的同一份
+    # 4d（cv #1999 `_near_from_3b`）比的是 methods_sha 里的 `rr_shape=<指纹>`，与它按 group_flow_rr_shape 算的同一份
     assert NM.method_fingerprint("rr_shape", str(model_file)) in {x.split(":", 1)[1] for x in pn.methods_sha.split(";")}
     near = pn.by_id()
     assert list(near) == [f"tbook:1:1:{s}" for s in (1, 2, 3, 4, 6)]

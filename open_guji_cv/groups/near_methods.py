@@ -52,7 +52,7 @@
 - `sims`：几何判成 八 → `{八: 1, 人: 0, 入: 0}`；走逻辑回归 → `{入: σ(s), 人: 1−σ(s), 八: 0}`（s＝`judge` 给的决策值，
   已按 3 位小数取整，同第四步 `evidence.rr_shape.score`）；弃权里没算出 s 的（无墨、组外字护栏、几何不明、NaN）→ `{}`。
   分差不够（`abstain:low_margin`）仍给 sims，弃权记在证据里。
-- `evidence`：`{method: "rr_shape", char, why, nn, score, geo}`，后五键与第四步 `evidence.rr_shape` 同键同值（`char` 是现役判法的结论，弃权为 None）。**4d 的读口就是这里**（`seed_admit_shapes._rr_shape_from_3b`，开关 `group_flow_rr_shape_3b`，cv #1999）：按 `NearMethodOut.method` 冒号前是 `rr_shape` 取，证据带 `error` 的格不取；模型对不对比 `methods_sha` 里的 `rr_shape=<指纹>`。
+- `evidence`：`{method: "rr_shape", char, why, nn, score, geo}`，后五键与第四步 `evidence.rr_shape` 同键同值（`char` 是现役判法的结论，弃权为 None）。**4d 的读口就是这里**（`seed_admit_shapes._near_from_3b`，开关 `group_flow_near_from_3b`，cv #1999）：按 `NearMethodOut.method` 冒号前是 `rr_shape` 取，证据带 `error` 的格不取；模型对不对比 `methods_sha` 里的 `rr_shape=<指纹>`。
 - 校准：模型文件旁边的 `<文件名去 .json>.calib.json`（给目录时是目录里的 `calib.json`），格式
   `{"format": "near-calib/1", "knots": {"入": [[σ(s)…], [p…]]}, "rule": {"八": p}}`：逻辑回归那一路按 knots 映 `入` 的 p、`人`＝1−p；
   几何判 八 的那一路 p 取 `rule.八`。**现在没有校准表**（`calibrate` 返回 None，收尾不出 p）；要标就拿训练脚本按册留出那一遍的
