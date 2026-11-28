@@ -6,6 +6,7 @@
 ## [未发版]
 
 - PATCH（L0，各书指纹逐位不变；CV0 2026-11-28，Sheldon 定「三链合成一条默认链」）：`keben_body_v2`、`keben_free`、`modern_body` 三条链并成唯一一条 `guji_default`（`pipelines/guji_default.yaml`），原来的三条链成了它的三个**版式** `layout: grid｜free｜print`，只换 1b–2b 槽位里的步骤。册配置新字段 `layout:`（不进指纹）；不写按旧 `pipeline:`、`seg_set:`、书仓 `code.yaml` 的 `base:`、`edition: modern` 推，缺省 grid（`core/seg_set.layout_of`）。三个旧 id 永久当别名（`guji pipeline keben_body_v2 …`、任务库旧单照跑），也可写 `guji_default@free`；`guji_default` 不带版式时按册推。`default_pipeline_id` 改返回 `guji_default@<版式>`，`Pipeline` 加 `layout`／`ref`，`list_pipelines` 每个版式列一条，run 记录与耗时统计加 `layout` 字段。步骤 id、产物、参数层都不动：`tests/test_guji_default.py` 核旧 id 与新引用加载出的步骤、参数、每步指纹自身部分逐位相同。设计 https://claude.ai/artifact/99ihHT9o84MSKtB59YDWMp ；自由版式接 2c 以后（free_to_cells）是第二期，交 CV2。
+- PATCH（CV2，四大步验收 L4／L5／L10）：切字 benchmark 搬进 `eval/`（`cut_bench` freeze／run／score／gate、`cut_frame`、`cut_ink`）；`cut_bench gate` 量出口闸检出率、误报率；row_segment、cell_shrink 等 7 个切字 Step 显示名改 2a／2d／2e，只改 title、登 code_equiv，产物与指纹不变。
 
 ## [0.9.16] - 测试中
 
