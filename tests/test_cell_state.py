@@ -137,6 +137,7 @@ def test_finale_same_with_and_without_cell_state(tmp_path, monkeypatch, params):
     _fill(ctx, boxes, [1, 4, 5])
     inline = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
 
+    params = params.model_copy(update={"cell_state_read": True})
     ctx2 = _ctx(tmp_path / "b", monkeypatch, params, cs.CellStateParams(enabled=True))
     _fill(ctx2, boxes, [1, 4, 5])
     st = STEPS["cell_state"].run_page(ctx2, PAGE)["cell_state"]
@@ -183,3 +184,33 @@ def test_run_page_does_not_shadow_cstate():
     tree = ast.parse(textwrap.dedent(inspect.getsource(SeedAdmitStep._run_page)))
     stores = [n for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id == "cstate" and isinstance(n.ctx, ast.Store)]
     assert len(stores) == 1
+
+
+@pytest.mark.usefixtures("seed_admit_switches_off")
+def test_cell_state_read_switch_semantics(tmp_path, monkeypatch):
+    """`cell_state_read` 关：产物在也不读（一律现算）；开：读产物，产物里没有的探测器现算并计数。"""
+    base = SeedAdmitParams(seg_box_check=("tall", "frame_line", "speck", "split_pair"))
+    boxes = [_box(1), _box(2), _box(3)]
+    ctx = _ctx(tmp_path, monkeypatch, base, cs.CellStateParams(enabled=True))
+    _fill(ctx, boxes, [1, 2, 3])
+    st = STEPS["cell_state"].run_page(ctx, PAGE)["cell_state"]
+    assert st.seg_box == {}
+    # 往产物里塞一条假判据：第 2 格「tall」
+    st = st.model_copy(update={"seg_box": {f"{BOOK}:{PAGE}:{COL}:2": ["tall"]}})
+    write_product(ctx, "cell_state", PAGE, cell_state=st)
+    logs: list[str] = []
+    ctx.log = logs.append
+    off = {r.slot: r for cc in STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns for r in cc.chars}
+    assert all(r.admit for r in off.values()) and not any("cell_state" in x for x in logs)      # 关：忽略产物，无日志
+    on_p = base.model_copy(update={"cell_state_read": True})
+    ctx2 = _ctx(tmp_path, monkeypatch, on_p, cs.CellStateParams(enabled=True))
+    ctx2.log = logs.append
+    on = {r.slot: r for cc in STEPS["char_decide"].run_page(ctx2, PAGE)["char_decide"].columns for r in cc.chars}
+    assert not on[2].admit and on[1].admit and on[3].admit        # 开：用了产物里的判据
+    assert any("cell_state 读产物" in x and "本地现算" in x for x in logs)
+
+
+def test_cell_state_read_default_off_and_not_in_dump():
+    assert SeedAdmitParams().cell_state_read is False
+    assert "cell_state_read" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(cell_state_read=True).model_dump()["cell_state_read"] is True

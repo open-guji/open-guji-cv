@@ -114,7 +114,7 @@ def rank_cell(pool: list[tuple[str, float]], sem: dict[str, float] | None, w: fl
 @register_step
 class ContextRankStep(Step):
     spec = StepSpec(
-        id="context_rank", title="按上下文排序（候选）", version="0.1", unit="cell",
+        id="context_rank", title="4b 按上下文排序（候选）", version="0.1", unit="cell",
         consumes=("glyph_match",), optional_consumes=("glyph_analyzer", "context_decision"),
         produces=("context_rank",),
         params=ContextRankParams,
