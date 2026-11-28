@@ -3,9 +3,10 @@
 - `llm-context`：外部大模型在「现行 gated_ngram 判错」的槽位上救回多少（题集＝缓存快照覆盖的 100 题，evalset 共 150 题）。**缺省只读裁定缓存，不联网**：
   缓存是 dataset `context-correction/llm-cache/<日期>.jsonl`（kind=ctx_ruling，键＝格号＋model＋prompt_ver），
   文件 sha256 写进结果 `env.llm_cache_sha256`，同缓存同题集两次结果逐位相同。题集在本仓 `output/llm_context_evalset/evalset.json`。
-  `--arg online=1` 才走旧脚本在线真调用（要 GLM／DASHSCOPE key，结果不可复现，不进护栏）；llm_online_accuracy 作它的 online 子项（待接，见已知缺口）。
-- `confusable-lm`：形近对消歧的 n-gram 臂（`scripts/eval_confusable_lm.py`）。语料路径走 `--arg book_corpus=…,general_corpus=…`
-  （manager 资源层还不给语料路径）；`mode` 缺省 heldout（诚实口径，book 对本集有泄漏）。
+  `--arg online=1` 才走旧脚本在线真调用（要 GLM／DASHSCOPE key，结果不可复现，不进护栏）；`--arg online=accuracy` 是 llm_online_accuracy
+  （线上调用日志×人审事件的真实正确率，只读，不可复现，不进护栏）。
+- `confusable-lm`：形近对消歧的 n-gram 臂（`scripts/eval_confusable_lm.py`）。语料路径读 manager 资源层 `ctx.res["corpus"]`，
+  没有时走 `--arg book_corpus=…,general_corpus=…`；`mode` 缺省 heldout（诚实口径，book 对本集有泄漏）。
 - `context-correction`：冻结候选上「通用 LM＋本书 LM」纠正（`scripts/eval_context_correction.py`），主指标 top1_gain，看有害翻转率。
 
 三项金标都只有殿本 vol01（`context-correction`、`confusable-context` 分片），其他书报 no_gold。基线数：都还没有。
@@ -92,6 +93,12 @@ def score_llm_context(items: list[dict], rulings: dict[str, dict], questions: se
 def _run_llm(ctx: BenchCtx) -> Path:
     _need_book(ctx)
     out = ctx.work / "llm-context.json"
+    if ctx.args.get("online") == "accuracy":              # 线上真实正确率：线上调用日志 × 人审事件（原 llm_online_accuracy），只读
+        from guji_manager.eval.llm_online_accuracy import compute_report     # noqa: PLC0415 —— 口径在 manager
+        log_dir = Path(ctx.args.get("log_dir") or REPO / "output" / "llm_online_calls")
+        rep = compute_report(log_dir, None if ctx.args.get("all") == "1" else ctx.args.get("log_book") or "vol03", None)
+        out.write_text(json.dumps({"mode": "online_accuracy", **rep}, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+        return out
     if ctx.args.get("online") == "1":                    # 在线真调用：旧脚本，不可复现
         prov = ctx.args.get("provider", "glm")
         cmd = [sys.executable, str(REPO / "scripts" / "eval_llm_context.py"), str(EVALSET), "--provider", prov,
@@ -111,6 +118,12 @@ def _run_llm(ctx: BenchCtx) -> Path:
 
 def _score_llm(ctx: BenchCtx, pred: Path) -> BenchResult:
     d = json.loads(pred.read_text(encoding="utf-8"))
+    if d.get("mode") == "online_accuracy":
+        m = {"online_accuracy": d.get("accuracy"), "n_resolved": d.get("n_resolved"), "n_total_calls": d.get("n_total_calls"),
+             "n_correct": d.get("n_correct"), "cache_miss_rate": 0.0}
+        return BenchResult("llm-context", ctx.book, ctx.vols, m, "online_accuracy", n=d.get("n_resolved") or 0, items=[],
+                           env={"online_accuracy": True, "log": "output/llm_online_calls"},
+                           reason="线上真实调用×人审事件，随日常处理量变，不可复现，不进护栏")
     if d.get("mode") == "cache":
         r = BenchResult("llm-context", ctx.book, ctx.vols, d["metrics"], "llm_accuracy", n=d["metrics"]["n"],
                         items=[{"id": x["id"], "ok": x["ok"], "llm": x["llm"], "gold": x["gold"]} for x in d["rows"]],
@@ -135,9 +148,17 @@ def _script(ctx: BenchCtx, cmd: list, log: str) -> None:
 
 
 def _corpus_args(ctx: BenchCtx) -> list[str]:
+    """语料路径：`--arg book_corpus=…,general_corpus=…` 优先；没给就读 manager 资源层的 `ctx.res["corpus"]`
+    （`{"book_corpus": 路径或路径列表, "general_corpus": …}`，GM2 11-28 补）。"""
+    res = ctx.res.get("corpus") if isinstance(ctx.res.get("corpus"), dict) else {}
     out: list[str] = []
     for key, flag in (("book_corpus", "--book-corpus"), ("general_corpus", "--general-corpus")):
-        for p in [x for x in ctx.args.get(key, "").split(",") if x]:
+        if ctx.args.get(key):
+            ps = [x for x in ctx.args[key].split(",") if x]
+        else:
+            v = res.get(key) or []
+            ps = [str(v)] if isinstance(v, (str, Path)) else [str(x) for x in v]
+        for p in ps:
             out += [flag, p]
     return out
 
@@ -146,7 +167,7 @@ def _run_confusable(ctx: BenchCtx) -> Path:
     _need_book(ctx)
     cargs = _corpus_args(ctx)
     if not cargs:
-        raise RuntimeError("confusable-lm 要语料：--arg book_corpus=<路径,…> general_corpus=<路径,…>（manager 资源层暂不提供语料路径）")
+        raise RuntimeError("confusable-lm 要语料：manager 资源层的 ctx.res['corpus'] 或 --arg book_corpus=<路径,…> general_corpus=<路径,…>")
     out = ctx.work / "confusable.json"
     cases = Path(ctx.res["dataset"]) / "confusable-context" / "cases.json"
     _script(ctx, [sys.executable, str(REPO / "scripts" / "eval_confusable_lm.py"), str(cases), "--mode", ctx.args.get("mode", "heldout"),
@@ -173,7 +194,7 @@ def _run_cc(ctx: BenchCtx) -> Path:
     _need_book(ctx)
     cargs = _corpus_args(ctx)
     if not cargs:
-        raise RuntimeError("context-correction 要语料：--arg book_corpus=<路径> general_corpus=<路径>（manager 资源层暂不提供语料路径）")
+        raise RuntimeError("context-correction 要语料：manager 资源层的 ctx.res['corpus'] 或 --arg book_corpus=<路径> general_corpus=<路径>")
     out = ctx.work / "cc.json"
     w = ctx.args.get("weight", "0.9")
     _script(ctx, [sys.executable, str(REPO / "scripts" / "eval_context_correction.py"), str(Path(ctx.res["dataset"]) / "context-correction"),
@@ -197,12 +218,41 @@ def _score_cc(ctx: BenchCtx, pred: Path) -> BenchResult:
                        env={"provenance": d.get("provenance")})
 
 
+# ---------------------------------------------------------------- context-guard（A/B 工具，没有金标）
+def _run_guard(ctx: BenchCtx) -> Path:
+    a = ctx.args
+    if not (a.get("base") and a.get("variant") and a.get("book_id")):
+        raise RuntimeError("context-guard 是基线对变体的 A/B 工具：--arg base=<基线产物根> variant=<名=变体产物根> book_id=<册，如 vol03> [labels=<标签 json>]")
+    out = ctx.work / "guard.json"
+    cmd = [sys.executable, str(REPO / "scripts" / "eval_context_guard.py"), "--book", a["book_id"], "--base", a["base"],
+           "--variant", a["variant"], "--json", str(out)] + (["--labels", a["labels"]] if a.get("labels") else [])
+    _script(ctx, cmd, "guard.log")
+    return out
+
+
+def score_guard(res: dict) -> tuple[dict, list[dict]]:
+    name = next(k for k in res if k != "base")
+    v, b = res[name], res["base"]
+    m = {"blocked": v["blocked"], "blocked_wrong": v["wrong"], "blocked_right": v["right"], "unlabeled": v["unlabeled"],
+         "missed": v["missed"], "review_rate_base": b["rate"], "review_rate_variant": v["rate"],
+         "review_rate_diff": round(v["rate"] - b["rate"], 6), "context_admits": b["context"]}
+    items = [{"id": k, "ok": True, "kind": "拦对"} for k in v["wrong_ids"]] + [{"id": k, "ok": False, "kind": "误拦"} for k in v["right_ids"]] \
+        + [{"id": k, "ok": False, "kind": "漏拦"} for k in v["missed_ids"]]
+    return m, items
+
+
+def _score_guard(ctx: BenchCtx, pred: Path) -> BenchResult:
+    m, items = score_guard(json.loads(pred.read_text(encoding="utf-8")))
+    return BenchResult("context-guard", ctx.book, ctx.vols, m, "blocked_right", items=items, n=len(items),
+                       reason="A/B 工具，没有金标；blocked_right 是有标签的误拦（拦下的字其实是对的）")
+
+
 _GOLD = lambda shard: {BOOK: shard}                                    # noqa: E731 —— 三项都只有殿本 vol01
 register(BenchSpec(
     id="llm-context", title="外部大模型在 ngram 判错槽位上的救回率（缺省只读裁定缓存，不联网）", steps=("context_decide",), owner="CV4",
     gold=_GOLD("context-correction"), needs=("gold",), primary="llm_accuracy", run=_run_llm, score=_score_llm, cost="light",
     guards=(Guard("cache_miss_rate", "max", 0.0),), item_key="id", item_ok="ok",
-    args={"online": "1＝在线真调用（要 key，不可复现）", "model": f"缓存里的 model（缺省 {DEFAULT_MODEL}）", "prompt": f"prompt_ver（缺省 {DEFAULT_PROMPT}）",
+    args={"online": "1＝在线真调用（要 key，不可复现）｜accuracy＝线上调用日志×人审事件的真实正确率（原 llm_online_accuracy，只读）", "model": f"缓存里的 model（缺省 {DEFAULT_MODEL}）", "prompt": f"prompt_ver（缺省 {DEFAULT_PROMPT}）",
           "cache": "裁定缓存路径（缺省取 dataset context-correction/llm-cache 最新一份）"}))
 register(BenchSpec(
     id="confusable-lm", title="形近对消歧 n-gram 臂（真难档准确率）", steps=("context_decide",), owner="CV4",
@@ -214,3 +264,8 @@ register(BenchSpec(
     gold=_GOLD("context-correction"), needs=("gold", "corpus"), primary="top1_gain", run=_run_cc, score=_score_cc, cost="heavy",
     guards=(Guard("glyph_layer_immutable", "min", 1),), item_key="id", item_ok="ok",
     args={"book_corpus": "本书语料路径", "general_corpus": "通用语料路径", "weight": "本书 LM 权重（缺省 0.9）", "gate": "门槛（缺省 0.70，生产口径）"}))
+register(BenchSpec(
+    id="context-guard", title="context 通道护栏（基线对变体：拦对／误拦／漏拦、待审率代价；A/B 工具，无金标）", steps=("context_decide",), owner="CV4",
+    gold={}, needs=(), primary="blocked_right", run=_run_guard, score=_score_guard, cost="light", nogold=True,
+    guards=(Guard("blocked_right", "max", 0),), item_key="id", item_ok="ok",
+    args={"base": "基线产物根", "variant": "名=变体产物根", "book_id": "册（如 vol03）", "labels": "标签 json（`eval_context_guard.py --make-labels` 生成）"}))
