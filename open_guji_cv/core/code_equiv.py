@@ -3056,6 +3056,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='f6aab5e7da1e89138f0284120d6cbbed4d2423a9c69bf6d347a616324f4dd49a',
           old='d3509fcba80364ca8f152a30fc5902b9947c2949dacacbf83a35fc7a719ad20d',
           evidence='四大步验收 L10（CV3 2026-11-28）：只把 StepSpec.title 显示名从旧号改成新编号（Step5-b 生僻字候选→（旧）生僻字候选），title 不进产物、不进参数，运行逻辑一字不动，产物逐字节不变按构造成立'),
+    Equiv(module='open_guji_cv.groups.registry',
+          new='6be537ace4ec44167c9221266bfdd4ac8ebb41083e8b7577cb71634580d41dce',
+          old='f878d64c10d110fef8316ea390c3388a4f673e795a310991a4a999f8a85622f2',
+          evidence='结构拆分 A5（CV3 2026-11-28，CV4 同意分界）：groups/registry.py 的组数据（名字、成员、类型、后端、解法、配置目录、overlaps、ref_free、说明、次序）搬进 config/near_groups/registry.json，FlowSpec 留在本模块按 id 写，载入时组装；DATA_SHA 钉住 JSON 内容。GROUPS／CODEPOINT_GROUPS／SHAPE_GROUPS／OPT_IN_GROUPS／FLOW_GROUPS 与拆前逐项同值同序（逐字段规范化比较 185 组全同，FLOW_GROUPS id 序列 sha ae5db619ca6cb627 冻进 tests/test_groups_registry_json.py），VIS_GROUPS、PROVISIONAL、generic_flow_names 不变；产物逐字节不变按构造成立'),
+    Equiv(module='composite:open_guji_cv.steps.glyph_stages+open_guji_cv.clustering.near_route+open_guji_cv.groups.shape_stage+open_guji_cv.groups.methods+open_guji_cv.groups.ids_online+open_guji_cv.groups.registry',
+          new='da9681484d26d47896e61186f8a2fef741403f4523b238220b29437006d39919',
+          old='fbced2adde554dc77ac3bbbf4b481b7a79356a0d2f5a9b1eaa4a8fcdaabf2746',
+          evidence='结构拆分 A5（CV3 2026-11-28）：合算里的 groups/registry.py 组数据搬进 config/near_groups/registry.json、FlowSpec 按 id 组装，FLOW_GROUPS 等与拆前逐项同值同序（185 组逐字段规范化比较全同），其余模块未动；5a stages 产物逐字节不变按构造成立'),
 )
 
 

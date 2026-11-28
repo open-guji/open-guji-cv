@@ -206,8 +206,8 @@ def test_clean_patch_drops_border_specks():
 def test_near_family_groups():
     """码位已定、库在形近字间拿不准的族（2026-10-26）：整字 HOG 一对多、两码位并一类、陪衬进库；须与整理本同字、库首位是陪衬也按整理本进。"""
     from open_guji_cv.groups.ids_online import SPECS, bank_path
-    from open_guji_cv.groups.registry import SHAPE_GROUPS, _NEAR_FAMILY
-    gs = [g for g, *_ in _NEAR_FAMILY]
+    from open_guji_cv.groups.registry import SHAPE_GROUPS, _NEAR_FAMILY_TOL
+    gs = list(_NEAR_FAMILY_TOL)
     assert set(gs) == {"xiang", "weim", "bie", "zhen", "fu"}
     check_groups(tuple(gs))
     for g in gs:
