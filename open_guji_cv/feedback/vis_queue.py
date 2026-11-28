@@ -94,7 +94,6 @@ def collect(ctx_pages: Iterable[tuple[object, Iterable[int] | None]], store=None
            "img_changed": 0, "questions": 0, "cells": 0}
     rows: dict[str, dict] = {}
     pngs: dict[str, bytes] = {}
-    bad: set[str] = set()                     # 读不到图／图变了的题键：同键别的格也不再试
     for ctx, pages in ctx_pages:
         p = ctx.params_for(STEPS[STEP])
         psha = V.prompt_sha(p.prompt)
@@ -121,20 +120,20 @@ def collect(ctx_pages: Iterable[tuple[object, Iterable[int] | None]], store=None
                 if k in rows:
                     rows[k]["cells"].append(v.id)
                     continue
-                if k in bad:
-                    continue
                 if crec is None:
-                    chars = ctx.product("char_index", page)
-                    crec = {r.id: r for cc in chars.columns for r in cc.chars}
-                    raw = ctx.raw_page(page) if p.patch == "raw" else None
+                    try:
+                        chars = ctx.product("char_index", page)
+                        crec = {r.id: r for cc in chars.columns for r in cc.chars}
+                        raw = ctx.raw_page(page) if p.patch == "raw" else None
+                    except Exception:  # noqa: BLE001 —— 这页字框／原图读不到：各格记 patch_missing，不挡别页
+                        crec, raw = {}, None
                 c = crec.get(v.id)
                 patch = GlyphVisStep._patch(ctx, page, col, v, c, p.patch, raw)[0] if c is not None else None
                 if patch is None:
                     rep["patch_missing"] += 1
                     continue
                 if V.img_sha(patch) != ask["img_sha"]:
-                    rep["img_changed"] += 1
-                    bad.add(k)
+                    rep["img_changed"] += 1          # 同图别的格字块没变的照样出题
                     continue
                 cands = V.sort_cands(ask["cands"])
                 png = V.render_png(patch)
