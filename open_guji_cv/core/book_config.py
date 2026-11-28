@@ -117,6 +117,18 @@ def layers(book_yaml: Path, *, apply_override: bool = True) -> list[tuple[str, d
     return out
 
 
+def _fold_admit_layer(ly: dict) -> dict:
+    """每层先把收尾步参数的旧键 `seed_admit` 并成现在生效的 `char_decide`（P3a-3）：否则一层写旧键、另一层（含页型表并进来的）
+    写新键，合层后两个键并存，下游 `fold_admit_params` 报「同时写了」。同一层自己两个键都写仍报错。"""
+    from .decide_names import fold_admit_params
+    ps = ly.get("params") if isinstance(ly, dict) else None
+    if isinstance(ps, dict):
+        folded = fold_admit_params(ps)
+        if folded is not ps:
+            return {**ly, "params": folded}
+    return ly
+
+
 def effective_book_dict(book_yaml: Path, *, apply_override: bool = True) -> dict:
     """册 yaml 合上基础配置与运行覆盖后的生效字典（`load_book` 的入口）。"""
     from .page_kinds import fold_layer, reject_old_syntax
@@ -128,7 +140,7 @@ def effective_book_dict(book_yaml: Path, *, apply_override: bool = True) -> dict
     from .lib_pins import expand_layer
     try:      # 参校本属性：各层先把标量归一成 {default: x} 再合并（否则标量盖映射丢另一半）；基础配置不许写 segments
         # 四库版本简写 `pin: c31-g19-m2-k3` 逐层展开成分开的键（core/lib_pins.py），上层照常压下层
-        ls = [(n, fold_ref_profile(n, fold_layer(n, expand_layer(ly, f"{n}：")), allow_segments=(n != "基础配置")))
+        ls = [(n, _fold_admit_layer(fold_ref_profile(n, fold_layer(n, expand_layer(ly, f"{n}：")), allow_segments=(n != "基础配置"))))
               for n, ly in raw_ls]
     except ValueError as e:
         raise BookConfigError(str(e)) from None

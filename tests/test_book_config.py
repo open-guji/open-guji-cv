@@ -167,3 +167,12 @@ def test_book_placeholder_layout_prior(ws):
     # 册 yaml 写死的照旧压过基础配置
     r = _w(ws, "vol52.yaml", {**BOOK, "id": "vol52", "params": {"row_segment": {"layout_prior": "x.jsonl"}}})
     assert bc.effective_book_dict(r)["params"]["row_segment"]["layout_prior"] == "x.jsonl"
+
+
+def test_layers_mixing_legacy_and_new_admit_key_fold_to_one(ws):
+    """基础配置写旧键 seed_admit、册 yaml 的页型表(no_ref)并进新键 char_decide：合层后只剩 char_decide，不报「同时写了」（P3a-3）。"""
+    _w(ws, "book_defaults.yaml", {"params": {"seed_admit": {"shadow_veto": True}}}, sub="config")
+    p = _w(ws, "v1.yaml", {"id": "v1", "title": "t", "raw_dir": "raw", "page_kinds": {"no_ref": [3, 4]}})
+    d = bc.effective_book_dict(p)
+    assert "seed_admit" not in d["params"]
+    assert d["params"]["char_decide"]["shadow_veto"] is True and d["params"]["char_decide"]["no_ref_pages"] == [3, 4]
