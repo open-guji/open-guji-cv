@@ -152,8 +152,8 @@ class GlyphNearStep(Step):
         params=GlyphNearParams,
         needs=("model",),
         code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_registry",
-                   "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.part_shape", "open_guji_cv.groups.rr_shape",
-                   "open_guji_cv.groups.wu_shape"),
+                   "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.part_shape",
+                   "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.wu_shape"),
         enabled_by="groups",
     )
 
