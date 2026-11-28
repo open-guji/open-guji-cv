@@ -2961,10 +2961,6 @@ ENTRIES: tuple[Equiv, ...] = (
           new="1208d13d6d057505ed9a3ec385895367f6f7fa9ae4a0b5fed72a5013021487c8",
           old="66b4b39a9704d4d6fd516910d7b7ed9493393287cfb4b2a394e9f4121ba6ab2e",
           evidence=_NONE_COLS_1128),
-    Equiv(module="open_guji_cv.products.kinds.recog",
-          new="daf5e69b08b6aca4046aa8fe80b1435c5f48e1204a2dd68a24dfb7bf1ccb2d9f",
-          old="e5e77318387b3f6205604e2efe15bd4ea83f41f4212904a1f2a0a7a1ec5e05c5",
-          evidence=_NONE_COLS_1128),
     # 全唐文开竖线跟踪后切字适配：row_segment 加 frame_edge_near、layout_off_always（缺省关）；frame_only_edge_cells 加 near_frac（CV2 11-28）
     Equiv(module='open_guji_cv.steps.row_segment',
           new='1c455cf504c6486727bf1d7f2d1406a9f9b86d356e9380ca7872bd5c54fcd10c',
@@ -3057,9 +3053,13 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     # 下面几块都还是这一版时合回原来的一项，指纹与 dev d226f31 逐步相同（check_fp_change 0 步变）；之后哪块真改了照常过期。
     # 证据：①AST 逐定义比对（顶层函数／类／常量搬前搬后 ast.dump 相同，仅 groups 里那一行等价替换、_align／_coord_refs 改调 decide 的解析、StepSpec.code_deps 加项）；
     # ②全量测试与 dev 同一批失败（环境缺件），其余全过；未另跑真书页产物比对（纯搬家，需要时用 scripts/code_equiv.py check）。
+    # 2026-11-28 P3b（CV4）：seed_admit.py 与 seed_admit_cell_state.py 把六个不读放行状态的探测器抽成函数、各 pass 多收一个可选参数
+    # （给了 4c cell_state 产物里的探测原值就用，不给照旧现算），块表这两块换成新哈希，旧哈希不动。证据：①decide-bench small 史記 03
+    # （231 页）基线 dev 与本分支（cell_state 产物在、收尾读它）seed_admit 逐页 JSON 全相同、翻转 0 格；②tests/test_cell_state.py 收尾读产物与现算逐格相同；
+    # ③全量测试与 dev 同一批环境缺件失败。未跑殿本／全唐文（无工作区），开 cell_state 的书另有验证。
     "open_guji_cv.steps.seed_admit": ("4c1df66c210c3ccef9acb3e7b1fab4491a3bbfe02a77adcc5e039b6ee7ca92e8", (
-        ("open_guji_cv.steps.seed_admit", "71182f3f7aae3c13dbf3353b7b41d962471df2ee35552a0a986d43a0ce570634"),
-        ("open_guji_cv.steps.seed_admit_cell_state", "b75e6dbd27dd776282bcc66538b2f182d5f855119d2dac42d1d8a8b271fca42e"),
+        ("open_guji_cv.steps.seed_admit", "26e0d0559cf43efe22b98974c931d3b6c1c84f36956b77b593eb97e2b3733e9f"),
+        ("open_guji_cv.steps.seed_admit_cell_state", "3cad1f99367bd64e2cb40ff870c586be75cbf9ee8073632eea252d1f5c332460"),
         ("open_guji_cv.steps.seed_admit_groups", "1b9b64cd665c26ae764e2d03cc2422681ac56aa4a4a7120b07e2181347555510"),
         ("open_guji_cv.steps.seed_admit_pick", "f658ffd0219c3aa8692fa0200b6e184f5abad6d4cc8e3613b4424bb015190598"),
         ("open_guji_cv.steps.seed_admit_veto", "5e44d349989c2dfc774ce934b28fa961e304f5cea08d10552ba28f13f4795192"),

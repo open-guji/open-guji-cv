@@ -108,7 +108,7 @@ import yaml
 from open_guji_cv.core.pipeline import PIPELINES_DIR, SKELETON_ID, expand_slots
 
 # 展开前写死在三个 yaml 里的步骤表（2026-11-03 之前）：展开结果必须逐项相同，各书产物目录与指纹才不动。
-_COMMON_TAIL = ["cell_shrink", "glyph_match", "glyph_near", "rare_candidates", "glyph_candidate", "cell_traits", "glyph_analyzer", "align_ref", "context_decide", "context_rank", "seed_admit"]
+_COMMON_TAIL = ["cell_shrink", "glyph_match", "glyph_near", "rare_candidates", "glyph_candidate", "cell_traits", "glyph_analyzer", "align_ref", "context_decide", "context_rank", "cell_state", "seed_admit"]
 _EXPECT = {
     "keben_body_v2": ["page_survey", "invert_detect", "border_detect", "seal_detect", "column_warp", "column_band", "column_end", "column_geometry", "row_segment", *_COMMON_TAIL],
     "modern_body": ["page_survey", "invert_detect", "line_detect", "column_crop", "row_segment_runs", *_COMMON_TAIL],
