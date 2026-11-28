@@ -79,7 +79,7 @@ def score(ctx: BenchCtx, pred: Path) -> BenchResult:
          "missing_rate": round(c["缺格"] / n, 4),
          "outcomes": dict(c)}
     items = [{"id": r["id"], "ok": r["outcome"] in OK, "outcome": r["outcome"], "algo": r.get("algo"),
-              "truth": r.get("truth")} for r in rows]
+              "truth": r.get("truth"), **({"cmp_skip": True} if r["outcome"] == "缺格" else {})} for r in rows]
     return BenchResult("decide", ctx.book, _vols(ctx), m, "wrong_admit", items=items, n=len(rows))
 
 

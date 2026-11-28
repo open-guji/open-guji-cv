@@ -95,3 +95,13 @@ def test_decide_score(tmp_path):
     assert [x["ok"] for x in r.items] == [True, False, True, False] and r.vols == ["01"]
     r = B.apply_guards(B.get("decide"), r)
     assert r.status == "regressed"
+
+
+def test_flip_guard_na_without_against_and_cmp_skip(tmp_path):
+    s = _spec(guards=(B.Guard("flip_worse", "max", 0), B.Guard("nope", "max", 0)))
+    r = B.execute(s, _ctx(tmp_path, [{"id": 1, "ok": True}]))
+    st = {g["metric"]: g["status"] for g in r.guards}
+    assert st == {"flip_worse": "n/a", "nope": "unverified"}
+    out = B.write_result(tmp_path / "r0", r)
+    now = B.execute(s, _ctx(tmp_path, [{"id": 1, "ok": False, "cmp_skip": True}]), against=out)
+    assert now.against["worse"] == 0
