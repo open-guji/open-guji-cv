@@ -147,7 +147,7 @@ def test_glyph_near_and_analyzer_end_to_end(tmp_path, tiny_model):
         {"slot": 1, "bbox_page": (30.0, 40.0, 110.0, 130.0)}, {"slot": 2, "bbox_page": (30.0, 140.0, 110.0, 230.0)}]))
 
     out = run_steps(ctx, 1, ["glyph_near", "glyph_analyzer"])
-    near = out["glyph_near"].by_id()
+    near = {k: v[0] for k, v in out["glyph_near"].by_id_all().items()}
     assert list(near) == ["vol07:1:1:1"]                                        # 只有触发的格
     mo = near["vol07:1:1:1"].methods[0]
     assert mo.method == "cnn_small:gong" and mo.evidence == {"fold": "fold1"}  # 册号 7 % 2 折
