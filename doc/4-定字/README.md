@@ -7,6 +7,7 @@
 | 4a 整理本对位 | `align_ref` | 整理本（参校文本）与字格逐字对位，给每格整理本说的字（要语料；不读字块图，2026-11-22 起从 3 识字移来） |
 | 4b 上下文 | `context_decide` | 在候选里按上下文重排、门槛化定字（要语料） |
 | 4c 放行 | `seed_admit` | 每格：自动放行（带通道）或落人审（带 `pending_reason`）；进库走裁定事件 |
+| 出口 gate | `decide_gate` | **只检测、不判断**（2026-11-28）：读第四步全部产物，每页出检测清单（`fail`／`flag` 两级）；不改任何格、不挡别的步骤、不进任何步骤的指纹。挂在 `seed_admit` 出口，永远最后跑；检测项见 [decide_gate.md](decide_gate.md) |
 
 - 各步的输入输出、参数缺省值：[步骤与产物.md](步骤与产物.md)（从代码生成）。
 - 待审原因的取值：[../design/待审原因PendingReason.md](../design/待审原因PendingReason.md)。
