@@ -37,7 +37,7 @@ def _advset_out(way="cov", near_bad=("q1",), var_bad=()):
 def test_registered_and_suites():
     ids = {s.id for s in B.all_specs()}
     assert {"read-3a-advset", "read-3a-damaged", "read-3b-near"} <= ids
-    assert {s.id for s in B.expand(["@read-3a"])} == {"read-3a-advset", "read-3a-damaged"}
+    assert {s.id for s in B.expand(["@read-3a"])} == {"read-3a-advset", "read-3a-damaged", "read-3a-pairs", "read-normalize"}
     s = B.get("read-3a-advset")
     assert s.gold_rel("995ejelvk0") == "glyph-match/advset-qtw" and s.gold_rel("99k3i35yww") is None
     assert B.get("read-3a-damaged").gold_rel("995ejelvk0") is None        # 全唐文没有残损集 → no_gold
@@ -121,3 +121,35 @@ def test_sim_model_defaults_and_override(tmp_path):
     assert R._sim_model(_ctx(tmp_path, book="995ejelvk0")) == "models/glyph_sim_qtw/model.pt"
     assert R._sim_model(_ctx(tmp_path)) == ""
     assert R._sim_model(_ctx(tmp_path, book="995ejelvk0", args={"sim_model": "cov"})) == ""
+
+
+def test_pairs_score(tmp_path):
+    ctx = _ctx(tmp_path, guards=[])
+    _jsonl(ctx.work / "pairs-rows.jsonl", [{"id": "a|b", "ok": True}, {"id": "a|c", "ok": False}])
+    pred = tmp_path / "pairs.json"
+    pred.write_text(json.dumps({"cov_high": 0.99, "n_pairs": 2, "n_pairs_excluded": 0,
+                                "knn": {"precision": 0.99912, "recall": 0.1095, "fp": 3},
+                                "random": {"fp": 0}, "best_operating_point": {"recall": 0.2055, "cov_high": 0.985}}),
+                    encoding="utf-8")
+    r = R.pairs_score(ctx, pred)
+    assert r.metrics["knn 精度"] == 99.91 and r.metrics["knn 误放"] == 3 and r.metrics["random 误放"] == 0
+    assert r.metrics["P≥0.999 最大召回"] == 20.55 and r.n == 2 and r.primary == "knn 精度"
+
+
+def test_normalize_score(tmp_path):
+    pred = tmp_path / "n.json"
+    pred.write_text(json.dumps({"gate": {"n": 4, "passed": 3, "failed": [{"sample": "002"}], "ok": False},
+                                "known_defect": {"n": 1, "changed": []},
+                                "samples": [{"sample": "001", "passed": True, "status": "verified"},
+                                            {"sample": "002", "passed": False, "status": "verified"},
+                                            {"sample": "003", "status": "known_defect"}]}), encoding="utf-8")
+    r = B.apply_guards(B.get("read-normalize"), R.normalize_score(_ctx(tmp_path, guards=[]), pred))
+    assert r.metrics["回归门失败"] == 1 and r.metrics["回归门通过率"] == 75.0 and r.status == "ok"
+    assert [x["ok"] for x in r.items] == [True, False, True]
+
+
+def test_deprecated_legacy_ids_are_registered():
+    for i in ("match_triplets", "match_pairs", "guard_ceiling", "db_match", "db_match_books", "rare_char", "zero_shot",
+              "zero_shot_fusion", "oov", "degradation", "struct_rerank", "struct_heads"):
+        s = B.get(i)
+        assert s.deprecated and s.owner == "CV3"
