@@ -12,8 +12,8 @@ from open_guji_cv.core import book_config as bc
 from open_guji_cv.core import ref_profile as RP
 from open_guji_cv.core.book import load_book
 
-REFS = [{"file": "qtw_front_wiki.txt", "label": "wiki", "quality": "mid"},
-        {"file": "qtw_kanripo.txt", "label": "kanripo", "quality": "best", "line_is_column": False}]
+REFS = [{"file": "qtw_front_wiki.txt", "label": "wiki", "accuracy": "mid"},
+        {"file": "qtw_kanripo.txt", "label": "kanripo", "accuracy": "high", "form": "text"}]
 BOOK = {"id": "v1", "title": "t", "raw_dir": "raw", "expected_cols": 9, "pages": ["1-200"]}
 
 
@@ -66,7 +66,7 @@ def test_scalar_shorthand_and_explicit_column_token():
     ("nothing", REFS, "未知参照形态"),
     ({"default": "none", "foo": 1}, REFS, "不认识 foo"),
     ([1], REFS, "column／text／none"),
-    ({"segments": [{"pages": [1], "kind": "text", "quality": "mid"}]}, REFS, "references\\[\\].quality"),
+    ({"segments": [{"pages": [1], "kind": "text", "quality": "mid"}]}, REFS, "不认识 quality"),
     ({"segments": [{"pages": [1]}]}, REFS, "pages、kind 都要写"),
     ({"segments": [{"pages": ["9-3"], "kind": "none"}]}, REFS, "页号写错"),
     ({"segments": [{"pages": [1.5], "kind": "none"}]}, REFS, "页号列表"),
@@ -85,7 +85,7 @@ def test_validation(raw, refs, msg):
 
 
 def test_text_may_point_to_column_witness_and_ambiguous_ref():
-    refs = [{"file": "a.txt", "label": "x", "line_is_column": True}]
+    refs = [{"file": "a.txt", "label": "x", "form": "column"}]
     assert RP.load_reference_profile({"segments": [{"pages": [1], "kind": "text"}]}, refs).kind_of(1) == "text"
     dup = [{"file": "a.txt", "label": "x"}, {"file": "b.txt", "label": "x"}]
     with pytest.raises(ValueError, match="对上 2 项"):

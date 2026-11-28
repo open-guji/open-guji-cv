@@ -5,7 +5,7 @@ from open_guji_cv.core.ref_profile import load_reference_profile
 from open_guji_cv.products.kinds.recog import AlignRec, CoordRec, PageAlignRef
 from open_guji_cv.steps.align_ref import _strip_none_cols
 
-REFS = [{"file": "a.txt", "line_is_column": False}]
+REFS = [{"file": "a.txt", "form": "text"}]
 
 
 def _prof():

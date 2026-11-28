@@ -413,6 +413,13 @@ def _stroke_veto_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict
     from ..groups import stroke_veto as sv
     model = sv.load(p.stroke_veto)
     miss = patch_missing if patch_missing is not None else {}
+    near_on = "stroke_veto" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    near, want = {}, {}
+    if near_on:
+        from ..groups.near_methods import method_fingerprint
+        near = _near_by_model_from_3b(ctx, page, "stroke_veto")
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     n = 0
     for c in out:
         for r in c.chars or []:
@@ -421,14 +428,24 @@ def _stroke_veto_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict
             gid, gm = sv.group_of(model, r.char or "")
             if gm is None or (gm.get("channels") and r.channel not in gm["channels"]):
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("stroke_veto")
-                continue
-            v = sv.judge(img, gm)
+            v = None
+            if near_on and c.col not in alt:
+                if gid not in want:
+                    want[gid] = method_fingerprint("stroke_veto", {"path": p.stroke_veto, "group": gid})
+                v = near.get((r.id, want[gid]))
+            if v is not None:
+                tally["3b"] += 1
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("stroke_veto")
+                    continue
+                v = sv.judge(img, gm)
             if v["cls"] is None or v["cls"] == gm["classes"][r.char]:
                 continue
             _demote(r, "stroke_veto")
@@ -436,6 +453,8 @@ def _stroke_veto_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict
             r.admit, r.channel, r.provenance = False, None, ""
             r.doubts = list(r.doubts or []) + ["stroke_veto"]
             n += 1
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, "stroke_veto", tally)
     return n
 
 
