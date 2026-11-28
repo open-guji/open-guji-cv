@@ -854,6 +854,13 @@ class AlignRefStep(Step):
         res.alt_draft = AltDraft(chars=chars)
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
+        out = self._run_page_kind(ctx, page)
+        nc = _none_cols(ctx.book, page)
+        if nc and "align_ref" in out:
+            _strip_none_cols(out["align_ref"], nc)
+        return out
+
+    def _run_page_kind(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: AlignRefParams = ctx.params_for(self)  # type: ignore[assignment]
         p = _with_book_corpus(p, ctx)
         kind = _ref_kind(ctx.book, page)
@@ -1255,6 +1262,30 @@ def _majority_vote_labels(book: str, page: int, norm: list[tuple], query: str,
 REF_NONE_NOTE = "本页无参照（配置）"
 #: 声明为不分行全文（text）的页不做坐标对位时的 `coord_note`
 REF_TEXT_COORD_NOTE = "参照不分列（配置），不做坐标对位"
+
+
+def _none_cols(book, page: int) -> frozenset:
+    """册配置 `reference_profile` 列级 none 段在本页声明的无参照列（2026-11-28 脉经第 2 册缺文小注）；没有＝空。"""
+    prof = getattr(book, "reference_profile", None)
+    if prof is None or not prof.declared:
+        return frozenset()
+    return prof.none_cols(page)
+
+
+def _strip_none_cols(ar, cols: frozenset) -> None:
+    """声明无参照的列：去掉这些列的对位字、坐标对位与提示，记 `none_cols`（下游 manager 按格认「参照缺是设计」）。"""
+    def keep(rec):
+        return int(rec.col) not in cols
+    ar.chars = [c for c in ar.chars if keep(c)]
+    ar.coord = [c for c in ar.coord if keep(c)]
+    ar.coord_cols = [c for c in ar.coord_cols if int(c) not in cols]
+    ar.coord_conflict_ids = [i for i in ar.coord_conflict_ids if _id_col(i) not in cols]
+    ar.ref_hint = {k: v for k, v in ar.ref_hint.items() if _id_col(k) not in cols}
+    if ar.alt_draft is not None:
+        ar.alt_draft.chars = [c for c in ar.alt_draft.chars if keep(c)]
+        ar.alt_draft.coord = [c for c in ar.alt_draft.coord if keep(c)]
+        ar.alt_draft.coord_cols = [c for c in ar.alt_draft.coord_cols if int(c) not in cols]
+    ar.none_cols = sorted(cols)
 
 
 def _ref_kind(book, page: int) -> str:
