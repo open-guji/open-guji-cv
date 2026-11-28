@@ -1,7 +1,14 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行（档位写明）。
+
+## [未发版]
+
+## [0.9.16] - 测试中
+
+PATCH（CV4 2026-11-28，由第四步重构主线请求）＝v0.9.15＋dev 上此后 76 个提交整体切出（含 #2033 `seed_admit`→`char_decide` 改名与收尾写送审原因、4a–4d 拆模块与新步 `cell_state`／`group_decision`／`decide_gate`、CV3 `glyph_vis`／3b 方法、参校本四维、row_segment 新参数等）。新功能一律缺省关；改名靠 `decide migrate-name` 迁移、不用重跑。指纹变更与底库见 tag 说明。下列条目均属本版。
+
 
 - 新命令（不进任何 Step 指纹：新模块 `feedback/vis_queue.py`、改的 `feedback/llm_queue.py` 都不在 code_deps，L0；CV3 2026-11-28）：第三步 `glyph_vis` 的离线 ask 导出／导入，挂在现役 `llm_queue` 同一命令组下。`python -m open_guji_cv.feedback.llm_queue vis-export <册…> -w <工作区> --out <目录> [--pages 1-30]`：扫 glyph_vis 产物里 `status=pending` 的 ask，按 `(img_sha, prompt_sha, 候选集合)` 跨册去重，跳过缓存里已有答案的（按本书当前 `model`＋`accept_models`，开了 `accept_legacy` 也认 legacy），按本书 `patch` 重读字块、重算 img_sha 核对（变了报 `img_changed`、读不到报 `patch_missing`、提示词／渲染口径改了报 `stale_prompt`，都不出题），落出 `img/<题号>.png`（`vis_img.render_png`，与在线送模型的同一张）、`manifest.jsonl`（题号、稳定键 key、img_sha、img_shape、prompt_sha、候选、`options` 行、本书认的 models、格号）、`prompt.md`（系统提示与用户模板原文＋答题格式）。`vis-import <答案.jsonl> --name <名> [--manifest …]`：答案按 key 对回 manifest，核 img_sha／prompt_sha／候选集合一致、提示词仍是现行代码的，用 `VisGlyphStore.put` 写 `<feedback>/vis_glyph/glyph-vis-session-<日期>.jsonl`，`model=session:<名>`；答案不在候选里又不是「其他」、conf 不认、与 manifest 不符的拒收并报告（退出码 1）；同答案重复导入不写（幂等），改了答案追加一条（后到覆盖）；`accept_models` 没列 `session:<名>` 时提示。只写本机、不推中心库、不调任何模型服务；导入后从 `glyph_vis` 起 `--force` 重跑才生效。新测 `tests/test_vis_queue.py`。
 - 新步骤 `glyph_vis`（3e 看图大模型（条件），缺省关 `enabled`；CV3 2026-11-28，接口草案经 CV4 审定。指纹变更：glyph_vis 新步骤自身新增、无旧产物；收尾 `glyph_analyzer` 代码改动登记 code_equiv（自造册 3 页逐字节相同＋测试冻结 dev 的 merge_cell 输出），没开 3e 的书各步不过期）：3a／3b 给不出好结论的少数格（3b 触发了 `groups` 里的组——缺省第四步现役 `registry.VIS_GROUPS` 8 组——且方法全弃权 `near_abstain`／方法分歧 `near_split`／概率口径方法分差小 `near_margin`／3a 组内两字相持 `a_margin`／组内校准 p 低 `p_low`），把 `char_patch` 字块图连同候选字（组字 ∪ 3a 前 5 ∪ 3b 方法给的字）交给大模型**只按刻形**判（新提示词 `vis-img-1`，不写书名、不给前后文与整理本；走 `ctx_llm.Client` 结构化输出＋拒答回落；真调只在 `GUJI_LLM_ONLINE=1` 且有密钥、`model` 非空时，缺省只读缓存、没命中出 `ask`）。产物 `PageVis`（每格 `VisRec`：trigger 记号、status＝hit／asked／pending／error／skipped:<原因>、char／other／conf／why／model／prompt_sha／cache_hit／legacy、页头 `cache_pin`）。缓存是新事件种类 `vis_glyph`，**单开目录 `<feedback>/vis_glyph/`**（`feedback/vis_glyph.SUBDIR`，不进 rulings/），target `unit="glyph_img"`、key＝img_sha，键 `(img_sha〔含形状〕, prompt_sha, 候选集合, model)`，读只认 `model`＋`accept_models`；不是人裁、不算钉（`event_level` 给 None），`core/event_files.GATE_EXEMPT_KINDS` 加 `vis_glyph`；缓存内容不进指纹（导新答案后从 glyph_vis 起 force）。收尾 `glyph_analyzer` 每格新字段 `vis`（空不落盘）、答出字的候选加 `evidence.v`，**不出 p、不改排序**。第四步一行未动。一次性脚本 `scripts/rekey_vis1_to_glyph_vis.py`：旧 vis1 ctx_ruling 缓存按当前字块重算 sha1 核对同图后转成 `legacy=true` 的 vis_glyph 记录（缺省 dry-run，只写本机），第三步缺省不认（`accept_legacy`）。**开 glyph_vis 写缓存、推中心库前须 guji-manager 含 #1239 的版本**（vis_glyph 目录归 events 表、不算钉、u_stamp 跳过、GATE_EXEMPT_KINDS）。阈值缺省是拍的，待殿本、全唐文各数一册触发量后定。新测 `tests/test_glyph_vis.py`。
@@ -156,7 +163,7 @@
 
 - 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时殿本 vol30、全唐文 020、史記 42 逐字节同，登 code_equiv `_FREE_SEAM_1117`。建议值 0.35。
 
-## [未发版]
+## [0.9.15] 的 dev 条目（补记）
 
 - PATCH（CV3 2026-11-28，Sheldon 11-27 定形近字组方案）：形近字组登记表 `config/near_groups/v2.json` 类型只分 `variant`（异体，同义异码）与 `near`（形近异义）两类，原另记一类的 6 组（guan、hou、kgc、tsh、xz、zh）归 near，组内异体归并照旧在 `fold` 字段；旧版书级表的 `fold` 类型读成 near。每组加处理方式 `handling`（`methods` 允许的 3b 看图方法、`context` 文意、`aspect` 4d 宽高比、`action` admit／evidence、`threshold`），人定值在新输入文件 `config/near_groups/handling.json`，其余按现役行为的缺省规则生成；日曰（ry）、己已巳（jys）`methods: []`（不做字形区分，去掉 stroke_veto 对 jys）、context=true；aspect 日曰 true（按现役）、己已巳 false。读口 `near_registry.handling_of(组, over=书级覆盖)`（书配置优先、handling 缺省；methods 不许书级放宽）、`resolve(groups, book)`。3b `glyph_near` 守 `handling.methods`：书配置挂了以外的方法过渡期警告、跳过并计数（产物新字段 `PageNear.skipped_methods`，空的不落盘；`near_registry.STRICT_METHODS` 改 True 后载入即报错）。现役读口（NEVER_MATCH_FAMILIES、partners、_PARTNER、NEAR_FORM_CHARS、manager N01、glyph_near_spec、groups_of）取值逐项不变。**指纹变更：glyph_near 起过期**（glyph_near.py、near_registry.py 改了；登记表数据不进指纹，其余 Step 的 code_hash 不变）。
 
