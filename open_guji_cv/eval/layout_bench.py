@@ -4,6 +4,10 @@
         [--gold <layout-gold items.jsonl>] [--page-type-gold <page-type items.jsonl> --page-map map.json] \
         [--pages 1-20] [--expected-cols 9] [--out report.json]
 
+    # 按书分表的基线报告（四大步验收 L2／B4）：金标里每册都跑，按套书汇总成一张 markdown 表
+    python -m open_guji_cv.eval.layout_bench --products <产物根> --gold <layout-gold items.jsonl> \\
+        --series-report [--md 基线报告.md] [--out report.json]
+
 读 `<产物根>/<册>/border_detect/pNNNN.json`（＋ `border_detect_gate/`）→ 版面文档 → 指标。
 三层都报，各自独立：
 
@@ -107,6 +111,79 @@ def run(products: Path, book: str, pages: set[int] | None = None, expected_cols:
     return rep
 
 
+#: 金标册名前缀 → 套书（按书分表用）。册名取金标 `anchor.book`，产物根下同名目录。
+SERIES = (("殿本", "vol"), ("史記", "sj"), ("全唐文", "qtw"), ("脈經", "mj"))
+PX_BUCKETS = (5, 10, 20)   # 界行偏差分档（像素，p95 沿线）：≤5px 算准，只报 >5／>10／>20 的条数
+
+
+def series_of(book: str) -> str | None:
+    for name, pre in SERIES:
+        if book.startswith(pre):
+            return name
+    return None
+
+
+def run_series(products: Path, gold_items: list[dict]) -> dict:
+    """金标里每册各跑一遍 `run`，按套书汇总。返回 {"series": {套书: 汇总}, "books": {册: 页数}}。
+
+    汇总口径：线 P/R 用 recall@0.05（列距 5%）；界行偏差用「每条配上的线沿线 p95」分档 >5／>10／>20 px
+    （用户 2026-11-25 定：≤5px 算准确）；框看上下框 p95 的页中位、框型认对率；页型看策略准确与两类错。
+    """
+    books = sorted({it["anchor"]["book"] for it in gold_items if it.get("status") == "active"})
+    recs: dict[str, list[tuple[str, dict]]] = {}
+    pages_missing: dict[str, list[int]] = {}
+    for b in books:
+        ser = series_of(b)
+        if ser is None:
+            continue
+        for it in gold_items:
+            a = it["anchor"]
+            if it.get("status") != "active" or a.get("book") != b:
+                continue
+            d = pred_doc(products, b, int(a["page"]))
+            if d is None:
+                pages_missing.setdefault(b, []).append(int(a["page"]))
+                continue
+            g = dict(it["expected"], book=b, stratum=it.get("stratum"))
+            recs.setdefault(ser, []).append((f"{b}:{a['page']}", lm.page_metrics(g, d)))
+    out: dict = {"series": {}, "missing": pages_missing}
+    for ser, per in recs.items():
+        rs = [r for _, r in per]
+        agg = lm.aggregate(rs)["all"]
+        p95 = [x for r in rs if r.get("vlines") for x in r["vlines"]["line_p95"]]
+        agg["line_gt_px"] = {f">{t}": sum(1 for x in p95 if x > t) for t in PX_BUCKETS}
+        agg["worst"] = lm.worst_pages(per, 5)
+        agg["books"] = sorted({r["book"] for r in rs})
+        out["series"][ser] = agg
+    return out
+
+
+def series_markdown(rep: dict, meta: dict | None = None) -> str:
+    cols = ["套书", "页", "金标线", "漏线", "多线", "线召回@5%", ">5px", ">10px", ">20px",
+            "上框 p95 px", "下框 p95 px", "框型认对", "列数对", "页型对", "该切判跳过", "该跳过判切"]
+    f = lambda v, d=3: "–" if v is None else (f"{v:.{d}f}" if isinstance(v, float) else str(v))
+    lines = []
+    if meta:
+        lines += [f"- {k}：{v}" for k, v in meta.items()] + [""]
+    lines += ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
+    for name, _ in SERIES:
+        a = rep["series"].get(name)
+        if not a:
+            lines.append(f"| {name} |" + " 无金标页 |" + " – |" * (len(cols) - 2))
+            continue
+        pol = a.get("policy") or {}
+        fr = a.get("frame") or {}
+        lines.append("| " + " | ".join([
+            name, str(a["pages"]), str(a["lines_gold"]),
+            str(a["lines_gold"] - a["lines_matched"]), str(a["lines_pred"] - a["lines_matched"]),
+            f(a.get("recall@0.05")), str(a["line_gt_px"][">5"]), str(a["line_gt_px"][">10"]),
+            str(a["line_gt_px"][">20"]),
+            f((a.get("top_frame_px") or {}).get("p95"), 1), f((a.get("bottom_frame_px") or {}).get("p95"), 1),
+            f(fr.get("kind_acc")), f(a.get("n_cols_acc")), f(pol.get("acc")),
+            str(pol.get("wrong_skip", "–")), str(pol.get("wrong_keep", "–"))]) + " |")
+    return "\n".join(lines) + "\n"
+
+
 def _by_type(recs: list[dict]) -> dict:
     out: dict[str, dict] = {}
     for r in recs:
@@ -122,7 +199,9 @@ def _by_type(recs: list[dict]) -> dict:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--products", required=True)
-    ap.add_argument("--book", required=True)
+    ap.add_argument("--book")
+    ap.add_argument("--series-report", action="store_true", help="金标里每册都跑，按套书分表（L2／B4）")
+    ap.add_argument("--md", help="--series-report 时另存 markdown 表")
     ap.add_argument("--pages")
     ap.add_argument("--expected-cols", type=int)
     ap.add_argument("--gold")
@@ -130,6 +209,20 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--page-map")
     ap.add_argument("--out")
     a = ap.parse_args(argv)
+    if a.series_report:
+        if not a.gold:
+            ap.error("--series-report 要 --gold")
+        gold = [json.loads(l) for l in Path(a.gold).read_text(encoding="utf-8").splitlines() if l.strip()]
+        rep = run_series(Path(a.products), gold)
+        if a.md:
+            Path(a.md).write_text(series_markdown(rep), encoding="utf-8")
+        txt = json.dumps(rep, ensure_ascii=False, indent=1, default=float)
+        if a.out:
+            Path(a.out).write_text(txt, encoding="utf-8")
+        print(series_markdown(rep))
+        return
+    if not a.book:
+        ap.error("要 --book（或 --series-report）")
     rd = lambda p: [json.loads(l) for l in Path(p).read_text(encoding="utf-8").splitlines() if l.strip()]
     rep = run(Path(a.products), a.book, parse_pages(a.pages), a.expected_cols,
               gold_items=rd(a.gold) if a.gold else None,

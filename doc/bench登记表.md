@@ -5,9 +5,9 @@
 
 | 小步 | Step id | 负责 | bench（命令或脚本） | 住处 | 主指标 | 护栏（必须为 0／不增） | 测试集（dataset 分片） | 覆盖的书 | 基线报告 |
 |---|---|---|---|---|---|---|---|---|---|
-| 1a 页面预检 | `page_survey`、`invert_detect` | CV1 | | | | | page-type | 殿本 | |
-| 1b 版框界行 | `border_detect`（`line_detect`、`block_detect`） | CV1 | `python -m open_guji_cv.eval.layout_bench` | cv `eval/` | 框线、界行误差；列数；页型 | 正文页判成非正文 | layout、border-detection | 殿本（W1 79 页）；史記、全唐文、脉经只有回归例 | |
-| 1c 印章 | `seal_detect` | CV1 | | | | 印章漏认压字 | | | |
+| 1a 页面预检 | `page_survey`、`invert_detect` | CV1 | `python -m open_guji_cv.eval.survey_bench --gold <items.jsonl>`（尺寸判据；反色带暂无） | cv `eval/` | 异常页召回、精确率、形态对率 | 正常页判异常（false_alarm）=0 | page-survey（种子，rule 快照，待人核）；page-type | 殿本、史記、全唐文、脈經（样本尺寸表） | [doc/1-版面/基线报告.md](1-版面/基线报告.md) 第三节 |
+| 1b 版框界行 | `border_detect`（`line_detect`、`block_detect`） | CV1 | `python -m open_guji_cv.eval.layout_bench --series-report`（单册去掉该开关加 `--book`） | cv `eval/` | 框线、界行误差（>5／10／20px 条数）；列数；页型 | 正文页判成非正文 | layout（79 页）、border-detection | 殿本 47 页、史記 11、全唐文 10、脈經 11 | [doc/1-版面/基线报告.md](1-版面/基线报告.md) |
+| 1c 印章 | `seal_detect` | CV1 | `python -m open_guji_cv.eval.seal_bench --products <根> --gold <items.jsonl>` | cv `eval/` | 印章召回／精确率@IoU、IoU 中位、类别对率 | 印章漏认压字 | seal-box（种子，全是待核底稿，缺人标框） | 殿本 vol01:1、脈經 mj01:3 两页底稿；史記、全唐文无 | [doc/1-版面/基线报告.md](1-版面/基线报告.md) 第四节 |
 | 2a 拉直 | `column_warp` | CV2 | `cut_bench.py` | ai-team（待搬） | 列全对 | 好列改坏 | page-geometry、column-layout | 四书试点各 5 页 | ai-team `A22/cut-bench/基线-2026-11-23.md` |
 | 2b 字带左右边 | `column_band` | CV2 | | | | | char-segmentation/text-band、side-rule | 殿本 | |
 | 2c 列端字 | `column_end` | CV2 | cut-frame 脚本 | ai-team（待搬） | 列端格干净率 | 切笔 | 列端金标 v0、frame-end-crop | 史記、全唐文各 40 列；殿本 451 格 | |

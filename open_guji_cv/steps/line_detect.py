@@ -37,7 +37,7 @@ class LineDetectParams(BaseModel):
 @register_step
 class LineDetectStep(Step):
     spec = StepSpec(
-        id="line_detect", title="Step1 行探测（现代印刷）", version="1.0", unit="page",
+        id="line_detect", title="1b 行探测（现代印刷）", version="1.0", unit="page",
         consumes=("raw_page",), produces=("borders", "line_index"), params=LineDetectParams,
         code_deps=("open_guji_cv.impl.modern.line_layout",),
         # 纯函数：读原图算完直接返回，无实例级缓存、无数据库/模型一次性初始化，

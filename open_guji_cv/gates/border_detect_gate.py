@@ -157,7 +157,7 @@ def _no_frame(luma) -> bool:
 @register_step
 class BorderDetectGateStep(Step):
     spec = StepSpec(
-        id="border_detect_gate", title="Step1→2 交接闸", version="1.4", unit="page",   # 1.4：no_frame_skip 缺省开（空白封里、纯色底板页按封面跳过，2026-11-25 用户定）；1.3：Step1 列宽出带的页标 col_width_out_of_band（只标不拦）
+        id="border_detect_gate", title="1 版面出口闸", version="1.4", unit="page",   # 1.4：no_frame_skip 缺省开（空白封里、纯色底板页按封面跳过，2026-11-25 用户定）；1.3：Step1 列宽出带的页标 col_width_out_of_band（只标不拦）
         consumes=("borders",), optional_consumes=("page_survey", "line_index"),
         produces=("border_detect_gate_manifest",),
         params=BorderDetectGateParams,

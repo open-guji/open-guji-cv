@@ -113,7 +113,7 @@ def survey_book(book, pages: list[int] | None = None,
 @register_step
 class PageSurveyStep(Step):
     spec = StepSpec(
-        id="page_survey", title="Step0 页面预检", version="1.0", unit="page",
+        id="page_survey", title="1a 页面预检", version="1.0", unit="page",
         consumes=("raw_page",), produces=("page_survey",), params=PageSurveyParams,
         # 阈值变了全书判据跟着变，`whitelist` 变了个别页的 `whitelisted` 跟着变——
         # 两个都不是"软参数"（不能改了却不让产物过期）。

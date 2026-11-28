@@ -206,7 +206,7 @@ def detect_inverted(gray: np.ndarray, *, min_flipped: int = MIN_FLIPPED) -> list
 @register_step
 class InvertDetectStep(Step):
     spec = StepSpec(
-        id="invert_detect", title="Step0 反色带候选", version="1.2", unit="page",
+        id="invert_detect", title="1a 反色带候选", version="1.2", unit="page",
         consumes=("raw_page",), produces=("inverted",), params=InvertDetectParams,
     )
 

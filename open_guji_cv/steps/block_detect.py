@@ -58,7 +58,7 @@ class BlockDetectParams(BaseModel):
 @register_step
 class BlockDetectStep(Step):
     spec = StepSpec(
-        id="block_detect", title="Step1 分块（自由版式）", version="1.10", unit="page",
+        id="block_detect", title="1b 分块（自由版式）", version="1.10", unit="page",
         consumes=("raw_page",), produces=("layout_blocks",), params=BlockDetectParams,
         code_deps=("open_guji_cv.impl.free.free_blocks", "open_guji_cv.impl.free.free_rectify", "open_guji_cv.utils.layout_hints"),
         book_deps=("layout_hints",),
