@@ -120,6 +120,7 @@ from .seed_admit_lanes import (  # noqa: F401  CV4 整理 PR3c（2026-11-26）�
     _consensus_lib_pass,
     _edge_pair_pass,
     _evict_review_pass,
+    _ink_mark_pass,
     _seg_box_pass,
     _follow_ref_pass,
     _human_unbound_pass,
@@ -1113,6 +1114,11 @@ class SeedAdmitStep(Step):
             d_sb = _seg_box_pass(ctx, page, out, p.seg_box_check)
             n_auto -= d_sb
             n_review += d_sb
+        if p.ink_marks:
+            # 格级墨迹记号（升降都有，CV2 11-28，缺省关、按书开）：印、墨点对位无字判非字放行，对位有字送审
+            d_im = _ink_mark_pass(ctx, page, out, amap)
+            n_auto += d_im
+            n_review -= d_im
         if ctx.book.codepoints:
             # 放行字落到册指定码位。放在所有后处理遍之后：`group_flow` 的文意 L2 表键是按整理本原字
             # 建的（`_clf_ctx` 取邻格放行字），提前改邻格字会让键对不上、组内格被误降。

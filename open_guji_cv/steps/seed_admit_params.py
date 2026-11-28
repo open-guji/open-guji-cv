@@ -195,6 +195,7 @@ _DUMP_DROP_HASH: tuple = (
 
 _DUMP_DROP: tuple = (
     (lambda p: not p.seg_box_check, ("seg_box_check",)),
+    (lambda p: not p.ink_marks, ("ink_marks",)),
     (lambda p: not p.book_lanes, ("book_lanes", "book_lanes_fingerprint")),
     (lambda p: not p.symbol_review, ("symbol_min_human",)),
     (lambda p: p.rare_ref_coord_min_cov == _RARE_REF_COORD_MIN_COV, ("rare_ref_coord_min_cov",)),
@@ -670,6 +671,13 @@ class SeedAdmitParams(BaseModel):
     `split_pair`（一字劈两框，与邻框合起来 <1.25 格）、`tall`（过高框 >1.6 格）；`[all]`＝全开。判据与阈值见
     `seed_admit_lanes.seg_box_defects`。**按书开、按书挑判据**：殿本「一」本来就扁（frame_line 误中），史記卷首大字题会中 tall。
     缺省空＝关，关时不进参数 dump。"""
+
+    ink_marks: bool = False
+    """格级墨迹记号判非字（CV2 2026-11-28，朱楓林集 MBJ 报）：读 Step4 `cell_shrink.ink_marks` 打的格旗（要一起开）。
+    印（旗 `ink_seal`，或已判 `occluded` 的格）：参校本对位（align_ref）这格无字 → 判非字放行（通道 `seal`，doubt `lane_seal`，
+    证据 `lane.via=ink_seal`、`nonchar`）；对位有字 → 按被印遮挡送审（doubt `occluded`）。参校本不分行的书没有坐标对位，
+    `lane_seal` 的 coord_blank 分支走不到，这条按逐字对位补上。墨点（旗 `ink_speck`）：对位无字 → 判非字放行（通道 `blank_ink`，
+    `lane.via=ink_speck`）；对位有字、或贴着同列别的字（`SPECK_HALF_GAP`，多是切坏的半字）→ 送审（doubt `seg_defect`）。人裁、排除名单不动。缺省关，不进 dump。"""
 
     @field_validator("seg_box_check", mode="before")
     @classmethod

@@ -122,6 +122,14 @@
 
 ## [未发版]
 
+## [0.9.12] - 2026-11-28
+
+补发（PATCH，L0）＝v0.9.11＋#1993（朱楓林集 MBJ：藏书印、墨点判非字，骑线字合一格进右列；CV2）。三个开关缺省关，对 v0.9.11 各步 code_hash 全同（row_segment、cell_shrink、seed_admit、seed_admit_params、seed_admit_lanes 按本线 v0.9.11 哈希重登 code_equiv `_MBJ_MARKS_1128`）；底库不变；配 manager 同 0.9.11；没开开关的书不过期。
+
+- `row_segment.straddle_merge`：界行断开处骑在线上的字合成一格放进右列，左列那格记空（格旗 straddle／straddle_into）；开了的册从 row_segment 起过期。
+- `cell_shrink.ink_marks`（`char_w`＝本书中位字宽）：按原图墨打格旗 ink_seal／ink_speck；见骑线旗在原图上裁整字。
+- `seed_admit.ink_marks`：印（旗或已 occluded）、墨点对位无字判非字放行；对位有字或贴字的墨点送审。
+
 ## [0.9.11] - 2026-11-28
 
 补发（PATCH，L0）＝v0.9.10＋册号位数统一五件（#1970 #1976 #1977 #1980 #1987），给改名迁移中的各书（脉经、朱楓林集、北行、幼學、殿本）正式钉。对 v0.9.10 各步 code_hash 全同（row_segment 登 code_equiv `_LAYOUT_ALIAS_1128`）；底库不变；配 manager ≥0.7.0（`ops.rename_volume`／`ops.renumber`），待审路径按数值认要 ≥0.7.1；没写 `aliases` 的册行为逐位不变。
