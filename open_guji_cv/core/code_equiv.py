@@ -716,6 +716,8 @@ _MBJ_MARKS_1128 = ("切字：朱楓林集藏书印／墨点格旗 cell_shrink.in
                    "GUJI_CORPUS_DRIFT=warn，2026-11-28（CV2，MBJ 印章墨点骑线字）")
 
 
+_L10_TITLE_1128 = ("切字各 Step 显示名改新编号（四大步验收 L10，cv doc/验收标准.md S1）：row_segment「Step3 单列文字切分」→「2d 字间切分」、cell_shrink「Step4 字框收缩」→「2e 字框压缩」，自由版式、现代印刷链的 column_trace／line_ocr／cell_cut／column_crop／row_segment_runs 的 Step2／Step3 前缀改 2a／2d；只改 StepSpec.title 字符串，步骤 id、参数、运行逻辑一字不动；title 只进日志与 Pipeline.describe，不进产物、不进参数 dump，产物逐字节不变按构造成立（CV2 2026-11-28）")
+
 _TITLE_L10_1128 = ("版面线 Step 显示名改新编号（四大步验收 L10／S1，2026-11-28，CV1）：StepSpec.title 一个字符串字面量，只进日志与 步骤与产物.md，不进产物也不进 params；git diff 每个模块仅 title= 一处，其余代码字节不变，故不必另跑产物比对")
 
 ENTRIES: tuple[Equiv, ...] = (
@@ -3098,6 +3100,36 @@ ENTRIES: tuple[Equiv, ...] = (
           new='f6aab5e7da1e89138f0284120d6cbbed4d2423a9c69bf6d347a616324f4dd49a',
           old='d3509fcba80364ca8f152a30fc5902b9947c2949dacacbf83a35fc7a719ad20d',
           evidence='四大步验收 L10（CV3 2026-11-28）：只把 StepSpec.title 显示名从旧号改成新编号（Step5-b 生僻字候选→（旧）生僻字候选），title 不进产物、不进参数，运行逻辑一字不动，产物逐字节不变按构造成立'),
+    # 切字各 Step 显示名改新编号（四大步验收 L10，CV2 2026-11-28）：只改 StepSpec.title 字符串，title 不进产物、不进参数 dump，
+    # 产物逐字节不变按构造成立（同 _HOU_DEP_1120 的口径）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="27a28beaed1248526f0ef690913562287bb2b76b1ae031db3c07c0bc0622f7dc",
+          old="f235472064121bdcc7a34e6d92d10ccef4c7fbe3d60d1c1b00babd10f2bd0498",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="68a4b1e59a9e699313b45188b962c3b1c98fefc794121a08fc7974c03a2bf5a6",
+          old="b371efa2475cbb64d95bb988e7eb877550ef2703feec593c6cf50bffddfddb7b",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.column_trace",
+          new="792228d3dbcfc1a9e9fb6f174dbab832bdc5a2a35b094e8bc55dd01a0dc6bd20",
+          old="086eeda1a547f2b57354bb23cc3d97efa09441688cf70781d25c5ed7d2a5564d",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.line_ocr",
+          new="26f425ddcb621fc68e0547253b0c4bdd7aae385fe45d2148f253194e3cf10bd3",
+          old="d2e4e5d2b8200bd5a1eedbeb99f997999923933b8423cd651c43c79bb900e16f",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.cell_cut",
+          new="0cc94182a0ff9b6dbfdd44b2582380bbe6e8a569c7a35f628603cbe505609e97",
+          old="a77e55914c45a35f40800976accf9329ab049aeea6a951d6c3cafd181331687d",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.column_crop",
+          new="a55098a981126125bbeb4f973da4108d0475230566bcc9d8c501c0da5e7e1a0a",
+          old="09e6c46b9b530b3a329476dc44d8580c0080569892bcf30e3c7b803d16fdf758",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.row_segment_runs",
+          new="4d9f0e35da3dbf8a1ae1c142c86e3e241cd10586254a48b7308d995419db28f5",
+          old="47cde846ac5378eef452e9734fb179698ab7c960af78ac738dc1bbcbbca7cabd",
+          evidence=_L10_TITLE_1128),
 )
 
 

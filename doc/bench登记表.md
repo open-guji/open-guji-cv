@@ -1,19 +1,19 @@
 # benchmark 登记表
 
 每个小步一行，标准见 [验收标准.md](验收标准.md) S11、S12、B4。各线负责填自己的行、改了就更新；「住处」不是 cv `eval/` 或 manager 评测器的，算待搬（S11）。
-2026-11-28 CV0 按审查时的现状起表，空格＝没有。
+2026-11-28 CV0 按审查时的现状起表，空格＝没有。2 切字各行 11-28 由 CV2 更新（脚本搬进 cv `eval/`，用法见 [2-切字/README.md](2-切字/README.md)「benchmark」）。
 
 | 小步 | Step id | 负责 | bench（命令或脚本） | 住处 | 主指标 | 护栏（必须为 0／不增） | 测试集（dataset 分片） | 覆盖的书 | 基线报告 |
 |---|---|---|---|---|---|---|---|---|---|
 | 1a 页面预检 | `page_survey`、`invert_detect` | CV1 | `python -m open_guji_cv.eval.survey_bench --gold <items.jsonl>`（尺寸判据；反色带暂无） | cv `eval/` | 异常页召回、精确率、形态对率 | 正常页判异常（false_alarm）=0 | page-survey（种子，rule 快照，待人核）；page-type | 殿本、史記、全唐文、脈經（样本尺寸表） | [doc/1-版面/基线报告.md](1-版面/基线报告.md) 第三节 |
 | 1b 版框界行 | `border_detect`（`line_detect`、`block_detect`） | CV1 | `python -m open_guji_cv.eval.layout_bench --series-report`（单册去掉该开关加 `--book`） | cv `eval/` | 框线、界行误差（>5／10／20px 条数）；列数；页型 | 正文页判成非正文 | layout（79 页）、border-detection | 殿本 47 页、史記 11、全唐文 10、脈經 11 | [doc/1-版面/基线报告.md](1-版面/基线报告.md) |
 | 1c 印章 | `seal_detect` | CV1 | `python -m open_guji_cv.eval.seal_bench --products <根> --gold <items.jsonl>` | cv `eval/` | 印章召回／精确率@IoU、IoU 中位、类别对率 | 印章漏认压字 | seal-box（种子，全是待核底稿，缺人标框） | 殿本 vol01:1、脈經 mj01:3 两页底稿；史記、全唐文无 | [doc/1-版面/基线报告.md](1-版面/基线报告.md) 第四节 |
-| 2a 拉直 | `column_warp` | CV2 | `cut_bench.py` | ai-team（待搬） | 列全对 | 好列改坏 | page-geometry、column-layout | 四书试点各 5 页 | ai-team `A22/cut-bench/基线-2026-11-23.md` |
-| 2b 字带左右边 | `column_band` | CV2 | | | | | char-segmentation/text-band、side-rule | 殿本 | |
-| 2c 列端字 | `column_end` | CV2 | cut-frame 脚本 | ai-team（待搬） | 列端格干净率 | 切笔 | 列端金标 v0、frame-end-crop | 史記、全唐文各 40 列；殿本 451 格 | |
-| 2 列几何、出口闸 | `column_geometry`、`cut_gate` | CV2 | | | 检出率、误报率 | | | | |
-| 2d 字间切分 | `row_segment` | CV2 | `cut_bench.py` | ai-team（待搬） | 列字数全对、列全对、格 F1 | 好列改坏 | cut-lattice、char-segmentation/book-columns | 殿本、史記、全唐文、脉经 | 同 2a |
-| 2e 字框压缩 | `cell_shrink` | CV2 | manager 老评测器（多数跑不起） | manager | | 字身墨被切 | char-segmentation 各分片 | 殿本为主 | |
+| 2a 拉直 | `column_warp`（现代 `column_crop`、自由版式 `column_trace`） | CV2 | `python -m open_guji_cv.eval.cut_bench run／score`（经 2d 量） | cv `eval/` | 列全对 | 好列改坏（`--against` 对→错翻转） | char-segmentation/cut-bench | 史記、全唐文、殿本、脉经（各 35–40 页）；缺朱楓林集、汉书 | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md) |
+| 2b 字带左右边 | `column_band` | CV2 | `python -m open_guji_cv.eval.cut_ink band` | cv `eval/` | 字带余量（中位、p10） | 抹墨格 | char-segmentation/band-ink（v0.1，金标由人核格界＋连通域推出）；殿本旧集 text-band、side-rule | 史記、全唐文各 30 列（band-ink）；殿本（旧集） | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md) |
+| 2c 列端字 | `column_end` | CV2 | `python -m open_guji_cv.eval.cut_frame --items cut-frame/items.jsonl` | cv `eval/` | IoU@0.9 | 切笔；新带渣 | char-segmentation/cut-frame、frame-end-crop | 史記、全唐文各 60 列；殿本 451 格（frame-end-crop） | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md) |
+| 2 列几何、出口闸 | `column_geometry`、`cut_gate` | CV2 | `python -m open_guji_cv.eval.cut_bench gate` | cv `eval/` | 检出率、误报率（拦／拦或旗两档，按判据分报） | | char-segmentation/cut-bench（真值＝2d 列全对） | 史記、全唐文已量；殿本、脉经可跑未量 | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md) |
+| 2d 字间切分 | `row_segment` | CV2 | `python -m open_guji_cv.eval.cut_bench score`；cut-lattice `score.py` | cv `eval/`；dataset cut-lattice | 列字数全对、列全对、格 F1 | 好列改坏 | char-segmentation/cut-bench（random／hard 分报）、cut-lattice、char-segmentation/book-columns | 殿本、史記、全唐文、脉经；缺朱楓林集、汉书 | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md)（史記、全唐文）；殿本、脉经见 ai-team `A22/cut-bench/基线-2026-11-23.md` |
+| 2e 字框压缩 | `cell_shrink` | CV2 | `python -m open_guji_cv.eval.cut_frame`（shrink-ink 加 `--junk-tol 6`） | cv `eval/` | IoU@0.9 | 字身墨被切（切笔） | char-segmentation/shrink-ink（列中，v0.1）、cut-frame（列端） | 史記、全唐文各约 150 格（列中）＋各 60 列（列端）；殿本老分片 instances 等跑不起 | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md) |
 | 3a 字形库匹配 | `glyph_match` | CV3 | `guji eval run @read-3a`；`@read-qtw-lib`（设 `GUJI_GLYPH_DB`）；`guji eval guard` | manager | same 精度、库外拒识、首位命中、对家误认 | 库外字误认 same；残损误放；nearform 对家误认；`guards/read.yaml` 17 条 | glyph-match/advset-*、damaged-*、nearform-qtw；guards/read.yaml | 殿本、史記、全唐文 | ai-team `A23/识字benchmark-2026-11-23/`（未钉库／模型 sha，缺口） |
 | 3b 形近字组 | `glyph_near` | CV3 | `guji eval run @near`（`scripts/eval_near.py`；冻结 `scripts/build_near_bench.py`） | manager 评测器 `near` | 组内判对率、弃权率、触发量、覆盖率、方法一致率、ECE、每格耗时 | 组内误判（非弃权错判） | glyph-near/bench3b（三书 test＋fit 各一册，钉产物包标签与模型 sha256）；正式金标 char-groups/gold/<组> 标注暂停 | 殿本、史記、全唐文 | dataset `glyph-near/bench3b/baseline.json`；ai-team `CV/CV3/3b-bench-2026-11-28/` |
 | （旧）生僻字候选 | `rare_candidates` | CV3 | `guji eval run @read-3b`（套名待改，与新 3b 撞名） | manager | emb 前 10 | | rare-char、char-clustering/samples/007-qtw-firstseen | 殿本、史記、全唐文 | |

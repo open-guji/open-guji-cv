@@ -134,5 +134,5 @@ FREE_CELLS = register_kind(ProductKindSpec(
     id="free_cells", title="自由版式 Step3 字框", storage="numeric", unit="page",
     schema=FreeCells, coord_space=RAW_TR))
 FREE_OCR_LINES = register_kind(ProductKindSpec(
-    id="free_ocr_lines", title="自由版式 Step2-b 列内识别行", storage="numeric", unit="page",
+    id="free_ocr_lines", title="自由版式 2a 列内识别行", storage="numeric", unit="page",
     schema=FreeOcrLines, coord_space=RAW_TR))

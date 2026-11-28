@@ -100,7 +100,7 @@ class PageChars(BaseModel):
 
 
 CHAR_INDEX = register_kind(ProductKindSpec(
-    id="char_index", title="Step4 字框（紧框 + flags）", storage="numeric", unit="cell",
+    id="char_index", title="2e 字框（紧框 + flags）", storage="numeric", unit="cell",
     schema=PageChars, coord_space=COLUMN_PX))
 
 CHAR_PATCH = register_kind(ProductKindSpec(

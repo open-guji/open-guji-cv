@@ -26,3 +26,18 @@
 
 ## 出口闸（2026-11-25）
 刻本链的出口闸只有一道 `cut_gate`，挂在 `cell_shrink` 出口、永远最后调用，读 2a–2e 全部产物，只出裁决（`gate_manifest`、`row_segment_gate_manifest`），不挡中间步。几何量与结构性不切（页型 skip、非正文列位、表格列、页周期估不出）由前面的 `column_geometry` 算；`row_segment` 读它。现代链仍用 `column_crop`＋`column_gate`，与此独立。
+
+## benchmark（2026-11-28，四大步验收 S11、S12）
+脚本都在 `open_guji_cv/eval/`，只读产物、不动指纹；金标在 open-guji-dataset `char-segmentation/`。登记见 [../bench登记表.md](../bench登记表.md)，按书基线见 [基线-2026-11-28.md](基线-2026-11-28.md)。
+
+| 小步 | 命令 | 测试集 | 主指标 | 护栏（必须为 0／不增） |
+|---|---|---|---|---|
+| 2a、2d、整步 | `python -m open_guji_cv.eval.cut_bench run／score` | cut-bench（四书 155 页）、cut-lattice | 列全对、字数全对、格 F1 | `--against` 的「对→错」翻转列 |
+| 出口闸 | `python -m open_guji_cv.eval.cut_bench gate` | cut-bench | 检出率、误报率（拦／拦或旗两档，按判据分报） | — |
+| 2b | `python -m open_guji_cv.eval.cut_ink band` | band-ink（史記、全唐文） | 字带余量 | 抹墨格 |
+| 2c、2e 列端 | `python -m open_guji_cv.eval.cut_frame --items cut-frame/items.jsonl` | cut-frame（史記、全唐文） | IoU@0.9 | 切笔、新带渣 |
+| 2e 列中 | `python -m open_guji_cv.eval.cut_frame --items shrink-ink/items.jsonl --junk-tol 6` | shrink-ink（史記、全唐文） | IoU@0.9 | 切笔 |
+
+冻结输入（原图、第一步产物、册配置、书仓 code/）用 `cut_bench freeze --gold-from <dataset>/char-segmentation/cut-bench/<书>` 从工作区与产物包取，做法见 `eval/cut_bench.py` 模块头；
+改切字算法前后各 `run` 一次，`score／gate／cut_frame／cut_ink band` 都带 `--against` 出翻转清单。
+
