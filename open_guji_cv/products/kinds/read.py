@@ -50,12 +50,17 @@ class PageNear(BaseModel):
     #: 本页跑过的方法用的模型版本 {"方法:组": 模型 sha}（方法的 `model_sha`；rr_shape 等从第四步搬来的判法与第四步
     #: 参数指纹里那一段同算法，如 rr_shape＝模型文件 sha256 前 16 位，4d 拿它对书配置 `group_flow_rr_shape`）。空的不落盘
     models: dict[str, str] = Field(default_factory=dict)
+    #: 书配置挂了、但登记表该组 `handling.methods` 不允许、3b 过渡期跳过的方法「组:方法」（2026-11-28；见 `steps/glyph_near.py`
+    #: 模块头「守登记表的 handling.methods」）。空的不落盘
+    skipped_methods: list[str] = Field(default_factory=list)
 
     @model_serializer(mode="wrap")
     def _drop_empty_models(self, handler):
         d = handler(self)
-        if isinstance(d, dict) and not d.get("models"):
-            d.pop("models", None)
+        if isinstance(d, dict):
+            for k in ("models", "skipped_methods"):
+                if not d.get(k):
+                    d.pop(k, None)
         return d
 
     def by_id(self) -> dict[str, NearRec]:
