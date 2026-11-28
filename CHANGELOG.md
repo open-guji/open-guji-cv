@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- PATCH（11-28，CV3，结构拆分 A5，CV4 审过）：字组数据（185 组）搬进 `config/near_groups/registry.json` 作人维护的真源，`groups/registry.py` 只留 id → FlowSpec 四张表、`load_groups()` 按 `order` 组装，对外名字与类型不变；`DATA_SHA` 核数据，`code_equiv` 登记合算，36 步指纹逐位不变；FlowSpec 成员字段 ⊆ 本组成员守卫（例外仅 `flow._EXTRA_SAME_WRITING`）。只支持检出安装。L0。
 - PATCH（11-28，CV0，bench 框架，CV3 提议）：dataset `guards/*.yaml` 的按书护栏挪进 `eval/bench.py`（`dataset_guards`、`apply_dataset_guards`），`execute` 跑完自动判、只判一次，`benches/read.py` 留名字兼容；`BenchSpec.cost` 可按书写 `{书id: "heavy", "default": "light"}`，取用走 `cost_of(书)`（read-3a-advset 只全唐文算 heavy）。manager `guji bench list／guard` 需配合改用 `cost_of`。
 - PATCH（11-28，CV3，bench 统一接口 P1 第二批）：`eval/benches/read.py` 加 `read-3a-pairs`（匹配判据操作点，三书 pairs-*）、`read-normalize`（归一化回归门）；老评测器 match_triplets、match_pairs、guard_ceiling、db_match、db_match_books 与 5b 研究集 rare_char、zero_shot、zero_shot_fusion、oov、degradation、struct_rerank、struct_heads 逐个试跑后登 deprecated（理由见 `guji bench list`）。`eval_match_pairs.py` 加 `--rows`。指纹不变。L0。
 

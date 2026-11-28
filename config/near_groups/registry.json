@@ -1,0 +1,2709 @@
+{
+ "format": "flow_groups/1",
+ "_doc": "注册字组表的组数据（结构拆分 A5，2026-11-28 由 groups/registry.py 搬出，人维护的真源）。每组 {id, order, table, name, members, kind, backends, solvers, config_dir, overlaps, ref_free?, note}；order 是 FLOW_GROUPS 的次序（入口按次序取第一个装得下的组，有行为意义，别动）；table 是归哪张表（GROUPS／CODEPOINT_GROUPS／SHAPE_GROUPS／OPT_IN_GROUPS，见 registry.py 各表注释）。判法与策略 FlowSpec 不在这里，在 registry.py 里按组 id 写；两边 id 必须一一对上，否则载入报错。改了跑 python scripts/build_near_groups_v2.py。",
+ "groups": [
+  {
+   "id": "jys",
+   "order": 0,
+   "table": "GROUPS",
+   "name": "己已巳",
+   "members": "己已巳",
+   "kind": "near_form",
+   "backends": [
+    "rule",
+    "ctx_table",
+    "table"
+   ],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/jys",
+   "overlaps": [],
+   "ref_free": true,
+   "note": "按文意定（L1 规则含旧 ji_yi_si_clf 规则路，弃权查 L2 表）；已放行的本族格无文意证据也降审。巴是库形陪衬（vol04–10 有 17 格因分差内的巴没进流程；L2 有「其他」出口，真是巴会弃权）。前一字也是族字（干支「己巳」的第二字）时不查 L2 表。L2 表由 haiku 建、Opus＋Sonnet 离线复核（`groups/l2_panel`：Opus high 反对就否决；haiku 不是 high 时 Opus high 且 Sonnet 同字才补字）。"
+  },
+  {
+   "id": "ry",
+   "order": 1,
+   "table": "GROUPS",
+   "name": "日曰",
+   "members": "日曰",
+   "kind": "near_form",
+   "backends": [
+    "table"
+   ],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/ry",
+   "overlaps": [
+    "rm"
+   ],
+   "note": "按文意定（L1 规则，弃权查 L2 表）＋字形宽高比（日窄曰宽，只当第二路：强烈指向另一个字就降审，不单独补放）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"
+  },
+  {
+   "id": "rr",
+   "order": 2,
+   "table": "GROUPS",
+   "name": "入人八",
+   "members": "人入八",
+   "kind": "near_form",
+   "backends": [
+    "image"
+   ],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3",
+    "image"
+   ],
+   "config_dir": "config/groups/rr",
+   "overlaps": [],
+   "note": "文意＋字形分类器＋整字 HOG（上半）；补放要文意或整字 HOG 给字且各路不冲突（随机森林分类器不单独补放），复核时任一路给了别的字就降审（随机森林是弱票：别的路都支持放行字时它单独反对不降）。文意 strong 或 L1 规则时两路字形都只算弱票，复核可照 strong 文意改字；文意没给字时字形不许拗整理本补放（A24 10-26）。"
+  },
+  {
+   "id": "wxs",
+   "order": 3,
+   "table": "GROUPS",
+   "name": "戊戌戍",
+   "members": "戊戌戍",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/wxs",
+   "overlaps": [],
+   "note": "按文意定（只有 L1 规则）。"
+  },
+  {
+   "id": "ss",
+   "order": 4,
+   "table": "GROUPS",
+   "name": "十士",
+   "members": "十士",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "image"
+   ],
+   "config_dir": "config/groups/ss",
+   "overlaps": [
+    "ts",
+    "sb"
+   ],
+   "note": "形近不同义，按数横定（十一横一竖，士两横一竖）；补放须与整理本（缺位用坐标对位字）同字，只补放不复核。与 土士 ts、十卜 sb 共用「士」「十」。"
+  },
+  {
+   "id": "wm",
+   "order": 5,
+   "table": "GROUPS",
+   "name": "未末",
+   "members": "未末",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3",
+    "image"
+   ],
+   "config_dir": "config/groups/wm",
+   "overlaps": [
+    "sz"
+   ],
+   "note": "按文意定；文意弃权时按量横长短（groups/bars.py）。与 sz 共用「未」。"
+  },
+  {
+   "id": "ts",
+   "order": 6,
+   "table": "GROUPS",
+   "name": "土士",
+   "members": "土士",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3",
+    "image"
+   ],
+   "config_dir": "config/groups/ts",
+   "overlaps": [
+    "ss"
+   ],
+   "note": "按文意定；文意弃权时按量横长短（groups/bars.py）与整字 HOG（左半），给字须一致。"
+  },
+  {
+   "id": "ly",
+   "order": 7,
+   "table": "GROUPS",
+   "name": "論諭",
+   "members": "論諭",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/ly",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。論＝議論；諭＝詔諭、上諭。"
+  },
+  {
+   "id": "dt",
+   "order": 8,
+   "table": "GROUPS",
+   "name": "大太",
+   "members": "大太",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/dt",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。太只收官名帝号类；大史／太史等两可词弃权。"
+  },
+  {
+   "id": "wj",
+   "order": 9,
+   "table": "GROUPS",
+   "name": "問間",
+   "members": "問間",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/wj",
+   "overlaps": [
+    "men"
+   ],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。間＝其間、間有、年間；問＝詢問、學問。"
+  },
+  {
+   "id": "zh",
+   "order": 10,
+   "table": "GROUPS",
+   "name": "曾會㑹",
+   "members": "㑹曾會",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/zh",
+   "overlaps": [
+    "qin"
+   ],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。會＝會典、附會；曾＝曾經、姓氏。㑹是會的异体：先按文意定曾／會族，會㑹再按刻形（字频→IDS→库形最近）定哪一形。"
+  },
+  {
+   "id": "yh",
+   "order": 11,
+   "table": "GROUPS",
+   "name": "遺還",
+   "members": "遺還",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/yh",
+   "overlaps": [
+    "chuo"
+   ],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。遺＝遺文、補遺；還＝還朝、返還。"
+  },
+  {
+   "id": "xz",
+   "order": 12,
+   "table": "GROUPS",
+   "name": "象彖𧰼",
+   "members": "彖象𧰼",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/xz",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。彖傳＝释卦辞；象傳＝释卦象；象數、取象为象。𧰼是象的异体：先按文意定彖／象族，象𧰼再按刻形（字频→IDS→库形最近）定哪一形。"
+  },
+  {
+   "id": "wyu",
+   "order": 13,
+   "table": "GROUPS",
+   "name": "王玉",
+   "members": "玉王",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/wyu",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。王＝王弼等人名、帝王；玉＝玉器、玉海。"
+  },
+  {
+   "id": "yt",
+   "order": 14,
+   "table": "GROUPS",
+   "name": "圓圖",
+   "members": "圓圖",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/yt",
+   "overlaps": [
+    "kou"
+   ],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。圖＝河圖、圖書、圖說；圓＝圓通、渾圓、方圓。"
+  },
+  {
+   "id": "rm",
+   "order": 15,
+   "table": "GROUPS",
+   "name": "日目",
+   "members": "日目",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/rm",
+   "overlaps": [
+    "ry",
+    "mz"
+   ],
+   "note": "按文意定；与 ry 共用「日」。目＝書目、總目、存目；日＝今日、是日、日月。"
+  },
+  {
+   "id": "mz",
+   "order": 16,
+   "table": "GROUPS",
+   "name": "目自",
+   "members": "目自",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/mz",
+   "overlaps": [
+    "rm"
+   ],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。目＝總目、書目、存目；自＝自序、所自、自某代以來。"
+  },
+  {
+   "id": "yr",
+   "order": 17,
+   "table": "GROUPS",
+   "name": "一二",
+   "members": "一二",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/yr",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。数词序列：卷一、第二、一二、二十一。"
+  },
+  {
+   "id": "sb",
+   "order": 18,
+   "table": "GROUPS",
+   "name": "十卜",
+   "members": "十卜",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/sb",
+   "overlaps": [
+    "ss"
+   ],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。十＝十二、十卷；卜＝占卜、卜筮、卜子。"
+  },
+  {
+   "id": "js",
+   "order": 19,
+   "table": "GROUPS",
+   "name": "甲申",
+   "members": "甲申",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/js",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。干支：甲子、甲乙；申＝申明、申屠、庚申。"
+  },
+  {
+   "id": "em",
+   "order": 20,
+   "table": "GROUPS",
+   "name": "而面",
+   "members": "而面",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/em",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。而＝虚词；面＝東面、南面、四面。"
+  },
+  {
+   "id": "fc",
+   "order": 21,
+   "table": "GROUPS",
+   "name": "傅傳",
+   "members": "傅傳",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/fc",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。傳＝傳注、經傳、傳記；傅＝傅會、傅寅、傅以漸、太傅。"
+  },
+  {
+   "id": "mb",
+   "order": 22,
+   "table": "GROUPS",
+   "name": "木本",
+   "members": "木本",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/mb",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（规则够硬时改字）。本＝版本、原本、本草；木＝草木、木瓜、木部。"
+  },
+  {
+   "id": "yi_560",
+   "order": 23,
+   "table": "GROUPS",
+   "name": "彝彛彜彞𢑱𢑴",
+   "members": "彛彜彝彞𢑱𢑴",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/yi_560",
+   "overlaps": [],
+   "note": "异体字组（#560）：字频→IDS 三段（上彑彐／中米糸米分／下廾大，自动缝，42 格模板）；判不出送人审，不退到库形最近。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "dian",
+   "order": 24,
+   "table": "GROUPS",
+   "name": "點㸃",
+   "members": "㸃點",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：字频→IDS→库形最近；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "chen",
+   "order": 25,
+   "table": "GROUPS",
+   "name": "讖識䜟",
+   "members": "䜟識讖",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：字频→IDS→库形最近；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "shen",
+   "order": 26,
+   "table": "GROUPS",
+   "name": "慎愼",
+   "members": "愼慎",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/shen",
+   "overlaps": [
+    "tsh"
+   ],
+   "note": "异体组：字频→IDS→库形最近；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "zhi",
+   "order": 27,
+   "table": "GROUPS",
+   "name": "旨㫖",
+   "members": "㫖旨",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/zhi",
+   "overlaps": [],
+   "note": "异体组：字频→IDS→库形最近；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "can",
+   "order": 28,
+   "table": "GROUPS",
+   "name": "參㕘叅",
+   "members": "㕘參叅",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/can",
+   "overlaps": [],
+   "note": "异体组：字频→IDS 下块与整字 HOG 两路一致；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "ji",
+   "order": 29,
+   "table": "GROUPS",
+   "name": "即卽",
+   "members": "即卽",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "qing",
+   "order": 30,
+   "table": "GROUPS",
+   "name": "卿𨜊",
+   "members": "卿𨜊",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "hui",
+   "order": 31,
+   "table": "GROUPS",
+   "name": "彙彚",
+   "members": "彙彚",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "kan",
+   "order": 32,
+   "table": "GROUPS",
+   "name": "刊刋",
+   "members": "刊刋",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "jiw",
+   "order": 33,
+   "table": "GROUPS",
+   "name": "既旣",
+   "members": "既旣",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "qx",
+   "order": 34,
+   "table": "GROUPS",
+   "name": "清淸",
+   "members": "淸清",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "dx",
+   "order": 35,
+   "table": "GROUPS",
+   "name": "顚顛",
+   "members": "顚顛",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "zx",
+   "order": 36,
+   "table": "GROUPS",
+   "name": "淄湽",
+   "members": "淄湽",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "qy",
+   "order": 37,
+   "table": "GROUPS",
+   "name": "青靑",
+   "members": "靑青",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "wei",
+   "order": 38,
+   "table": "GROUPS",
+   "name": "爲為",
+   "members": "為爲",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "shuo",
+   "order": 39,
+   "table": "GROUPS",
+   "name": "說説",
+   "members": "說説",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "xu",
+   "order": 40,
+   "table": "GROUPS",
+   "name": "叙敘",
+   "members": "叙敘",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/xu",
+   "overlaps": [],
+   "note": "异体组：字频→IDS（按字分类）；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "ce",
+   "order": 41,
+   "table": "GROUPS",
+   "name": "冊册",
+   "members": "冊册",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/ce",
+   "overlaps": [],
+   "note": "异体组：字频→IDS（按字分类）；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "jiao",
+   "order": 42,
+   "table": "GROUPS",
+   "name": "教敎",
+   "members": "敎教",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/jiao",
+   "overlaps": [],
+   "note": "异体组：字频→IDS（按字分类）；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "qik",
+   "order": 43,
+   "table": "GROUPS",
+   "name": "啓啟",
+   "members": "啓啟",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/qik",
+   "overlaps": [],
+   "note": "异体组：字频→IDS（按字分类）；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "lih",
+   "order": 44,
+   "table": "GROUPS",
+   "name": "厯歴",
+   "members": "厯歴",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/lih",
+   "overlaps": [],
+   "note": "异体组：字频→IDS（按字分类）；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "jue",
+   "order": 45,
+   "table": "GROUPS",
+   "name": "絕絶",
+   "members": "絕絶",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/jue",
+   "overlaps": [],
+   "note": "异体组：字频→IDS（按字分类）；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "lv",
+   "order": 46,
+   "table": "GROUPS",
+   "name": "呂吕",
+   "members": "吕呂",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/lv",
+   "overlaps": [],
+   "note": "异体组：字频→IDS（整字岭回归）；差在中间连笔，只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "zy",
+   "order": 47,
+   "table": "GROUPS",
+   "name": "于千子干",
+   "members": "于千子干",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3",
+    "ids"
+   ],
+   "config_dir": "config/groups/zy",
+   "overlaps": [
+    "yz"
+   ],
+   "note": "形近不同义，按文意定（L1 规则，弃权查 L2 表）；子于整字 HOG 当第二路（只在分差内全是 子于干 时跑），给字须一致；补放，也复核（只跑文意，只降审不改字）。与 予子 yz 共用「子」。千干 qg 已并入（册配置里的 qg 读作 zy）。"
+  },
+  {
+   "id": "sy",
+   "order": 48,
+   "table": "GROUPS",
+   "name": "山由出",
+   "members": "出山由",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/sy",
+   "overlaps": [
+    "chu"
+   ],
+   "note": "形近不同义，按整字字形判（一对多岭回归，按册留一 0 错）；曲 当陪衬字；只补放。"
+  },
+  {
+   "id": "sz",
+   "order": 49,
+   "table": "GROUPS",
+   "name": "宋朱未",
+   "members": "宋未朱",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/sz",
+   "overlaps": [
+    "wm"
+   ],
+   "note": "按整字字形判（一对多岭回归）；末 当陪衬字，模板库里也有末；与 wm 共用「未」；只补放。"
+  },
+  {
+   "id": "gm",
+   "order": 50,
+   "table": "GROUPS",
+   "name": "各名",
+   "members": "各名",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/gm",
+   "overlaps": [],
+   "note": "按整字字形判（上部夂／夕）；只补放。"
+  },
+  {
+   "id": "xb",
+   "order": 51,
+   "table": "GROUPS",
+   "name": "心必",
+   "members": "心必",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/xb",
+   "overlaps": [],
+   "note": "按整字字形判（按册留一 0 错）；只补放。"
+  },
+  {
+   "id": "weiw",
+   "order": 52,
+   "table": "GROUPS",
+   "name": "衛衞",
+   "members": "衛衞",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/weiw",
+   "overlaps": [],
+   "note": "异体组：取框 HOG＋岭回归（看字中下部）；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "shan",
+   "order": 53,
+   "table": "GROUPS",
+   "name": "刪删",
+   "members": "删刪",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/shan",
+   "overlaps": [],
+   "note": "异体组：取框 HOG＋岭回归（看左下的冊／册）；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "di",
+   "order": 54,
+   "table": "GROUPS",
+   "name": "扺抵",
+   "members": "扺抵",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/di",
+   "overlaps": [],
+   "note": "异体组：取框 HOG＋岭回归（看左下到右下）；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "nei",
+   "order": 55,
+   "table": "CODEPOINT_GROUPS",
+   "name": "內内",
+   "members": "內内",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "chu",
+   "order": 56,
+   "table": "CODEPOINT_GROUPS",
+   "name": "出岀",
+   "members": "出岀",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [
+    "sy"
+   ],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "juan",
+   "order": 57,
+   "table": "CODEPOINT_GROUPS",
+   "name": "卷巻",
+   "members": "卷巻",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "wan",
+   "order": 58,
+   "table": "CODEPOINT_GROUPS",
+   "name": "晚晩",
+   "members": "晚晩",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "huo",
+   "order": 59,
+   "table": "CODEPOINT_GROUPS",
+   "name": "獲𫉬",
+   "members": "獲𫉬",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "kui",
+   "order": 60,
+   "table": "CODEPOINT_GROUPS",
+   "name": "夔䕫",
+   "members": "䕫夔",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "lie",
+   "order": 61,
+   "table": "CODEPOINT_GROUPS",
+   "name": "獵𤢪",
+   "members": "獵𤢪",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "lei",
+   "order": 62,
+   "table": "CODEPOINT_GROUPS",
+   "name": "類𩔖",
+   "members": "類𩔖",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cuan",
+   "order": 63,
+   "table": "CODEPOINT_GROUPS",
+   "name": "竄𥨥",
+   "members": "竄𥨥",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "lang",
+   "order": 64,
+   "table": "CODEPOINT_GROUPS",
+   "name": "郎郞",
+   "members": "郎郞",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "zheng",
+   "order": 65,
+   "table": "CODEPOINT_GROUPS",
+   "name": "徵徴",
+   "members": "徴徵",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cek",
+   "order": 66,
+   "table": "CODEPOINT_GROUPS",
+   "name": "策䇿",
+   "members": "䇿策",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_ji4",
+   "order": 67,
+   "table": "CODEPOINT_GROUPS",
+   "name": "寄𭔃",
+   "members": "寄𭔃",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_ji2",
+   "order": 68,
+   "table": "CODEPOINT_GROUPS",
+   "name": "急𢚩",
+   "members": "急𢚩",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_ye",
+   "order": 69,
+   "table": "CODEPOINT_GROUPS",
+   "name": "耶𫆀",
+   "members": "耶𫆀",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_xun2",
+   "order": 70,
+   "table": "CODEPOINT_GROUPS",
+   "name": "尋㝷",
+   "members": "㝷尋",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_li2",
+   "order": 71,
+   "table": "CODEPOINT_GROUPS",
+   "name": "黎𥠖",
+   "members": "黎𥠖",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_bao3",
+   "order": 72,
+   "table": "CODEPOINT_GROUPS",
+   "name": "寶寳",
+   "members": "寳寶",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_tai4",
+   "order": 73,
+   "table": "CODEPOINT_GROUPS",
+   "name": "泰㤗",
+   "members": "㤗泰",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_bu4",
+   "order": 74,
+   "table": "CODEPOINT_GROUPS",
+   "name": "步歩",
+   "members": "步歩",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_xu1",
+   "order": 75,
+   "table": "CODEPOINT_GROUPS",
+   "name": "虛虚",
+   "members": "虚虛",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_zhen1",
+   "order": 76,
+   "table": "CODEPOINT_GROUPS",
+   "name": "眞真",
+   "members": "眞真",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_heng2",
+   "order": 77,
+   "table": "CODEPOINT_GROUPS",
+   "name": "橫横",
+   "members": "横橫",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_mei3",
+   "order": 78,
+   "table": "CODEPOINT_GROUPS",
+   "name": "每毎",
+   "members": "毎每",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_jie2",
+   "order": 79,
+   "table": "CODEPOINT_GROUPS",
+   "name": "杰𤇍",
+   "members": "杰𤇍",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_yin3",
+   "order": 80,
+   "table": "CODEPOINT_GROUPS",
+   "name": "飮飲",
+   "members": "飮飲",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_bu3",
+   "order": 81,
+   "table": "CODEPOINT_GROUPS",
+   "name": "補𥙷",
+   "members": "補𥙷",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_sou1",
+   "order": 82,
+   "table": "CODEPOINT_GROUPS",
+   "name": "搜捜",
+   "members": "捜搜",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_ping2",
+   "order": 83,
+   "table": "CODEPOINT_GROUPS",
+   "name": "憑慿",
+   "members": "慿憑",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_xu4",
+   "order": 84,
+   "table": "CODEPOINT_GROUPS",
+   "name": "緒緖",
+   "members": "緒緖",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_kou4",
+   "order": 85,
+   "table": "CODEPOINT_GROUPS",
+   "name": "宼寇冦",
+   "members": "冦宼寇",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [
+    "kgc"
+   ],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_ming2",
+   "order": 86,
+   "table": "CODEPOINT_GROUPS",
+   "name": "冥㝠𡨋",
+   "members": "㝠冥𡨋",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_fei1",
+   "order": 87,
+   "table": "CODEPOINT_GROUPS",
+   "name": "𡚱妃",
+   "members": "妃𡚱",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_she4",
+   "order": 88,
+   "table": "CODEPOINT_GROUPS",
+   "name": "渉涉",
+   "members": "涉渉",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_su4",
+   "order": 89,
+   "table": "CODEPOINT_GROUPS",
+   "name": "宿𪧐",
+   "members": "宿𪧐",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_yang4",
+   "order": 90,
+   "table": "CODEPOINT_GROUPS",
+   "name": "漾𣻌",
+   "members": "漾𣻌",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_jing1",
+   "order": 91,
+   "table": "CODEPOINT_GROUPS",
+   "name": "荆荊",
+   "members": "荆荊",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_feng4",
+   "order": 92,
+   "table": "CODEPOINT_GROUPS",
+   "name": "鳳鳯",
+   "members": "鳯鳳",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_ta4",
+   "order": 93,
+   "table": "CODEPOINT_GROUPS",
+   "name": "沓㳫",
+   "members": "㳫沓",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_shu4",
+   "order": 94,
+   "table": "CODEPOINT_GROUPS",
+   "name": "述𫐠",
+   "members": "述𫐠",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [
+    "chuo"
+   ],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_yu4",
+   "order": 95,
+   "table": "CODEPOINT_GROUPS",
+   "name": "鬰鬱",
+   "members": "鬰鬱",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_yan2",
+   "order": 96,
+   "table": "CODEPOINT_GROUPS",
+   "name": "顔顏",
+   "members": "顏顔",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_hui1",
+   "order": 97,
+   "table": "CODEPOINT_GROUPS",
+   "name": "徽𡽪",
+   "members": "徽𡽪",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_jiu1",
+   "order": 98,
+   "table": "CODEPOINT_GROUPS",
+   "name": "究䆒",
+   "members": "䆒究",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_fa4",
+   "order": 99,
+   "table": "CODEPOINT_GROUPS",
+   "name": "髮髪",
+   "members": "髪髮",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_shu4b",
+   "order": 100,
+   "table": "CODEPOINT_GROUPS",
+   "name": "樹𣗳",
+   "members": "樹𣗳",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_huai2",
+   "order": 101,
+   "table": "CODEPOINT_GROUPS",
+   "name": "懷懐",
+   "members": "懐懷",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_han2",
+   "order": 102,
+   "table": "CODEPOINT_GROUPS",
+   "name": "涵𣹢",
+   "members": "涵𣹢",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_yi3",
+   "order": 103,
+   "table": "CODEPOINT_GROUPS",
+   "name": "倚𠋣",
+   "members": "倚𠋣",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_lu4",
+   "order": 104,
+   "table": "CODEPOINT_GROUPS",
+   "name": "麓𪋤",
+   "members": "麓𪋤",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_sui4",
+   "order": 105,
+   "table": "CODEPOINT_GROUPS",
+   "name": "邃𮟏䆳",
+   "members": "䆳邃𮟏",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_yin3b",
+   "order": 106,
+   "table": "CODEPOINT_GROUPS",
+   "name": "隱隠𨼆",
+   "members": "隠隱𨼆",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_lu4b",
+   "order": 107,
+   "table": "CODEPOINT_GROUPS",
+   "name": "祿禄",
+   "members": "祿禄",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_shou4",
+   "order": 108,
+   "table": "CODEPOINT_GROUPS",
+   "name": "壽夀",
+   "members": "壽夀",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_zan4",
+   "order": 109,
+   "table": "CODEPOINT_GROUPS",
+   "name": "贊賛",
+   "members": "賛贊",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_mo4",
+   "order": 110,
+   "table": "CODEPOINT_GROUPS",
+   "name": "黙默",
+   "members": "默黙",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_lian2",
+   "order": 111,
+   "table": "CODEPOINT_GROUPS",
+   "name": "濂濓",
+   "members": "濂濓",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_lian2b",
+   "order": 112,
+   "table": "CODEPOINT_GROUPS",
+   "name": "廉亷",
+   "members": "亷廉",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_chu3",
+   "order": 113,
+   "table": "CODEPOINT_GROUPS",
+   "name": "楚椘",
+   "members": "椘楚",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_shuang1",
+   "order": 114,
+   "table": "CODEPOINT_GROUPS",
+   "name": "雙䨇",
+   "members": "䨇雙",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_shu4c",
+   "order": 115,
+   "table": "CODEPOINT_GROUPS",
+   "name": "豎䜿",
+   "members": "䜿豎",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_dou4",
+   "order": 116,
+   "table": "CODEPOINT_GROUPS",
+   "name": "鬬鬭",
+   "members": "鬬鬭",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_yan4",
+   "order": 117,
+   "table": "CODEPOINT_GROUPS",
+   "name": "艷艶",
+   "members": "艶艷",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_gao1b",
+   "order": 118,
+   "table": "CODEPOINT_GROUPS",
+   "name": "高髙",
+   "members": "高髙",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_sheng2",
+   "order": 119,
+   "table": "CODEPOINT_GROUPS",
+   "name": "繩䋲",
+   "members": "䋲繩",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_xie2",
+   "order": 120,
+   "table": "CODEPOINT_GROUPS",
+   "name": "攜𢹂",
+   "members": "攜𢹂",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_yuan4",
+   "order": 121,
+   "table": "CODEPOINT_GROUPS",
+   "name": "苑𫟍",
+   "members": "苑𫟍",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_xiao3",
+   "order": 122,
+   "table": "CODEPOINT_GROUPS",
+   "name": "曉暁",
+   "members": "暁曉",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_kuan1",
+   "order": 123,
+   "table": "CODEPOINT_GROUPS",
+   "name": "寛寬",
+   "members": "寛寬",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_zeng1",
+   "order": 124,
+   "table": "CODEPOINT_GROUPS",
+   "name": "增増",
+   "members": "増增",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_zao3",
+   "order": 125,
+   "table": "CODEPOINT_GROUPS",
+   "name": "棗𬃷",
+   "members": "棗𬃷",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_feng4b",
+   "order": 126,
+   "table": "CODEPOINT_GROUPS",
+   "name": "奉𫯠",
+   "members": "奉𫯠",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_mao4",
+   "order": 127,
+   "table": "CODEPOINT_GROUPS",
+   "name": "貌貎",
+   "members": "貌貎",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_gao1",
+   "order": 128,
+   "table": "CODEPOINT_GROUPS",
+   "name": "臯𦤎",
+   "members": "臯𦤎",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_du2",
+   "order": 129,
+   "table": "CODEPOINT_GROUPS",
+   "name": "瀆凟",
+   "members": "凟瀆",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_li2b",
+   "order": 130,
+   "table": "CODEPOINT_GROUPS",
+   "name": "梨棃",
+   "members": "梨棃",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_yin3c",
+   "order": 131,
+   "table": "CODEPOINT_GROUPS",
+   "name": "櫽𭬚",
+   "members": "櫽𭬚",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_huang1",
+   "order": 132,
+   "table": "CODEPOINT_GROUPS",
+   "name": "荒𮎰",
+   "members": "荒𮎰",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "cp_fen1",
+   "order": 133,
+   "table": "CODEPOINT_GROUPS",
+   "name": "棻𦯳",
+   "members": "棻𦯳",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [],
+   "config_dir": null,
+   "overlaps": [],
+   "note": "码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "kgc",
+   "order": 134,
+   "table": "SHAPE_GROUPS",
+   "name": "冠寇冦宼㓂",
+   "members": "㓂冠冦宼寇",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/kgc",
+   "overlaps": [
+    "cp_kou4"
+   ],
+   "note": "冠／寇：按文意定族（冠＝衣冠、弱冠；寇＝盜寇、流寇），寇族内按书级码位归一；须与整理本同字才补放；与 cp_kou4 共用 宼寇冦；只补放。"
+  },
+  {
+   "id": "tsh",
+   "order": 135,
+   "table": "SHAPE_GROUPS",
+   "name": "塡填愼慎",
+   "members": "塡填愼慎",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/tsh",
+   "overlaps": [
+    "shen"
+   ],
+   "note": "塡／愼：按文意定族（塡＝填補、填詞；愼＝謹慎、慎重），族内按书级码位归一；须与整理本同字才补放；与 shen 共用 愼慎；只补放。"
+  },
+  {
+   "id": "qin",
+   "order": 136,
+   "table": "SHAPE_GROUPS",
+   "name": "禽會俞命舍",
+   "members": "俞命會禽舍",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/qin",
+   "overlaps": [
+    "zh"
+   ],
+   "note": "按整字字形判（一对多岭回归；曾 合 愈 也进库，判成它们＝弃权）；會 与 zh 共用，入口按分差内候选选组；只补放。"
+  },
+  {
+   "id": "kou",
+   "order": 137,
+   "table": "SHAPE_GROUPS",
+   "name": "國圖圍園固圓圜",
+   "members": "固國圍園圓圖圜",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/kou",
+   "overlaps": [
+    "yt"
+   ],
+   "note": "口框族：按框内字形判（一对多岭回归；圃 圈 囿 也进库，判成它们＝弃权），须与整理本同字才补放；与 yt 共用 圓 圖，册里 yt 排前；只补放。"
+  },
+  {
+   "id": "shang",
+   "order": 138,
+   "table": "SHAPE_GROUPS",
+   "name": "尙尚",
+   "members": "尙尚",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/shang",
+   "overlaps": [],
+   "note": "异体对按刻形判（上部 小／⺌）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "gai",
+   "order": 139,
+   "table": "SHAPE_GROUPS",
+   "name": "蓋葢",
+   "members": "葢蓋",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/gai",
+   "overlaps": [],
+   "note": "异体对按刻形判（草头下 去／大）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "ba",
+   "order": 140,
+   "table": "SHAPE_GROUPS",
+   "name": "䟦跋",
+   "members": "䟦跋",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/ba",
+   "overlaps": [],
+   "note": "异体对按刻形判（右边 叐／犮）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "zhun",
+   "order": 141,
+   "table": "SHAPE_GROUPS",
+   "name": "凖準",
+   "members": "凖準",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/zhun",
+   "overlaps": [],
+   "note": "异体对按刻形判（左旁 冫／氵）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "mi",
+   "order": 142,
+   "table": "SHAPE_GROUPS",
+   "name": "宻密",
+   "members": "宻密",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/mi",
+   "overlaps": [],
+   "note": "异体对按刻形判（中部 㐅／必）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "zhuan",
+   "order": 143,
+   "table": "SHAPE_GROUPS",
+   "name": "撰𢰅",
+   "members": "撰𢰅",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/zhuan",
+   "overlaps": [],
+   "note": "异体对按刻形判（右下 共／丌）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "sang",
+   "order": 144,
+   "table": "SHAPE_GROUPS",
+   "name": "䘮喪",
+   "members": "䘮喪",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/sang",
+   "overlaps": [],
+   "note": "异体对按刻形判（中部 从／吅）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "bian",
+   "order": 145,
+   "table": "SHAPE_GROUPS",
+   "name": "變𠮓",
+   "members": "變𠮓",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/bian",
+   "overlaps": [],
+   "note": "异体对按刻形判（下部 攵／又）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "suo",
+   "order": 146,
+   "table": "SHAPE_GROUPS",
+   "name": "瑣𤨏",
+   "members": "瑣𤨏",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/suo",
+   "overlaps": [],
+   "note": "异体对按刻形判（右上 ⺌／巛）；补放，复核只降审；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "suan",
+   "order": 147,
+   "table": "SHAPE_GROUPS",
+   "name": "算𮅕",
+   "members": "算𮅕",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/suan",
+   "overlaps": [],
+   "note": "异体对按刻形判（下部 廾／大）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "guanm",
+   "order": 148,
+   "table": "SHAPE_GROUPS",
+   "name": "闗關",
+   "members": "闗關",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/guanm",
+   "overlaps": [
+    "men"
+   ],
+   "note": "异体对按刻形判（門内下部 灬／丱）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "shi",
+   "order": 149,
+   "table": "SHAPE_GROUPS",
+   "name": "勢𫝑",
+   "members": "勢𫝑",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/shi",
+   "overlaps": [],
+   "note": "异体对按刻形判（左上 坴／幸）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "fa",
+   "order": 150,
+   "table": "SHAPE_GROUPS",
+   "name": "發𤼵",
+   "members": "發𤼵",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/fa",
+   "overlaps": [],
+   "note": "异体对按刻形判（右下 殳／矢）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "pai",
+   "order": 151,
+   "table": "SHAPE_GROUPS",
+   "name": "派𣲖",
+   "members": "派𣲖",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/pai",
+   "overlaps": [],
+   "note": "异体对按刻形判（右边 𠂢 有横／无横三竖）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "qi",
+   "order": 152,
+   "table": "SHAPE_GROUPS",
+   "name": "奇竒",
+   "members": "奇竒",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/qi",
+   "overlaps": [],
+   "note": "异体对按刻形判（上部 大／立）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "sui",
+   "order": 153,
+   "table": "SHAPE_GROUPS",
+   "name": "歲嵗",
+   "members": "嵗歲",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/sui",
+   "overlaps": [],
+   "note": "异体对按刻形判（上部 止／山）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "li",
+   "order": 154,
+   "table": "SHAPE_GROUPS",
+   "name": "隸𨽾",
+   "members": "隸𨽾",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/li",
+   "overlaps": [],
+   "note": "异体对按刻形判（左上 木（柰）／士（士示））；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "mn",
+   "order": 155,
+   "table": "SHAPE_GROUPS",
+   "name": "蒙𫎇",
+   "members": "蒙𫎇",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/mn",
+   "overlaps": [],
+   "note": "异体对按刻形判（头部 艹／〢丷（两竖带点））；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "yinv",
+   "order": 156,
+   "table": "SHAPE_GROUPS",
+   "name": "陰隂",
+   "members": "陰隂",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/yinv",
+   "overlaps": [],
+   "note": "异体对按刻形判（右边 今云／侌）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "xian",
+   "order": 157,
+   "table": "SHAPE_GROUPS",
+   "name": "陷䧟",
+   "members": "䧟陷",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/xian",
+   "overlaps": [],
+   "note": "异体对按刻形判（右上 臽 头 ⺈／平头）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "shu",
+   "order": 158,
+   "table": "SHAPE_GROUPS",
+   "name": "䟽疏",
+   "members": "䟽疏",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/shu",
+   "overlaps": [],
+   "note": "异体对按刻形判（左旁 足字旁／疋）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "ning",
+   "order": 159,
+   "table": "SHAPE_GROUPS",
+   "name": "寧寜",
+   "members": "寜寧",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/ning",
+   "overlaps": [],
+   "note": "异体对按刻形判（中部 皿／用）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "yao",
+   "order": 160,
+   "table": "SHAPE_GROUPS",
+   "name": "謠謡",
+   "members": "謠謡",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/yao",
+   "overlaps": [],
+   "note": "异体对按刻形判（右边写法两种（看组卡图））；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "jim",
+   "order": 161,
+   "table": "SHAPE_GROUPS",
+   "name": "覊羈",
+   "members": "羈覊",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/jim",
+   "overlaps": [],
+   "note": "异体对按刻形判（上部 覀／罒）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "xun",
+   "order": 162,
+   "table": "SHAPE_GROUPS",
+   "name": "巡廵",
+   "members": "巡廵",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/xun",
+   "overlaps": [
+    "chuo"
+   ],
+   "note": "异体对按刻形判（走之 辶／廴）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "jian",
+   "order": 163,
+   "table": "SHAPE_GROUPS",
+   "name": "劍劔",
+   "members": "劍劔",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/jian",
+   "overlaps": [],
+   "note": "异体对按刻形判（右边 刂／刃）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "chi",
+   "order": 164,
+   "table": "SHAPE_GROUPS",
+   "name": "勅敕",
+   "members": "勅敕",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/chi",
+   "overlaps": [],
+   "note": "异体对按刻形判（右边 力／攵）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "bi",
+   "order": 165,
+   "table": "SHAPE_GROUPS",
+   "name": "𡚁弊",
+   "members": "弊𡚁",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/bi",
+   "overlaps": [],
+   "note": "异体对按刻形判（下部 大／廾）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "huiq",
+   "order": 166,
+   "table": "SHAPE_GROUPS",
+   "name": "囘回",
+   "members": "囘回",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/huiq",
+   "overlaps": [],
+   "note": "异体对按刻形判（内部 己／口）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "xuan",
+   "order": 167,
+   "table": "SHAPE_GROUPS",
+   "name": "選𨕖",
+   "members": "選𨕖",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/xuan",
+   "overlaps": [
+    "chuo"
+   ],
+   "note": "异体对按刻形判（巽下 共／丌）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"
+  },
+  {
+   "id": "xiang",
+   "order": 168,
+   "table": "SHAPE_GROUPS",
+   "name": "鄉鄕",
+   "members": "鄉鄕",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/xiang",
+   "overlaps": [],
+   "note": "鄉 与形近字按整字字形判（左边 乡／卯左；陪衬 卿鄭鄒郡；陪衬进库，判成它们＝弃权），须与整理本同字才补放；只补放。"
+  },
+  {
+   "id": "weim",
+   "order": 169,
+   "table": "SHAPE_GROUPS",
+   "name": "微㣲",
+   "members": "㣲微",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/weim",
+   "overlaps": [],
+   "note": "微 与形近字按整字字形判（中部 山一几（口）／山一王；陪衬 徵徴徹；陪衬进库，判成它们＝弃权），须与整理本同字才补放；只补放。"
+  },
+  {
+   "id": "bie",
+   "order": 170,
+   "table": "SHAPE_GROUPS",
+   "name": "別别",
+   "members": "別别",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/bie",
+   "overlaps": [],
+   "note": "別 与形近字按整字字形判（左边 另／月 等；陪衬 刖則所冊册；陪衬进库，判成它们＝弃权），须与整理本同字才补放；只补放。"
+  },
+  {
+   "id": "fu",
+   "order": 171,
+   "table": "SHAPE_GROUPS",
+   "name": "撫橅",
+   "members": "撫橅",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/fu",
+   "overlaps": [],
+   "note": "撫 与形近字按整字字形判（左旁 扌／木；陪衬进库，判成它们＝弃权），须与整理本同字才补放；只补放。"
+  },
+  {
+   "id": "zhen",
+   "order": 172,
+   "table": "SHAPE_GROUPS",
+   "name": "鎭鎮",
+   "members": "鎭鎮",
+   "kind": "variant",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/zhen",
+   "overlaps": [],
+   "note": "鎭 与形近字按整字字形判（右边 眞／重 等；陪衬 鍾愼慎鏡鏤銷續錢鈿鑽錄鉤鉞銀鍵；陪衬进库，判成它们＝弃权），须与整理本同字才补放；只补放。"
+  },
+  {
+   "id": "guang",
+   "order": 173,
+   "table": "SHAPE_GROUPS",
+   "name": "廣實賔賓宸",
+   "members": "宸實廣賓賔",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/guang",
+   "overlaps": [],
+   "note": "按整字字形判（一对多岭回归，只给 賔賓；成员 實廣宸 只当入口，陪衬与「其他」池判中＝弃权）；补放＋复核降审。"
+  },
+  {
+   "id": "men",
+   "order": 174,
+   "table": "SHAPE_GROUPS",
+   "name": "門族",
+   "members": "問聞門閉開閎閏閑閒間閔閣閨閩閭閱閶閻闇闈闌闕闚關闞闡闢",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/men",
+   "overlaps": [
+    "wj",
+    "guanm"
+   ],
+   "note": "門族（形近不同义）：整字 HOG 一对多认刻形，与整理本同字才补放；問間 与 wj 共用（点名排在 wj 之后）、關 与 guanm 共用；只补放。"
+  },
+  {
+   "id": "chuo",
+   "order": 175,
+   "table": "SHAPE_GROUPS",
+   "name": "辶族",
+   "members": "巡迎近迥迫述追退逆逋通造連進逸逾遁遇運遍過道違遜遞遠遣適遭遵遷選遺遼邁還邇邊",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/chuo",
+   "overlaps": [
+    "yh",
+    "xuan",
+    "xun",
+    "cp_shu4"
+   ],
+   "note": "辶族（形近不同义）：取右上框（避开走之底）HOG 一对多认刻形，与整理本同字才补放；遺還 与 yh 共用（点名排在 yh 之后）；逈（迥的异体）不进组，归异体对处理；只补放。"
+  },
+  {
+   "id": "xjz",
+   "order": 176,
+   "table": "SHAPE_GROUPS",
+   "name": "形近不同字对",
+   "members": "仝令住偏全冐冑冶冷前勾卑句可嘗埤壙孰往徧揚曠楊榮水永治滎熟當祇祗窿章翦胄草釆采阿隆齊齋",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ids"
+   ],
+   "config_dir": "config/groups/xjz",
+   "overlaps": [],
+   "note": "形近不同字对族：整字 HOG 一对多认刻形（门槛 0.7），与整理本同字才补放；只补放。釆 只当入口（库里的 釆 刻例都是 采）。"
+  },
+  {
+   "id": "yz",
+   "order": 177,
+   "table": "SHAPE_GROUPS",
+   "name": "予子",
+   "members": "予子",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/yz",
+   "overlaps": [
+    "zy"
+   ],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。予＝賜予、予奪、我；子＝孔子、國子、君子。與 于千子干 zy 共用「子」，分差内有 予 的格归本组。"
+  },
+  {
+   "id": "guan",
+   "order": 178,
+   "table": "SHAPE_GROUPS",
+   "name": "官宫宮",
+   "members": "官宫宮",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/guan",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。官＝官至、職官、天官；宫＝宫室、殯宫、宫調。宮是宫的异体：先定 官／宫族，族内按库形最近。"
+  },
+  {
+   "id": "hou",
+   "order": 179,
+   "table": "SHAPE_GROUPS",
+   "name": "侯候𠉀𠋫俟",
+   "members": "侯俟候𠉀𠋫",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/hou",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。侯＝諸侯、夏侯、某國侯；候＝氣候、七十二候、候補；俟＝等待。𠉀、𠋫是候的异体（𠋫：全唐文刻形，sheldon 11-03 定另立字头）。"
+  },
+  {
+   "id": "liang",
+   "order": 180,
+   "table": "SHAPE_GROUPS",
+   "name": "兩雨",
+   "members": "兩雨",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/liang",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。兩＝兩江、兩淮、兩家；雨＝風雨、雨水。"
+  },
+  {
+   "id": "ci",
+   "order": 181,
+   "table": "SHAPE_GROUPS",
+   "name": "刺剌",
+   "members": "刺剌",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/ci",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）：剌 只用于译音与 乖剌、剌謬，其余是 刺；补放，也复核，文意 strong 才改字（同 日曰）。"
+  },
+  {
+   "id": "feng",
+   "order": 182,
+   "table": "SHAPE_GROUPS",
+   "name": "逄逢",
+   "members": "逄逢",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/feng",
+   "overlaps": [],
+   "note": "按文意定（L1 规则，弃权查 L2 表）：逄 只作姓，其余是 逢；补放，也复核，文意 strong 才改字（同 日曰）。"
+  },
+  {
+   "id": "zw",
+   "order": 183,
+   "table": "OPT_IN_GROUPS",
+   "name": "丈文",
+   "members": "丈文",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/zw",
+   "overlaps": [],
+   "note": "形近不同义，按文意定（L1 规则，弃权查 L2 表）；放行字须与整理本（参校本）同字：补放要同字，复核时与整理本不同又没有文意给出整理本字的降审（不改字）。"
+  },
+  {
+   "id": "wu",
+   "order": 184,
+   "table": "OPT_IN_GROUPS",
+   "name": "嗚鳴",
+   "members": "嗚鳴",
+   "kind": "near_form",
+   "backends": [],
+   "solvers": [
+    "ctx_l1",
+    "ctx_l3"
+   ],
+   "config_dir": "config/groups/wu",
+   "overlaps": [],
+   "note": "形近不同义，看图分不开，按文意定（L1 规则，弃权查 L2 表；L3 走裁定库）：嗚＝嗚呼、嗚咽，鳴＝雞鳴、鳴鑾；补放，也复核，文意 strong 才改字（同 日曰）。"
+  }
+ ]
+}
