@@ -2965,6 +2965,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="daf5e69b08b6aca4046aa8fe80b1435c5f48e1204a2dd68a24dfb7bf1ccb2d9f",
           old="e5e77318387b3f6205604e2efe15bd4ea83f41f4212904a1f2a0a7a1ec5e05c5",
           evidence=_NONE_COLS_1128),
+    # 全唐文开竖线跟踪后切字适配：row_segment 加 frame_edge_near、layout_off_always（缺省关）；frame_only_edge_cells 加 near_frac（CV2 11-28）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='1c455cf504c6486727bf1d7f2d1406a9f9b86d356e9380ca7872bd5c54fcd10c',
+          old='27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee',
+          evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；全唐文开竖线跟踪后切字适配（CV2 11-28）：row_segment 加 frame_edge_near、layout_off_always，seg.profile.frame_only_edge_cells 加 near_frac，缺省同旧'),
+    Equiv(module='open_guji_cv.seg.profile',
+          new='fab536ffa8ffa50bb39ea02edcffca32da3fbb59b162d86c422f9e0e6094ff79',
+          old='cf88eafeacd8a4c224239bc9e7b0e2ec5332319e5022fff13809245cd3ea2f50',
+          evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；全唐文开竖线跟踪后切字适配（CV2 11-28）：row_segment 加 frame_edge_near、layout_off_always，seg.profile.frame_only_edge_cells 加 near_frac，缺省同旧'),
 )
 
 

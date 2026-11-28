@@ -1,19 +1,19 @@
 {
  "format": "near_groups/2",
- "_doc": "形近字组登记表（scripts/build_near_groups_v2.py 生成，勿手改；读口 open_guji_cv/groups/near_registry.py，schema 与来源见 doc/3-识字/形近字组登记表.md）。groups 的键是组 id：注册字组表的组 id 照旧，其余字对单立 p:<两字>。src：registry＝注册字组表、hand＝config/near_groups/hand.json（手工核过的形近否决对）、human＝config/confusable_human.json、font＝字体形近表 τ≥font_tau、near_groups＝config/near_groups.json、pair_clf:<书>＝该书的按对分类器文件。methods＝第四步 group_flow 的方法数组（按顺序）；books＝按书覆盖（哪本书开哪些方法、用哪个模型文件）。",
+ "_doc": "形近字组登记表（scripts/build_near_groups_v2.py 生成，勿手改；读口 open_guji_cv/groups/near_registry.py，schema 与来源见 doc/3-识字/形近字组登记表.md）。groups 的键是组 id：注册字组表的组 id 照旧，其余字对单立 p:<两字>。src：registry＝注册字组表、hand＝config/near_groups/hand.json（手工核过的形近否决对）、human＝config/confusable_human.json、font＝字体形近表 τ≥font_tau、near_groups＝config/near_groups.json、shape＝config/near_groups/shape_pairs.json（第四步书级刻形判法的字对，只给 3b ref，现役护栏与分流不读）、pair_clf:<书>＝该书的按对分类器文件。methods＝第四步 group_flow 的方法数组（按顺序）；books＝按书覆盖（哪本书开哪些方法、用哪个模型文件）。",
  "types": {
   "near": "异字形近（组内是不同的字）",
   "variant": "同字异码（组内是同一个字的不同码位／写法）",
   "fold": "折叠组（组内既有不同的字，又有某字的异体；fold 把异体折到它归的字）"
  },
  "font_tau": 0.988,
- "n_groups": 619,
+ "n_groups": 620,
  "n_registry": 185,
- "n_pair_groups": 434,
- "n_pairs": 572,
+ "n_pair_groups": 435,
+ "n_pairs": 573,
  "n_by_type": {
   "fold": 6,
-  "near": 291,
+  "near": 292,
   "variant": 322
  },
  "n_groups_by_src": {
@@ -21,13 +21,15 @@
   "hand": 20,
   "human": 38,
   "near_groups": 521,
-  "registry": 185
+  "registry": 185,
+  "shape": 1
  },
  "n_pairs_by_src": {
   "font": 78,
   "hand": 20,
   "human": 42,
-  "near_groups": 572
+  "near_groups": 572,
+  "shape": 1
  },
  "books": [],
  "groups": {
@@ -7313,6 +7315,24 @@
    },
    "src": [
     "near_groups"
+   ],
+   "type": "near"
+  },
+  "p:之矣": {
+   "chars": [
+    "之",
+    "矣"
+   ],
+   "methods": [],
+   "pairs": {
+    "之矣": {
+     "src": [
+      "shape"
+     ]
+    }
+   },
+   "src": [
+    "shape"
    ],
    "type": "near"
   },

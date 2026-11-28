@@ -16,7 +16,11 @@
 - 注册字组表（`groups/registry.py` 的 `FLOW_GROUPS`）每组一条，组 id 照旧；
 - 字对来源（手工、人裁、字体 τ≥`confusable.FONT_TAU`、`near_groups.json`、书级 pair_clf）按无序对去重，`src` 记全部来源；
   两个字同在某个注册组里的对挂到那个组（同在几个组就挂几个）的 `pairs` 下，其余每对单立一组，id 为 `p:<两字按码位序>`；
-- 剔除名单 `config/near_groups_drop.tsv` 里的对，没有手工／人裁来源的不收（同 `build_near_groups.py merge`）。
+- 剔除名单 `config/near_groups_drop.tsv` 里的对，没有手工／人裁／刻形（shape）来源的不收（同 `build_near_groups.py merge`）；
+- 单立字对组的类型按规则定（`near_groups.json` 的 src 有 variant → variant，否则 near），`config/near_groups/type_override.json`
+  人定覆盖（2026-11-28 Sheldon：pair_clf 来的 侣侶 记 variant、凊淸 保持 near）；
+- 来源 7（2026-11-28）`config/near_groups/shape_pairs.json`：第四步书级刻形判法挂着、别处没登记的字对（史记 之矣），
+  src＝`shape`，只为 3b `glyph_near` 的书配置能 `ref` 到一个组；现役读口按 src 取 hand／human／font，不读它。
 
 本脚本只生成表。第二期（2026-11-28）起 `confusable.NEVER_MATCH_FAMILIES`／`partners()` 从本表派生，所以手工表不能再从
 `confusable` 读（会读回自己），改读真源 `config/near_groups/hand.json`；改了任何来源都要重跑本脚本，否则现役护栏跟不上。
@@ -39,7 +43,9 @@ PAIR_PREFIX = "p:"
 DOC = ("形近字组登记表（scripts/build_near_groups_v2.py 生成，勿手改；读口 open_guji_cv/groups/near_registry.py，"
        "schema 与来源见 doc/3-识字/形近字组登记表.md）。groups 的键是组 id：注册字组表的组 id 照旧，其余字对单立 p:<两字>。"
        "src：registry＝注册字组表、hand＝config/near_groups/hand.json（手工核过的形近否决对）、human＝config/confusable_human.json、"
-       "font＝字体形近表 τ≥font_tau、near_groups＝config/near_groups.json、pair_clf:<书>＝该书的按对分类器文件。"
+       "font＝字体形近表 τ≥font_tau、near_groups＝config/near_groups.json、"
+       "shape＝config/near_groups/shape_pairs.json（第四步书级刻形判法的字对，只给 3b ref，现役护栏与分流不读）、"
+       "pair_clf:<书>＝该书的按对分类器文件。"
        "methods＝第四步 group_flow 的方法数组（按顺序）；books＝按书覆盖（哪本书开哪些方法、用哪个模型文件）。")
 
 
@@ -63,7 +69,7 @@ def read_drop(path: Path) -> set[str]:
 
 
 def repo_pair_sources(root: Path = ROOT) -> dict[str, dict]:
-    """仓内四处字对来源 → {对: {"src": {标签…}, …附带字段}}。"""
+    """仓内字对来源（手工、人裁、字体、near_groups.json、刻形判法字对 shape）→ {对: {"src": {标签…}, …附带字段}}。"""
     from open_guji_cv.clustering.confusable import FONT_TAU, hand_pairs
     cfg = root / "config"
     acc: dict[str, dict] = {}
@@ -92,8 +98,12 @@ def repo_pair_sources(root: Path = ROOT) -> dict[str, dict]:
             if e.get("near"):
                 extra["near"] = dict(sorted(e["near"].items()))
             add(k[0], k[1], "near_groups", **extra)
+    shape = cfg / "near_groups" / "shape_pairs.json"            # 来源 7：第四步书级刻形判法的字对，只进登记表（2026-11-28）
+    if shape.exists():
+        for e in json.loads(shape.read_text(encoding="utf-8")).get("pairs") or ():
+            add(str(e["a"]), str(e["b"]), "shape")
     drop = read_drop(cfg / "near_groups_drop.tsv")
-    return {k: e for k, e in acc.items() if not (k in drop and not {"hand", "human"} & e["src"])}
+    return {k: e for k, e in acc.items() if not (k in drop and not {"hand", "human", "shape"} & e["src"])}
 
 
 def registry_groups() -> list[dict]:
@@ -177,14 +187,30 @@ def _merge_pair(dst: dict, e: dict) -> None:
             dst[k] = v
 
 
+def read_type_override(path: Path) -> dict[str, str]:
+    """单立字对组的类型人定覆盖 `config/near_groups/type_override.json` → {对: 类型}（键按码位序重排）。没有文件 → {}。"""
+    if not Path(path).exists():
+        return {}
+    out = {}
+    for k, e in (json.loads(Path(path).read_text(encoding="utf-8")).get("types") or {}).items():
+        t = str(e["type"] if isinstance(e, dict) else e)
+        if t not in TYPES:
+            raise ValueError(f"{path}：{k} 的 type {t!r} 不认识（应为 {sorted(TYPES)}）")
+        out[pair_key(k[0], k[1:])] = t
+    return out
+
+
 def build(reg: list[dict], pairs: dict[str, dict], book_pairs: dict[str, tuple[dict, dict]] | None = None,
-          book_gn: dict[str, dict] | None = None, font_tau: float | None = None) -> dict:
+          book_gn: dict[str, dict] | None = None, font_tau: float | None = None,
+          type_override: dict[str, str] | None = None) -> dict:
     """纯函数：注册组 ＋ 字对来源 ＋ 书级输入 → `near_groups/2` 整张表（dict，键序确定）。
 
     - `reg`：`registry_groups()` 的形状；`pairs`：{对: {"src": {标签}, …}}；
-    - `book_pairs`：{书: (字对来源, {对: 档})}；`book_gn`：{书: glyph_near 的 groups dict}。"""
+    - `book_pairs`：{书: (字对来源, {对: 档})}；`book_gn`：{书: glyph_near 的 groups dict}；
+    - `type_override`：{对: 类型}，单立字对组的类型人定覆盖（只管 `p:` 组；对没进表就不起作用）。"""
     book_pairs = book_pairs or {}
     book_gn = book_gn or {}
+    type_override = type_override or {}
     allp: dict[str, dict] = {}
     for k, e in pairs.items():
         _merge_pair(allp.setdefault(k, {}), e)
@@ -210,8 +236,8 @@ def build(reg: list[dict], pairs: dict[str, dict], book_pairs: dict[str, tuple[d
         if not gids:
             gid = PAIR_PREFIX + key
             ng = e.get("ng_src") or ()
-            groups[gid] = {"chars": [key[0], key[1]], "type": "variant" if "variant" in ng else "near",
-                           "methods": [], "src": []}
+            typ = type_override.get(key) or ("variant" if "variant" in ng else "near")
+            groups[gid] = {"chars": [key[0], key[1]], "type": typ, "methods": [], "src": []}
             gids = [gid]
         for gid in gids:
             g = groups[gid]
@@ -271,7 +297,8 @@ def build_from_repo(pair_clf: dict[str, Path] | None = None, glyph_near: dict[st
     from open_guji_cv.clustering.confusable import FONT_TAU
     bp = {b: book_pair_clf(b, p) for b, p in (pair_clf or {}).items()}
     bg = {b: book_glyph_near(p) for b, p in (glyph_near or {}).items()}
-    return build(registry_groups(), repo_pair_sources(ROOT), bp, bg, font_tau=FONT_TAU)
+    return build(registry_groups(), repo_pair_sources(ROOT), bp, bg, font_tau=FONT_TAU,
+                 type_override=read_type_override(ROOT / "config" / "near_groups" / "type_override.json"))
 
 
 def dumps(table: dict) -> str:
