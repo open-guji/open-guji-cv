@@ -15,7 +15,7 @@
 | 2d 字间切分 | `row_segment` | CV2 | `cut_bench.py` | ai-team（待搬） | 列字数全对、列全对、格 F1 | 好列改坏 | cut-lattice、char-segmentation/book-columns | 殿本、史記、全唐文、脉经 | 同 2a |
 | 2e 字框压缩 | `cell_shrink` | CV2 | manager 老评测器（多数跑不起） | manager | | 字身墨被切 | char-segmentation 各分片 | 殿本为主 | |
 | 3a 字形库匹配 | `glyph_match` | CV3 | `guji eval run @read-3a`；`@read-qtw-lib`（设 `GUJI_GLYPH_DB`）；`guji eval guard` | manager | same 精度、库外拒识、首位命中、对家误认 | 库外字误认 same；残损误放；nearform 对家误认；`guards/read.yaml` 17 条 | glyph-match/advset-*、damaged-*、nearform-qtw；guards/read.yaml | 殿本、史記、全唐文 | ai-team `A23/识字benchmark-2026-11-23/`（未钉库／模型 sha，缺口） |
-| 3b 形近字组 | `glyph_near` | CV3 | `guji eval run @near`（`scripts/eval_near.py`，11-28 建设中） | manager（建设中） | 组内判对率、触发量、覆盖率、方法一致率、校准误差 | 组内误判 | char-groups（3b 分片建设中；正式金标 gold/<组> 标注暂停） | 殿本、史記、全唐文 | 建设中 |
+| 3b 形近字组 | `glyph_near` | CV3 | `guji eval run @near`（`scripts/eval_near.py`；冻结 `scripts/build_near_bench.py`） | manager 评测器 `near` | 组内判对率、弃权率、触发量、覆盖率、方法一致率、ECE、每格耗时 | 组内误判（非弃权错判） | glyph-near/bench3b（三书 test＋fit 各一册，钉产物包标签与模型 sha256）；正式金标 char-groups/gold/<组> 标注暂停 | 殿本、史記、全唐文 | dataset `glyph-near/bench3b/baseline.json`；ai-team `CV/CV3/3b-bench-2026-11-28/` |
 | （旧）生僻字候选 | `rare_candidates` | CV3 | `guji eval run @read-3b`（套名待改，与新 3b 撞名） | manager | emb 前 10 | | rare-char、char-clustering/samples/007-qtw-firstseen | 殿本、史記、全唐文 | |
 | 3c 按图候选 | `glyph_candidate` | CV3 | `guji eval run cands`（`scripts/eval_cands.py`） | manager（已登记） | 甲层难格召回@1／10／30／50 | | char-candidates（甲层难格、乙层待审卡） | 殿本、史記、全唐文 | dataset `char-candidates/baseline.json` |
 | 3d 其他特征 | `cell_traits` | CV3 | | | | | | | |

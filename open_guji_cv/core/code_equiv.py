@@ -3044,6 +3044,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='9b02962b10247767e7bf45803f8ea9c730d4ff959e942fa922de1913ae5d38c8',
           old='714c024357d5563e31b61e39fbec59c3a8aff04bc56ddf0fa23af94de1f774fb',
           evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
+    # 收尾 glyph_analyzer 认校准表的 version／temporary（CV3 11-28，3b bench 临时校准）：表没写这两个键时 p_src 与之前逐字相同，
+    # 临时表的 p 只进 near[组].p_tmp——现役书（殿本宫官那份表没写 version）收尾产物逐字节不变
+    Equiv(module='open_guji_cv.steps.glyph_analyzer',
+          new='8b183226d9cf4e1e654a93ca870e3693b75fe7e0238a4ce34ca309e93aee4b5a',
+          old='534f3cf7b21cbd27340b99e2a9121b8ec677e9d3aa1507fb4e2f5844e1c3ef74',
+          evidence='glyph_analyzer 在殿本 vol04 8 页（--pages 1,2,7,17,22,48,162,181；上游 main 包 cv0.7.110-c23-g24-m2-ZM-colend-human-vol04-a3 '
+                   '＋本机按书配置现跑的 3b glyph_near 宫官 cnn_small，5 页有触发格、带正式校准表）上与 origin/dev 02604860 产物逐字节相同；'
+                   'scripts/code_equiv.py check，2026-11-28（CV3）'),
     Equiv(module='open_guji_cv.steps.group_decision',
           new='df9b7b767ba9a6c2de43cc3aecb7fe5b9e567f8f88dea4884b061cea0f486553',
           old='3c9bc0ebfe44f461a07190f1e6abc352c7ea15917da3ead3972cedf3efc54585',

@@ -130,7 +130,8 @@ class FinalRec(BaseModel):
     traits: dict[str, float] = Field(default_factory=dict)
     #: 3b 触发了的格，按组：`{组: {trigger, methods: {方法名: {method, …方法证据原样, model}}, [p, p_src]}}`（2026-11-28 一格多组起；
     #: 给 4d 取看图判法结果，rr_shape 的证据是 `{char, why, nn, score, geo}`，与第四步 `rr_shape.judge()` 同键同值）。
-    #: 这组有方法出了校准 p 才有 `p`（{字: p}）与 `p_src`（`near:方法:组`）。没触发为空，空的不落盘。
+    #: 这组有方法出了校准 p 才有 `p`（{字: p}）与 `p_src`（`near:方法:组`，表写了 `version` 再接 `@版本`）；只有临时校准表
+    #: （`temporary: true`，只给排序展示）出 p 的组改写 `p_tmp`／`p_tmp_src`，不写 `p`。没触发为空，空的不落盘。
     #: 读旧文件（之前是一格一组的 `{group, trigger, methods}`）用 `near_groups()`，两种都认
     near: dict = Field(default_factory=dict)
     #: 3e `glyph_vis`（看图大模型，只看图）这一格的结论：`{group, trigger, status, char, other, conf, why, model, prompt_sha,
