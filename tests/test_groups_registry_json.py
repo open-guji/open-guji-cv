@@ -103,3 +103,62 @@ def test_malformed_rows_raise(tmp_path, bad):
         del g[0]["members"]
     with pytest.raises(ValueError):
         R.load_groups(_write(tmp_path, doc), sha=None)
+
+
+# —— 成员派生常量守卫（A5 条件 c，CV4 2026-11-28 定：常量都不改，只守住 ⊆ 成员） ——
+
+#: FlowSpec 及其方法里「必须是本组成员」的字段（`tolerate`、`ref_top_extra` 是组外陪衬，不在内）。
+MEMBER_FIELDS = {("Only", "chars"), ("Only", "give"), ("FlowSpec", "families"), ("FlowSpec", "pair"),
+                 ("FlowSpec", "ref_margin_forms"), ("Llm", "after_pair"), ("CtxModel", "after_pair"),
+                 ("CtxOnline", "after_pair"), ("RefRare", "rare")}
+#: 唯一的例外：`flow._EXTRA_SAME_WRITING`（「同一个字的写法」，跨组的语义表，不按某一组成员算）。
+EXEMPT = {"open_guji_cv.groups.flow._EXTRA_SAME_WRITING"}
+
+
+def _chars(v) -> set:
+    if isinstance(v, str):
+        return set(v)
+    return {c for x in v for c in _chars(x)} if isinstance(v, (tuple, list, frozenset, set)) else set()
+
+
+def _member_fields(o, out):
+    import dataclasses
+    if dataclasses.is_dataclass(o) and not isinstance(o, type):
+        for f in dataclasses.fields(o):
+            v = getattr(o, f.name)
+            if (type(o).__name__, f.name) in MEMBER_FIELDS:
+                out.append((f"{type(o).__name__}.{f.name}", _chars(v)))
+            _member_fields(v, out)
+    elif isinstance(o, (tuple, list)):
+        for x in o:
+            _member_fields(x, out)
+    return out
+
+
+def test_flow_char_constants_are_members():
+    bad = []
+    for g in R.FLOW_GROUPS.values():
+        for where, chars in _member_fields(g.flow, []):
+            if chars - g.members:
+                bad.append((g.id, where, "".join(sorted(chars - g.members))))
+    assert not bad, f"FlowSpec 里出现了非本组成员的字（成员改了常量没跟上？）：{bad}"
+
+
+def test_known_member_fields_still_exist():
+    """守卫要真在守：这几类字段在现有组里都还出现（改名了会漏守）。"""
+    found = {w for g in R.FLOW_GROUPS.values() for w, _ in _member_fields(g.flow, [])}
+    assert found == {f"{a}.{b}" for a, b in MEMBER_FIELDS}
+
+
+def test_ry_shape_output_chars_are_members():
+    """`methods.ry_shape` 出字映射是 日／曰：挂了它的组成员必须含这两个字。"""
+    from open_guji_cv.groups.methods import RY_SHAPE
+    users = [g for g in R.FLOW_GROUPS.values() if RY_SHAPE in g.flow.methods]
+    assert users and all({"日", "曰"} <= g.members for g in users), [g.id for g in users]
+
+
+def test_extra_same_writing_is_the_listed_exemption():
+    """例外显式列出：`_EXTRA_SAME_WRITING` 还是那两组；它变了就要回来确认是否仍算例外。"""
+    from open_guji_cv.groups import flow
+    assert EXEMPT == {"open_guji_cv.groups.flow._EXTRA_SAME_WRITING"}
+    assert flow._EXTRA_SAME_WRITING == (frozenset("宫宮"), frozenset("賓賔"))
