@@ -211,6 +211,8 @@ class ContextDecideParams(BaseModel):
     指纹、不进参数哈希。书 yaml `params: {context_decide: {rare_topk: 5}}` 打开。
     只**扩候选集**、按名次给先验（`rare_priors`），`same` 档继承、门槛化、字形层
     不可改写这三条铁律都不动——5-b 的字进了候选池，才轮得到 LM 在它们之间选。"""
+    read_3c: bool = False
+    """`rare_topk > 0` 时「按图前几名」改读 3c `glyph_candidate` 而不是 5-b（A7，2026-11-28）。缺省关、关时不进 dump，产物逐字节同。"""
     rare_weight: float = 1.5
     """5-b 这一路在 `fuse_priors` 里的总权重（按名次 1/r 归一后乘它）。缺省与 OCR
     一路同权（`OCR_WEIGHT`=1.5，库一路是 3.0×cov）：只扩池、不喧宾夺主。只在
@@ -229,6 +231,16 @@ class ContextDecideParams(BaseModel):
     开了以后这些格的裁决与没开共识时逐字节相同；配 seed_admit `consensus_fallback` 一起开——准入那边
     库字≠整理本字的共识 same 退回 unsure 走 context 等原通道，要的就是这里的上下文裁决。"""
 
+    @property
+    def rare_5b_on(self) -> bool:
+        """给 `optional_consumes_when` 用：读 5-b 的开关（`rare_topk` 开且没改读 3c）。"""
+        return bool(self.rare_topk) and not self.read_3c
+
+    @property
+    def cand_3c_on(self) -> bool:
+        """给 `optional_consumes_when` 用：读 3c 的开关。"""
+        return bool(self.rare_topk) and self.read_3c
+
     @model_serializer(mode="wrap")
     def _drop_empty_ai(self, handler):
         """两个 ai_* 字段为空时不进 dump：没接 AI 的书 `params_hash` 与加字段前逐位
@@ -245,6 +257,8 @@ class ContextDecideParams(BaseModel):
         if isinstance(d, dict) and not self.rare_topk:
             d.pop("rare_topk", None)
             d.pop("rare_weight", None)
+        if isinstance(d, dict) and not self.read_3c:
+            d.pop("read_3c", None)
         return d
 
     def _corpus_paths(self) -> list[str]:
@@ -289,8 +303,8 @@ def rare_priors(chars: list[str]) -> list[tuple[str, float]]:
 class ContextDecideStep(Step):
     spec = StepSpec(
         id="context_decide", title="4b 上下文裁决", version="1.0", unit="cell",
-        consumes=("glyph_match",), optional_consumes=("rare_candidates",),
-        optional_consumes_when=(("rare_candidates", "rare_topk"),),
+        consumes=("glyph_match",), optional_consumes=("rare_candidates", "glyph_candidate"),
+        optional_consumes_when=(("rare_candidates", "rare_5b_on"), ("glyph_candidate", "cand_3c_on")),
         produces=("context_decision",),
         params=ContextDecideParams,
         needs=("corpus",),
@@ -422,8 +436,8 @@ class ContextDecideStep(Step):
         omap: dict = {}                    # Step5-c 已删（2026-10-18）：OCR 这一路恒缺席
         rmap: dict[str, list[str]] = {}
         if p.rare_topk:
-            from .align_ref import _opt, rare_topk_map
-            rmap = rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
+            from .align_ref import topk_src_map
+            rmap = topk_src_map(ctx, page, p.rare_topk, p.read_3c)
         def _decide_column(cc, rmap, ai_map) -> ColumnDecision:
             if not cc.ok:
                 return ColumnDecision(col=cc.col, ok=False, error=cc.error)

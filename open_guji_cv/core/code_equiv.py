@@ -720,6 +720,8 @@ _L10_TITLE_1128 = ("切字各 Step 显示名改新编号（四大步验收 L10�
 
 _TITLE_L10_1128 = ("版面线 Step 显示名改新编号（四大步验收 L10／S1，2026-11-28，CV1）：StepSpec.title 一个字符串字面量，只进日志与 步骤与产物.md，不进产物也不进 params；git diff 每个模块仅 title= 一处，其余代码字节不变，故不必另跑产物比对")
 
+_READ3C_1128 = ('read_3c 开关（第四步名次类读口 5-b↔3c，缺省关、关时不进参数 dump）：殿本 vol01 small 的 54 页（--pages 1,4,7,…,194 每三页取一，任务库 #18351 新 cv 8d8bef7 对 #18352 旧 dev cb53bcf，align_ref→char_decide，GUJI_CORPUS_DRIFT=warn）align_ref／context_decide／seed_admit／decide_gate 产物逐页 sha256 全同；dev 自 cb53bcf 到 5c01736 没改这几个模块（A7，CV4 2026-11-28，cv#2079）')
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.steps.page_survey",
           new="97e54ab117a488a226cb87bf8ecb6e7dcdfc29f810e6b0138e0be0acb526268a",
@@ -3202,6 +3204,26 @@ ENTRIES: tuple[Equiv, ...] = (
           new="2aebf528f1547d752a5d0e7674a3b6d2a704ffe7ca329ab60c5d5bf0df1de045",
           old="e17c625e507b0532a4d3c65a2ddc392dcbdd25932c3346acd68c0ddc04e54cf8",
           evidence="char_decide 在 03 231 页与基线逐字节相同（A1 开关缺省关，证据见前行；合入 dev da40aed 后哈希重登，dev 合入的改动非本改动）；史記 03 small"),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="6cb7c3ee1e08ec54e925006fba054ac34f8f6d546256ae40c87cf24a16c4d065",
+          old="1c4789b64ad098e05dafbe3e44573e5e0599b8aa240dbb24f9932a26f7614110",
+          evidence=_READ3C_1128),
+    Equiv(module="open_guji_cv.steps.context_decide",
+          new="82568d36c299522891f7f12743b6351fef6faf60351bfe2a63155b1a10c70edb",
+          old="442732ff599c28b52a7dca9064ce776441c2f9b4dadf867d9863d380e6a43a1a",
+          evidence=_READ3C_1128),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="e8f81d5bea8cfd3356346b5ec8b55134c0cbfb933d32a4c75971dedebf5757f1",
+          old="b229b492cedfbc0c009dd7297002718f839ed9dda5d5ee4f37dd7a7c705a91cb",
+          evidence=_READ3C_1128),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="d81af3fd1299b34a994e7ef9291d40a46397fbb78b15a5d74c806ff6acb68104",
+          old="d67115b2d285056d99853842d0eb6227760c2388854ff35dd281394a3b210350",
+          evidence=_READ3C_1128),
+    Equiv(module="open_guji_cv.steps.seed_admit_cell_state",
+          new="34f76c04719b4a5f22183cb1d9b720de77a10ca90f9321e5780d55490521292c",
+          old="3cad1f99367bd64e2cb40ff870c586be75cbf9ee8073632eea252d1f5c332460",
+          evidence=_READ3C_1128),
 )
 
 
