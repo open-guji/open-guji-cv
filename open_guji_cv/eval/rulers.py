@@ -182,6 +182,8 @@ def measure(book: str, pages: list[int], store=None, full: bool = False) -> dict
     n_cache_miss = 0     # 其中列图缓存缺失（拿不到 _col_profile）的列数
     for pg in pages:
         gate = store.read(book, "column_gate", page_key(pg), "gate_manifest")
+        if gate is None:      # 11-28 三链合一后列级闸是 2 切字出口闸 cut_gate（产物同名 gate_manifest）
+            gate = store.read(book, "cut_gate", page_key(pg), "gate_manifest")
         cells = store.read(book, "cell_shrink", page_key(pg), "cells")
         if cells is None:
             cells = store.read(book, "row_segment", page_key(pg), "cells")
