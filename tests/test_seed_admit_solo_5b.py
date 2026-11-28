@@ -31,8 +31,14 @@ def _rare(cs: list[str]) -> PageRare:
     return PageRare(page=PAGE, columns=[ColumnRare(col=COL, ok=True, chars=[rec])])
 
 
+def _cand3c(cs: list[str]):
+    from open_guji_cv.products.kinds.read import CandRec, ColumnCand, PageCand
+    return PageCand(page=PAGE, model="m", columns=[ColumnCand(col=COL, chars=[
+        CandRec(id=f"{BOOK}:{PAGE}:{COL}:1", slot=1, cands=[[c, 0.9 - 0.01 * i] for i, c in enumerate(cs)])])])
+
+
 def _run(tmp_path, monkeypatch, *, cands, rare, params=None, guard=None, verdict="unsure", via=None,
-         book_kw=None, coord=None):
+         book_kw=None, coord=None, cand3c=None):
     patch_seed_admit(monkeypatch, "_trusted_keben_counts", lambda _db, borrow=None: KEBEN)
     if coord is not None:
         patch_seed_admit(monkeypatch, "_coord_refs", lambda _ctx, _page, _cache: {f"{BOOK}:{PAGE}:{COL}:1": coord})
@@ -44,6 +50,8 @@ def _run(tmp_path, monkeypatch, *, cands, rare, params=None, guard=None, verdict
         PAGE, BOOK, col=COL, recs=[dict(slot=1, char=None, margin=0.0, source="prior")]))
     if rare is not None:
         write_product(ctx, "rare_candidates", PAGE, rare_candidates=_rare(rare))
+    if cand3c is not None:
+        write_product(ctx, "glyph_candidate", PAGE, glyph_candidate=_cand3c(cand3c))
     # 无整理本的页会走 iron 量字块尺寸；测试不造字块图，按缺块跳过
     ctx.params["char_decide"] = SeedAdmitParams(**{"patch_missing": "skip", **(params or {})})
     (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
@@ -57,9 +65,12 @@ GOOD = dict(cands=(("百", 0.985), ("白", 0.95)), rare=["百", "白"])
 # ── 声明与指纹 ───────────────────────────────────────────────────────────
 def test_gated_optional_upstream():
     spec = STEPS["char_decide"].spec
-    assert ("rare_candidates", "solo_5b_cov") in spec.optional_consumes_when
+    assert ("rare_candidates", "solo_5b_5b") in spec.optional_consumes_when
     on = spec.params().model_copy(update={"solo_5b_cov": 0.98})
     assert "rare_candidates" in live_optional_consumes(spec, on)
+    on3 = on.model_copy(update={"read_3c": True})                 # A7：改读 3c，5-b 出指纹、3c 进
+    assert "rare_candidates" not in live_optional_consumes(spec, on3)
+    assert "glyph_candidate" in live_optional_consumes(spec, on3)
 
 
 def test_params_off_is_invisible(tmp_path):
@@ -185,3 +196,17 @@ def test_scope_no_ref_admits_reference_lacuna(tmp_path, monkeypatch, gap):
     """有参校本的页上，坐标对位说参校本这一位是缺字：照放。"""
     r = _run(tmp_path, monkeypatch, params=SCOPE, coord=gap, **GOOD)
     assert r.admit and r.channel == "match_solo_5b"
+
+
+# ── A7：read_3c 开时「按图首位」读 3c 余弦首位 ──────────────────────────
+def test_read_3c_uses_3c_first_char(tmp_path, monkeypatch):
+    on = {**ON, "read_3c": True}
+    # 5-b 首位不同意、3c 首位同意：读 3c 才放
+    r = _run(tmp_path, monkeypatch, cands=GOOD["cands"], rare=["白", "百"], cand3c=["百", "白"], params=on)
+    assert r.admit and r.channel == "match_solo_5b" and r.evidence["solo_5b"]["rare"] == "百"
+    # 3c 首位不同意、5-b 首位同意：读 3c 不放
+    r = _run(tmp_path, monkeypatch, cands=GOOD["cands"], rare=["百", "白"], cand3c=["白", "百"], params=on)
+    assert not r.admit
+    # 关时仍读 5-b（逐字节同）
+    r = _run(tmp_path, monkeypatch, cands=GOOD["cands"], rare=["百", "白"], cand3c=["白", "百"], params=ON)
+    assert r.admit

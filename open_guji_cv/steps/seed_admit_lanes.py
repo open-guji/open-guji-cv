@@ -241,19 +241,24 @@ def solo_5b_decide(*, cands: list, rare_top: str | None, n_lib: dict | int, doub
 
 def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare, coord: dict[str, str],
                   keben: dict[str, int],
-                  mmap_raw: dict | None = None, lacuna_only: bool = False) -> int:
+                  mmap_raw: dict | None = None, lacuna_only: bool = False, cand=None) -> int:
     """无参照格「库首位＋5-b 作证」：只把**仍待审**、无任何整理本对位的格升为放行。→ 升级格数。见 `SeedAdmitParams.solo_5b_cov`。
 
     `mmap_raw`：`consensus_fallback` 退档前的 glyph_match 记录。无参照格没有整理本字，共识升档的 same
     一律被退回 unsure，`solo_5b_same_cov` 要认的正是这批「库原判 same」，所以按退档前的记录看。
-    `lacuna_only`：本页有参校本且 `solo_5b_scope=no_ref`，只放坐标对位为缺字（`GAP_CHARS`）的格。"""
-    if rare is None:
+    `lacuna_only`：本页有参校本且 `solo_5b_scope=no_ref`，只放坐标对位为缺字（`GAP_CHARS`）的格。
+    `cand`：3c `glyph_candidate` 产物（`read_3c` 开时由调用方传，此时 `rare` 传 None）：「按图首位」取 3c 余弦首位，其余不变（A7）。"""
+    if rare is None and cand is None:
         return 0
     from ..clustering.seeding import NEAR_FORM_CHARS
     from ..groups.registry import GROUPS
     from ..variants import are_variants
     group_chars = frozenset(c for g in GROUPS.values() for c in g.members)
-    rmap = {r.id: r.candidates[0].char for cc in rare.columns for r in cc.chars if r.candidates and r.candidates[0].char}
+    if cand is not None:
+        from .align_ref import cand_topk_map
+        rmap = {k: v[0] for k, v in cand_topk_map(cand, 1).items() if v}
+    else:
+        rmap = {r.id: r.candidates[0].char for cc in rare.columns for r in cc.chars if r.candidates and r.candidates[0].char}
     n = 0
     for col in out:
         for rec in col.chars or []:
