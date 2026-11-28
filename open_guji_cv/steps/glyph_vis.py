@@ -225,7 +225,7 @@ class GlyphVisStep(Step):
         id="glyph_vis", title="3e 看图大模型（条件）", version="0.1", unit="cell",
         consumes=("glyph_match", "glyph_near", "char_index", "char_patch"), produces=("glyph_vis",),
         params=GlyphVisParams,
-        code_deps=("open_guji_cv.groups.vis_img", "open_guji_cv.feedback.vis_glyph", "open_guji_cv.groups.near_methods"),
+        code_deps=("open_guji_cv.groups.vis_img", "open_guji_cv.feedback.vis_glyph", "open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_methods._base", "open_guji_cv.groups.near_methods.cnn_small", "open_guji_cv.groups.near_methods.rr_shape", "open_guji_cv.groups.near_methods.wu_shape", "open_guji_cv.groups.near_methods.hou_shape", "open_guji_cv.groups.near_methods.part_shape", "open_guji_cv.groups.near_methods.pair_shape", "open_guji_cv.groups.near_methods.book_knn", "open_guji_cv.groups.near_methods.near_knn", "open_guji_cv.groups.near_methods.stroke_veto", "open_guji_cv.groups.near_methods.flow_shape", "open_guji_cv.groups.near_methods.pair_clf"),
         enabled_by="enabled",
     )
 

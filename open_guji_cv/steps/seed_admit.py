@@ -337,7 +337,7 @@ class SeedAdmitStep(Step):
         optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review"), ("rare_candidates", "rare_ref_sparse"),
                                 ("rare_candidates", "solo_5b_cov"), ("rare_candidates", "book_lanes"),
                                 ("rare_candidates", "ref_lib_5b_veto"), ("glyph_analyzer", "group_flow_near_p"),
-                                ("glyph_near", "group_flow_near_from_3b")),
+                                ("glyph_near", "group_flow_near_from_3b"), ("glyph_analyzer", "vis3_shadow")),
         produces=(ADMIT_STEP_ACTIVE,),
         params=SeedAdmitParams,
         needs=("db",),
@@ -346,6 +346,7 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.steps.seed_admit_lanes",
                    "open_guji_cv.steps.seed_admit_shapes",
                    # 2026-11-28 CV4 P1a：本模块与 lanes 再拆出下面八块（纯搬家），SPLITS 合回原来的 seed_admit／seed_admit_lanes 两项
+                   "open_guji_cv.steps.seed_admit_vis3",         # 影子读口 vis3（缺省关；2026-11-28 P1）
                    "open_guji_cv.steps.seed_admit_cell_state",   # 4c 格况（探测器；2026-11-28 P3b 起另有 steps/cell_state 出产物，收尾读它）
                    "open_guji_cv.steps.seed_admit_groups",       # 4d 字组流程（2026-11-28 P3c 起另有 steps/group_decision 出原料，收尾读它）
                    "open_guji_cv.steps.seed_admit_pick",         # 定字：选刻形／铁证／独证／钩子取数
@@ -1339,6 +1340,11 @@ class SeedAdmitStep(Step):
                 for rec in col.chars or []:
                     if rec.admit and rec.char and not _codepoint_exempt(rec, ctx.book, p.codepoint_no_exempt):
                         rec.char = ctx.book.canonical_char(rec.char)
+        if p.vis3_shadow:
+            # 影子（只记录）：3e glyph_vis 的看图结论与现行 vis_llm 逐格对比，写 evidence.vis3_shadow，不动放行
+            from .seed_admit_vis3 import vis3_shadow_pass
+            _v3 = vis3_shadow_pass(_opt(ctx, "glyph_analyzer", page), out)
+            ctx.log(f"seed_admit p{page}: vis3 影子 {dict(sorted(_v3.items()))}")
         if patch_missing:
             lanes: dict[str, int] = {}
             for v in patch_missing.values():

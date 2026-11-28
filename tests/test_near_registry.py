@@ -260,10 +260,10 @@ def test_default_handling_follows_current_flow():
     """缺省规则＝现役行为：flow 有 ctx → context；flow 有看图解法（IMG_SOLVERS＋near_p）或挂了会放行的 3b 方法 → admit；aspect 关。"""
     t = B.build(REG, {"天夭": _p("near_groups")})
     h = {gid: g["handling"] for gid, g in t["groups"].items()}
-    assert h["guan"] == {"methods": [], "context": True, "aspect": False, "action": "admit", "threshold": None}   # near_p
-    assert h["wm"] == {"methods": ["flow_shape"], "context": True, "aspect": False, "action": "admit", "threshold": None}   # bars；有字形方法 → flow_shape（A4）
+    assert h["guan"] == {"methods": ["pair_clf"], "context": True, "aspect": False, "action": "admit", "threshold": None}   # near_p；各组都许 pair_clf（A4）
+    assert h["wm"] == {"methods": ["flow_shape", "pair_clf"], "context": True, "aspect": False, "action": "admit", "threshold": None}   # bars；有字形方法 → flow_shape（A4）
     assert h["sz"]["context"] is False and h["sz"]["action"] == "admit"                                          # ids
-    assert h["p:天夭"] == {"methods": [], "context": False, "aspect": False, "action": "evidence", "threshold": None}
+    assert h["p:天夭"] == {"methods": ["pair_clf"], "context": False, "aspect": False, "action": "evidence", "threshold": None}
     ctx_only = B.build([_reg("ry", "日曰", methods=["ctx"])], {})["groups"]["ry"]["handling"]
     assert ctx_only["context"] is True and ctx_only["action"] == "evidence"
     assert B.default_handling({"methods": []}, ["stroke_veto"])["action"] == "evidence"     # 只降审的方法不算放行
@@ -312,7 +312,7 @@ def test_committed_v2_two_types_and_handling():
     for gid, g in reg.groups.items():
         h = reg.handling_of(gid)
         assert set(h["methods"]) <= set(METHODS)
-        dflt = ["flow_shape"] if shape_methods(gid) else []          # 有 5a.2 字形方法的注册组缺省挂 flow_shape（结构拆分 A4）
+        dflt = (["flow_shape"] if shape_methods(gid) else []) + ["pair_clf"]   # 有 5a.2 字形方法的注册组缺省挂 flow_shape，各组许 pair_clf（A4）
         assert h["methods"] == want.get(gid, {}).get("methods", dflt)
         assert h["aspect"] is (gid == "ry")                               # 现役宽高比只有 ry
     assert "cnn_small" in reg.handling_of("guan")["methods"]              # 殿本 gong（宫宮官）挂 cnn_small 不受影响

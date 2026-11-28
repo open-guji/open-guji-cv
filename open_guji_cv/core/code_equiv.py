@@ -3023,6 +3023,31 @@ ENTRIES: tuple[Equiv, ...] = (
           old='fbced2adde554dc77ac3bbbf4b481b7a79356a0d2f5a9b1eaa4a8fcdaabf2746',
           evidence="glyph_stages._code_sha 加 canonical(composite_key) 换算、模块表提成常量 STAGES_CODE_MODS／PAIR_CODE_MODS（次序不变），"
                    "只改 stages_sha 的算法、不碰任何判定路径，产物逐字节不变按构造成立；对 origin/dev 1afa3a39，2026-11-28（CV3，结构拆分 A4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="4aa0dee4383fe880e76ca1cb8f78fe77b2f288e9d0045d75ebffcbfa497333c2",
+          old="b229b492cedfbc0c009dd7297002718f839ed9dda5d5ee4f37dd7a7c705a91cb",
+          evidence="char_decide 在殿本 vol01 3 页（--pages 1,2,3；冻结快照第三步产物＋本机重跑 3b／3e，glyph_vis 25 格 pending）上与 origin/dev daf144f 产物逐字节相同；vis3 影子读口缺省关（seed_admit.vis3_shadow）；scripts/code_equiv.py check，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="50f75f21c3eef6f208ab3f822f19e56cb4a54b45f2279c48158166a5b93edafa",
+          old="d67115b2d285056d99853842d0eb6227760c2388854ff35dd281394a3b210350",
+          evidence="char_decide 在殿本 vol01 3 页（--pages 1,2,3；冻结快照第三步产物＋本机重跑 3b／3e，glyph_vis 25 格 pending）上与 origin/dev daf144f 产物逐字节相同；vis3 影子读口缺省关（seed_admit.vis3_shadow）；scripts/code_equiv.py check，2026-11-28（CV4）"),
+    # 结构拆分 C5（CV3 11-28）：四个读 near_methods 的步 code_deps 补列拆出来的子模块（只改声明）
+    Equiv(module='open_guji_cv.steps.glyph_near',
+          new='b9d0bdaae510d0867217f0b9a4f39fd1e41a55d6c8138379f417066645cd3ae6',
+          old='0535f4d658fddff0e8898c65a27d1de5503d0a7e6a6bf41ed4e11ce55918f553',
+          evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
+    Equiv(module='open_guji_cv.steps.glyph_analyzer',
+          new='c7862ac915a5da3544dbccbb78785af9ac9b671ce7844bf6955f5a40b694aeb7',
+          old='534f3cf7b21cbd27340b99e2a9121b8ec677e9d3aa1507fb4e2f5844e1c3ef74',
+          evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
+    Equiv(module='open_guji_cv.steps.glyph_vis',
+          new='9b02962b10247767e7bf45803f8ea9c730d4ff959e942fa922de1913ae5d38c8',
+          old='714c024357d5563e31b61e39fbec59c3a8aff04bc56ddf0fa23af94de1f774fb',
+          evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
+    Equiv(module='open_guji_cv.steps.group_decision',
+          new='df9b7b767ba9a6c2de43cc3aecb7fe5b9e567f8f88dea4884b061cea0f486553',
+          old='3c9bc0ebfe44f461a07190f1e6abc352c7ea15917da3ead3972cedf3efc54585',
+          evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
 )
 
 
@@ -3090,6 +3115,30 @@ FORKED: dict[str, tuple[str, str]] = {
 #: 也用来登 Step 新加的 code_dep（不是拆分）：旧模块名就是 Step 模块自己，块表＝它自己＋新加的那个模块；
 #: 两块都还是登记时那一版就合回原来一项，指纹不变（row_segment＋jiazhu_step 空实现，cv#1011）。这种项不是错登，别删。
 SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
+    # 结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py（3b 方法登记表）拆成包——一方法一模块（cnn_small … pair_clf）、公用的 _base、
+    # 包根留 METHODS／parse_spec／load_method／method_fingerprint 并转出口全部旧名。纯搬家：顶层定义搬前搬后 ast.dump 逐个相同（相对 import 多一层点），
+    # 唯一改动 REPO＝parents[2]→parents[3]（文件深一层，值相同）。用到它的四步（glyph_near、glyph_analyzer、glyph_vis、group_decision）
+    # code_deps 在 near_methods 后列齐 12 块；都还是这一版时合回 near_methods 一项，指纹与 origin/dev 02a98489 逐步相同。
+    "open_guji_cv.groups.near_methods": ("9a3255c676bcb1bfa3175469d0b26c251cdaa55211c8d8a04f02baab3c06cf5e", (
+        ("open_guji_cv.groups.near_methods", "3bea586c86d2cfc3cf771d4540078d97d37f3444781f4fa07722d477051ff311"),
+        ("open_guji_cv.groups.near_methods._base", "165d858f8ac039d8c8c0fd28bbfdbfb312998f782d3360086febaa0623fe769d"),
+        ("open_guji_cv.groups.near_methods.cnn_small", "869ca46317dbf8f75d81a94736471c5643496cf7a4ad56a332e04698c100c22c"),
+        ("open_guji_cv.groups.near_methods.rr_shape", "d65f3506ae4315ba0197a8b9af1bc44749c31ec1c8b0f68e8905140b1301ac60"),
+        ("open_guji_cv.groups.near_methods.wu_shape", "ed5b87b70c113c07dd52723dbb1c6f4c62a86676dcb5eef3f4222e0a518e8e1e"),
+        ("open_guji_cv.groups.near_methods.hou_shape", "d2f8485dca499cd43efa96d2ab61a5103dc8bc1dc47d083e6da7cf90aaa32c37"),
+        ("open_guji_cv.groups.near_methods.part_shape", "50616482cd05eb4c37a5a41f431df852deab0968ddae43877a8471b8ffa2b31b"),
+        ("open_guji_cv.groups.near_methods.pair_shape", "355dc8658403d4023c52cc70bf3d5bb2d0abc9ebb445de76d2299207e1f46b86"),
+        ("open_guji_cv.groups.near_methods.book_knn", "d49feb40ee4b8c568c447fa2b637e01109e1ba473accc1611e3291a1864ec66c"),
+        ("open_guji_cv.groups.near_methods.near_knn", "6ee37e47c9375d1e9b25b0a820d2b9f950f434cb758e8699b52368c984c61708"),
+        ("open_guji_cv.groups.near_methods.stroke_veto", "f86ddb4452ba68b5a5f38116ddb398c24b1620575272617433ec63d61ce8eeab"),
+        ("open_guji_cv.groups.near_methods.flow_shape", "ad7e2fa8747a6baf3d345f3e18a5f10fec7ab27fc3f3e3c804200fa0b7dfa8bb"),
+        ("open_guji_cv.groups.near_methods.pair_clf", "b0f0fe6719e48640ecaf3381df99d5156275205b3bf38ca8237056783bfd3045"),)),
+    # 2026-11-28 vis3 影子（CV4，cv #2042）：seed_admit 新加 code_dep seed_admit_vis3（缺省关的影子读口，只写 evidence.vis3_shadow），
+    # 同时 seed_admit_params 加缺省 false 的 vis3_shadow（不进参数 dump）。两块都还是这一版时合回 seed_admit_params 一项，指纹不变；
+    # 证据同上面 seed_admit 那条 Equiv（char_decide 殿本 vol01 3 页与 origin/dev 逐字节相同）。
+    "open_guji_cv.steps.seed_admit_params": ("d67115b2d285056d99853842d0eb6227760c2388854ff35dd281394a3b210350", (
+        ("open_guji_cv.steps.seed_admit_params", "d67115b2d285056d99853842d0eb6227760c2388854ff35dd281394a3b210350"),   # 规范哈希（Equiv 已把 50f75f21 换算成它）
+        ("open_guji_cv.steps.seed_admit_vis3", "f391a34184aee5d4f35e728cd475aca52910ab2ec0af0b158b29b703a27f37f3"),)),
     # 全唐文书仓 k13 覆盖了 impl.keben.admit_lanes（四条无参照补放通道，只在册配置写了 seed_admit.book_lanes 时调）。
     # 没写 book_lanes 的册（004 起）钩子根本不 import，产物同 k11；写了的（001–003）参数指纹本就跟着 book_lanes 变。
     # 所以书仓这一版 admit_lanes 按 cv 缺省模块记（单块「拆分」＝改名），下面 seed_admit 那条照样合回，k11→k13 不过期。

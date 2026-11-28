@@ -69,7 +69,7 @@ def test_merge_cell_with_near_calibrated_p_and_variant():
     assert by["宫"].p == 0.9 and by["官"].p == 0.1
     assert by["宮"].p is None and by["宮"].evidence["b"]["same_as"] == "宫"     # 异体不另算概率
     assert sum(c.p for c in rec.cands if c.p is not None) == pytest.approx(1.0)
-    assert by["宫"].evidence["b"] == {"group": "gong", "cnn_small:gong": 0.8}
+    assert by["宫"].evidence["b"] == {"cnn_small:gong": 0.8}
     assert rec.p_src == "near:cnn_small:gong"
 
 
@@ -160,3 +160,12 @@ def test_glyph_near_and_analyzer_end_to_end(tmp_path, tiny_model):
     want = load_method("cnn_small", str(tiny_model)).calibrate(mo.sims)
     assert {c.char: c.p for c in a.cands if c.p is not None} == want
     assert b.cands[0].char == "言" and b.cands[0].p is None and b.p_src == ""
+
+
+def test_p_other_only_serialized_when_set():
+    """B3 定稿：`p_other`（都不对的概率）现在恒 None、不落盘；给了才写。"""
+    from open_guji_cv.products.kinds.read import FinalRec
+    assert "p_other" not in FinalRec(id="b:1:1:1", slot=1).model_dump(mode="json")
+    r = FinalRec(id="b:1:1:1", slot=1, p_other=0.05)
+    assert r.model_dump(mode="json")["p_other"] == 0.05
+    assert FinalRec.model_validate_json(r.model_dump_json()).p_other == 0.05

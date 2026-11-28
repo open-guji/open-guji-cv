@@ -226,14 +226,15 @@ class GlyphNearStep(Step):
         consumes=("glyph_match", "char_index", "char_patch"), produces=("glyph_near",),
         params=GlyphNearParams,
         needs=("model",),
-        code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_registry",
+        code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_methods._base", "open_guji_cv.groups.near_methods.cnn_small", "open_guji_cv.groups.near_methods.rr_shape", "open_guji_cv.groups.near_methods.wu_shape", "open_guji_cv.groups.near_methods.hou_shape", "open_guji_cv.groups.near_methods.part_shape", "open_guji_cv.groups.near_methods.pair_shape", "open_guji_cv.groups.near_methods.book_knn", "open_guji_cv.groups.near_methods.near_knn", "open_guji_cv.groups.near_methods.stroke_veto", "open_guji_cv.groups.near_methods.flow_shape", "open_guji_cv.groups.near_methods.pair_clf", "open_guji_cv.groups.near_registry",
                    "open_guji_cv.groups.book_knn", "open_guji_cv.groups.near_knn", "open_guji_cv.clustering.match",
                    "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.part_shape",
                    "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.stroke_veto", "open_guji_cv.groups.wu_shape",
                    "open_guji_cv.strokes", "open_guji_cv.strokes._ink", "open_guji_cv.strokes.features",
                    "open_guji_cv.strokes.register", "open_guji_cv.strokes.template",
                    "open_guji_cv.groups.shape_stage", "open_guji_cv.groups.methods", "open_guji_cv.groups.ids_online",
-                   "open_guji_cv.groups.registry"),
+                   "open_guji_cv.groups.registry", "open_guji_cv.groups.pair_clf", "open_guji_cv.clustering.sim_cnn",
+                   "open_guji_cv.clustering.normalize"),
         enabled_by="groups",
     )
 
@@ -321,7 +322,8 @@ class GlyphNearStep(Step):
     def _cell(page: int, col: int, r, c) -> dict:
         return {"id": r.id, "page": page, "col": col, "slot": r.slot, "sub": r.sub,
                 "patch_key": c.patch_key or cell_patch_key(page, col, r.slot, r.sub),
-                "char": r.char, "candidates": [(str(ch), float(v)) for ch, v in (r.candidates or [])]}
+                "char": r.char, "candidates": [(str(ch), float(v)) for ch, v in (r.candidates or [])],
+                "punct": getattr(c, "step3_kind", None) == "punct"}
 
 
 def cell_patch_key(page: int, col: int, slot: int, sub: str | None) -> str:

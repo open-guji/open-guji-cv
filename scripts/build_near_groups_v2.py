@@ -220,8 +220,8 @@ def _flow_img() -> frozenset:
 
 def default_handling(g: dict, methods: list | None = None, gid: str | None = None) -> dict:
     """一组的缺省处理方式（＝现役行为，2026-11-28）：
-    - `methods`：注册组里有只吃字块图的方法（`shape_stage.shape_methods`）→ [flow_shape]（5a.2 字组看图判法，结构拆分 A4）；
-      其余 []（别的看图方法要人定，写在 handling.json）；
+    - `methods`：注册组里有只吃字块图的方法（`shape_stage.shape_methods`）→ flow_shape（5a.2 字组看图判法，结构拆分 A4）；
+      各组都许 pair_clf（5a.3 按书字对分类器，挂哪对由书的分类器文件定，A4）；别的看图方法要人定，写在 handling.json；
     - `context`：第四步 group_flow 的方法（`methods`／`review_methods`／`form_methods`）里有文意 `ctx` → true；
     - `aspect`：false（现役宽高比只有 seed_admit `_fold_pass` 对日曰一组，日曰在 handling.json 里定 true）；
     - `action`：group_flow 有看图解法（`flow.IMG_SOLVERS`＋`near_p`），或 `methods` 里有现役会放行／改字的 3b 方法
@@ -231,7 +231,7 @@ def default_handling(g: dict, methods: list | None = None, gid: str | None = Non
     flow = set(g.get("methods") or ()) | set(g.get("review_methods") or ()) | set(g.get("form_methods") or ())
     if methods is None:
         from open_guji_cv.groups.shape_stage import shape_methods
-        methods = ["flow_shape"] if gid and shape_methods(gid) else []
+        methods = (["flow_shape"] if gid and shape_methods(gid) else []) + ["pair_clf"]
     ms = list(methods)
     admit = bool(flow & _flow_img()) or bool(set(ms) & ADMIT_METHODS)
     return {"methods": ms, "context": "ctx" in flow, "aspect": False, "action": "admit" if admit else "evidence",
