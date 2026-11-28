@@ -181,20 +181,30 @@ def _hou_shape_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict |
     from ..groups import hou_shape
     model = hou_shape.load(p.group_flow_hou_shape)
     miss = patch_missing if patch_missing is not None else {}
+    near_on = "hou_shape" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    near = _near_from_3b(ctx, page, "hou_shape", p.group_flow_hou_shape) if near_on else {}
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     for c in out:
         for r in c.chars or []:
             if not r.admit or r.char not in _HOU or r.provenance == "human" or r.channel == "human":
                 continue
             if only_unjudged and "hou_shape" in (r.evidence or {}):
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("hou_shape")
-                continue
-            v = hou_shape.judge(img, model)
+            v = near.get(r.id) if c.col not in alt else None
+            if v is not None:
+                tally["3b"] += 1
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("hou_shape")
+                    continue
+                v = hou_shape.judge(img, model)
             ev = r.evidence or {}
             if v["char"] is None:
                 r.evidence = {**ev, "hou_shape": v}
@@ -203,6 +213,8 @@ def _hou_shape_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict |
                 ev = {**ev, "fixed_from": {"channel": r.channel, "char": r.char}}
                 r.char = v["char"]
             r.evidence = {**ev, "hou_shape": v}
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, "hou_shape", tally)
     return 0
 
 

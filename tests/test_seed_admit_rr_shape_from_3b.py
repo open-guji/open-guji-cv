@@ -15,6 +15,7 @@ from open_guji_cv.products.kinds.read import ColumnNear, NearMethodOut, NearRec,
 from open_guji_cv.steps.seed_admit_shapes import _rr_shape_pass
 
 from test_glyph_near_rr_shape import _probe_imgs, _write_model, model_file  # noqa: F401
+from test_glyph_near_hou_shape import models  # noqa: F401
 
 
 def _recs(n):
@@ -142,3 +143,39 @@ def test_wu_shape_read_3b_same_as_local(tmp_path):
     ctx = _Ctx(imgs, near, set(range(n)) - covered)
     assert run(ctx, True) == base
     assert "wu_shape 判法结果 读 3b 2" in ctx.logs[0] and "3b 没触发 1" in ctx.logs[0]
+
+
+# ── hou_shape（候𠋫，CV3 #2007）：只改已放行格的字；主遍与晚跑遍读同一条 3b 结论 ──────────
+
+@pytest.mark.parametrize("late", [False, True])
+@pytest.mark.parametrize("k", ["geo", "hou", "alt", "mid"])
+def test_hou_shape_read_3b_same_as_local(models, k, late):
+    from open_guji_cv.steps.seed_admit_shapes import _hou_shape_pass
+    from test_glyph_near_hou_shape import _imgs as _hou_imgs
+
+    model = models[k]
+    imgs = _hou_imgs()
+    n = len(imgs)
+
+    def recs():
+        return [NS(id=f"b:1:1:{i + 1}", slot=i + 1, sub=None, char="𠋫", admit=True, evidence={},
+                   provenance="match", channel="match_ref", doubts=[]) for i in range(n)]
+
+    def run(ctx, on):
+        rs = recs()
+        p = NS(group_flow_hou_shape=str(model), patch_missing="error",
+               group_flow_near_from_3b=["hou_shape"] if on else [])
+        _hou_shape_pass(p, [NS(col=1, chars=rs)], ctx, 1, only_unjudged=late)
+        return [(r.char, r.admit, r.channel, copy.deepcopy(r.evidence)) for r in rs]
+
+    base = run(_Ctx(imgs, None, set(range(n))), False)
+    outs = NM.load_method("hou_shape", str(model)).score(imgs, "b")
+    covered = set(range(0, n, 2))
+    chars = [NearRec(id=r.id, slot=r.slot, group="hou", trigger="cands",
+                     methods=[NearMethodOut(method="hou_shape:hou", sims=o["sims"], evidence=o["evidence"])])
+             for i, (r, o) in enumerate(zip(recs(), outs)) if i in covered]
+    near = PageNear(page=1, methods_sha="hou:" + NM.method_fingerprint("hou_shape", str(model)),
+                    columns=[ColumnNear(col=1, chars=chars)])
+    ctx = _Ctx(imgs, near, set(range(n)) - covered)
+    assert run(ctx, True) == base
+    assert f"hou_shape 判法结果 读 3b {len(covered)}" in ctx.logs[0]
