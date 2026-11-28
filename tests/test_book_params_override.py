@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """书级 yaml `params:` 段覆盖 Step 参数（2026-09-27，D-书级admit覆盖）。
 
-任务书依据：全唐文一直靠命令行 `--params '{"seed_admit": {"use_context": false}}'`
+任务书依据：全唐文一直靠命令行 `--params '{"char_decide": {"use_context": false}}'`
 临时挡住 `context` 通道的错放行，漏带一次这个参数这一轮就白挡——书级 yaml 能把
 这个决定钉死。这里测两件事：`BookSpec.params` 的读（`load_book`）与
 `core.step._with_book_params` 在 `RunContext.params_for` 里的合并行为。
@@ -41,7 +41,7 @@ def test_load_book_reads_params_section(tmp_path):
         "    context_verdicts: same,unsure\n",
         encoding="utf-8")
     book = load_book("qtw", books_dir=books_dir)
-    assert book.params == {"seed_admit": {"use_context": False,
+    assert book.params == {"char_decide": {"use_context": False,
                                           "context_verdicts": "same,unsure"}}
 
 
@@ -75,15 +75,15 @@ def test_load_book_rejects_malformed_params(tmp_path):
 def test_no_book_params_is_noop(tmp_path, monkeypatch):
     """书没配 `params:`（默认 {}）：`params_for` 结果与不加这层机制之前逐字节相同。"""
     ctx = make_ctx(tmp_path, make_book("tbook"), monkeypatch=monkeypatch)
-    got = ctx.params_for(STEPS["seed_admit"])
+    got = ctx.params_for(STEPS["char_decide"])
     assert got.model_dump() == SeedAdmitParams().model_dump()
 
 
 def test_book_params_overrides_step_default(tmp_path, monkeypatch):
     """书 yaml 配的字段仍是 Step 构造默认值时，被书级配置替换。"""
-    book = make_book("tbook", params={"seed_admit": {"use_context": False}})
+    book = make_book("tbook", params={"char_decide": {"use_context": False}})
     ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
-    got = ctx.params_for(STEPS["seed_admit"])
+    got = ctx.params_for(STEPS["char_decide"])
     assert got.use_context is False
     # 没配的字段不受影响，仍是 Step 默认值。
     assert got.context_margin == SeedAdmitParams().context_margin
@@ -92,10 +92,10 @@ def test_book_params_overrides_step_default(tmp_path, monkeypatch):
 def test_caller_override_wins_over_book_params(tmp_path, monkeypatch):
     """调用方已经把这个字段改成非默认值（模拟 Engine 解析过管线 yaml/CLI
     `--params` 之后传进 `ctx.params`）：书 yaml 的配置不会覆盖它。"""
-    book = make_book("tbook", params={"seed_admit": {"rare_ref_coord_min_cov": 0.95}})
+    book = make_book("tbook", params={"char_decide": {"rare_ref_coord_min_cov": 0.95}})
     ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
-    ctx.params["seed_admit"] = SeedAdmitParams(rare_ref_coord_min_cov=0.55)
-    got = ctx.params_for(STEPS["seed_admit"])
+    ctx.params["char_decide"] = SeedAdmitParams(rare_ref_coord_min_cov=0.55)
+    got = ctx.params_for(STEPS["char_decide"])
     assert got.rare_ref_coord_min_cov == 0.55, "调用方覆盖被书 yaml 盖掉了，优先级反了"
 
 
@@ -103,7 +103,7 @@ def test_book_params_does_not_affect_other_steps(tmp_path, monkeypatch):
     """`params:` 里没提到的 Step 不受影响——只在这个 Step 的条目非空时才生效。"""
     from open_guji_cv.steps.align_ref import AlignRefParams
 
-    book = make_book("tbook", params={"seed_admit": {"use_context": False}})
+    book = make_book("tbook", params={"char_decide": {"use_context": False}})
     ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
     got = ctx.params_for(STEPS["align_ref"])
     # align_ref 的书级语料替换（`_with_book_corpus`）另有测试覆盖，这里只
@@ -118,10 +118,10 @@ def test_caller_value_equal_to_default_is_overridden_by_book_params(tmp_path, mo
     两者都只看值是否等于默认。本测试只用来**钉住现状**——将来换成更精确的机制
     （比如看 `model_fields_set`）时，这条要一起改，不是期望行为。
     """
-    book = make_book("tbook", params={"seed_admit": {"rare_ref_coord_min_cov": 0.95}})
+    book = make_book("tbook", params={"char_decide": {"rare_ref_coord_min_cov": 0.95}})
     ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
-    ctx.params["seed_admit"] = SeedAdmitParams()
-    got = ctx.params_for(STEPS["seed_admit"])
+    ctx.params["char_decide"] = SeedAdmitParams()
+    got = ctx.params_for(STEPS["char_decide"])
     assert got.rare_ref_coord_min_cov == 0.95
 
 

@@ -75,6 +75,19 @@ class ColumnEndParams(BaseModel):
     ink_threshold: int = 128
 
 
+def _legacy_band(ctx: RunContext, page: int, col: int) -> tuple[int, int] | None:
+    """拆步前的旧产物包（2026-11-25 五小步拆分前，各书钉 0.7.x 线的 main 包）：这一页没有 2b `column_bands`，
+    文字带记在 `column_windows` 的 `band` 里（拆分后 2a 不再写这一项）。是旧包就回这一列的旧 `band`，否则 None。
+
+    只在这两样同时成立时认作旧包：新包 2a 不写 `band`，缺 2b 产物的新包仍按原样报「上游产物缺失」。"""
+    if ctx.has_product("column_bands", page):
+        return None
+    rec = ctx.product("column_windows", page).column(col)
+    if rec is None or rec.band is None:
+        return None
+    return int(rec.band[0]), int(rec.band[1])
+
+
 @register_step
 class ColumnEndStep(Step):
     spec = StepSpec(
@@ -91,9 +104,15 @@ class ColumnEndStep(Step):
     def _one(self, ctx: RunContext, page: int, col: int, p: ColumnEndParams, inner_bottom: float):
         key = column_key(page, col)
         raw = ctx.image("column_raw", key)
-        banded = ctx.image("column_banded", key)
-        band = ctx.product("column_bands", page).column(col).band
-        denoised = denoise_column(raw, ink_threshold=p.ink_threshold)
+        legacy = _legacy_band(ctx, page, col)
+        if legacy is None:
+            banded = ctx.image("column_banded", key)
+            band = ctx.product("column_bands", page).column(col).band
+            denoised = denoise_column(raw, ink_threshold=p.ink_threshold)
+        else:
+            # 旧包重放（CV4 算法待办 #13）：2b 按拆步前的做法在内存里现算，不写包、不进缓存；文字带用包里记的旧值
+            band = legacy
+            denoised, banded = ctx.producer("column_bands").legacy_strip(ctx, raw)
         fl, og = ctx.book.frame_layers or {}, ctx.book.outer_gap or {}
         out, diag = trim_ends(
             denoised, band, banded, p.ink_threshold,

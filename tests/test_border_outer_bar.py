@@ -85,3 +85,14 @@ def test_outer_side_limits_to_declared_side():
     verts = _verts(150 - GAP)
     out, n = refit_outer_by_bar(m, top, bottom, verts, W, H, outer_side="right")
     assert n == 0 and out[-1] is verts[-1]
+
+
+def test_skip_sides_keeps_bar_line():
+    """册声明该侧单线（frame_layers 左/右=1，四周單邊）：粗条就是版框，不按粗条内沿补内框。"""
+    m = _page(worn=(400, 2300))
+    top, bottom = _lines()
+    verts = _verts(150 - GAP)
+    out, n = refit_outer_by_bar(m, top, bottom, verts, W, H, skip_sides=("left",))
+    assert n == 0 and out[-1] is verts[-1]
+    _, n2 = refit_outer_by_bar(m, top, bottom, verts, W, H, skip_sides=("right",))
+    assert n2 == 1                                     # 声明另一侧不影响这一侧

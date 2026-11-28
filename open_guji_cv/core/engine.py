@@ -11,7 +11,9 @@ import importlib
 import inspect
 import json
 import multiprocessing
+import os
 import re
+import sys
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -25,7 +27,7 @@ from .book import BookSpec
 from .pipeline import Pipeline, _produces, resolve_params
 from .parallel import effective_jobs, is_parallel_safe, warm_first, worker_threads
 from .spec import gated_optional_on, live_optional_consumes, page_key
-from .step import STEPS, RunContext, Step, kind_of
+from .step import CPL_PAGES_STEPS as _CPL_PAGES_STEPS, STEPS, RunContext, Step, kind_of
 from ..products.cache import ImageCache
 from ..products.manifest import ManifestEntry
 from ..products.store import ProductStore
@@ -373,6 +375,10 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     # 再把这个修订号 +1，只让下端两层的册（现在只有殿本）从 column_end 起判过期。没声明两层的册不写这个键，指纹逐位不变。
     if step.spec.id == "column_end" and int((getattr(book, "frame_layers", None) or {}).get("bottom", 1) or 1) >= 2:
         payload["frame_layer_rev"] = FRAME_LAYER_REV
+    # 按页每列字数 `chars_per_line_pages`（2026-11-27，朱楓林集序页）：读每列格数的步，只在写了表的册加键（整张表），
+    # 没写的册指纹逐位不变（不进 `book_deps`，同 side_frame）。
+    if step.spec.id in _CPL_PAGES_STEPS and getattr(book, "chars_per_line_pages", None):
+        payload["cpl_pages"] = {str(k): int(v) for k, v in sorted(book.chars_per_line_pages.items())}
     # Step5-b 的字表语料由册配置 `rare_charset` 指定（参校本属性 C 块）：只在写了的册加键，没写的册指纹逐位不变
     # （不进 `book_deps`，那会让所有册指纹变，见 core/ref_profile.py 模块头）。
     if step.spec.id == "rare_candidates" and getattr(book, "rare_charset", None):
@@ -461,8 +467,12 @@ class Engine:
           （`real_proto`），每次导出字形库都会让它整册过期重算。审字卡上的「查候选」走
           `/api/rare` 现算，不读这一步的产物。
 
+        - 声明了 `StepSpec.enabled_by` 的步骤：那个参数字段为假就跳过（2026-11-27，3b glyph_near／收尾 glyph_analyzer 缺省关）。
+
         只跳过执行，不改 pipeline 拓扑，下游本来就处理得了「这一路证据没有」。"""
-        out = list(steps)
+        out = [s for s in steps
+               if not STEPS[s].spec.enabled_by
+               or getattr(self.ctx.params_for(STEPS[s]), STEPS[s].spec.enabled_by, None)]
         if "rare_candidates" in out and not rare_candidates_consumed(
                 self.pipeline.steps, lambda sid: self.ctx.params_for(STEPS[sid]), self.book):
             out = [s for s in out if s != "rare_candidates"]
@@ -610,6 +620,114 @@ class Engine:
             return STALE, entry        # 显式失效（人裁落定等），见 ManifestEntry.invalidated
         return (FRESH if entry.fingerprint == fp else STALE), entry
 
+    #: 册改名标记（guji-manager `ops/rename_volume`，11-27 用户定老书 cv 册名「只改、不重跑」）：
+    #: `<产物根>/<册>/_renamed.json` 记着改写前后的产物 sha 对照表。
+    RENAME_MARKER = "_renamed.json"
+
+    def _rename_marker_path(self) -> Path:
+        return Path(self.store.root) / self.book.id / self.RENAME_MARKER
+
+    def _rename_marker(self) -> dict:
+        """改名标记 `<产物根>/<册>/_renamed.json`（manager `ops.rename_volume` 写）。没有或读不了 → 空。"""
+        mk = getattr(self, "_rename_mk", None)
+        if mk is None:
+            mk = {}
+            p = self._rename_marker_path()
+            if p.exists():
+                try:
+                    mk = json.loads(p.read_text(encoding="utf-8")) or {}
+                except (OSError, ValueError):
+                    mk = {}
+            self._rename_mk = mk
+        return mk
+
+    def _rename_inverse(self) -> dict[str, str]:
+        """改名标记里的对照表反过来：改写后 sha → 改写前 sha。没改过名 → 空表。"""
+        inv = getattr(self, "_rename_inv", None)
+        if inv is None:
+            inv = {v: k for k, v in (self._rename_marker().get("shamap") or {}).items()}
+            self._rename_inv = inv
+        return inv
+
+    def _rename_params_ok(self, step: Step, entry: ManifestEntry) -> bool:
+        """参数对不上，但变了的每个字段都是改名时封存过的「旧值→新值」（`seal_rename`）：
+        改名改写了参数指纹读的文件（如 `crop_exclusions.jsonl` 里的格号），内容只差册名。
+        封存之后这些文件再变（新人裁），新值对不上封存值，照常过期。"""
+        sealed = (self._rename_marker().get("sealed") or {}).get(step.spec.id) or {}
+        if not sealed or entry.param_parts is None:
+            return False
+        now = param_parts(self._params(step), step.spec.soft_params, step.spec.path_params)
+        diff = [k for k in {*now, *entry.param_parts} if now.get(k) != entry.param_parts.get(k)]
+        return bool(diff) and all(list(sealed.get(k) or ()) == [entry.param_parts.get(k), now.get(k)]
+                                  for k in diff)
+
+    #: 封存只认这几类参数：都是「按文件内容自动填的指纹」，改名改写那些文件就会变；手写的参数不封。
+    SEAL_SUFFIX = "_fingerprint"
+
+    def seal_rename(self, pages: list[int] | None = None,
+                    keys: set[str] | None = None) -> dict[str, dict[str, list]]:
+        """改名刚做完时调一次：各步现算参数与产物条目比，只因 `*_fingerprint` 字段变了的，
+        把「条目记的旧值→现在的新值」记进改名标记的 `sealed`，`status` 据此认作改名带来的变化。
+        同一字段各页旧值不一致（本来就新旧混杂）的不封。`keys` 给了就只封这几个字段——**只封确实被改名改写了
+        来源文件的指纹**（如 `exclusions_fingerprint`：`crop_exclusions.jsonl` 里有格号）；`human_fingerprint`
+        读的是字形库 `v2:` 实例 id，改名不碰，它变了是改名前后真有新人裁，不该封。返回 {步: {字段: [旧, 新]}}，写回标记。"""
+        mk = self._rename_marker()
+        if not mk:
+            raise FileNotFoundError(f"{self._rename_marker_path()} 不存在：这册没改过名，不用封存")
+        pages = pages if pages is not None else self.book.resolve_pages("all")
+        steps, _ = self._default_steps(None)
+        out: dict[str, dict[str, list]] = {}
+        self._pcache = {}
+        try:
+            for sid in steps:
+                step = self.pipeline.step(sid)
+                now = param_parts(self._params(step), step.spec.soft_params, step.spec.path_params)
+                olds: dict[str, set] = {}
+                for pg in pages:
+                    _, entry = self.page_status(step, pg)
+                    if entry is None or entry.param_parts is None:
+                        continue
+                    for k in {*now, *entry.param_parts}:
+                        if now.get(k) != entry.param_parts.get(k):
+                            olds.setdefault(k, set()).add(entry.param_parts.get(k))
+                sealed = {k: [next(iter(v)), now.get(k)] for k, v in sorted(olds.items())
+                          if k.endswith(self.SEAL_SUFFIX) and len(v) == 1 and (keys is None or k in keys)}
+                if sealed:
+                    out[sid] = sealed
+        finally:
+            self._pcache = None
+        mk = {**mk, "sealed": out, "sealed_ts": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        self._rename_marker_path().write_text(json.dumps(mk, ensure_ascii=False, indent=1), encoding="utf-8")
+        self._rename_mk = mk
+        return out
+
+    def rename_only(self, step: Step, page: int, entry: ManifestEntry | None, code_ok: bool = False) -> bool:
+        """这一页过期只因册改名改写了上游产物：把现在的上游 sha 按改名对照表换回改写前的，指纹与条目逐位相同。
+        代码、参数、册配置有任何一样变了都对不上，照常过期。只给 `status` 用（`run` 照旧按指纹重跑）。
+        `code_ok`（同 `_page_status_row`）：换回后上游与条目记的相同、参数没变、产物记着正式版 cv_version，
+        代码或版本另外变了也算（就是「改名」＋「在跑它的那个版本下新鲜」两条叠加）。"""
+        inv = self._rename_inverse()
+        if not inv or entry is None or entry.invalidated:
+            return False
+        _, ups, ph = self.fingerprint(step, page)
+        if not ups:
+            return False
+        old = {k: inv.get(v, v) for k, v in ups.items()}
+        if entry.params_hash != ph and self._rename_params_ok(step, entry):
+            ph = entry.params_hash            # 参数只差封存过的改名变化：按条目记的参数比
+        elif old == ups:
+            return False
+        payload = {**_self_payload(step, self.book, ph), "upstream": old}
+        tok = ref_profile_token(step, self.book, page)
+        if tok:
+            payload["ref_profile"] = tok
+        if hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24] == entry.fingerprint:
+            return True
+        now = book_dep_values(step, self.book)
+        return (code_ok and (entry.upstream or {}) == old and entry.params_hash == ph
+                and (now is None or entry.book is None or entry.book == now)
+                and bool(_FORMAL_CV.match(entry.cv_version or "")))
+
     def stale_reason(self, step: Step, page: int, entry: ManifestEntry | None) -> str | None:
         """指纹对不上时说清是哪一样变了（#174）。按能分辨的粒度报：显式失效 > 册配置
         （`book_deps` 值，只有记过 `entry.book` 的条目才分得出）> 参数 > 上游产物 > 代码/版本。
@@ -631,6 +749,10 @@ class Engine:
                 now_parts = param_parts(self._params(step), step.spec.soft_params, step.spec.path_params)
                 diff = sorted(k for k in {*now_parts, *entry.param_parts}
                               if now_parts.get(k) != entry.param_parts.get(k))
+                # 改名时封存过的字段（`seal_rename`）旧→新对得上，不是这一页过期的原因，不列（MJ 11-28：列出来易误读）
+                sealed = (self._rename_marker().get("sealed") or {}).get(step.spec.id) or {}
+                diff = [k for k in diff
+                        if list(sealed.get(k) or ()) != [entry.param_parts.get(k), now_parts.get(k)]] or diff
                 if diff:
                     return "参数变了：" + "、".join(diff)
             return "参数变了"
@@ -707,9 +829,13 @@ class Engine:
         n_drift = 0
         reasons: dict[str, int] = {}
         code_only = 0
+        renamed = 0
         cv_versions: dict[str, int] = {}
         for pg in pages:
             st, entry = self.page_status(step, pg)
+            if st == STALE and self.rename_only(step, pg, entry, code_ok):
+                st = FRESH
+                renamed += 1
             if (code_ok and st == STALE and entry is not None and not entry.invalidated
                     and _FORMAL_CV.match(entry.cv_version or "")
                     and self.stale_reason(step, pg, entry) == "代码或版本变了"):
@@ -735,6 +861,8 @@ class Engine:
                             "elapsed": entry.elapsed if entry else None,
                             "error": entry.error if entry else None}
         row = {"counts": counts, "pages": per_page, "drift": n_drift, "stale_reasons": reasons}
+        if renamed:
+            row["rename_only"] = renamed          # 只因册改名改写了上游产物而过期、按新鲜算的页数
         if code_only:
             row["code_only"] = code_only
             row["cv_versions"] = cv_versions
@@ -785,7 +913,7 @@ class Engine:
                 grow, gpage_state = self._page_status_row(gate_step, pages, gate_upstream_fresh, code_ok)
                 seen[gate.id] = gpage_state
                 out[gate.id] = grow
-        return {"book": self.book.id, "pipeline": self.pipeline.id, "pages": pages, "steps": out}
+        return {"book": self.book.id, "pipeline": self.pipeline.id, "layout": getattr(self.pipeline, "layout", None), "pages": pages, "steps": out}
 
     # ── 执行 ─────────────────────────────────────────────────────────
     def _run_one_step(self, step: Step, pages: list[int], report: RunReport,
@@ -931,6 +1059,7 @@ class Engine:
                 report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
             except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整轮
                 elapsed = time.time() - t0
+                _trace_page_error(step, pg)
                 err = f"{type(e).__name__}: {e}"
                 if sp is not None:
                     sp.page(pg, "failed", elapsed, rec.to_dict(), ov)
@@ -1082,6 +1211,7 @@ class Engine:
                 with _perf.page_scope(rec):
                     prods, err = step.run_page(self.ctx, first), None
             except Exception as e:  # noqa: BLE001
+                _trace_page_error(step, first)
                 prods, err = None, f"{type(e).__name__}: {e}"
             detail = rec.to_dict()
             detail["warm_first"] = True
@@ -1126,7 +1256,7 @@ class Engine:
         self._perf = None
         if _perf.enabled():
             self._perf = _perf.RunPerf(self.store.root, self.book.id, {
-                "pipeline": self.pipeline.id, "steps": list(steps), "n_pages": len(pages),
+                "pipeline": self.pipeline.id, "layout": getattr(self.pipeline, "layout", None), "steps": list(steps), "n_pages": len(pages),
                 "force": force, "jobs": jobs, "code_rev": self._rev,
                 **{k: self._cv.get(k) for k in ("cv_version", "cv_commit", "cv_override")}})
         stopped = True
@@ -1252,6 +1382,14 @@ def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
     _worker_ctx._params_memo = {}         # worker 只跑这一步：参数每进程构造一次（同 `Engine._run_one_step`）
 
 
+def _trace_page_error(step, page) -> None:
+    """设了环境变量 GUJI_TRACE_PAGE_ERRORS=1 时，把一页失败的完整 traceback 打到 stderr（缺省不打，日志里只有一行错因）。"""
+    if os.environ.get("GUJI_TRACE_PAGE_ERRORS"):
+        import traceback
+        print(f"--- {getattr(step, 'id', step)} p{page} traceback ---", file=sys.stderr)
+        traceback.print_exc()
+
+
 def _parallel_worker(page: int) -> tuple[int, dict | None, str | None, float, dict]:
     """`_run_one_step_parallel` 的子进程体：用 `_parallel_worker_init` 建好的
     进程级 ctx/step，只算不写盘。模块级函数（不是方法）——`ProcessPoolExecutor`
@@ -1263,4 +1401,5 @@ def _parallel_worker(page: int) -> tuple[int, dict | None, str | None, float, di
             products = _worker_step.run_page(_worker_ctx, page)
         return page, products, None, time.time() - t0, rec.to_dict()
     except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整批
+        _trace_page_error(_worker_step, page)
         return page, None, f"{type(e).__name__}: {e}", time.time() - t0, rec.to_dict()

@@ -395,7 +395,7 @@ class AlignRefParams(BaseModel):
       「爲/為」这类系统性版本差不再被判成 `replace`，取字仍是证人原文的字形
       （归一只影响判等/判异，不影响最终写进 `align_char` 的字）。
     - ``"majority_vote"``：`references` 每家证人各自跑一次锚定 + `difflib`
-      （原始字形比较，不歸一），逐字位在锚定成功的证人里按 `quality` 加权
+      （原始字形比较，不歸一），逐字位在锚定成功的证人里按 `accuracy` 加权
       多数表决；只有一家覆盖的字位直接用它，别的证人在这一位缺席不算票。
     """
     witness_fingerprint: str = ""
@@ -457,7 +457,7 @@ class AlignRefParams(BaseModel):
     """按坐标对位（2026-09-28，D 道 overview#195；见 `steps/align_ref_coord` 模块头）。
 
     - ``"auto"``（缺省）：整理本是**逐列分行**的才做——书 yaml `references[0]` 标了
-      `line_is_column: true`，或语料本身 ≥95% 的非空行字位数不超过每列格数
+      `form: column`，或语料本身 ≥95% 的非空行字位数不超过每列格数
       （`chars_per_line`，+1 容抬头）。四庫光盘版满足（一行 = 刻本一列），北行日錄
       校對本、全唐文这类整段录入的整理本不满足，自动不做。
     - ``"on"`` / ``"off"``：强制。
@@ -854,6 +854,13 @@ class AlignRefStep(Step):
         res.alt_draft = AltDraft(chars=chars)
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
+        out = self._run_page_kind(ctx, page)
+        nc = _none_cols(ctx.book, page)
+        if nc and "align_ref" in out:
+            _strip_none_cols(out["align_ref"], nc)
+        return out
+
+    def _run_page_kind(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: AlignRefParams = ctx.params_for(self)  # type: ignore[assignment]
         p = _with_book_corpus(p, ctx)
         kind = _ref_kind(ctx.book, page)
@@ -1127,7 +1134,7 @@ def _witnesses_for_book_cached(refs_key: tuple) -> tuple:
 
 
 def _witnesses_for_book(book) -> list:
-    """`book.references` → 按 `quality` 排序的证人列表（复用 `report.witness.load_witnesses`，
+    """`book.references` → 按 `accuracy` 排序的证人列表（复用 `report.witness.load_witnesses`，
     最高质量在前）。空 `references` 时退回单一默认证人（光盘版），与 legacy 的
     `DEFAULT_CORPUS` 是同一份文件。结果按 `references` 内容缓存，见 `_refs_key`。"""
     return list(_witnesses_for_book_cached(_refs_key(book.references)))
@@ -1211,7 +1218,7 @@ def _labels_from_ops(book: str, page: int, norm: list[tuple], ops: list[tuple],
 def _majority_vote_labels(book: str, page: int, norm: list[tuple], query: str,
                           witnesses: list) -> list | None:
     """`references` 每家证人各自锚定 + 过闸（原始字形比较，`normalize=False`），
-    逐字位在锚定成功的证人里按 `quality` 加权多数表决；只有一家覆盖的字位
+    逐字位在锚定成功的证人里按 `accuracy` 加权多数表决；只有一家覆盖的字位
     直接用它，别的证人在这一位缺席不算票。返回 `None` 表示没有任何一家证人
     锚上这一页——`_run_multi_witness` 据此报「未锚定」。
     """
@@ -1255,6 +1262,30 @@ def _majority_vote_labels(book: str, page: int, norm: list[tuple], query: str,
 REF_NONE_NOTE = "本页无参照（配置）"
 #: 声明为不分行全文（text）的页不做坐标对位时的 `coord_note`
 REF_TEXT_COORD_NOTE = "参照不分列（配置），不做坐标对位"
+
+
+def _none_cols(book, page: int) -> frozenset:
+    """册配置 `reference_profile` 列级 none 段在本页声明的无参照列（2026-11-28 脉经第 2 册缺文小注）；没有＝空。"""
+    prof = getattr(book, "reference_profile", None)
+    if prof is None or not prof.declared:
+        return frozenset()
+    return prof.none_cols(page)
+
+
+def _strip_none_cols(ar, cols: frozenset) -> None:
+    """声明无参照的列：去掉这些列的对位字、坐标对位与提示，记 `none_cols`（下游 manager 按格认「参照缺是设计」）。"""
+    def keep(rec):
+        return int(rec.col) not in cols
+    ar.chars = [c for c in ar.chars if keep(c)]
+    ar.coord = [c for c in ar.coord if keep(c)]
+    ar.coord_cols = [c for c in ar.coord_cols if int(c) not in cols]
+    ar.coord_conflict_ids = [i for i in ar.coord_conflict_ids if _id_col(i) not in cols]
+    ar.ref_hint = {k: v for k, v in ar.ref_hint.items() if _id_col(k) not in cols}
+    if ar.alt_draft is not None:
+        ar.alt_draft.chars = [c for c in ar.alt_draft.chars if keep(c)]
+        ar.alt_draft.coord = [c for c in ar.alt_draft.coord if keep(c)]
+        ar.alt_draft.coord_cols = [c for c in ar.alt_draft.coord_cols if int(c) not in cols]
+    ar.none_cols = sorted(cols)
 
 
 def _ref_kind(book, page: int) -> str:
@@ -1436,8 +1467,9 @@ def _coord_enabled(p: "AlignRefParams", book) -> bool:
         return False
     if p.coord == "on":
         return True
+    from ..core.ref_profile import ref_is_column
     refs = getattr(book, "references", None) or []
-    if refs and refs[0].get("line_is_column"):
+    if refs and ref_is_column(refs[0]):
         return True
     return _corpus_line_is_column(p.corpus, int(getattr(book, "chars_per_line", None) or 0))
 

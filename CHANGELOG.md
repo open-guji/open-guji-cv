@@ -1,7 +1,58 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行（档位写明）。
+
+## [未发版]
+
+- PATCH（L0，各书指纹逐位不变；CV0 2026-11-28，Sheldon 定「三链合成一条默认链」）：`keben_body_v2`、`keben_free`、`modern_body` 三条链并成唯一一条 `guji_default`（`pipelines/guji_default.yaml`），原来的三条链成了它的三个**版式** `layout: grid｜free｜print`，只换 1b–2b 槽位里的步骤。册配置新字段 `layout:`（不进指纹）；不写按旧 `pipeline:`、`seg_set:`、书仓 `code.yaml` 的 `base:`、`edition: modern` 推，缺省 grid（`core/seg_set.layout_of`）。三个旧 id 永久当别名（`guji pipeline keben_body_v2 …`、任务库旧单照跑），也可写 `guji_default@free`；`guji_default` 不带版式时按册推。`default_pipeline_id` 改返回 `guji_default@<版式>`，`Pipeline` 加 `layout`／`ref`，`list_pipelines` 每个版式列一条，run 记录与耗时统计加 `layout` 字段。步骤 id、产物、参数层都不动：`tests/test_guji_default.py` 核旧 id 与新引用加载出的步骤、参数、每步指纹自身部分逐位相同。设计 https://claude.ai/artifact/99ihHT9o84MSKtB59YDWMp ；自由版式接 2c 以后（free_to_cells）是第二期，交 CV2。
+
+## [0.9.16] - 测试中
+
+PATCH（CV4 2026-11-28，由第四步重构主线请求）＝v0.9.15＋dev 上此后 76 个提交整体切出（含 #2033 `seed_admit`→`char_decide` 改名与收尾写送审原因、4a–4d 拆模块与新步 `cell_state`／`group_decision`／`decide_gate`、CV3 `glyph_vis`／3b 方法、参校本四维、row_segment 新参数等）。新功能一律缺省关；改名靠 `decide migrate-name` 迁移、不用重跑。指纹变更与底库见 tag 说明。下列条目均属本版。
+
+
+- 新命令（不进任何 Step 指纹：新模块 `feedback/vis_queue.py`、改的 `feedback/llm_queue.py` 都不在 code_deps，L0；CV3 2026-11-28）：第三步 `glyph_vis` 的离线 ask 导出／导入，挂在现役 `llm_queue` 同一命令组下。`python -m open_guji_cv.feedback.llm_queue vis-export <册…> -w <工作区> --out <目录> [--pages 1-30]`：扫 glyph_vis 产物里 `status=pending` 的 ask，按 `(img_sha, prompt_sha, 候选集合)` 跨册去重，跳过缓存里已有答案的（按本书当前 `model`＋`accept_models`，开了 `accept_legacy` 也认 legacy），按本书 `patch` 重读字块、重算 img_sha 核对（变了报 `img_changed`、读不到报 `patch_missing`、提示词／渲染口径改了报 `stale_prompt`，都不出题），落出 `img/<题号>.png`（`vis_img.render_png`，与在线送模型的同一张）、`manifest.jsonl`（题号、稳定键 key、img_sha、img_shape、prompt_sha、候选、`options` 行、本书认的 models、格号）、`prompt.md`（系统提示与用户模板原文＋答题格式）。`vis-import <答案.jsonl> --name <名> [--manifest …]`：答案按 key 对回 manifest，核 img_sha／prompt_sha／候选集合一致、提示词仍是现行代码的，用 `VisGlyphStore.put` 写 `<feedback>/vis_glyph/glyph-vis-session-<日期>.jsonl`，`model=session:<名>`；答案不在候选里又不是「其他」、conf 不认、与 manifest 不符的拒收并报告（退出码 1）；同答案重复导入不写（幂等），改了答案追加一条（后到覆盖）；`accept_models` 没列 `session:<名>` 时提示。只写本机、不推中心库、不调任何模型服务；导入后从 `glyph_vis` 起 `--force` 重跑才生效。新测 `tests/test_vis_queue.py`。
+- 新步骤 `glyph_vis`（3e 看图大模型（条件），缺省关 `enabled`；CV3 2026-11-28，接口草案经 CV4 审定。指纹变更：glyph_vis 新步骤自身新增、无旧产物；收尾 `glyph_analyzer` 代码改动登记 code_equiv（自造册 3 页逐字节相同＋测试冻结 dev 的 merge_cell 输出），没开 3e 的书各步不过期）：3a／3b 给不出好结论的少数格（3b 触发了 `groups` 里的组——缺省第四步现役 `registry.VIS_GROUPS` 8 组——且方法全弃权 `near_abstain`／方法分歧 `near_split`／概率口径方法分差小 `near_margin`／3a 组内两字相持 `a_margin`／组内校准 p 低 `p_low`），把 `char_patch` 字块图连同候选字（组字 ∪ 3a 前 5 ∪ 3b 方法给的字）交给大模型**只按刻形**判（新提示词 `vis-img-1`，不写书名、不给前后文与整理本；走 `ctx_llm.Client` 结构化输出＋拒答回落；真调只在 `GUJI_LLM_ONLINE=1` 且有密钥、`model` 非空时，缺省只读缓存、没命中出 `ask`）。产物 `PageVis`（每格 `VisRec`：trigger 记号、status＝hit／asked／pending／error／skipped:<原因>、char／other／conf／why／model／prompt_sha／cache_hit／legacy、页头 `cache_pin`）。缓存是新事件种类 `vis_glyph`，**单开目录 `<feedback>/vis_glyph/`**（`feedback/vis_glyph.SUBDIR`，不进 rulings/），target `unit="glyph_img"`、key＝img_sha，键 `(img_sha〔含形状〕, prompt_sha, 候选集合, model)`，读只认 `model`＋`accept_models`；不是人裁、不算钉（`event_level` 给 None），`core/event_files.GATE_EXEMPT_KINDS` 加 `vis_glyph`；缓存内容不进指纹（导新答案后从 glyph_vis 起 force）。收尾 `glyph_analyzer` 每格新字段 `vis`（空不落盘）、答出字的候选加 `evidence.v`，**不出 p、不改排序**。第四步一行未动。一次性脚本 `scripts/rekey_vis1_to_glyph_vis.py`：旧 vis1 ctx_ruling 缓存按当前字块重算 sha1 核对同图后转成 `legacy=true` 的 vis_glyph 记录（缺省 dry-run，只写本机），第三步缺省不认（`accept_legacy`）。**开 glyph_vis 写缓存、推中心库前须 guji-manager 含 #1239 的版本**（vis_glyph 目录归 events 表、不算钉、u_stamp 跳过、GATE_EXEMPT_KINDS）。阈值缺省是拍的，待殿本、全唐文各数一册触发量后定。新测 `tests/test_glyph_vis.py`。
+- 参校本四维成唯一入口（Sheldon 11-28 定「按这四个维度走，新书开，旧书换配置不重跑，旧代码清干净」；CV0）：① seed_admit `reference_trust`／`ref_lib_coord`／`follow_ref_variants`／`ref_topk_follow` 不再从册配置读，一律由 `references[].accuracy`／`script`／`form`（段上可压低）推出（`derive_trust`），写了旧值且与推出值不同起跑 `FutureWarning`；#1979 的过渡开关 `trust_from_accuracy`、`ref_variants_off` 删除（写了也丢）；`reference_trust` 不再隐含照录异体。② 证人排序与主参照选取改看 `accuracy`（未标＝low），`Witness.quality` 改名 `accuracy`；列级对位看 `form: column`，旧键 `quality`／`line_is_column` 不再读（迁移期并存不报，段上写 `quality` 报不认识）。**指纹变更**：seed_admit 参数——史記、脉经推出值与原配置相同不变；全唐文、殿本、明別集参数变，按「出过 v0.1 不重跑」不重跑；align_ref／cell_state 代码改（cell_state 缺省关）。设计 `doc/design/参校本四维与准确度分档.md` 第四、六节。中心库各书补四维另做，旧键第二期删。
+- 新步骤 `group_decision`（4d 字组，缺省关 `enabled`；CV4 P3c 2026-11-28，Sheldon 定「子步只出证据、收尾做全部判断」）：只出**原料**——①字组入口归属（待审口径，本版只出不读）；②3b `glyph_near` 看图判法快照（rr／wu／hou／part／pair_shape、book_knn、near_knn、stroke_veto，开关 `group_flow_near_from_3b`）；③字框宽高 `wh` 与按组 `aspect` 比值（`fold_aspect`）；另有按组 `handling` 定稿快照（见下条）。**不含**补放／改字／降审、字组文意各层、裁定缓存、`vis_ruling`（它们读邻格放行状态，只能在收尾）。收尾 `seed_admit` 可选读：`_near_from_3b`／`_near_by_model_from_3b` 先查快照（4d 步自己取快照传 `use_gd=False`），`_fold_pass(wh=…)` 先读 `wh`；没有就照旧现算。`seed_admit_groups` 把 `_group_flow_pass` 里的 `FlowConfig` 构造原样抽成 `_flow_config`，另加只够入口用的 `_entry_config`。`vis_ruling` 及其后各遍次序、`ask`、`evidence.vis_ctx`、`evidence.group` 位置不变（`tests/test_group_decision.py` 断言）。指纹变更：group_decision 新步骤自身新增、无旧产物；`seed_admit` 的 seed_admit／seed_admit_groups／seed_admit_shapes 三块改了（缺省关、关着逐字节不变），code_equiv 登记待 decide-bench 冻结包上逐字节核对后补（核对前别用本分支的册与基线产物混批）。依据：ai-team `domain/CV/A24/P3c-组判pass依赖清单-2026-11-28.md`）
+- `group_decision` 记按组处理方式定稿快照（CV4 P3c 2026-11-28，缺省关，收尾**不读**）：新参数 `handling`（书级覆盖 `{组 id: {context, aspect, action, threshold}}`，Sheldon 定书配置优先；`methods` 不许书级写）；`book_params` 把它叠到登记表（`near_registry.handling_of(over=)`，键值与组 id 不合规报错）后填进自动参数 `resolved`（进参数指纹，登记表或覆盖一改就过期）；每页产物 `handling` 原样记这份。涉及组＝`group_flow`＋`fold_groups`＋覆盖里点名的组。指纹变更：仅 `group_decision` 自身（缺省关）。
+- 新步骤 `cell_state`（4c 格况，缺省关 `enabled`；CV4 P3b 2026-11-28，Sheldon 定「格况判断拆成独立步骤」。指纹变更：cell_state 新步骤自身新增、无旧产物；`seed_admit` 组合 code_hash 经 code_equiv.SPLITS 块表换新哈希后与 dev 相同、各书现有产物不过期，decide-bench small 史記 03 共 231 页 seed_admit 逐页 JSON 全相同、翻转 0 格）：把 `seed_admit_cell_state` 里**不读放行状态**的六个探测器（遮挡 `_occluded`、盖章空栏 `page_seal_blank`、字框几何 `seg_box_bad`、墨迹格旗 `ink_mark_facts`、夹注分法不均列旗 `jiazhu_uneven_spans`、题列套语 `header_formula_lines`）抽成独立函数，算成产物 `cell_state`（逐格 `state`＝char／occluded／seal／seg_bad／non_char＋证据，另存各探测原值与 `ran`）；收尾 `seed_admit` 各 pass 多收一个可选参数，给了产物里的探测原值就用、不给就现算，升降仍按放行状态在收尾做；读放行状态的 `symbol_review`／`symbol_ref_blank`／`blank_ink` 不搬。关着时产物逐字节不变，开着时逐格相同（`tests/test_cell_state.py`）。依赖清单 ai-team `domain/CV/A24/P3b-格况pass依赖清单-2026-11-28.md`；新产物 kind 已告 GM2／GM3／GM4。
+- PATCH（产物逐字节不变，各书不过期：row_segment、impl.keben.row_boundaries 登记 code_equiv，053 40 页对 dev 逐字节相同；CV2 2026-11-28）：缺省关的书级参数 `row_segment.jiazhu_edge_trim`——单格夹注判据落空时去上下边（×格高）再量，段判据与书级钩子同看去边后的图块。起因全唐文 053 75:3 开竖线后「學」脚压进「字闕」夹注格、夹注少一格；0.15 在 053 cut-bench 346→347、0 回退，031–120 layout_off 页只变 1 列（篆书印文，平）。
+- PATCH（产物逐字节不变，各书不过期：row_segment、seg.profile 登记 code_equiv，053 40 页对 dev 逐字节相同；CV2 2026-11-28）：全唐文开 `border_detect.vline_track` 后切字适配，两个缺省关的书级参数：`row_segment.layout_off_always`（无先验格网不论别的候选劈不劈字都出场打分，配 `layout_off_tol` 用；起因 039 31:9、055 49:1、067 64:6 开竖线后有候选劈字为 0，无先验格网连出场都没有）；`row_segment.frame_edge_near`（列首／列尾「只有框线」格判空的贴框距离，×格高，缺省 0.2＝原常数；全唐文上框下细线在 0.2 边上，建议 0.3）。`seg.profile.frame_only_edge_cells` 加 `near_frac` 参数。全唐文 031–120 实测见开关登记表与 ai-team `domain/CV/A22/cut-bench/实验-全唐文竖线跟踪适配-1128.md`。
+- PATCH（指纹变更：开了 3b 的书 glyph_near 起过期——`groups.near_methods` 改；收尾 glyph_analyzer 随 near_methods 一起过期；现行只有殿本开 3b，且殿本没挂 hou_shape；CV3 2026-11-28）：候𠋫 书级刻形判法 `hou_shape` 包成 3b 方法（照 rr_shape 样板）：吃 `char_patch`；`hou_shape/2`（小网）`sims`＝`{候: p, 𠋫: 1−p}`；`hou_shape/1`（几何量 v，不是概率）用与现役判定一致的单调映射 `候 = σ(ln9·(lo+hi−2v)/(hi−lo))`、`𠋫 = 1−候`（现役判 候 的格 候 ≥ 0.9、判 𠋫 的 ≤ 0.1、弃权在中间，`hi−lo<0.001` 时按判出的字给 1／0）；无墨弃权 `{}`。证据 `{method: "hou_shape", char, why, v|p}`，后三键＝`judge()` 整个返回值（第四步 `evidence.hou_shape` 那份，主遍与晚跑遍 `group_flow_hou_shape_late` 同一判法）；`model_sha` 与第四步参数指纹 `hs` 段同算法；校准表读口 `knots.候`，现在没有表、不出 p。书配置 `hou: {ref: hou, trigger: cands, methods: {hou_shape: config/groups/hou_shape.json}}`。哪些格用、主遍还是晚跑遍、改不改字留在 4d；现役第四步判法一行不动。
+- PATCH（指纹变更：开了 3b 的书 glyph_near 起过期——`groups.near_methods` 改、`glyph_near.code_deps` 补 `groups.wu_shape`；收尾 glyph_analyzer 随 near_methods 一起过期；现行只有殿本开 3b，且殿本没挂 wu_shape；CV3 2026-11-28）：嗚鳴 书级刻形判法 `wu_shape` 包成 3b 方法（照 rr_shape 样板）：吃 `char_patch`，`sims`＝`{鳴: p, 嗚: 1−p}`（p 是 `wu_shape.judge` 已取 4 位的 鳴 概率），无墨弃权 `{}`；证据 `{method: "wu_shape", char, why, p}`，后三键＝`judge()` 整个返回值（第四步 `evidence.wu_shape` 存的那份）；`model_sha` 与第四步参数指纹 `ws` 段同算法；校准表读口 `<模型去 .json>.calib.json`（`knots.鳴`），现在没有表、不出 p。书配置 `wu: {ref: wu, trigger: cands, methods: {wu_shape: config/groups/wu_shape.json}}`。现役第四步判法一行不动。
+- PATCH（产物逐字节不变，各书不过期：改动都在不属于任何 Step `code_deps` 的模块，`check_fp_change` 对 dev 0 步变；CV4 P3a-1 2026-11-28，Sheldon 定收尾步改名 `char_decide`）：`seed_admit`→`char_decide` 的**兼容读口**，产物仍写 `seed_admit`，Step id／产物种类／参数类不动。① 新 `core/decide_names.py`（`ADMIT_STEPS=("char_decide","seed_admit")`、`LEGACY_ADMIT_STEP`、`ADMIT_STEP_ACTIVE`〔改名那一版只翻这一个常量〕、`fold_admit_params`、`final_page_dict`、`final_dir`）；② 产物读口 `steps/decide_final.read_final(ctx, page)`、`products/final_read.read_final_store`，新目录与新页键优先、并存以 `char_decide/` 为准（`guji-cv status` 并存警告），pending-cells、slots、glyph_ledger、alt_view、llm_queue、ids_retrain、seg_screen_run、shadow/offline 的读点全改新旧并认；③ 事件读口 `feedback/decide_events`（`decided_view`／`ruling_by_u`／`invalidate_final`：两个步名当同一步、后到覆盖按写入时间、失效两个目录都标；D1 历史事件不改写）；④ 参数键 `params.char_decide.*` 与 `params.seed_admit.*` 都认（册配置、管线 yaml、套书缺省、`--params`／`--override`、page_kinds），同一层同时写报错；⑤ 新命令 `guji-cv decide migrate-name <册>`（`products/migrate_final.py`：目录与页顶层键原地改名不删、manifest 换 sha 并按新名 Step 换算指纹、下游 `upstream` 键换名、sha 清单存 `_migrate_char_decide.json`；本版只能 `--dry-run`，改名那一版起才能真迁）；⑥ `pending-cells` 每格加 `pending_reason`／`pending_reason_detail`／`form_src`（本版值一律 None，cv 将来直写的 15 个原因见 `doc/4-定字/pending_reason.md`）；⑦ `steps/char_decide` 导入入口（与 `SeedAdmitStep` 同一个类）；`manager_api` 导出以上读口。新测 `tests/test_decide_name_compat.py`（页键、ask／vis_ctx 位置不变，新旧事件名查询结果相同，参数并存报错，迁移只改名不删）。
+- PATCH（指纹变更：开了 3b 的书 glyph_near 起过期——Step 模块与 `groups.near_methods` 改；现行只有殿本开 3b；CV3 2026-11-28，按 CV4《4d 接 3b 看图方法-接口要求》）：3b 新触发方式 `trigger: cands`（3a 首位或候选前 `topk` 名（缺省 5）里有组内任一字就跑，罩住第四步看图判法的触发格）；3b 产物 `PageNear.models` 记本页各方法的模型版本（`方法.model_sha`，rr_shape 与第四步参数指纹 `rs` 段同算法）；收尾 `glyph_analyzer` 每格新键 `near: {group, trigger, methods: {方法名: {method, …方法证据原样, model}}}`（rr_shape 证据＝`{method: "rr_shape", char, why, nn, score, geo}`，后五键同 `rr_shape.judge()`；4d 读口是 3b 产物本身，见 cv #1999），没触发的格不落盘，宫官 cnn_small 的 `evidence.b`／p／p_src 不变。3b 只管主切法格，备选切法列 4d 本地现算。
+- 新步骤（只新增 gate，不影响别的步骤指纹：现役各步 code_hash 逐个核过不变；`decide_gate` 自己的指纹不过期任何东西，L0；CV4 2026-11-28，Sheldon 定「gate 只检测、不判断」）：第四步出口 gate `decide_gate`，挂在 `seed_admit` 出口、永远最后跑（照 `cut_gate`），读 `seed_admit`／`align_ref`／`glyph_match`／`context_decision`／`char_index`，每页出检测清单 `PageDecideGate`（`fail`／`flag` 两级）。首批检测：列报错、连续放行字等于参校本错开一位（`ref_shift`）、放行字没有任何出处、放行格是空白（fail）；参校本缺席／没锚上却靠它放行、坐标退回、备选切法、罕用码位、人裁绑丢、字组漏判、上游报错（flag）。不改任何格，没有 Step 读它。文档 `doc/4-定字/decide_gate.md`；量法 ai-team decide-bench `gate_bench.py`。
+
+- 修复（缺省关；指纹变更：glyph_near 起过期——code_deps 补 `groups.hou_shape`，glyph_near 是 dev 上未发版的新步骤、缺省关，只有开了它的书（殿本）受影响，且它们未出过 v0.1 产物；CV3 2026-11-28）：#1997 把刻形判法 `rr_shape` 包进 glyph_near 后，`glyph_near.code_deps` 只列了 SPLITS 里 `rr_shape` 拆出的一块（hou_shape 漏列），`tests/test_seg_move.py::test_split_parts_listed_together_in_every_step` 报红；补上并重生成 doc/3-识字/步骤与产物.md。
+
+- 读口改读形近字组登记表（产物逐字节不变：改的 `clustering/confusable.py` 不在任何 Step 的 `code_deps` 里，32 个 Step 的 code_hash 与 `stages_sha` 代码部分改前改后逐位相同，L0；CV3 W1 第二期 2026-11-28）：`confusable.NEVER_MATCH_FAMILIES`、`partners()` 改从 `config/near_groups/v2.json` 按字对 `src` 派生（手工表真源原样搬到 `config/near_groups/hand.json`，生成脚本与 `build_near_groups.py merge` 改读它），`match._PARTNER`、`seeding.NEAR_FORM_CHARS`、seed_admit（现 `seed_admit_pick`）三处 `partners()`、`shadow/signals` 源码不动、跟着改读；`manager_api` 加 `near_registry_pairs`（manager N01 用）。新测 `tests/test_near_registry_readers.py`：与搬家前字面量、人裁表、字体表逐项相等（各种 τ × `GUJI_CONFUSABLE`）。`NEVER_MATCH_FAMILIES` 顺序改按码位（只脚本用到顺序）。near_route／glyph_stages／glyph_rules／flow／shape_stage／pair_clf 名单这期没改，原因见 `doc/3-识字/形近字组登记表.md` 第五节。
+- PATCH（纯搬家，产物与指纹不变，全部 Step code_hash 与合并前 dev 实算相同；CV4 P1a 2026-11-28，第四步定字子步重构）：`seed_admit.py` 按位置拆模块，3,464→1,178 行：新 `seed_admit_cell_state`（4c 格况，含从 lanes 搬来的墨点／字框几何／符号空白）、`seed_admit_groups`（4d 字组流程、看图判、折叠组）、`seed_admit_pick`（定字）、`seed_admit_veto`、`seed_admit_altcut`（备选切法挑列）、`seed_admit_reasons`（疑问码与护栏）、`seed_admit_page_params`；新 `steps/decide.py` 读口 `ref_of(ctx, page)`（`{格: {ref, via, op}}`），`_align`／`_coord_refs` 的 `PageAlignRef` 解析收进它。旧名全部从 `seed_admit` re-export；测试里换函数改用 `tests/helpers.patch_seed_admit`。`code_equiv.SPLITS` 重登（11-23／26 那条在 dev 上早已失效）。
+- PATCH（指纹变更：开了 3b 的书 glyph_near 起过期——Step 模块改、code_deps 加 `groups.near_registry`／`groups.rr_shape`、consumes 加 `char_patch`；现行只有殿本开 3b；CV3 2026-11-28，Sheldon 11-26 分工）：3b `glyph_near` 新方法 `rr_shape`（入人八 书级刻形判法从第四步 group_flow 搬来的样板，包同一个 `groups.rr_shape.judge`、吃同一张 `char_patch` 字块图，证据与 seed_admit `evidence.rr_shape` 逐键相同；sims 八＝几何判 八，人／入＝σ(决策值)；模型直接指数据目录 `config/groups/rr_shape.json`，暂无校准表，`calibrate` 返回 None）。方法接口加可选 `ctx`／`cells`（`near_methods.score` 按签名传，老方法照用）、方法类属性 `patch` 定吃原图裁块还是切字字块图；3b 接上形近字组登记表 `expand_refs`（书配置 `groups.<组>: {ref: <组 id>, …}`，没写 `ref` 的书参数哈希逐位不变）。第四步现役判法一行没动。守卫 `tests/test_glyph_near_rr_shape.py`。
+- 修复（产物逐字节不变，code_equiv 登记 row_segment_pagemap／utils.daizhige，L0；CV0 2026-11-28，殿本改名演练）：自动配页读的 corpus 表（daizhige `layout_slots`／`layout_overrides`、钉位表、`page_map_overrides`）按册过滤时认册 yaml 的 `aliases`（新 `core.volume_alias.names_for`），改格行用旧册名也盖到本册；`status` 的「参数变了」不再列改名时封存过的字段（MJ 建议）。没写 aliases 的册行为逐位不变。
+- 新命令（不进任何 Step 指纹，engine.py／cli_v2.py 不在 code_deps，L0；CV0 2026-11-28，脉经第 1 册改名后 seed_admit 判「参数变了」）：`guji-cv rename-seal <册> [--keys …]`——册改名刚做完时跑一次，把只因改名改写了来源文件而变的参数指纹（如 `exclusions_fingerprint`：`crop_exclusions.jsonl` 的格号 01:→1:）记进改名标记 `sealed`（{步: {字段: [旧, 新]}}），`status` 的 `rename_only` 据此按条目记的参数比；封存后文件再变，新值对不上照常过期。只封 `*_fingerprint` 字段、各页旧值一致的；`human_fingerprint` 读字形库 `v2:` 实例 id、改名不碰，不该封（用 `--keys` 限定）。新测 3 条在 `tests/test_stale_reason.py`。
+- PATCH（新步骤缺省关，现役各步 code_hash 不变；指纹变更：cell_traits（新步）、glyph_analyzer 起过期——3d 缺省关、glyph_analyzer 只有开了它的书过期，没跑 3d 时收尾产物逐字节不变；CV3 W3 2026-11-28，Sheldon 11-27 定「这格图有没有毛病」收到 3d）：3 识字加 3d `cell_traits`（字块图的其他特征）：每格 `cut`（字被切断）／`border`（混入边框）／`residue`（混入上下字残留）／`stain`（背景污染、印章）／`merged`（两字并一格）／`blank`（空格有墨、非字）各一个**原始分**（0～1，0.5≈原处判法的门槛，未校准、不是概率），`evidence` 按键记子判据与原始量。判法收自 cell_shrink flags、guji-manager `review/seg_defect`（同字对照只取本页 3a 判 same 的列中格、端区碎线／端条、并格低谷）、`steps/occlusion`（背景中等墨点密度、印章重叠）、seed_admit `_blank_ink_pass` 的图像部分，算法在新模块 `clustering/cell_traits.py`，现役代码不动。书配置 `cell_traits.enabled`（缺省 false）。收尾 `glyph_analyzer` 可选读它，原始分原样放进每格新字段 `traits`（空的不落盘），**不写 `p_map`**（没有校准来源）。殿本列端尺子 frame-end-crop（694 块）：`border` ≥0.5 检出 65/86、误报 38/591；`cut` 靠同字墨高比（尺子给的全册比值）≥0.5 检出 41/65、误报 14/612。量法与 vol02 分布见 ai-team `domain/CV/CV3/cell_traits-2026-11-28/量.md`。
+- PATCH（缺省关、产物逐字节不变，code_equiv 登记；CV2 2026-11-28，朱楓林集 MBJ 报）：三个按书开的切字开关。① `row_segment.straddle_merge`（写 `{}` 开）：卷端「新安」「裔孫」这类写在两列之间界行上（界行在此断开）、被劈成两半的骑线字，合成一格放进右列（先读的那列）对应格位、左列那格记空（格旗 `straddle:`／`straddle_into:`），`cell_shrink` 见旗在原图上裁整字字块（render 也认）；判据 `straddle_pairs`（界行两侧墨满、两列本来的字位空、两列文字带够宽）。朱楓林集 01–05 册卷一至卷十 10 个卷端页 38 格全中、零误报。② `cell_shrink.ink_marks`：按原图墨打格旗 `ink_seal`（藏书印）／`ink_speck`（墨点）。③ `seed_admit.ink_marks`：印、墨点逐字对位无字判非字放行（seal／blank_ink 通道），对位有字或墨点贴着别的字（切坏的半字）送审——补上参校本不分行、没有坐标对位时 lane_seal coord_blank 走不到的缺口。新测 `tests/test_ink_marks_straddle.py`。
+- 修复（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-28，册号位数统一）：`row_segment.load_layout` 读格位表／备选格表（`layout_prior`、`alt_cuts`）时，表行 `vol` 是本册 yaml `aliases` 里的旧名也归本册。脉经第 1 册改名 01→1 后继续用原 `maijing_yolo_alt_cells.jsonl`，不必另出一张表、不改参数，`status` 仍按 rename_only 判新鲜；殿本 vol01→01 的格位表同理。没写 aliases 的册行为逐位不变。新测 `test_load_layout_reads_old_volume_name_via_aliases`。
+- 脚本／事件格式（不进任何 Step 指纹，events.py 不在 code_deps，L0；清理计划 2.4，用户 11-27 定）：`feedback/events.provenance(level, by, channel)`（与 manager `levels.provenance` 同口径）；cv 里写 `confirm` 的脚本接来源三字段：`build_newchar_review`（`human／--reviewer／console`）、`ingest_char_review.py`、`harvest_shadow_review.py`（**都新增必填 `--reviewer 账号`**，原来可以不带）、`book_lib_auto`（`machine／book_lib_auto／script`，含撤回）、`glyph_codepoint_unify`（按现行口径写 `ai`，改 human 要各书线先确认）、`mojibake_census`（按现行口径写 `human`，改 machine 会让该批不再算钉，先查影响）。`research/qtw_booklib/a4_import.py` 一次性、历史批次已写完，不改。
+- PATCH（不进任何 Step 指纹，L0；CV0 2026-11-27，用户定册号位数统一、老书 cv 册名也改）：① `core/volume_id` 位数按全书册数——1–9 册 1 位、10–99 两位、100 起三位（`width_for` 最少 1 位，`vol_label` 按给的位数补），新增 `same_volume`（1、01、001 同一册）、`VolumeId.chapter_mismatch`；没写 `volume_width` 的老书缺省仍 2 位，不静默变号。② 新模块 `core/volume_alias`：册 yaml 写 `aliases: [旧名]`，`EventLog.read`／`iter_all_cached` 与 `core.event_files.iter_event_records`（过闸读）把事件里的旧册名（`target.book`、`target.key` 册名段、`payload.cell`／`instance_id`／`book`、uid 流顶层 `book`）在内存换成新名，旧记录不改写；`raw=True`、`gate=False` 的维护读口看原样。没有任何册写 `aliases` 时逐位不变。events.py、event_files.py 不在任何 Step 的 code_deps 里。方案：https://claude.ai/artifact/GFATExpvckttdKaHSHRuTz
+
+- 文档／事件格式（不进任何 Step 指纹，events.py 不在 code_deps，L0；CV0 线程 2026-11-27，用户定「裁定事件要能区分来源」，清理计划 1.6）：裁定事件（`confirm`，格级）加来源三字段 `payload.level`（human／ai／machine）／`by`／`channel`（console／web_vote／opinion／script／llm／vision），写进规范 §4.1 与 `guji_feedback_event_v1.schema.json`；`EventLog.append` 缺字段或取值越界**只告警不拒**（`provenance_missing` 计数）；`payload.level=machine` 现在明确不算钉（`event_level` 给 None，同中心库 `events.level` 与 Worker 落定条件）。必填化留 2.4。
+- 脚本（不进指纹，只加注释与文档；待审单清理 1.7）：`scripts/zhengli/republish.py`、`proof_cycle.py`、`auto_cycle.py` 文件头标 DEPRECATED（整张换单已被 `guji land` 取代）；调用方清单与退役条件见 `doc/design/整张换单脚本退役清单.md`。**未删**：guji-manager 的 `online_lists`（标 main 后自动重出）和 `swap run` 仍在调用。
+- 修复（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-27，汉书 WYG #18261）：`border_detect` vline_track 淡线兜底 `_trk_gray_line` 取行号只封上界，页图比下框矮（汉书 26 册 p4/p5 是合扫拆坏的 120px 窄条）时不再抛 `IndexError: index 120 is out of bounds`。v0.9.2 起 vline_track 缺省开即有此错。
+
+- PATCH（缺省关，产物逐字节不变，seed_admit 三模块 code_equiv 登记；CV2 2026-11-27，朱楓林集 MBJ 报）：①册 yaml 顶层 `chars_per_line_pages` 按页每列字数（如序页 `{"2-9": 14}`），border_detect／column_geometry／column_gate／row_segment／row_segment_gate／cut_gate 一处认（`core/step` 注册处换 `ctx.book.chars_per_line`，步代码不动）；写了表的册这几步指纹加 `cpl_pages`，没写的册不变。②`seed_admit.seg_box_check`（按书挑 sliver／frame_line／speck／split_pair／tall，`[all]` 全开）：碎格、框线扁条、墨点、一字劈两框、过高框退回待审，doubt `seg_defect`（待审原因 seg_defect）。
+- 脚本（不进任何 Step 指纹；GM2 2026-11-27，CV0 采纳执行方建议）：`scripts/rerun_prep.sh` 切 cv 改走 `safe_checkout`：遇「未跟踪文件会被覆盖／删除」只处理 git 报出的那几个文件，先带时间戳备份到工作区外（缺省 `~/.guji-jobs/checkout-bak/<UTC 时间>-<pid>/<仓名>/`），再移走、重切，备份路径打进准备日志；不整仓 clean，清单里有仓外／已跟踪／不存在的路径就一个都不动。执行方取 dev 上的准备脚本，合进 dev 即生效。规则同 guji-manager `jobs/safe_checkout.py`。
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV2 2026-11-27，CV4 算法待办 #13）：拆步前的旧产物包（各书钉 0.7.x 线的 main 包）没有 `column_bands`，现行 cv 再生 `column_image`／`char_patch` 时 `column_end` 报上游缺失、`seed_admit` 整页 PatchUnavailable。现在 `column_end` 读不到 2b 产物且 `column_windows` 带旧 `band` 时，经 `column_band.legacy_strip` 按拆步前 `clean_column` 前半在内存里现算（不带 `side_cut`，不写包、不进缓存），文字带用包里记的值；新包缺 2b 照旧报错。史記 42（v0.7.112 包）、全唐文 020（v0.7.104 包）各 12 页列图＋字块与包的原版本逐像素同。
+
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26，CV0 定）：刻本链出口闸 `cut_gate` 也认 row_segment 列旗 `manual_cells_remapped`（钉子按列图几何换算、位移 >3px），列级 flags 记「待人核」，只记不拦，口径同 row_segment_gate；manager ≥ v0.6.38 按它出 S05 待审卡。
+
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26，CV0 批的钉子护栏第二步）：`row_segment` 套整列钉子（manual-cells）前比钉子写入时记的列图几何底（manager v0.6.35 `column_basis.geom`）：一致照套；不一致经旧／新 `ColumnMapper` 把格框经原图换到新列图，角点最大位移 >3px 的列打 `manual_cells_remapped`，出口闸（row_segment_gate）记旗「待人核」。没记 geom 的老钉子照原坐标套、只在日志提示。开关登记表 outer_bar 记「直线页可能被记成三段，人钉切格的书慎开」。缘由：全唐文 031–060 outer_bar 让列图挪 10–32px，钉子照旧坐标套切偏。
+- PATCH（缺省 `any` 产物逐字节不变，待 code_equiv 登记，L0；书上开 `no_ref` 为 D 档，只动 `seed_admit`；CV0 2026-11-26，Sheldon 定）：`seed_admit` 加 `solo_5b_scope: any|no_ref`。`no_ref`：无参照放行 `match_solo_5b` 只放①`reference_profile` 声明 `kind: none` 或 `page_kinds.no_ref` 的页、②有参校本页上坐标对位为缺字（〓／▣）的位；有参校本页上一个对位字都没拿到的格留待审（全唐文 main 包 8 册实数：有参校本页 94 格受影响，none 页 7,513 格不变）。缺省不进参数 dump。
+
+- 文档／脚本（不进任何 Step 指纹；CV2 2026-11-26）：字间判官固定下来——`scripts/train_boundary_net.py`（出样本、训练，与推理同一窗口函数）、`doc/2-切字/字间判官.md`（参数、模型、借用或单独训、验收）、Wiki 2-切字「给一本书打开」。
 
 - PATCH（产物逐字节不变，code_equiv 登记，L0；CV2 2026-11-26）：`row_segment` 加两个开关（缺省关、不进参数 dump）。`layout_off_tol`：无先验格网违表＋劈字只多 ≤tol、劈字／格高不匀／穿字严格更好时改选（全唐文 060:3:3 多出空格；053 册 L2 列全对 323→324、0 回退）。`boundary_net`／`boundary_net_p`：字间界线判官（新 `impl/keben/boundary_net`＋模型 `models/boundary_net_shiji_v1`），只重排全正文列内部低分切线、格数不变（史記 42 cut-lattice 线 789→808/874、错列修回 4、好列不坏）。史記 42 40 页 row_segment 逐字节同，新 code_dep 经 SPLITS 合回。
 
@@ -116,13 +167,97 @@
 
 - 新书级参数 `row_segment.cut_free_seam`（缺省 0＝关、不进参数哈希；史記 r77 切分清零，A22 11-17）：选中切线仍劈开单字大小连通块、且墨大半在上格时，在 ±这么多格内找零墨（或穿墨减半）折线改选，上字戈钩／长捺／竖尾整块归上字。史記 42 册 82 页与 cut_gap_guard 0.08 同开：实际切坏线 72→54、新劈 0、格号不变。关时殿本 vol30、全唐文 020、史記 42 逐字节同，登 code_equiv `_FREE_SEAM_1117`。建议值 0.35。
 
-## [未发版]
+## [0.9.15] 的 dev 条目（补记）
+
+- PATCH（CV3 2026-11-28，Sheldon 11-27 定形近字组方案）：形近字组登记表 `config/near_groups/v2.json` 类型只分 `variant`（异体，同义异码）与 `near`（形近异义）两类，原另记一类的 6 组（guan、hou、kgc、tsh、xz、zh）归 near，组内异体归并照旧在 `fold` 字段；旧版书级表的 `fold` 类型读成 near。每组加处理方式 `handling`（`methods` 允许的 3b 看图方法、`context` 文意、`aspect` 4d 宽高比、`action` admit／evidence、`threshold`），人定值在新输入文件 `config/near_groups/handling.json`，其余按现役行为的缺省规则生成；日曰（ry）、己已巳（jys）`methods: []`（不做字形区分，去掉 stroke_veto 对 jys）、context=true；aspect 日曰 true（按现役）、己已巳 false。读口 `near_registry.handling_of(组, over=书级覆盖)`（书配置优先、handling 缺省；methods 不许书级放宽）、`resolve(groups, book)`。3b `glyph_near` 守 `handling.methods`：书配置挂了以外的方法过渡期警告、跳过并计数（产物新字段 `PageNear.skipped_methods`，空的不落盘；`near_registry.STRICT_METHODS` 改 True 后载入即报错）。现役读口（NEVER_MATCH_FAMILIES、partners、_PARTNER、NEAR_FORM_CHARS、manager N01、glyph_near_spec、groups_of）取值逐项不变。**指纹变更：glyph_near 起过期**（glyph_near.py、near_registry.py 改了；登记表数据不进指纹，其余 Step 的 code_hash 不变）。
+
+- PATCH（产物逐字节不变，code_equiv 登记；CV0 2026-11-28，脉经第 2 册缺文小注）：`reference_profile` 的 `kind: none` 段可写 `cols`（列级无参照，可与页段重叠）；align_ref 在这些列不出对位字、坐标对位与提示，产物写 `none_cols`；`page_token` 只在声明页加 `|nc:…`。manager 待审原因据此按格认「参照缺是设计」。
+## [0.9.15] - 2026-11-28
+
+PATCH（L0）＝v0.9.14＋#2018（reference_profile 列级无参照 cols；dev 条目见上文）。对 v0.9.14 全部 32 步 code_hash 全同；底库 b35 不变。
+
+## [0.9.14] - 2026-11-28
+
+PATCH（L0）＝v0.9.13＋#2008（收尾步 char_decide 兼容读口；dev 条目见上文）。对 v0.9.13 全部 32 步 code_hash 全同；底库 b35 不变；各书不过期。
+
+## [0.9.13] - 2026-11-28
+
+- 新表／读口（不进任何 Step 指纹，现役代码不改读，L0；CV3 W1 第一期 2026-11-28，Sheldon 定方向）：形近字组登记表 `config/near_groups/v2.json`（格式 `near_groups/2`），由 `scripts/build_near_groups_v2.py` 从六处来源确定性合成（注册字组表 185 组＋手工 20／人裁 42／字体 78／`near_groups.json` 572 对，去重后 619 组，类型 near／variant／fold，记 `src`；书级 pair_clf 与 3b 组用 `--pair-clf`／`--glyph-near` 出书级版本）；读口 `groups/near_registry.py`（按字查组、按类型过滤、转 3b 书配置、展开 `ref`，没写 `ref` 原样返回）。守卫 `tests/test_near_registry.py`。来源清单与第二期要改的读口见 `doc/3-识字/形近字组登记表.md`。
+- PATCH（缺省关，产物逐字节不变，code_equiv 登记；CV0 2026-11-27，Sheldon「四维＋准确度分档」）：册配置 `references[]` 新键 `form`／`punct`／`script`／`accuracy`／`accuracy_evidence`（写错值就报，`form` 与 `line_is_column` 矛盾也报），`reference_profile` 段可写 `accuracy`（只许压低）；`seed_admit` 新开关 `trust_from_accuracy`：开时按本页参照的 accuracy 推信任档（very_high/high → `reference_trust`，mid → `ref_lib_coord`，只往上推），`script: trad|simp` 的页关照录异体、`edge_pair_to: ref` 退回 freq；本册摘要进 `ref_accuracy` 指纹。门槛与实测见 `doc/design/参校本四维与准确度分档.md`。
+- PATCH（各书产物不过期，第四步逐字节不变；CV2 2026-11-27，Sheldon 定「折线只存拐点」，已通知 CV0/CV3/CV4/A30）：`products/kinds/cells.py` 折线落盘改游程——格的 `seam_top`／`seam_bottom`、切点候选的 `y` 在产物 JSON 里存 `{"n": 长度, "runs": [[x, y], …]}`（无损，只存变化点），载入时展开回逐 x 表，旧产物照读；直接读 JSON 的脚本用 `cells.seam_ys()`。史記 42 册 40 页 row_segment 产物 13.9MB→6.1MB。本模块不在 code_deps 里，指纹不变；新跑的 row_segment 字节会变，跨此改动做 `code_equiv check` 比 row_segment 要以本版为基线。
+- PATCH（缺省关，产物逐字节不变，code_equiv 登记；CV2 2026-11-27）：cell_shrink 新开关 `end_dash_row`，列首／列尾格端区里成排的虚线短划整排抹白（`extractor.strip_dash_row`）。写本内框细线印成短划、整页拟不出内线的页，紧框不再横着拉宽去圈短划（cut-frame 史記 42:43:5「宗」、42:27:5「事」）。
+- PATCH（11-27，CV0，参校本 bug）：`seed_admit.no_ref_params` 也叠在册配置 `reference_profile` 声明 `kind: none` 的页上（原先只认 `no_ref_pages`／`page_kinds.no_ref`），两种写法同一口径。现行各书没有同时配 no_ref_params 与 none 页的，产物不变，登 code_equiv。
+- PATCH（指纹变更：seed_admit 起过期，`feedback.bindings` 在其 code_deps；CV0 2026-11-27）：绑定给无框旧人裁补锚时，字形库里同格号人裁实例的图只有在「裁决当时那版切分被换掉」之前写进库才当旁证（看切分步 manifest 历史）；之后才写进去的（回库、补放、重切刷新）是按原格号从新切分切的，与现格比等于自己比自己——史記 03 册 #17918／#17967 因此把 16／360 格旧人裁照原格号采信。另：manifest 查不到这一页时现行切分起始时间不再当 0（当作刚切）。`_VERSION` 9。code_equiv：殿本 vol28 13 页、全唐文 020 16 页逐字节相同；史記 02 25 页中 10 页不同（15 格 human→机器字，均为上述情形）。
+- PATCH（L0：`glyph_analyzer` 缺省关、尚无册跑过）：`glyph_analyzer` 的 `code_deps` 补 `clustering.sim_cnn`（`match_algo` 用它解析 `sim_model` 拼证据里的算法名），过 manager 指纹覆盖守卫 `test_code_deps_coverage`（CV0 2026-11-27，GM3 报）。
+- PATCH（`context_rank` 缺省关、尚无册跑过；指纹变更：context_rank 起过期，不随重跑；CV3 2026-11-28）：`context_rank` 抽出 `page_seq`、`neighbor_texts(match, dec)`（本页每格的左右文，读序和邻格取字规则与本步同一份），供 manager 给已发册的待审卡现算候选（`guji audit cands`）；`manager_api` 登记 `glyph_candidate_mod`、`context_rank_mod`、`ctx_fill_mod` 三个名字；本步产物不变。
+- PATCH（新步骤缺省关，现役各步 code_hash 不变；指纹变更：context_rank（新步）起过期——缺省关、尚无册跑过，不随重跑；CV3 2026-11-27，候选字线）：4 定字加 `context_rank`（候选字线所说的 4b，按上下文排序）：给 3a 未判 same 的格，把候选池（收尾 `glyph_analyzer` 的 cands，缺则 3a 候选）按「图像分＋0.005·填空语义分」重排，记进产物 `context_rank`（每格 [字, 融合分, 图像分, 填空 logp]）。填空模型 SikuRoBERTa（钉 revision，不微调），前后文取本页读序左右各 24 字、邻格字用 `context_decide` 定字或其第一候选。**只排序、不放行、不改别的步骤的产物**，`context_decide`、`seed_admit` 都不读它。依据测试集 `char-candidates`（@cands）：甲层首位 56.3%（原序）→ 76.5%、前 3 82.4%→89.0%；乙层卡片前 3 命中 80.4%（旧按钮）→ 90.7%，难格 22.7%→78.7%；伤害率（原首位已对被换掉）3.3%，难格 10.9%；邻字错 20% 增益只掉约 2 点。书配置 `context_rank.enabled`（缺省 false）。评测脚本加 `--ctx-noise`。
+- PATCH（新步骤缺省关，现役各步 code_hash 不变；指纹变更：glyph_candidate（新步）、glyph_analyzer 起过期——两者缺省关、尚无册跑过，不随重跑；CV3 2026-11-27，Sheldon 11-27 定「候选字线」由 CV3 做）：3 识字加 3c `glyph_candidate`（按图候选：字块图过 r5 向量网络，对全字表〔EmbPack 约 10.2 万字，含扩 B 以后〕取余弦前 50，**不用分类头与 RRF 融合**；再把图像前 5 名的异体族成员按自己的图像分插在前 10 之后）。书配置 `glyph_candidate.enabled`（缺省 false＝不跑）。收尾 `glyph_analyzer` 可选并入它的前 10 个，证据记 `evidence.c = {sim, fam_of?}`。依据测试集 `open-guji-dataset/char-candidates`（`guji eval run @cands`）：甲层难格首位 54.7%（3b 产线）→77.0%、前 10 87.8%→95.7%；扩 B 以后的字首位 1.5%→16.2%、前 30 80.1%→93.7%（异体族展开）。负结果：CSLS 去枢纽性校正全线更差。
+- PATCH（新步骤缺省关，现役各步 code_hash 不变；CV3 2026-11-27，Sheldon 11-26 定的第三步重构第一块）：3 识字加 3b `glyph_near`（形近字组分析：书配置 `glyph_near.groups` 里登记的字组被 3a 触发时，按组登记的方法给组内各字新分＋证据，不定字）与收尾 `glyph_analyzer`（汇总成每格 `cands`〔字＋校准后 p＋各小步证据〕与 `p_map`，第三步不判放行）。第一个方法 `cnn_small`：殿本 宫／宮／官 小 CNN（ZM 训，按册号 % 5 取留出折，`models/glyph_near_gong`，已登记模型表、传 R2；calib.json 用 7447 格留出概率保序标定）。框架：`StepSpec.enabled_by`（参数为假就跳过的可选步骤）、骨架 `finals:`（大步收尾，必须是本大步最后一步，`Pipeline.final_of`）。殿本 vol02 49 格经步骤复核与训练留出概率最大差 0.0195、0.5 两侧一致 49/49。
+
+## [0.9.12] - 2026-11-28
+
+补发（PATCH，L0）＝v0.9.11＋#1993（朱楓林集 MBJ：藏书印、墨点判非字，骑线字合一格进右列；CV2）。三个开关缺省关，对 v0.9.11 各步 code_hash 全同（row_segment、cell_shrink、seed_admit、seed_admit_params、seed_admit_lanes 按本线 v0.9.11 哈希重登 code_equiv `_MBJ_MARKS_1128`）；底库不变；配 manager 同 0.9.11；没开开关的书不过期。
+
+- `row_segment.straddle_merge`：界行断开处骑在线上的字合成一格放进右列，左列那格记空（格旗 straddle／straddle_into）；开了的册从 row_segment 起过期。
+- `cell_shrink.ink_marks`（`char_w`＝本书中位字宽）：按原图墨打格旗 ink_seal／ink_speck；见骑线旗在原图上裁整字。
+- `seed_admit.ink_marks`：印（旗或已 occluded）、墨点对位无字判非字放行；对位有字或贴字的墨点送审。
+
+## [0.9.11] - 2026-11-28
+
+补发（PATCH，L0）＝v0.9.10＋册号位数统一五件（#1970 #1976 #1977 #1980 #1987），给改名迁移中的各书（脉经、朱楓林集、北行、幼學、殿本）正式钉。对 v0.9.10 各步 code_hash 全同（row_segment 登 code_equiv `_LAYOUT_ALIAS_1128`）；底库不变；配 manager ≥0.7.0（`ops.rename_volume`／`ops.renumber`），待审路径按数值认要 ≥0.7.1；没写 `aliases` 的册行为逐位不变。
+
+- 事件读口（#1970）：`core/volume_id` 按全书册数定位数；`core/volume_alias` 按册 yaml `aliases` 读事件时把旧册名换新名，旧记录不改写。
+- 实例 id 不换（#1976）：`v1:`／`v2:` 前缀键与 `payload.instance_id` 保持原样，glyph_audit 撤库事件对得上库。
+- `status` 认改名过期（#1977）：`<产物根>/<册>/_renamed.json` 对照表把上游 sha 换回改写前，指纹对得上就算新鲜，记 `rename_only`；`run` 照旧。
+- 格位表／备选格表认旧册名（#1980）：`row_segment.load_layout` 表行 `vol` 是本册 `aliases` 里的旧名也归本册（脉经第 1 册继续用原 alt_cells 表）。
+- 新命令 `guji-cv rename-seal <册> [--keys …]`（#1987）：改名后封存只因改名改写了来源文件而变的参数指纹（如 `exclusions_fingerprint`），`status` 的 rename_only 据此认作改名；封存后再变照常过期。
+
+## [0.9.10] - 2026-11-27
+
+补发（PATCH，L0）＝v0.9.9＋#1961（汉书 WYG #18261，vline_track 淡线兜底封上界；dev 条目见上文）。对 v0.9.9 各步 code_hash 全同（border 登 code_equiv `_TRK_CLIP_1127`，dev 与本线同一条）；底库 b35 不变；各书不过期。
+
+## [0.9.9] - 2026-11-27
+
+补发（PATCH，L0）＝v0.9.8＋#1922（cherry-pick cc426f1，四周單邊版框，MBJ 要用；dev 上 #1922 条目见上文）。对 v0.9.8 各步 code_hash 全同（border、seg.lines 按本线哈希登 code_equiv `_SINGLE_SIDES_1127`）；底库 b35 不变；不需 manager 配套。
+`frame_layers` 在 border_detect 的 book_deps 里：写了左右=1 的册从 border_detect 起过期，没写的不变。
+
+## [0.9.8] - 2026-11-27
+
+补发（PATCH，L0）＝v0.9.7＋#1956（cherry-pick b42592c，朱楓林集 MBJ 要用；dev 上 #1956 条目见上文）。对 v0.9.7 各步 code_hash 全同（seed_admit 三模块按本线哈希登 code_equiv `_SEG_BOX_1127`）；底库 b35 不变；不需 manager 配套。
+重跑起点：册 yaml 写了 `chars_per_line_pages` 的从 border_detect 起过期；`seed_admit.seg_box_check` 开了的从 seed_admit 起过期；都没写的册不过期。
+
+## [0.9.7] - 2026-11-27
+
+从 dev 切（脉经 01 按用户 11-27 定用最新改动重跑）：v0.9.6 之外带上 dev 已合的 #1899、#1900（2b side_cut 缺省开）、#1911、#1914、#1918（boundary_net、layout_off_tol 缺省关）、#1919、#1920（solo_5b_scope）、#1921、#1923、#1930、#1932、#1933。
+指纹变更：对 v0.9.6，column_band、cut_gate（#1900 side_cut 缺省开）、seed_admit 起过期；不要的书写 params.column_band.side_cut: false 可免 column_band 过期。底库 b35 不变。
+
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-26，GM2 分工）：页绑定盘上缓存（`cache/<册>/bindings`）键加算法哈希 `algo`（`bindings.py`、`anchor.py`、`anchor_backfill.py` 三文件 sha256 前 16 位）：换了这三处代码的 cv，旧绑定缓存不再命中、现算。防同一工作区换 cv 版本后沿用旧版算的绑定。
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV0 2026-11-26，GM4 方案第九节定 A）：删钉垫片 `pin_removed`：`feedback.bindings.removed_pin_events` 读 `<feedback>/pins/*.state.jsonl`（manager 钉状态流 `pin_state`，每个 `pin_id` 后到覆盖先到），最后为 `removed` 的钉，其 `payload.events` 列的答案事件不进 `human_chars`、不进绑定表（`expired`／`reactivated` 不删）。没有钉状态文件时行为不变。钉状态是数据、不进指纹：写了 removed 要从 `seed_admit` 起 force 重放。cv 改读编好的钉表后去掉。
+
+## [0.9.6] - 2026-11-26
+
+补发（PATCH，L0）＝v0.9.5＋#1924（钉子护栏，CV0 11-26 批；dev 上已有 MINOR 改动，故走补发线）。指纹不变（code_equiv 登记）。配 manager ≥ v0.6.35（写钉子时记几何底 geom）。
+
+- PATCH（产物逐字节不变，code_equiv 登记，L0；CV1 2026-11-26）：`row_segment` 套整列钉子（manual-cells）前比钉子写入时记的列图几何底（manager v0.6.35 `column_basis.geom`）：一致照套；不一致经旧／新 `ColumnMapper` 把格框经原图换到新列图，角点最大位移 >3px 的列打 `manual_cells_remapped`，出口闸（row_segment_gate）记旗「待人核」。没记 geom 的老钉子照原坐标套、只在日志提示。开关登记表 outer_bar 记「直线页可能被记成三段，人钉切格的书慎开」。缘由：全唐文 031–060 outer_bar 让列图挪 10–32px，钉子照旧坐标套切偏。
 
 ## [0.9.5] - 2026-11-26
 
 补发（PATCH，用户 11-26 定「发 patch 随时用」）＝v0.9.4＋#1899（字块按页取回接口，配 manager ≥ 含 #1013 的版本）。产物与各步 code_hash 逐位不变，各书不过期。
 
 - PATCH（11-25，CV0「字块随包存 R2」第一步，产物与 23 步 code_hash 逐位不变，L0）：`RunContext.chain_fingerprint(步, 页)`＝该步及全部上游这一页 manifest 指纹的合哈希（跨机共享派生图的键）；`RunContext.materialize` 缓存不在时先问 `core.derived.PAGE_FETCHER`（只管 `char_patch`，由 manager 注册；产出它的那一步自己在跑时不问；同页只问一次；`GUJI_PATCH_FETCH=0` 关），取不到照旧现算；`ImageCache.put_bytes` 放取回的已编码图。`core/step.py`、`core/derived.py`、`products/cache.py` 不在任何 code_deps。
+
+## [0.7.115] - 2026-11-27
+
+史記线 PATCH（SJ 请，GUJI-777）＝v0.7.112＋dev #1953 移植：seed_admit 书级 `symbol_ref_blank_from`（圈号 ○ 被误判成 口囗□日四、整理本此位空、库前三含 ○ 且 cov 与首位差 ≤ 0.03 时放行为 ○；缺省空＝关，关时不进参数 dump）。**不含** v0.7.113／v0.7.114 的 #1921、#1923、boundary_net（那两版的整书重算已取消，本版直接接 v0.7.112）。
+指纹变更：只 seed_admit 代码变，钉 v0.7.112／v0.7.103 的册改钉本版后从 seed_admit 起过期；SJ 只对 17/40/41 册相关页做页级 seed_admit 回放，不整册重跑。本线 2 条老红（test_default_group_flow_has_no_codepoint_groups、test_p_ref_coord_takes_coord_ref_only_when_no_text_label）v0.7.112 上同样红，非本版。
+
+## [0.7.114] - 2026-11-26
+
+史記线 PATCH＝v0.7.113＋#1918 移植（boundary_net、layout_off_tol）。dev 已有，本节只记账。
+
+## [0.7.113] - 2026-11-26
+
+史記线 PATCH＝v0.7.112＋#1921＋#1923 移植（codepoint_no_exempt）。dev 已有这两项，本节只记账。
 
 ## [0.9.4] - 2026-11-26
 

@@ -32,6 +32,13 @@ class BookSpec:
     expected_cols: int | None = 9
     #: Step3 的正文格数先验。同上，现代链是 None（由块宽 ÷ pitch 推）。
     chars_per_line: int | None = 21
+    #: 按页每列字数（yaml 的 `chars_per_line_pages:`，2026-11-27，朱楓林集序页六行十四字、正文九行二十字）：
+    #: `{页: 本页每列格数}`，覆盖本页的 `chars_per_line`。
+    #: **一处写、各步都认**：border_detect（抬头补框）、column_geometry、column_gate、row_segment（正文与职名格网）、
+    #: row_segment_gate、cut_gate 跑点名页时 `ctx.book.chars_per_line` 就是表里的数（`core/step.CPL_PAGES_STEPS`，
+    #: 在注册处换、不改步代码）。各步自己显式写的 `chars_per_line`／`n_body_slots`／`expected_slots` 参数仍优先。
+    #: 缺省空；空时行为与指纹逐位相同（不进 `book_deps`，写了由 `engine._self_payload` 加键 `cpl_pages`）。
+    chars_per_line_pages: dict[int, int] = field(default_factory=dict)
     #: 版式大类（`keben`／`modern`）：选缺省管线（`core/pipeline.default_pipeline_id`），现代书的字形库分域
     #: `modern:<册>`。**不是**书 ID、也不是版本名——书 ID 是 `book_id`（字形库里记作 `meta.book_edition`），
     #: 导出用的版本名是 `book_edition`，本书用字账的键是 `params.seed_admit.edition`。
@@ -93,9 +100,12 @@ class BookSpec:
     # Step0 预清理：{页号: [规则, ...]}。默认空 = 不做任何处理。
     # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
     preclean: dict[int, list[dict]] = field(default_factory=dict)
-    #: 显式指定这册走哪条管线（yaml 的 `pipeline:`）。**旧写法**：2026-11-03 起写 `seg_set:` 就够了，管线由套书推
-    #: （`core/seg_set.SEG_SET_PIPELINE`）；都不写按 `edition` 选（`core/pipeline.default_pipeline_id`）。写了仍优先。
+    #: 显式指定这册走哪条管线（yaml 的 `pipeline:`）。**旧写法**：2026-11-28 起只有一条默认链 `guji_default`，
+    #: 写旧链 id（keben_body_v2／keben_free／modern_body）等于写对应的 `layout:`（`core/seg_set.LEGACY_PIPELINES`）。
     pipeline: str | None = None
+    #: 版式（yaml 的 `layout:`，2026-11-28 三链合一）：grid 有格网刻本写本／free 坊刻自由版式／print 现代排印。
+    #: 只决定默认链 1b–2b 放哪几步，不进指纹。不写按 seg_set、书仓 base、edition 推（`core/seg_set.layout_of`），缺省 grid。
+    layout: str | None = None
     #: 切分代码归哪一套书（yaml 的 `seg_set:`，`core/seg_set.py` 登记）。不写 = 按管线推。
     seg_set: str | None = None
     #: 人标的版面提示（yaml 的 `layout_hints:`，自由版式管线用）：哪页不切、分几块、每块几列。
@@ -117,17 +127,17 @@ class BookSpec:
     #: 回退只需把这个开关改回 false 重跑 `seed_admit`，不用撤库。
     iron_gate: bool = True   # 2026-10-23 sheldon 定缺省开（20 册全开）
     #: Step9-9.3 对勘的**证人**（整理本）清单（yaml 的 `references:`）。
-    #: 每项 `{file, quality: best|mid|low, label, line_is_column}`。
+    #: 每项 `{file, label, form, punct, script, accuracy, accuracy_evidence}`（四维见 `core/ref_profile.py`；
+    #: 旧键 `quality`／`line_is_column` 2026-11-28 起不再读）。
     #: 空 = 退回单证人（与 `align_ref` 同一份默认语料）。
     #:
-    #: `quality` 用于多证人不一致时**加权**，不是简单多数——三份整理本来历与
-    #: 质量分级见 overview 仓 `Step9-结果整理/05-整理本清单.md`（唯一真相源）。
-    #: `line_is_column` 标记「这份证人的一行 ＝ 我们刻本的一列」：四库光盘版
+    #: `accuracy` 定证人排序与多证人不一致时的**加权**，也定 seed_admit 的参校本信任档。
+    #: `form: column` 标记「这份证人的一行 ＝ 我们刻本的一列」：四库光盘版
     #: 实测如此（vol01 列首命中行首 94.7%、命中者列长相等 87.2%），据此可以做
     #: **独立于字符对齐**的丢格检测，见 `report/witness.py::col_verdict`。
     references: list[dict] = field(default_factory=list)
     #: 参校本属性（yaml 的 `reference_profile:`，2026-11-08，`core/ref_profile.py`）：按页段写 `kind: column|text|none`，
-    #: 段用 `ref:` 指 `references[]` 里哪一份（质量看那一份的 `quality`）。未声明 = 每页 `column`、`declared=False`，
+    #: 段用 `ref:` 指 `references[]` 里哪一份（准确度看那一份的 `accuracy`，段上可压低）。未声明 = 每页 `column`、`declared=False`，
     #: 各步行为与加这个字段之前逐位相同。**不进任何 Step 的 `book_deps`**（会让所有册指纹变），要进指纹用 `page_token`。
     reference_profile: RefProfile = field(default_factory=lambda: UNDECLARED)
     #: 书级 5b 字表（yaml 的 `rare_charset:`，2026-11-08）：Step5-b 候选字表用的语料文件（同 `references[].file` 的写法），
@@ -490,6 +500,14 @@ class BookSpec:
         except ValueError as e:
             raise BadRequest(f"页号表达式错误：{e}") from e
 
+    def chars_per_line_at(self, page: int | None) -> int | None:
+        """本页每列格数：`chars_per_line_pages` 点名的页取表里的数，其余取册级 `chars_per_line`。"""
+        if page is not None and self.chars_per_line_pages:
+            v = self.chars_per_line_pages.get(int(page))
+            if v:
+                return int(v)
+        return self.chars_per_line
+
     def __post_init__(self) -> None:
         if self.page_kinds:
             from .page_kinds import merge_into_params
@@ -500,6 +518,8 @@ class BookSpec:
             "id": self.id, "title": self.title, "raw_dir": str(self.raw_dir),
             "raw_pattern": self.raw_pattern, "expected_cols": self.expected_cols,
             "chars_per_line": self.chars_per_line, "edition": self.edition,
+            **({"chars_per_line_pages": {str(k): v for k, v in sorted(self.chars_per_line_pages.items())}}
+               if self.chars_per_line_pages else {}),
             "dev_set": list(self.dev_set), "n_pages": len(self.all_pages()),
             "sets": {k: list(v) for k, v in self.sets.items()},
             "jiazhu": dict(self.jiazhu),
@@ -523,7 +543,7 @@ class BookSpec:
             "vline_polyline": self.vline_polyline,
             "font": dict(self.font), "frame_layers": dict(self.frame_layers), "side_frame": dict(self.side_frame),
             "codepoints": dict(self.codepoints),
-            "pipeline": self.default_pipeline_id(),
+            "pipeline": self.default_pipeline_id(), "layout": self.layout_of(),
             "in_workspace": self.in_workspace(),
         }
 
@@ -546,7 +566,7 @@ class BookSpec:
 
     def default_pipeline_id(self) -> str:
         """这册书默认走哪条管线。控制台按它选后端 Step id 与状态矩阵的管线
-        （2026-09-15）：前端此前硬编码 `keben_body_v2`，现代印刷本在台上
+        （2026-09-15；2026-11-28 起返回 `guji_default@<版式>`）：前端此前硬编码 `keben_body_v2`，现代印刷本在台上
         每一步都显示「没有产物」——它的产物在 `line_detect/column_crop/
         row_segment_runs` 名下。循环导入：`core.pipeline` 反过来要 `Book`，
         所以在方法里 import。"""
@@ -554,7 +574,15 @@ class BookSpec:
             from .pipeline import default_pipeline_id
             return default_pipeline_id(self)
         except Exception:
-            return "keben_body_v2"
+            return "guji_default@grid"
+
+    def layout_of(self) -> str:
+        """这册的版式（`core/seg_set.layout_of`）。"""
+        try:
+            from .seg_set import layout_of
+            return layout_of(self)
+        except Exception:
+            return "grid"
 
 
 def _expand_pages(raw) -> list[int]:
@@ -588,6 +616,11 @@ def _expand_pages(raw) -> list[int]:
                 out.append(int(part))
     seen: set[int] = set()
     return [p for p in out if not (p in seen or seen.add(p))]
+
+
+def _load_layout(v) -> str | None:
+    from .seg_set import validate_layout
+    return validate_layout(v)
 
 
 def _load_seg_set(v):
@@ -661,6 +694,8 @@ def _load_book_params(raw) -> dict[str, dict]:
         return {}
     if not isinstance(raw, dict) or any(not isinstance(v, dict) for v in raw.values()):
         raise ValueError("书 yaml 的 params: 必须是 {step_id: {字段: 值}}")
+    from .decide_names import fold_admit_params      # 收尾步 char_decide／seed_admit 新旧键并认（P3a-1）；同时写报错
+    raw = fold_admit_params(raw)
     return {str(k): dict(v) for k, v in raw.items()}
 
 
@@ -738,6 +773,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
                        else int(d.get("expected_cols", 9))),
         chars_per_line=(None if "chars_per_line" in d and d["chars_per_line"] is None
                         else int(d.get("chars_per_line", 21))),
+        chars_per_line_pages=_load_cpl_pages(d.get("chars_per_line_pages")),
         edition=d.get("edition", "keben"),
         dev_set=[int(p) for p in d.get("dev_set", [])],
         sets={str(k): [int(p) for p in v]
@@ -754,6 +790,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         preclean=_load_preclean(d.get("preclean")),
         pipeline=(None if d.get("pipeline") is None else str(d["pipeline"])),
         seg_set=_load_seg_set(d.get("seg_set")),
+        layout=_load_layout(d.get("layout")),
         layout_hints=_load_layout_hints(d.get("layout_hints")),
         page_kinds=_page_kinds_of(d.get("params")),
         notes=d.get("notes", ""),
@@ -794,6 +831,22 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         freeze=_load_freeze(d.get("freeze"), book_id),
         gaps=load_gaps(d.get("gaps"), book_id),
     )
+
+
+def _load_cpl_pages(raw) -> dict[int, int]:
+    """`chars_per_line_pages:` → `{页: 格数}`。键可写整数或区间字符串（同 `pages:`，如 `"2-9": 14`）。"""
+    if not raw:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"chars_per_line_pages 要写成 {{页: 每列格数}}，不是 {type(raw).__name__}")
+    out: dict[int, int] = {}
+    for k, v in raw.items():
+        n = int(v)
+        if n <= 0:
+            raise ValueError(f"chars_per_line_pages[{k!r}] = {v!r}：每列格数要是正整数")
+        for pg in _expand_pages([k]):
+            out[int(pg)] = n
+    return out
 
 
 def _parse_ink(raw):

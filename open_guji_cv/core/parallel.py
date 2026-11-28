@@ -119,7 +119,7 @@ AUDITED: dict[str, ParallelAudit] = {
              "落盘都是带 pid 的临时文件 + os.replace；每页单独组批、eval 模式无随机。前置：emb 索引在 fork 前已在盘上"
              "（`RareCandidatesStep.parallel_warm` 在主进程建，缺盘时只建一次）；跑批期间不改字形库、checkpoint、fonts、册 yaml。"
              "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 23.5 s，单进程 1.06 GB（2026-10-20）。"),
-    "seed_admit": ParallelAudit(
+    "char_decide": ParallelAudit(   # 原 seed_admit（2026-11-28 改名）
         mem_gb=2.0, warm_first=True,
         note="审查（2026-10-20）：run_page 不写事件／台账／人裁，只读；模块级缓存都按输入键记忆。"
              "修掉的：font_candidates._row_norms 按 id 缓存拿错矩阵（串行也随页序变）；图块缓存、"

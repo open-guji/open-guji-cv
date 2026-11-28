@@ -618,7 +618,138 @@ _EVENT_LEVEL_1126 = ("feedback/events.py 分事件级别（CV0 2026-11-26，GM4 
                      "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。史記 104/106 首跑曾异：绑定表 fp_diff 随字块缓存先后变，"
                      "同一份旧代码重跑也给出同样结果，非本改动所致，复跑逐字节同。")
 
+_BIND_CACHE_ALGO_1126 = ("feedback/bindings.py 页绑定盘上缓存键加算法哈希（bindings/anchor/anchor_backfill 三文件 sha256 前 16 位），"
+                         "改算法后旧缓存不再命中；只影响缓存命中，不改绑定结果（GM2／CV0 2026-11-26）。"
+                         "seed_admit 在史記 02 25 页、殿本 vol28 13 页、全唐文 020 16 页上与 origin/dev 产物逐字节相同"
+                         "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。")
+_PIN_REMOVED_1126 = ("feedback/bindings.py 加删钉垫片 removed_pin_events（读 <feedback>/pins/*.state.jsonl，最后为 removed 的钉所列答案事件不进 "
+                     "human_chars／绑定表；GM4 方案第九节，CV0 2026-11-26），lookup.py 两处读者接上。没有钉状态文件时为空集，行为不变。"
+                     "seed_admit 在史記 02 25 页、殿本 vol28 13 页、全唐文 020 16 页上与 origin/dev 产物逐字节相同"
+                     "（scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn）。")
+_PIN_GEOM_1126 = ("row_segment 套整列钉子前按钉子记的列图几何底（manager column_basis.geom）换算（CV1 2026-11-26，CV0 批的钉子护栏）："
+                  "没记 geom 的钉子（现有全部）照原坐标套、只写 stderr；几何一致照套。row_segment 在殿本 vol01 10 页"
+                  "（30,32,48,88,89,105,117,129,179,182，其中 9 页带钉子）、全唐文 053 12 页（28,74,76,77,83,84,89,90,94,95,97,116，全带钉子）"
+                  "与 origin/dev 7c5b894 产物逐字节相同；row_segment_gate 只在列旗有 manual_cells_remapped 时多记一条旗，"
+                  "cell_shrink→cut_gate 在 053 同 12 页逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
+_SOLO5B_SCOPE_1126 = ("seed_admit 加 solo_5b_scope 参数（any|no_ref，缺省 any 不进 dump、不改行为；CV0 2026-11-26，Sheldon 定）。"
+                      "缺省下 border_detect→seed_admit 整册与 dev 7c5b894 逐格相同：全唐文 030 194 页 30,205 格（任务库 #17835 对 #17836）、"
+                      "殿本 vol28 192 页 28,815 格（#17838 对 #17839），cells/text/state/geom 全不变，GUJI_CORPUS_DRIFT=warn。"
+                      "登记哈希按合入时的 origin/dev 重算（改动同一处）。")
+
+_PIN_LEVELS_1127 = ("feedback/lookup.py human_chars 加开关 GUJI_PIN_LEVELS（GM4 2026-11-27，用户定「人裁>AI>pipeline」）：开时同一格已有人裁字，"
+                    "之后写的 AI 钉不覆盖（payload.override_human=true 例外）；缺省关，关时多出的只是 lv_of 记账，out 的写入与原先逐位相同，"
+                    "按构造逐字节不变（tests/test_pin_removed.py::test_levels_human_over_later_ai 两种状态都验）。"
+                    "未在真册上跑 scripts/code_equiv.py check（GM4 容器无册数据），合入前请有数据的机器补一次。")
+
+_PIN_GEOM_096 = ("row_segment 套整列钉子前按钉子记的列图几何底（manager column_basis.geom）换算（CV1 2026-11-26，CV0 批的钉子护栏，"
+                 "v0.9.6 补发线＝v0.9.5＋#1924）：没记 geom 的钉子（现有全部）照原坐标套、只写 stderr；几何一致照套。"
+                 "row_segment 在殿本 vol01 10 页（30,32,48,88,89,105,117,129,179,182，其中 9 页带钉子）、全唐文 053 12 页"
+                 "（28,74,76,77,83,84,89,90,94,95,97,116，全带钉子）与 origin/main 04c7e75（v0.9.5）产物逐字节相同；"
+                 "cell_shrink→cut_gate 在 053 同 12 页逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
+
+_CUTGATE_REMAP_1126 = ("cut_gate（刻本链出口闸）也认 row_segment 列旗 manual_cells_remapped，只记旗不拦，口径同 row_segment_gate"
+                       "（CV1 2026-11-26，CV0 定）。现有产物没有列带这个旗，按构造逐字节同：cell_shrink→cut_gate 在殿本 vol01 10 页"
+                       "（30,32,48,88,89,105,117,129,179,182）、全唐文 053 12 页（28,74,76,77,83,84,89,90,94,95,97,116）与 origin/dev 产物"
+                       "逐字节相同（scripts/code_equiv.py check）。2026-11-26 CV1")
+
+_SINGLE_SIDES_1127 = ("版面 frame_layers 左右=1（四周單邊，朱楓林集）：该侧跳过 refit_outer_by_bar、find_vertical_lines 加 no_snap（缺省空）、"
+                      "detect_outer_borders 不量竖直外框；没写左右的册走原路径。scripts/code_equiv.py check 对 dev 7c5b894 逐字节相同，"
+                      "border_detect、border_detect_gate（随 border_detect）、column_warp、column_end 四步：殿本 vol01 8 页（1,8,30,40,100,132,149,188）、"
+                      "全唐文 053 8 页（1,2,3,20,50,80,120,150）、脈經 01 6 页（1,4,20,40,47,60）、史記文淵閣 05 8 页（1,3,8,28,58,73,90,94），"
+                      "共 4 册 30 页 ×4 步全同；另 79 页金标原图 detect_borders JSON sha256 逐页相同；中心库 402 个册配置无册写 frame_layers 左右；"
+                      "2026-11-27（CV1，cv #1922，CV0 审口径）")
+
+
+_NOREF_UNIFY_1127 = ("seed_admit.no_ref_params 也认 reference_profile none 页（no_ref_page_params 改用 _no_ref_page；CV0 2026-11-27，参校本 bug）。"
+                     "中心库现行只有脉经配 no_ref_params，脉经没有 profile none 页，其余书 no_ref_params 空即原样返回。"
+                     "脉经 01 border_detect→seed_admit 整册（任务库 #18053 dev 7e46ae7 对 #18054 分支，两台执行机）68 页 11,361 格："
+                     "text/state/geom 全不变，只 1 列切分不同（上游 row_segment 跨机差异，两边上游代码相同），该列 1 格送审→放行，其余 seed_admit 逐格同。"
+                     "GUJI_CORPUS_DRIFT=warn；哈希按合入时 origin/dev 重算。")
+
+_REF_ACC_1127 = ("seed_admit 新开关 trust_from_accuracy（缺省关；CV0 2026-11-27，参校本四维＋准确度分档）：关时 book_params 与 accuracy_page_params "
+                  "原样返回同一对象，_follow_variants 只在 ref_variants_off（逐页派生，缺省 False）时变；三个新键关时都由 _DUMP_DROP 去掉，"
+                  "参数 dump 与 params_hash 不变（tests/test_ref_accuracy.py::test_switch_off_unchanged）。ref_profile 只加读法与校验，不在 code_deps。"
+                  "哈希按合入时 origin/dev 重算。")
+
+_NONE_COLS_1128 = ("reference_profile 列级无参照段 cols（CV0 2026-11-28，脉经第 2 册缺文小注）：align_ref.run_page 只在本页声明了 cols 时"
+                   "（_none_cols 非空）去掉这些列的对位并写 PageAlignRef.none_cols；没声明的页原样返回、none_cols 空不落盘，"
+                   "page_token 只在声明页加 |nc:…（tests/test_ref_none_cols.py、test_ref_profile_steps.py）。中心库现无册写 cols。"
+                   "哈希按合入时 origin/dev 重算。")
+
+_DASH_ROW_1127 = ("cell_shrink 新开关 end_dash_row（缺省关，extractor.strip_dash_row 只在开时调；关时 grid 不带键、参数 dump 不变）："
+                  "史記 42 册 32 页（cut-bench，--pages 2,3,14,17,18,25,27,34,38,40,43,46,54,55,59,66,69,70,78,79,81,82,93,96,98,99,100,102,106,114,117,135）、"
+                  "全唐文 053 册 29 页（2,4,12,18,28,45,49,63,75,76,77,81,83,87,89,92,94,95,98,99,104,116,118,128,140,146,148,154,159）"
+                  "cell_shrink 与 origin/dev f48a746 产物逐字节相同；scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn，2026-11-27（CV2）")
+
+
+_LEGACY_BAND_1127 = ("旧产物包重放（CV4 算法待办 #13）：column_end 读不到 2b column_bands 且 column_windows 带拆步前的 band 时，"
+                     "经 column_band.legacy_strip 按拆步前 clean_column 前半在内存里现算（不带 side_cut、不写包、不进缓存）；"
+                     "有 column_bands 的正常流程只多一次 has_product 判断。正常流程：全唐文 053 新包（cv0.9.4-…-qtw053-ms6-a2）20 页"
+                     "（2,4,12,18,28,45,49,63,75,76,77,81,83,87,89,92,94,95,98,99）column_band、column_end 与 origin/dev 43d439d 产物逐字节相同"
+                     "（scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn）。旧包重放：史記 42 main 包（cv0.7.112-…-k27）12 页 96 列图＋2496 字块"
+                     "与 v0.7.112 现算逐像素同；全唐文 020 main 包（cv0.7.104-…-k11，inner_bar_span）12 页 108 列图＋2064 字块与 v0.7.104 同。2026-11-27（CV2）")
+
+
+_SEG_BOX_1127 = ('seed_admit 字框几何闸 seg_box_check（CV2，缺省空、不进参数 dump；空时 _seg_box_pass 不调，seed_admit_lanes 只多常量与新函数 seg_box_defects／_seg_box_pass）：朱楓林集 01 册 6 页（3,10,25,50,86,104，rev-001-r0 包 cv0.9.6 当上游）seed_admit 与 origin/dev fde00a0 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-27（CV2，MBJ 碎格放行成「一」）')
+
+
+_LAYOUT_ALIAS_1128 = ("row_segment.load_layout 认册 yaml 的 aliases（CV0 2026-11-28，册号位数统一：脉经 01→1 后备选格表 vol \"01\" 行仍归第 1 册，殿本 vol01 格位表同）："
+                      "没写 aliases 的册 names＝{本册名}，`r.get('vol') in names` 与原 `== book` 逐行同真，缓存键只多一段同值元组，"
+                      "表行集合与原来逐项相同，产物逐字节不变；目前没有任何册写 aliases（改名迁移从 11-28 脉经起）。"
+                      "单测 tests/test_dzg_layout.py::test_load_layout_reads_old_volume_name_via_aliases（无 aliases／读不到册配置都只认本名）。"
+                      "哈希按合入时 origin/dev 重算。")
+
+_PAGEMAP_ALIAS_1128 = ("row_segment_pagemap／utils.daizhige 认册 yaml 的 aliases（CV0 2026-11-28，殿本改名演练：corpus 钉位表、改格表、daizhige 表仍写 vol01）："
+                       "_book_lines／_pin_lines／_corpus_lines 过滤由 `== book` 改为 `in names_for(book)`，没写 aliases 时 names＝{本册名}，逐行同真；"
+                       "apply_overrides 新增 as_vol，调用处传本册名——没 aliases 时覆盖行已按本册过滤、o['vol'] 恒等于本册名，键与补行逐字段相同；"
+                       "指纹里哈希的 _book_lines 行仍是表里原样的行，不变。产物逐字节不变；目前只有改了名的册写 aliases。"
+                       "单测 tests/test_volume_alias.py::test_names_for、test_pagemap_overrides_old_name_land_on_current_book。哈希按合入时 origin/dev 重算。")
+
+_TRK_CLIP_1127 = ("vline_track 淡线兜底 _trk_gray_line 取行号只封上界（np.minimum(…, h-1)）：原先行号 ≥ 页高必抛 IndexError、该页失败，"
+                  "没抛错的页行号都 < 页高，min 是恒等，产物逐字节同（负行号照旧）。汉书 26 册 13 页（1,2,3,4,6,20,50,80,110,140,165,175 对 v0.9.9 border_detect 逐字节同；"
+                  "p5 原 120px 窄条由报错改为跑通）；单测 test_gray_fallback_page_shorter_than_frame。2026-11-27（CV0，WYG #18261）")
+
+
+_MBJ_MARKS_1128 = ("切字：朱楓林集藏书印／墨点格旗 cell_shrink.ink_marks、骑线字合一格 row_segment.straddle_merge（cell_shrink 见骑线格旗才走，旗只在开了的书上有）、"
+                   "seed_admit.ink_marks（三处缺省 None／关、不进参数 dump）：朱楓林集 01 册 8 页（9,25,37,50,53,77,86,104：序末印、目錄墨点、卷端骑线字、正文；"
+                   "本机关开关重跑产物当上游）row_segment、cell_shrink、seed_admit 与 origin/dev 54d4663 产物逐字节相同；scripts/code_equiv.py check，"
+                   "GUJI_CORPUS_DRIFT=warn，2026-11-28（CV2，MBJ 印章墨点骑线字）")
+
+
 ENTRIES: tuple[Equiv, ...] = (
+    Equiv(module="open_guji_cv.steps.column_end",
+          new="5ff011688402af99e9afecfe4bb381016b1c892805a7b93f5de3c80d59d9af33",
+          old="52cc8c91c4dde6974a4983fc034368ff9fc95a6d3cabec344f18366b4c263522",
+          evidence=_LEGACY_BAND_1127),
+    Equiv(module="open_guji_cv.steps.column_band",
+          new="f4771c07d631207bbde36ca444e5e29afe6246440354416198c33387d4266ba1",
+          old="dd6c40980a9be9078ee3592d323b12f878d7e1a3d367259950ff8fbd3b886043",
+          evidence=_LEGACY_BAND_1127),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="bf5f8a8a1722c32dead433b707813368d99ceb8980b582b92ec26a5bd802043d",
+          old="d7914794283cc70fa547e6dc003a410dda62e962684123b63eccfcce169d975c",
+          evidence=_DASH_ROW_1127),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="61d9212188fe065ac2aabb018237338420f3895095092aed2f6dbfe00f6056dc",
+          old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
+          evidence=_DASH_ROW_1127),
+    Equiv(module="open_guji_cv.gates.cut_gate",
+          new="925a3ee71711731992ffa1a26abe8f1444c23cf679f84ced22508507aa578938",
+          old="f91957b70ddd5e767f5361d6f1c0fb33ffe433f9c3e92a03ffbd447df3404065",
+          evidence=_CUTGATE_REMAP_1126),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="cf886dc57c42f8be18f36935ae07dabe11b8dd48b6a322316479873aa4679111",
+          old="27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee",
+          evidence=_PIN_GEOM_096),
+    # row_segment_gate 补发线与 dev 同一哈希，已由 _PIN_GEOM_1126 那条登记
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="f4812f0b455a1f3cfb40fe24a6a844d5c7ddbf9b5708842ad327c3a2a1baa690",
+          old="27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee",
+          evidence=_PIN_GEOM_1126),
+    Equiv(module="open_guji_cv.gates.row_segment_gate",
+          new="ec5c8b2501b409c620dd1890a16ea13adf9761551b0c1fbdc143f0c860e72bd3",
+          old="60b2f74610de83d13c681021d618b1e0523e35e93cd48675bfad1dbce1813ce8",
+          evidence=_PIN_GEOM_1126),
     Equiv(module="open_guji_cv.steps.border_detect",
           new="49cd0268f8136c2778937cb96c9068380ec9b89059695ce23b3db13370fe1904",
           old="3ae398ba0cfb5484d4e08e9be95bba628765633346bc784eaeb92bce984d3b78",
@@ -2704,6 +2835,227 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence='row_segment 在史記 42 册 cut-bench 40 页（--pages 2,3,7,14,17,18,25,27,33,34,38,40,43,46,54,55,59,64,66,69,70,73,78,79,81,82,'
                    '93,94,96,98,99,100,102,106,114,116,117,120,135,137）上与 origin/dev 3698522 产物逐字节相同（两开关关）；'
                    '新 code_dep impl.keben.boundary_net 经 SPLITS 合回 seg_overrides；scripts/code_equiv.py check，GUJI_CODE_DRIFT=warn，2026-11-26（CV2）'),
+    Equiv(module="open_guji_cv.feedback.lookup",
+          new="d9003659b953296b8ecb06a7f4947c6aeb4253fc4c98298b15565cd015432c3e",
+          old="f92a02c93d76432954d1e021802af8faa4f900855e1de867ba3fd7b7613c9de2",
+          evidence=_PIN_REMOVED_1126),
+    Equiv(module="open_guji_cv.feedback.bindings",
+          new="91f0bfe636d6749888609af6a60e1cb4bfd8b976678afd0d65d2182b8445496d",
+          old="ddf0c55cd63fe58202633d1e664647a5435749994140cf6c4e744358275cceee",
+          evidence=_PIN_REMOVED_1126),
+    Equiv(module="open_guji_cv.feedback.bindings",
+          new="2249d6f8568e0bd1b60d70ecc5922080002444baf834703f2bd6da5573c897be",
+          old="ddf0c55cd63fe58202633d1e664647a5435749994140cf6c4e744358275cceee",
+          evidence=_BIND_CACHE_ALGO_1126),
+    # seed_admit solo_5b_scope（无参照放行收窄，缺省 any 不变；CV0 11-26，#1920）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="861f2eb9818bcbd7643164eb32921feb05a27a5801e97823003794331c08c878",
+          old="c487fdb201dae03c2adbc8e352c0fa66be368b2a4c5ba0ba2db89cad72400633",
+          evidence=_SOLO5B_SCOPE_1126),
+    Equiv(module="open_guji_cv.steps.seed_admit_lanes",
+          new="edbe250857b9aedf78278c6dd78c00f34c92fe711591293980f9ea70d419139c",
+          old="d372c3a9245e947aeb235335460dc5f193eef77371b1050c5af5ea3472041baa",
+          evidence=_SOLO5B_SCOPE_1126),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97",
+          old="d9af94abb75fb9557ab425514532c9506ac1274ae3ceb0c47c50ce78b817c9c6",
+          evidence=_SOLO5B_SCOPE_1126),
+    Equiv(module="open_guji_cv.feedback.lookup",
+          new="d1dfd6a8914551a335843194bf71258bfd80e8f5a4381f38f0500296d6629a20",
+          old="f92a02c93d76432954d1e021802af8faa4f900855e1de867ba3fd7b7613c9de2",
+          evidence=_PIN_LEVELS_1127),
+    # 四周單邊：frame_layers 左右=1（CV1 11-27，cv #1922）
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='9d2e7a4bd695f98fbc8941e1a25174273081ae059f09a23da082284fb33c0c48',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_SINGLE_SIDES_1127),
+    Equiv(module='open_guji_cv.seg.lines',
+          new='4aaaa5b2df2c51a5a3b02eb4c268834f15dd8c9cdc4d1ef8d9d1df21a3ad3f72',
+          old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
+          evidence=_SINGLE_SIDES_1127),
+    # no_ref_params 也认 reference_profile none 页（CV0 11-27，#1943）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="b95f18d4a1d742afafc71664256d243255a08ff9efcdab03ccfdf78c690ffbf6",
+          old="861f2eb9818bcbd7643164eb32921feb05a27a5801e97823003794331c08c878",
+          evidence=_NOREF_UNIFY_1127),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="dcfb3042cc0706190cf659355b14e8de16e63f28f6163282b2b5fb85cd8e4634",
+          old="7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97",
+          evidence=_NOREF_UNIFY_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='40700ebd73f8c72fc7ed2842606345bb30fed8ee5c7bc884b623dc3bef0f98ca',
+          old='4c1df66c210c3ccef9acb3e7b1fab4491a3bbfe02a77adcc5e039b6ee7ca92e8',
+          evidence=_SEG_BOX_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit_params',
+          new='21dac7395856fdfb4777801d1973a37e1a3c5c905b15b2e20f2fd71ba009f610',
+          old='5f8dd48c565d4f7660a9d464c2aabcb59181767362c140e9c1823d74c6579a49',
+          evidence=_SEG_BOX_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit_lanes',
+          new='7327c59b4abbbced958a46c98bcfd8db75c16d7379b4ae5e4bf8f83a536f1fc5',
+          old='98fdf5949dc19daa7d1e913c39e02a2d6a9f5fc3683d8d9586957b882317aac0',
+          evidence=_SEG_BOX_1127),
+    # v0.9.8 patch 线（v0.9.7＋#1956）本线哈希，CV0 2026-11-27
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='bb399d901451c923a4d5c094d82275904cfc835d8739e89a4245d80e55056739',
+          old='861f2eb9818bcbd7643164eb32921feb05a27a5801e97823003794331c08c878',
+          evidence=_SEG_BOX_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit_params',
+          new='a983e51c2790877a16253d180a7f45afcdf402b0c2d832a1d393a7203c7f1236',
+          old='7b4bf3c5ae2d4e6cfafedf82e4cce49a3e3c6db3faeb89c0209ba12e3405da97',
+          evidence=_SEG_BOX_1127),
+    Equiv(module='open_guji_cv.steps.seed_admit_lanes',
+          new='5af58a0512ba501d499d21c67aeabb225f19d1e4b2a242bcb51afc6b7f7e34c0',
+          old='edbe250857b9aedf78278c6dd78c00f34c92fe711591293980f9ea70d419139c',
+          evidence=_SEG_BOX_1127),
+    # vline_track 淡线兜底封上界（CV0 11-27，汉书 26 p5）
+    Equiv(module='open_guji_cv.impl.keben.border',
+          new='064dc3aa396b925df392691ca745a40a59d3c1ca3ba519e0d6b3e260cc560098',
+          old='9d2e7a4bd695f98fbc8941e1a25174273081ae059f09a23da082284fb33c0c48',
+          evidence=_TRK_CLIP_1127),
+    # 参校本准确度分档 trust_from_accuracy（缺省关，CV0 11-27）
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="051f9ed901ddff23f089c634f94f315c96cf117b84af634ed1b6c80ff721c75a",
+          old="40700ebd73f8c72fc7ed2842606345bb30fed8ee5c7bc884b623dc3bef0f98ca",
+          evidence=_REF_ACC_1127),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="81f54a4eb44c0617d592e1e1c4656e7204e6d6461c15845c9d31bdac3065632a",
+          old="21dac7395856fdfb4777801d1973a37e1a3c5c905b15b2e20f2fd71ba009f610",
+          evidence=_REF_ACC_1127),
+    # 格位表／备选格表认册旧名 aliases（CV0 11-28，册号位数统一）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="f824d42d1404c02ed897097ee1388709b508ce820bddda3bad8df4a2f012c984",
+          old="f4812f0b455a1f3cfb40fe24a6a844d5c7ddbf9b5708842ad327c3a2a1baa690",
+          evidence=_LAYOUT_ALIAS_1128),
+    # 钉位表／改格表／daizhige 表认册旧名 aliases（CV0 11-28，册号位数统一）
+    Equiv(module="open_guji_cv.steps.row_segment_pagemap",
+          new="c6b35d48094df0e01a4eb6c6e99523c39823591a36a987909f1952e8c573645a",
+          old="a71017d111945b477cb9f65b464ea8e277b998a552688559ed7c96a182ef228a",
+          evidence=_PAGEMAP_ALIAS_1128),
+    Equiv(module="open_guji_cv.utils.daizhige",
+          new="2071cbefb24aa5fdc3cedeee17f8bc77b8d3f036150ca1aa35af6cf84614a483",
+          old="1c41134dcc1add33b4e65c712fd75226b2cf2c7ffc33ff64a817006f4b8320d1",
+          evidence=_PAGEMAP_ALIAS_1128),
+    # 朱楓林集印章／墨点／骑线字（CV2 11-28，缺省关）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="b9d758dcd7fefa8d0fa48ff18a865e0671b45c6b74b597bdcba1d7fe24a56a52",
+          old="27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee",
+          evidence=_MBJ_MARKS_1128),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="b371efa2475cbb64d95bb988e7eb877550ef2703feec593c6cf50bffddfddb7b",
+          old="d7914794283cc70fa547e6dc003a410dda62e962684123b63eccfcce169d975c",
+          evidence=_MBJ_MARKS_1128),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="0bbcee8c0691132b1f6b12e028ed6fae9c4df09c90ea634573e6b6af8ac651fd",
+          old="4c1df66c210c3ccef9acb3e7b1fab4491a3bbfe02a77adcc5e039b6ee7ca92e8",
+          evidence=_MBJ_MARKS_1128),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="5936c1774bfa255e88a5b13a54ff146cb585a93731dddae68d35192bb8bc65d7",
+          old="5f8dd48c565d4f7660a9d464c2aabcb59181767362c140e9c1823d74c6579a49",
+          evidence=_MBJ_MARKS_1128),
+    Equiv(module="open_guji_cv.steps.seed_admit_lanes",
+          new="2741e0048a40bba40cefdac9bebf011fcad3a020baeb9c2c454f96c5aa49615e",
+          old="98fdf5949dc19daa7d1e913c39e02a2d6a9f5fc3683d8d9586957b882317aac0",
+          evidence=_MBJ_MARKS_1128),
+    # reference_profile 列级无参照 cols（CV0 11-28）
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="1208d13d6d057505ed9a3ec385895367f6f7fa9ae4a0b5fed72a5013021487c8",
+          old="66b4b39a9704d4d6fd516910d7b7ed9493393287cfb4b2a394e9f4121ba6ab2e",
+          evidence=_NONE_COLS_1128),
+    # 全唐文开竖线跟踪后切字适配：row_segment 加 frame_edge_near、layout_off_always（缺省关）；frame_only_edge_cells 加 near_frac（CV2 11-28）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='1c455cf504c6486727bf1d7f2d1406a9f9b86d356e9380ca7872bd5c54fcd10c',
+          old='27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee',
+          evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；全唐文开竖线跟踪后切字适配（CV2 11-28）：row_segment 加 frame_edge_near、layout_off_always，seg.profile.frame_only_edge_cells 加 near_frac，缺省同旧'),
+    Equiv(module='open_guji_cv.seg.profile',
+          new='fab536ffa8ffa50bb39ea02edcffca32da3fbb59b162d86c422f9e0e6094ff79',
+          old='cf88eafeacd8a4c224239bc9e7b0e2ec5332319e5022fff13809245cd3ea2f50',
+          evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；全唐文开竖线跟踪后切字适配（CV2 11-28）：row_segment 加 frame_edge_near、layout_off_always，seg.profile.frame_only_edge_cells 加 near_frac，缺省同旧'),
+    # 第三步 3e glyph_vis（看图大模型，缺省关；CV3 11-28）：收尾 glyph_analyzer 可选读 glyph_vis，merge_cell 加 vis_rec 参数（缺省 None），
+    # FinalRec.vis 空不落盘、evidence.v 只在 3e 答出字时写——没开 3e 的书收尾产物逐字节不变
+    Equiv(module='open_guji_cv.steps.glyph_analyzer',
+          new='cc8e25d0ff6f542f8a668ffb7e39ae3ed2fe482883746c33ed345f20c456a608',
+          old='8203244471cd01071011fb7721b62a74d9f6ca23b25e9fb07e5497e8fef3bca1',
+          evidence='glyph_analyzer 在 vtest 3 页（--pages 1,2,3）上与 origin/dev 5910584e 产物逐字节相同；自造册 vtest（3 页×8 列×21 格含夹注半格，'
+                   '3a same/unsure/diff、3b 两组随机触发、3c、3d 都有，没有真书收尾产物可比），glyph_vis 没开；另 tests/test_glyph_vis.py '
+                   '冻结了 origin/dev 的 merge_cell 输出逐字节对照；scripts/code_equiv.py check，2026-11-28（CV3）'),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="4233b461ffe35a95c22dff68725bfd34314e0e95bd7dcd2db314103c9a75c069",
+          old="26e0d0559cf43efe22b98974c931d3b6c1c84f36956b77b593eb97e2b3733e9f",
+          evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 c32c0ed 产物逐字节相同；#1999（4d 读 3b 看图判法，group_flow_near_from_3b 缺省空＝关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="35d1414f025d67d4f7d8bad4f761ab5d28eeb1e1669a186e84f509d80f59b764",
+          old="5f8dd48c565d4f7660a9d464c2aabcb59181767362c140e9c1823d74c6579a49",
+          evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 c32c0ed 产物逐字节相同；#1999（4d 读 3b 看图判法，group_flow_near_from_3b 缺省空＝关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_shapes",
+          new="842046b514531070e360e798f85a8fc534bfb84b6ab445a156029eefb64d58d0",
+          old="ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77",
+          evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 c32c0ed 产物逐字节相同；#1999（4d 读 3b 看图判法，group_flow_near_from_3b 缺省空＝关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_shapes",
+          new="88b64132ad232206b5c940aad8ee9f86c0b6402ed63d2cbb01084360e10e4ec2",
+          old="ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77",
+          evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 2aae3bd 产物逐字节相同；#2027（4d 接 3b：stroke_veto 读口，缺省关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="79ec58530ac544cca0de43750dba5235a5854562a9050a5d3a232156a894349d",
+          old="9c18b9ebec3a2d0bc8ac0ebb5fa9a354bf5767b7d79d34285966ab402698ed5d",
+          evidence="seed_admit 在史記 03 small 231 页（--pages 1-231）上与基线产物逐字节相同：①关 group_decision——code_equiv check --base 2aae3bd --step seed_admit 对 #2029 头 3e9d74d，231 页逐字节相同（CV4 P3c 核对由「把格况判断拆成独立步骤」线程在其环境代跑，2026-11-28）；②开 group_decision（产物在、收尾读它）——231 页与基线逐页 JSON 0 页不同、翻转 0 格、wrong_admit=0。改动＝4d group_decision 原料独立成步：seed_admit_groups 抽出 _flow_config／_entry_config、seed_admit_shapes 两个 3b 读口加 use_gd 先读 4d 快照、seed_admit 的 fold 宽高先读 4d 产物，缺省关、关着逐字节不变。局限：史記 03 没配 glyph_near／3b，entry 与 near 读口没被走到；之后 rebase 到 dev b9c5a79／2fac591／6b427ca，改动内容同、哈希重算，stroke_veto 快照一路另有单元测试。"),
+    Equiv(module="open_guji_cv.steps.seed_admit_groups",
+          new="8e8e52ecde880d733e395b62aa3dc59b56c67ed749ae2d296dac69a8f10fa546",
+          old="1b9b64cd665c26ae764e2d03cc2422681ac56aa4a4a7120b07e2181347555510",
+          evidence="seed_admit 在史記 03 small 231 页（--pages 1-231）上与基线产物逐字节相同：①关 group_decision——code_equiv check --base 2aae3bd --step seed_admit 对 #2029 头 3e9d74d，231 页逐字节相同（CV4 P3c 核对由「把格况判断拆成独立步骤」线程在其环境代跑，2026-11-28）；②开 group_decision（产物在、收尾读它）——231 页与基线逐页 JSON 0 页不同、翻转 0 格、wrong_admit=0。改动＝4d group_decision 原料独立成步：seed_admit_groups 抽出 _flow_config／_entry_config、seed_admit_shapes 两个 3b 读口加 use_gd 先读 4d 快照、seed_admit 的 fold 宽高先读 4d 产物，缺省关、关着逐字节不变。局限：史記 03 没配 glyph_near／3b，entry 与 near 读口没被走到；之后 rebase 到 dev b9c5a79／2fac591／6b427ca，改动内容同、哈希重算，stroke_veto 快照一路另有单元测试。"),
+    Equiv(module="open_guji_cv.steps.seed_admit_shapes",
+          new="1c91dba82860bf2d86269f145ceeb12855cd475fd24a0c2e9b84d66c7c3e16e2",
+          old="ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77",
+          evidence="seed_admit 在史記 03 small 231 页（--pages 1-231）上与基线产物逐字节相同：①关 group_decision——code_equiv check --base 2aae3bd --step seed_admit 对 #2029 头 3e9d74d，231 页逐字节相同（CV4 P3c 核对由「把格况判断拆成独立步骤」线程在其环境代跑，2026-11-28）；②开 group_decision（产物在、收尾读它）——231 页与基线逐页 JSON 0 页不同、翻转 0 格、wrong_admit=0。改动＝4d group_decision 原料独立成步：seed_admit_groups 抽出 _flow_config／_entry_config、seed_admit_shapes 两个 3b 读口加 use_gd 先读 4d 快照、seed_admit 的 fold 宽高先读 4d 产物，缺省关、关着逐字节不变。局限：史記 03 没配 glyph_near／3b，entry 与 near 读口没被走到；之后 rebase 到 dev b9c5a79／2fac591／6b427ca，改动内容同、哈希重算，stroke_veto 快照一路另有单元测试。"),
+    # CV2 11-28：全唐文 053 75:3 夹注少一格，row_segment 加 jiazhu_edge_trim（缺省关）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='f235472064121bdcc7a34e6d92d10ccef4c7fbe3d60d1c1b00babd10f2bd0498',
+          old='27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee',
+          evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；053 75:3 开竖线后夹注少一格（CV2 11-28）：row_segment 加书级参数 jiazhu_edge_trim（单格夹注判据落空时去上下边再量），缺省 0＝同旧'),
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='10ea5301bf4ab201bdf1d855e7146443c0752b32bdfbe59b61c793aa027b8d9b',
+          old='ff1538485290289410fc7a706eb3d8b861b7fb21b9d1d172703d63650505e8e6',
+          evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；053 75:3 开竖线后夹注少一格（CV2 11-28）：row_segment 加书级参数 jiazhu_edge_trim（单格夹注判据落空时去上下边再量），缺省 0＝同旧'),
+    # 结构拆分 A4（CV3 11-28）：glyph_stages._code_sha 改查等价登记（合算键 composite:…，见 glyph_stages.composite_key），
+    # 改的就是 glyph_stages 自己，开 stages 的书 stages_sha 代码段随之变；只改指纹算法、空表时取值公式不变，
+    # 不碰任何判定路径，产物逐字节不变按构造成立。登记行由 scripts/code_equiv.py composite --base origin/dev（1afa3a39）出
+    Equiv(module='composite:open_guji_cv.steps.glyph_stages+open_guji_cv.clustering.near_route+open_guji_cv.groups.shape_stage+open_guji_cv.groups.methods+open_guji_cv.groups.ids_online+open_guji_cv.groups.registry',
+          new='5bc2d9c99198363cc16f9c3a3e499c4bee07b695208f46a04685c3ddef7c9e88',
+          old='fbced2adde554dc77ac3bbbf4b481b7a79356a0d2f5a9b1eaa4a8fcdaabf2746',
+          evidence="glyph_stages._code_sha 加 canonical(composite_key) 换算、模块表提成常量 STAGES_CODE_MODS／PAIR_CODE_MODS（次序不变），"
+                   "只改 stages_sha 的算法、不碰任何判定路径，产物逐字节不变按构造成立；对 origin/dev 1afa3a39，2026-11-28（CV3，结构拆分 A4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="4aa0dee4383fe880e76ca1cb8f78fe77b2f288e9d0045d75ebffcbfa497333c2",
+          old="b229b492cedfbc0c009dd7297002718f839ed9dda5d5ee4f37dd7a7c705a91cb",
+          evidence="char_decide 在殿本 vol01 3 页（--pages 1,2,3；冻结快照第三步产物＋本机重跑 3b／3e，glyph_vis 25 格 pending）上与 origin/dev daf144f 产物逐字节相同；vis3 影子读口缺省关（seed_admit.vis3_shadow）；scripts/code_equiv.py check，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="50f75f21c3eef6f208ab3f822f19e56cb4a54b45f2279c48158166a5b93edafa",
+          old="d67115b2d285056d99853842d0eb6227760c2388854ff35dd281394a3b210350",
+          evidence="char_decide 在殿本 vol01 3 页（--pages 1,2,3；冻结快照第三步产物＋本机重跑 3b／3e，glyph_vis 25 格 pending）上与 origin/dev daf144f 产物逐字节相同；vis3 影子读口缺省关（seed_admit.vis3_shadow）；scripts/code_equiv.py check，2026-11-28（CV4）"),
+    # 结构拆分 C5（CV3 11-28）：四个读 near_methods 的步 code_deps 补列拆出来的子模块（只改声明）
+    Equiv(module='open_guji_cv.steps.glyph_near',
+          new='b9d0bdaae510d0867217f0b9a4f39fd1e41a55d6c8138379f417066645cd3ae6',
+          old='0535f4d658fddff0e8898c65a27d1de5503d0a7e6a6bf41ed4e11ce55918f553',
+          evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
+    Equiv(module='open_guji_cv.steps.glyph_analyzer',
+          new='c7862ac915a5da3544dbccbb78785af9ac9b671ce7844bf6955f5a40b694aeb7',
+          old='534f3cf7b21cbd27340b99e2a9121b8ec677e9d3aa1507fb4e2f5844e1c3ef74',
+          evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
+    Equiv(module='open_guji_cv.steps.glyph_vis',
+          new='9b02962b10247767e7bf45803f8ea9c730d4ff959e942fa922de1913ae5d38c8',
+          old='714c024357d5563e31b61e39fbec59c3a8aff04bc56ddf0fa23af94de1f774fb',
+          evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
+    Equiv(module='open_guji_cv.steps.group_decision',
+          new='df9b7b767ba9a6c2de43cc3aecb7fe5b9e567f8f88dea4884b061cea0f486553',
+          old='3c9bc0ebfe44f461a07190f1e6abc352c7ea15917da3ead3972cedf3efc54585',
+          evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
+    Equiv(module='open_guji_cv.steps.glyph_match',
+          new='95e97024e0f17a7cb2a5d2b4b56b1f9ee54c736f8d15be5426b79900a3ba98fb',
+          old='90028714f203801241758f220bdcf3a0910c6d348dbb2a889c1bba18976a2b79',
+          evidence='四大步验收 L10（CV3 2026-11-28）：只把 StepSpec.title 显示名从旧号改成新编号（Step5-a 库匹配→3a 字形库匹配），title 不进产物、不进参数，运行逻辑一字不动，产物逐字节不变按构造成立'),
+    Equiv(module='open_guji_cv.steps.rare_candidates',
+          new='f6aab5e7da1e89138f0284120d6cbbed4d2423a9c69bf6d347a616324f4dd49a',
+          old='d3509fcba80364ca8f152a30fc5902b9947c2949dacacbf83a35fc7a719ad20d',
+          evidence='四大步验收 L10（CV3 2026-11-28）：只把 StepSpec.title 显示名从旧号改成新编号（Step5-b 生僻字候选→（旧）生僻字候选），title 不进产物、不进参数，运行逻辑一字不动，产物逐字节不变按构造成立'),
 )
 
 
@@ -2771,6 +3123,30 @@ FORKED: dict[str, tuple[str, str]] = {
 #: 也用来登 Step 新加的 code_dep（不是拆分）：旧模块名就是 Step 模块自己，块表＝它自己＋新加的那个模块；
 #: 两块都还是登记时那一版就合回原来一项，指纹不变（row_segment＋jiazhu_step 空实现，cv#1011）。这种项不是错登，别删。
 SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
+    # 结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py（3b 方法登记表）拆成包——一方法一模块（cnn_small … pair_clf）、公用的 _base、
+    # 包根留 METHODS／parse_spec／load_method／method_fingerprint 并转出口全部旧名。纯搬家：顶层定义搬前搬后 ast.dump 逐个相同（相对 import 多一层点），
+    # 唯一改动 REPO＝parents[2]→parents[3]（文件深一层，值相同）。用到它的四步（glyph_near、glyph_analyzer、glyph_vis、group_decision）
+    # code_deps 在 near_methods 后列齐 12 块；都还是这一版时合回 near_methods 一项，指纹与 origin/dev 02a98489 逐步相同。
+    "open_guji_cv.groups.near_methods": ("9a3255c676bcb1bfa3175469d0b26c251cdaa55211c8d8a04f02baab3c06cf5e", (
+        ("open_guji_cv.groups.near_methods", "3bea586c86d2cfc3cf771d4540078d97d37f3444781f4fa07722d477051ff311"),
+        ("open_guji_cv.groups.near_methods._base", "165d858f8ac039d8c8c0fd28bbfdbfb312998f782d3360086febaa0623fe769d"),
+        ("open_guji_cv.groups.near_methods.cnn_small", "869ca46317dbf8f75d81a94736471c5643496cf7a4ad56a332e04698c100c22c"),
+        ("open_guji_cv.groups.near_methods.rr_shape", "d65f3506ae4315ba0197a8b9af1bc44749c31ec1c8b0f68e8905140b1301ac60"),
+        ("open_guji_cv.groups.near_methods.wu_shape", "ed5b87b70c113c07dd52723dbb1c6f4c62a86676dcb5eef3f4222e0a518e8e1e"),
+        ("open_guji_cv.groups.near_methods.hou_shape", "d2f8485dca499cd43efa96d2ab61a5103dc8bc1dc47d083e6da7cf90aaa32c37"),
+        ("open_guji_cv.groups.near_methods.part_shape", "50616482cd05eb4c37a5a41f431df852deab0968ddae43877a8471b8ffa2b31b"),
+        ("open_guji_cv.groups.near_methods.pair_shape", "355dc8658403d4023c52cc70bf3d5bb2d0abc9ebb445de76d2299207e1f46b86"),
+        ("open_guji_cv.groups.near_methods.book_knn", "d49feb40ee4b8c568c447fa2b637e01109e1ba473accc1611e3291a1864ec66c"),
+        ("open_guji_cv.groups.near_methods.near_knn", "6ee37e47c9375d1e9b25b0a820d2b9f950f434cb758e8699b52368c984c61708"),
+        ("open_guji_cv.groups.near_methods.stroke_veto", "f86ddb4452ba68b5a5f38116ddb398c24b1620575272617433ec63d61ce8eeab"),
+        ("open_guji_cv.groups.near_methods.flow_shape", "ad7e2fa8747a6baf3d345f3e18a5f10fec7ab27fc3f3e3c804200fa0b7dfa8bb"),
+        ("open_guji_cv.groups.near_methods.pair_clf", "b0f0fe6719e48640ecaf3381df99d5156275205b3bf38ca8237056783bfd3045"),)),
+    # 2026-11-28 vis3 影子（CV4，cv #2042）：seed_admit 新加 code_dep seed_admit_vis3（缺省关的影子读口，只写 evidence.vis3_shadow），
+    # 同时 seed_admit_params 加缺省 false 的 vis3_shadow（不进参数 dump）。两块都还是这一版时合回 seed_admit_params 一项，指纹不变；
+    # 证据同上面 seed_admit 那条 Equiv（char_decide 殿本 vol01 3 页与 origin/dev 逐字节相同）。
+    "open_guji_cv.steps.seed_admit_params": ("d67115b2d285056d99853842d0eb6227760c2388854ff35dd281394a3b210350", (
+        ("open_guji_cv.steps.seed_admit_params", "d67115b2d285056d99853842d0eb6227760c2388854ff35dd281394a3b210350"),   # 规范哈希（Equiv 已把 50f75f21 换算成它）
+        ("open_guji_cv.steps.seed_admit_vis3", "f391a34184aee5d4f35e728cd475aca52910ab2ec0af0b158b29b703a27f37f3"),)),
     # 全唐文书仓 k13 覆盖了 impl.keben.admit_lanes（四条无参照补放通道，只在册配置写了 seed_admit.book_lanes 时调）。
     # 没写 book_lanes 的册（004 起）钩子根本不 import，产物同 k11；写了的（001–003）参数指纹本就跟着 book_lanes 变。
     # 所以书仓这一版 admit_lanes 按 cv 缺省模块记（单块「拆分」＝改名），下面 seed_admit 那条照样合回，k11→k13 不过期。
@@ -2779,16 +3155,30 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
         ("guji_book.quantangwen.admit_lanes", "110539c6e051bd89a943b9ed5d57b045fecaed7a5e401d9f69383265317de8ac"),)),
     # seed_admit 的参数类与参数表搬到 steps.seed_admit_params（CV4 整理 2026-11-23，纯搬家，殿本 vol28 16 页、全唐文 020 16 页、
     # 史記 02 18 页 seed_admit 产物与 dev b189b2e 逐字节相同）：两块都还是这一版时合回 seed_admit 一项，各书不过期。
-    "open_guji_cv.steps.seed_admit": ("1f1f1fb43270438a7f7ae51c94fbf4f26b93ba7317a21bd05334211b1820663c", (
-        # 2026-11-26 CV4 PR3c：seed_admit.py 再拆出 common／lanes／shapes 三块（纯搬家＋字块读取改经模块属性调用，
-        # 殿本 vol28、全唐文 020、史記 02 共 50 页产物与 dev 逐字节相同），四块都还是这一版时照样合回旧 seed_admit 一项。
-        ("open_guji_cv.steps.seed_admit", "425f028ce7eeb0df7898611698cf8cfdcfa2a7ddf7a43829fe92c14b8120f20a"),
-        ("open_guji_cv.steps.seed_admit_common", "e9dcb6a9f748f479bec5b536784893a9db0297867ae0d23b750f9eacb05a3310"),
-        ("open_guji_cv.steps.seed_admit_lanes", "d372c3a9245e947aeb235335460dc5f193eef77371b1050c5af5ea3472041baa"),
-        ("open_guji_cv.steps.seed_admit_shapes", "ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77"),
-        ("open_guji_cv.steps.seed_admit_params", "e62c318afc263a455cb1c312b4cac8e590c834b447c83cd63ae32e218c426091"),
-        # 书级放行通道钩子（缺省 None，CV4 2026-11-25）：书仓没覆盖时合回，各书指纹不变；全唐文 k13 覆盖后照常过期
-        ("open_guji_cv.impl.keben.admit_lanes", "26976aeeb23db0ece76f341f7cefbc0c2a4e25fbed3faa4671bcace3f4672cac"))),
+    # 历史（已失效，键与新条目同名，dict 只留一条）：seed_admit 旧哈希 1f1f1fb43270，块表 seed_admit／common／lanes／shapes／params＋impl.keben.admit_lanes（2026-11-23／26，CV4 PR3c）
+    # seed_admit 11-28 重登（CV4 P1a）：11-23／11-26 那条（拆出 params／common／lanes／shapes）在 dev 上早已失效（之后几个 PR 真改过这些模块，
+    # 块哈希对不上、没再合回），各册当前指纹是各块分列。这次再拆（纯搬家，seed_admit.py＋seed_admit_lanes.py 里的格况／字组／定字／否决／
+    # 备选切法／疑问码／按页参数各遍搬进新模块，不改一行逻辑，只改了 groups 里一处 `_coord_refs(ctx, page, {})` →
+    # `coord_refs(_opt(ctx, "align_ref", page))`，两者等价）：旧哈希取拆分前 dev d226f31 的 seed_admit／seed_admit_lanes 规范哈希，
+    # 下面几块都还是这一版时合回原来的一项，指纹与 dev d226f31 逐步相同（check_fp_change 0 步变）；之后哪块真改了照常过期。
+    # 证据：①AST 逐定义比对（顶层函数／类／常量搬前搬后 ast.dump 相同，仅 groups 里那一行等价替换、_align／_coord_refs 改调 decide 的解析、StepSpec.code_deps 加项）；
+    # ②全量测试与 dev 同一批失败（环境缺件），其余全过；未另跑真书页产物比对（纯搬家，需要时用 scripts/code_equiv.py check）。
+    # 2026-11-28 P3b（CV4）：seed_admit.py 与 seed_admit_cell_state.py 把六个不读放行状态的探测器抽成函数、各 pass 多收一个可选参数
+    # （给了 4c cell_state 产物里的探测原值就用，不给照旧现算），块表这两块换成新哈希，旧哈希不动。证据：①decide-bench small 史記 03
+    # （231 页）基线 dev 与本分支（cell_state 产物在、收尾读它）seed_admit 逐页 JSON 全相同、翻转 0 格；②tests/test_cell_state.py 收尾读产物与现算逐格相同；
+    # ③全量测试与 dev 同一批环境缺件失败。未跑殿本／全唐文（无工作区），开 cell_state 的书另有验证。
+    "open_guji_cv.steps.seed_admit": ("4c1df66c210c3ccef9acb3e7b1fab4491a3bbfe02a77adcc5e039b6ee7ca92e8", (
+        ("open_guji_cv.steps.seed_admit", "26e0d0559cf43efe22b98974c931d3b6c1c84f36956b77b593eb97e2b3733e9f"),
+        ("open_guji_cv.steps.seed_admit_cell_state", "3cad1f99367bd64e2cb40ff870c586be75cbf9ee8073632eea252d1f5c332460"),
+        ("open_guji_cv.steps.seed_admit_groups", "1b9b64cd665c26ae764e2d03cc2422681ac56aa4a4a7120b07e2181347555510"),
+        ("open_guji_cv.steps.seed_admit_pick", "f658ffd0219c3aa8692fa0200b6e184f5abad6d4cc8e3613b4424bb015190598"),
+        ("open_guji_cv.steps.seed_admit_veto", "5e44d349989c2dfc774ce934b28fa961e304f5cea08d10552ba28f13f4795192"),
+        ("open_guji_cv.steps.seed_admit_altcut", "7586d369fa7828d84a5ea7cc37632047c5cd26a1a86512d4ab29bbd2da659c58"),
+        ("open_guji_cv.steps.seed_admit_reasons", "4ca3d046b18dea3f2811e7459f56d734233c4ac53fb64a52dc048e19baca913c"),
+        ("open_guji_cv.steps.seed_admit_page_params", "8af6cb7e02b26c1c843968960e5cbbba3f812333806eef410a1fe28bcdf54eae"),
+        ("open_guji_cv.steps.decide", "dfb56b89cdb723d82a3fb17def6ab15fcd938a461575139297f4f860337f0858"),)),
+    "open_guji_cv.steps.seed_admit_lanes": ("98fdf5949dc19daa7d1e913c39e02a2d6a9f5fc3683d8d9586957b882317aac0", (
+        ("open_guji_cv.steps.seed_admit_lanes", "c3744c75872b13cf3fbbc21c150125afdbc4b1857a2bdd35c5126863813d9e77"),)),
     # 不是拆分、是 seed_admit 新加了一个 code_dep（书级钩子 follow_ref_hooks，缺省 rival_skip=None；2026-11-13 A22）：
     # pua_v2_codes 与 follow_ref_hooks 都还是这一版时合回 pua_v2_codes 一项，指纹不变。书仓覆盖了钩子的书（史記）照常过期
     # 不是拆分、是 seed_admit 补列 code_dep groups.hou_shape（#1729 起 seed_admit 就 import 它，当时没列进 code_deps，

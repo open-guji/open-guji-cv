@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """铁证放行遇对照刻例原图缺失 → 转待审（`seed_admit.iron_ex_missing_guard`，overview#554）：只收紧。自造数据。"""
 from __future__ import annotations
+
+from helpers import patch_seed_admit
 import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 
 import open_guji_cv.steps  # noqa: F401
@@ -19,7 +21,7 @@ def _run(tmp_path, monkeypatch, params, n_missing):
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
     ctx = RunContext(make_book(BOOK, iron_gate=True), ProductStore(products), ImageCache(cache),
-                     params={"seed_admit": params.model_copy(update={"shadow_veto": False})},   # 影子闸要真字形库，这里没摆
+                     params={"char_decide": params.model_copy(update={"shadow_veto": False})},   # 影子闸要真字形库，这里没摆
                      log=lambda s: None)
     recs = [dict(slot=1, verdict="unsure", cov=0.5, wmax=0.0, char="山", candidates=[("山", 0.5)])]
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
@@ -31,13 +33,13 @@ def _run(tmp_path, monkeypatch, params, n_missing):
             missing.extend(f"vol02:1:1:{i}" for i in range(n_missing))
         return "山"
 
-    monkeypatch.setattr(sa, "_iron_context", lambda *a, **k: object())
-    monkeypatch.setattr(sa, "_iron_page_scale", lambda *a, **k: 1.0)
-    monkeypatch.setattr(sa, "_iron_decide", fake_decide)
-    monkeypatch.setattr(sa, "_iron_confusable_witness", lambda *a, **k: False)
+    patch_seed_admit(monkeypatch, "_iron_context", lambda *a, **k: object())
+    patch_seed_admit(monkeypatch, "_iron_page_scale", lambda *a, **k: 1.0)
+    patch_seed_admit(monkeypatch, "_iron_decide", fake_decide)
+    patch_seed_admit(monkeypatch, "_iron_confusable_witness", lambda *a, **k: False)
     import open_guji_cv.clustering.seeding as seeding
     monkeypatch.setattr(seeding, "context_conflicts_ref", lambda *a, **k: False)
-    page = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    page = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
     return {r.slot: r for cc in page.columns for r in cc.chars}
 
 

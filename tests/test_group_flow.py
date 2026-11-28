@@ -407,8 +407,8 @@ def _run(tmp_path, monkeypatch, cands, params=None):
         dict(slot=1, verdict="unsure", cov=cands[0][1], wmax=10.0, candidates=list(cands))]))
     write_product(ctx, "context_decide", PAGE, context_decision=page_decision(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, char=None, margin=0.1, source="prior")]))
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"patch_missing": "skip", **(params or {})})
-    return STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns[0].chars[0]
+    ctx.params["char_decide"] = SeedAdmitParams(**{"patch_missing": "skip", **(params or {})})
+    return STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns[0].chars[0]
 
 
 def test_seed_admit_default_off_and_params_hidden(tmp_path, monkeypatch):

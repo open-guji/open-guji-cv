@@ -60,9 +60,14 @@ def load_samples(seg_set: str) -> dict:
     """读一套书的样页单并校验。返回 {pipeline, steps: {from, to}, local_only, books: [{book, ws_glob, pages: {页: 理由}}]}。"""
     import yaml
     from open_guji_cv.core.pipeline import PIPELINES_DIR, SKELETON_ID, expand_slots
+    from open_guji_cv.core.seg_set import split_ref
     d = yaml.safe_load(sample_path(seg_set).read_text(encoding="utf-8")) or {}
     # 只读管线 yaml 的步骤表，不走 load_pipeline 的上下游校验：管线本身坏了也要能列出样页、算牵动
-    chain = yaml.safe_load((PIPELINES_DIR / f"{d['pipeline']}.yaml").read_text(encoding="utf-8"))
+    # 2026-11-28 三链合一：样页单里的旧链 id（keben_body_v2…）当 `guji_default@版式` 读
+    base, lay = split_ref(d["pipeline"])
+    chain = yaml.safe_load((PIPELINES_DIR / f"{base}.yaml").read_text(encoding="utf-8"))
+    if "layouts" in chain:
+        chain = {**chain, **(chain["layouts"][lay or "grid"] or {})}
     if "slots" in chain:        # 链 yaml 只写槽位（方案 B 第二期），步骤顺序由骨架展开；仍只读 yaml，不校验上下游
         skel = yaml.safe_load((PIPELINES_DIR / f"{SKELETON_ID}.yaml").read_text(encoding="utf-8"))
         chain["steps"] = expand_slots(chain, skel, d["pipeline"])

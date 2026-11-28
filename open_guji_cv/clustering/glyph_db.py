@@ -377,6 +377,11 @@ class GlyphDB:
         if cur.execute("SELECT 1 FROM admissions WHERE instance_id=?",
                        (instance_id,)).fetchone():
             return False
+        # 借库撞号（2026-11-28，汉书借史記：两书都有 01 册，`v2:01:页:列:格` 同号指两书各一格）：
+        # 本库里这个 id 是借来的刻例时，本书的格优先——先把借来那份（图、派生、刻例、字头计数）从本库摘掉，
+        # 再按本书新例写入。否则下面 ON CONFLICT 只改 label，图仍是别的书那一格。借来的库本身不动（真源在别处）。
+        if instance_id in _borrowed(self)[0]:
+            _drop_borrowed_instance(cur, instance_id)
         source_id = instance_id.split(":")[0]
         edition = edition_tag or source_id
         # 一本书一个 edition（2026-09-25，用户：「v2 应该是整个四库目录，是整一个新的
@@ -478,10 +483,13 @@ class GlyphDB:
         if edition.startswith(("font:", "modern:")):
             raise ValueError("书的 edition 不能以 font: / modern: 开头")
         cur = self.conn.cursor()
-        rows = cur.execute(
+        # 借来的库（`rebuild_from_store(extra_stores=...)`）的 edition 与来源不并：它们是别的书（2026-11-28 汉书借史記，
+        # 原先会把借来的 6,473 行字头改归本书）。
+        _b_ids, b_eds, b_srcs = _borrowed(self)
+        rows = [r for r in cur.execute(
             "SELECT glyph_id, edition_tag, char, semantic, unicode_cp, ids, n_confirmed "
             "FROM glyphs WHERE edition_tag NOT LIKE 'font:%' AND edition_tag NOT LIKE 'modern:%' "
-            "AND edition_tag != ?", (edition,)).fetchall()
+            "AND edition_tag != ?", (edition,)).fetchall() if r[1] not in b_eds]
         merged = moved = 0
         seen: set[str] = set()        # 试算时记「已挪过去的字」，第二行同字才算合并
         for gid, ed, ch, sem, cp, ids, n in rows:
@@ -510,16 +518,18 @@ class GlyphDB:
             cur.execute("UPDATE OR IGNORE exemplars SET glyph_id=? WHERE glyph_id=?", (tid, gid))
             cur.execute("DELETE FROM exemplars WHERE glyph_id=?", (gid,))
             cur.execute("DELETE FROM glyphs WHERE glyph_id=?", (gid,))
+        skip = sorted(b_srcs)
+        not_b = (f" AND source_id NOT IN ({','.join('?' * len(skip))})" if skip else "")
         n_src = cur.execute(
             "SELECT COUNT(*) FROM sources WHERE COALESCE(kind,'woodblock') != 'font' "
-            "AND edition_tag NOT LIKE 'font:%'").fetchone()[0]
+            "AND edition_tag NOT LIKE 'font:%'" + not_b, skip).fetchone()[0]
         if not dry_run:
-            # 刻本来源一律改过来——含 bxgb 那条历史上记成 modern:bxgb、而字形早已是 bxgb 的
+            # 刻本来源一律改过来——含 bxgb 那条历史上记成 modern:bxgb、而字形早已是 bxgb 的（借来的来源除外）
             cur.execute("UPDATE sources SET edition_tag=? WHERE COALESCE(kind,'woodblock') != 'font' "
-                        "AND edition_tag NOT LIKE 'font:%'", (edition,))
+                        "AND edition_tag NOT LIKE 'font:%'" + not_b, [edition, *skip])
             if title:
-                cur.execute("UPDATE sources SET title=? WHERE COALESCE(kind,'woodblock') != 'font'",
-                            (title,))
+                cur.execute("UPDATE sources SET title=? WHERE COALESCE(kind,'woodblock') != 'font'" + not_b,
+                            [title, *skip])
             cur.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('book_edition', ?)",
                         (edition,))
             self.conn.commit()
@@ -945,6 +955,18 @@ def _borrowed(db: "GlyphDB") -> tuple[set[str], set[str], set[str]]:
     return ids, eds, srcs
 
 
+def _drop_borrowed_instance(cur, instance_id: str) -> None:
+    """从合并库里摘掉一条借来的刻例（只动本机合并库，借来的真源不动）：刻例、字头计数、派生、侧表、实例、`borrowed` 行。"""
+    for (gid,) in cur.execute("SELECT glyph_id FROM exemplars WHERE instance_id=?", (instance_id,)).fetchall():
+        cur.execute("DELETE FROM exemplars WHERE glyph_id=? AND instance_id=?", (gid, instance_id))
+        cur.execute("UPDATE glyphs SET n_confirmed = MAX(n_confirmed - 1, 0) WHERE glyph_id=?", (gid,))
+        if not cur.execute("SELECT 1 FROM exemplars WHERE glyph_id=?", (gid,)).fetchone():
+            cur.execute("DELETE FROM glyphs WHERE glyph_id=?", (gid,))
+    for t in ("derived", "cluster_members", "approx_labels", "instances", "borrowed"):
+        if cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (t,)).fetchone():
+            cur.execute(f"DELETE FROM {t} WHERE instance_id=?", (instance_id,))
+
+
 #: 例数少于这个就不开进程池（起进程的开销比省下的多）
 _PARALLEL_MIN = 2000
 
@@ -1071,10 +1093,36 @@ def borrowed_label(st: "str | Path", scope: str = "all", tag: str = "") -> str:
     return str(p) + suffix
 
 
+def _self_ids(store: Path, db: "GlyphDB", given) -> frozenset[str]:
+    """本书在组库里可能用的来源前缀（见 ``rebuild_from_store`` 的 ``self_ids``）。"""
+    if given is not None:
+        return frozenset(x for x in given if x)
+    out = set()
+    ed = db.book_edition()
+    if ed:
+        out.add(ed)
+    st = Path(store)
+    if st.name == "glyph_store" and st.parent.name == "output" and st.parent.parent.name:
+        out.add(st.parent.parent.name)
+    return frozenset(out)
+
+
+def _own_prefixed(ident: str, sep: str, own: frozenset[str]) -> bool:
+    head, s, _ = str(ident).partition(sep)
+    return bool(s) and head in own
+
+
 def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
                        feature_backend: str = DEFAULT_FEATURE,
-                       extra_stores: "tuple | list" = (), jobs: int = 1) -> dict:
+                       extra_stores: "tuple | list" = (), jobs: int = 1,
+                       self_ids: "tuple | list | None" = None) -> dict:
     """Git 導出目錄 → SQLite 索引（派生表示按當前算法重算）。
+
+    ``self_ids``（2026-11-28，文渊阁组库）：本书在共享刻例库（``glyphlib-*``）里的来源前缀。组库实例 id 是
+    ``<来源工作区>:<原 id>``，借组库的书若本身是来源之一（汉书借 glyphlib-wyg，组库里有 ``988g89tszv:`` 开头的汉书回库例），
+    这些例本书库里已有一份，借进来就重复了：借库装载时跳过 id 以 ``<本书>:`` 开头的实例（来源 id 以 ``<本书>.`` 开头的来源行同）。
+    缺省取本书 ``meta.book_edition`` 和真源目录 ``<工作区>/output/glyph_store`` 的工作区名两个——两者不一定相同
+    （殿本工作区 siku-zongmu、edition 96mid1ogzk），组库前缀用的是工作区名。
 
     ``extra_stores``（2026-09-27，全唐文书级库）：再把别的工作区的真源**借**进来，
     只为匹配（`glyph_match` 只读一个库文件）。借来的部分：
@@ -1117,6 +1165,8 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
                     lend_ids.add(r["instance_id"])
         new_src: list[str] = []
         for r in read(st / "sources.jsonl"):
+            if borrowed and _own_prefixed(r["source_id"], ".", own_ids):
+                continue
             cols = ",".join(r)
             cur.execute(f"{verb} INTO sources ({cols}) "
                         f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
@@ -1128,6 +1178,8 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
             for r in read(meta_file):
                 if lend_ids is not None and r["instance_id"] not in lend_ids:
                     continue        # scope=human：机器入库的借不进来
+                if borrowed and _own_prefixed(r["instance_id"], ":", own_ids):
+                    continue        # 组库里本书自己的例：本书库里已有，不再借一份
                 png = st / "patches" / f"{_safe(r['instance_id'])}.png"
                 if png.exists():
                     recs.append({**r, "patch_png": png.read_bytes()})
@@ -1219,6 +1271,7 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
         return n_inst, n_der, n_ex
 
     n_inst, n_der, n_ex = load(store, borrowed=False)
+    own_ids = _self_ids(store, db, self_ids)
     n_borrowed = 0
     if extra_stores:
         cur.execute(BORROWED_TABLE)

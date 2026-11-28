@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, field_validator, model_serializer
 
 from ...utils.cjk_compat import fold_compat
 
+from ...core.decide_names import ADMIT_STEP_ACTIVE
 from ...core.spec import COLUMN_PX, ProductKindSpec
 from ...core.step import register_kind
 
@@ -312,7 +313,20 @@ class AdmitRec(BaseModel):
     provenance: str = ""                # match | align | context —— 设计 §3.2 分级
     doubts: list[str] = Field(default_factory=list)
     evidence: dict = Field(default_factory=dict)
+    # P3a-2（2026-11-28）收尾直接写的送审原因：只写第四步名下的值（manager pending_reasons.yaml owner=CV4），别的 None（manager 判）；
+    # form_src＝选形来源 lib|ref|group|code_table|human。三项 None 不落盘，旧产物与不写的格逐字节不变。
+    pending_reason: str | None = None
+    pending_reason_detail: str | None = None
+    form_src: str | None = None
 
+    @model_serializer(mode="wrap")
+    def _drop_none_final(self, handler):
+        d = handler(self)
+        if isinstance(d, dict):
+            for k in ("pending_reason", "pending_reason_detail", "form_src"):
+                if d.get(k) is None:
+                    d.pop(k, None)
+        return d
 
     _fold_char = field_validator("char", mode="after")(_fold_char)
 
@@ -408,6 +422,8 @@ class PageAlignRef(BaseModel):
     # `"text"`（不分行全文，不做坐标对位）；column 与未声明为空、不落盘（旧书产物逐字节不变）。
     # 下游（seed_admit、manager）认这个字段，不认 note 文字。
     ref_kind: str = ""
+    # 册配置 `reference_profile` 列级 none 段在本页声明的无参照列（2026-11-28）：这些列不出对位字；空不落盘。
+    none_cols: list[int] = Field(default_factory=list)
     # `AlignRefParams.coord_ref_hint`（GUJI-767）：`coord_dp*` 对位得出、但没有字形证据所以不给 `coord` 的整理本字
     # {格 id → 整理本字}。只作点校候选，不是放行证据（下游不得据此放行）；关着或空不落盘。
     ref_hint: dict[str, str] = Field(default_factory=dict)
@@ -416,7 +432,7 @@ class PageAlignRef(BaseModel):
     def _drop_empty_alt(self, handler):
         d = handler(self)
         if isinstance(d, dict):
-            for k in ("alt_cols", "alt_cand", "alt_draft", "ref_kind", "ref_hint"):
+            for k in ("alt_cols", "alt_cand", "alt_draft", "ref_kind", "ref_hint", "none_cols"):
                 if not d.get(k):
                     d.pop(k, None)
         return d
@@ -444,11 +460,11 @@ PageAlignRef.model_rebuild()
 
 
 GLYPH_MATCH = register_kind(ProductKindSpec(
-    id="glyph_match", title="Step5-a 库匹配判决", storage="numeric", unit="cell",
+    id="glyph_match", title="3a 库匹配判决", storage="numeric", unit="cell",
     schema=PageMatch, coord_space=COLUMN_PX))
 
 RARE_CANDIDATES = register_kind(ProductKindSpec(
-    id="rare_candidates", title="Step5-b 生僻字候选", storage="numeric", unit="cell",
+    id="rare_candidates", title="（旧）生僻字候选", storage="numeric", unit="cell",
     schema=PageRare, coord_space=COLUMN_PX))
 
 CONTEXT_DECISION = register_kind(ProductKindSpec(
@@ -456,7 +472,7 @@ CONTEXT_DECISION = register_kind(ProductKindSpec(
     schema=PageDecision, coord_space=COLUMN_PX))
 
 SEED_ADMIT = register_kind(ProductKindSpec(
-    id="seed_admit", title="C1 进库准入裁决", storage="numeric", unit="cell",
+    id=ADMIT_STEP_ACTIVE, title="C1 进库准入裁决（收尾 char_decide）", storage="numeric", unit="cell",
     schema=PageAdmit, coord_space=COLUMN_PX))
 
 ALIGN_REF = register_kind(ProductKindSpec(

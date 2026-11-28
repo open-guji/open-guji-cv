@@ -187,13 +187,18 @@ _RETIRED.update(_CONSTANTS)
 #: 去了键会落回新缺省，写死的旧值就丢了。
 _DUMP_DROP_HASH: tuple = (
     (lambda p: not p.consensus_fallback, ("consensus_fallback",)),
+    (lambda p: not p.note_lexicon_lib_form, ("note_lexicon_lib_form",)),
     (lambda p: not p.ref_lib_coord_dissent, ("ref_lib_coord_dissent",)),
+    (lambda p: not p.solo_coord_dissent, ("solo_coord_dissent",)),
     (lambda p: not p.human_unbound_shift_ok, ("human_unbound_shift_ok",)),
     (lambda p: not p.group_flow_ctx_agree, ("group_flow_ctx_agree",)),
     (lambda p: p.edge_pair_group_seam, ("edge_pair_group_seam",)),
 )
 
 _DUMP_DROP: tuple = (
+    (lambda p: not p.solo_self_exemplar, ("solo_self_exemplar",)),
+    (lambda p: not p.seg_box_check, ("seg_box_check",)),
+    (lambda p: not p.ink_marks, ("ink_marks",)),
     (lambda p: not p.book_lanes, ("book_lanes", "book_lanes_fingerprint")),
     (lambda p: not p.symbol_review, ("symbol_min_human",)),
     (lambda p: p.rare_ref_coord_min_cov == _RARE_REF_COORD_MIN_COV, ("rare_ref_coord_min_cov",)),
@@ -209,6 +214,7 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.vis_ruling_ctx_subclasses, ("vis_ruling_ctx_subclasses",)),
     (lambda p: not p.ruling_anchor_loose, ("ruling_anchor_loose",)),
     (lambda p: not p.ruling_by_u, ("ruling_by_u",)),
+    (lambda p: not p.codepoint_no_exempt, ("codepoint_no_exempt",)),
     (lambda p: not p.group_flow_ruling_first, ("group_flow_ruling_first",)),
     (lambda p: not p.p_ref_admit, ("p_ref_admit",)),
     (lambda p: (not p.p_ref_admit or p.p_ref_max_cov is None), ("p_ref_max_cov",)),
@@ -240,6 +246,7 @@ _DUMP_DROP: tuple = (
     (lambda p: p.ruling_glyph_min_score is None and p.ruling_glyph_min_margin is None,
      ("ruling_glyph_min_score", "ruling_glyph_min_margin")),
     (lambda p: not p.symbol_ref_blank, ("symbol_ref_blank", "symbol_ref_blank_cov")),
+    (lambda p: not (p.symbol_ref_blank and p.symbol_ref_blank_from), ("symbol_ref_blank_from",)),
     (lambda p: not (p.symbol_ref_blank and p.symbol_ref_gap),
      ("symbol_ref_gap", "symbol_ref_gap_cov", "symbol_ref_gap_min_col")),
     (lambda p: not p.shadow_veto, ("shadow_conf", "shadow_veto_variant_abstain")),
@@ -251,11 +258,12 @@ _DUMP_DROP: tuple = (
     (lambda p: p.solo_5b_cov is None, ("solo_5b_cov", "solo_5b_gap", "solo_5b_min_n")),
     (lambda p: not p.no_ref_pages, ("no_ref_pages",)),
     (lambda p: not p.no_ref_params, ("no_ref_params",)),
+    (lambda p: not p.ref_accuracy, ("ref_accuracy",)),
     (lambda p: p.consensus_lib_cov is None, ("consensus_lib_cov",)),
     (lambda p: p.ref_lib_5b_veto is None, ("ref_lib_5b_veto", "ref_lib_5b_veto_lead")),
     (lambda p: p.solo_5b_same_cov is None, ("solo_5b_same_cov",)),
+    (lambda p: p.solo_5b_scope == "any", ("solo_5b_scope",)),
     (lambda p: not p.replace_form_edge_exclude, ("replace_form_edge_exclude",)),
-    (lambda p: not p.solo_coord_dissent, ("solo_coord_dissent",)),
     (lambda p: not p.lane_coord_blind_guard,
      ("lane_coord_blind_guard", "lane_coord_blind_min_n", "lane_coord_blind_lib_cov", "lane_coord_blind_gap")),
     (lambda p: not p.rare_ref, ("rare_ref_coord", "rare_ref_coord_min_cov")),
@@ -270,6 +278,9 @@ _DUMP_DROP: tuple = (
     (lambda p: not p.group_flow_lift_ref_veto, ("group_flow_lift_ref_veto",)),
     (lambda p: not p.group_flow_lift_shape_ref, ("group_flow_lift_shape_ref",)),
     (lambda p: not p.group_flow_ref_alias, ("group_flow_ref_alias",)),
+    (lambda p: not p.group_flow_near_p, ("group_flow_near_p",)),
+    (lambda p: not p.group_flow_near_from_3b, ("group_flow_near_from_3b",)),
+    (lambda p: not p.vis3_shadow, ("vis3_shadow",)),
     (lambda p: not p.group_flow_hou_shape_late, ("group_flow_hou_shape_late",)),
     (lambda p: p.reference_trust == 'none', ("reference_trust",)),
     (lambda p: not p.ref_topk_follow, ("ref_topk_follow",)),
@@ -482,6 +493,8 @@ class SeedAdmitParams(BaseModel):
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
     group_flow_book_knn: dict[str, str] = Field(default_factory=dict)   # 组 id → 书级刻形近邻库（`groups.book_knn`，缺省找 config/groups/book_knn/<组>.json；没有＝不跑，行为不变）
     group_flow_rr_shape: str = ""            # 入人八 书级刻形判法模型（`groups.rr_shape`，缺省找 config/groups/rr_shape.json；没有＝不跑，行为不变）。
+    group_flow_near_from_3b: list[str] = Field(default_factory=list)  # 这些看图方法（rr_shape、wu_shape、hou_shape、part_shape、pair_shape、book_knn、near_knn、stroke_veto）的判法结果先读 3b `glyph_near` 的原样结论，3b 没有的格（没触发、备选切法列、读不到字块）本地现算；模型须与书级参数同一份，不同报错。缺省空、空时不进参数 dump（CV4 11-28，第四步 4d 接 3b）。
+    vis3_shadow: bool = False  # 影子：读同页 glyph_analyzer 的 FinalRec.vis（3e glyph_vis，vis3）与现行 vis_llm 看图结论逐格对比，只写 evidence.vis3_shadow、不改放行；缺省关、关时不进参数 dump、不读产物（CV4 11-28，P1）。
     group_flow_wu_shape: str = ""            # 嗚鳴 书级刻形判法模型（`groups.wu_shape`，缺省找 config/groups/wu_shape.json；没有＝不跑，行为不变；全唐文 11-14）。
     group_flow_hou_shape: str = ""           # 候𠋫 书级刻形判法（`groups.hou_shape`，几何量判 亻 右边第二竖长短；缺省找 config/groups/hou_shape.json；没有＝不跑，行为不变；全唐文 11-20）。
     group_flow_part_shape: str = ""          # 书级部件刻形判法模型（`groups.part_shape`，剌刺／疎踈 等差在一块部件的字对，一份文件挂多对；缺省空＝不跑，不自动找文件；全唐文 11-15）。
@@ -527,6 +540,9 @@ class SeedAdmitParams(BaseModel):
     开（`RulingStore._anchor_loose`）：同格同 cells_sha 同 ref 下，本组 `validate` 认的任意版本（减 `ver_equiv.yaml` 的 `void`，O 组仍按目标版本）、
     多条取最新、字不一致记 `ruling_conflict` 不放行；只收 high（fold 遍也是）；窗口改为前后 2 字至少一侧相同。
     窗口键、版本等价表照旧先查；在线问前查缓存（`RulingCache`）仍按精确键。开之前须 20 册强制锚点回放人裁真错 0。"""
+    codepoint_no_exempt: tuple = ()
+    """书级，缺省空、关时不进参数 dump、行为不变（史記 sui/guanm/yinv/can 统一归一，Sheldon 11-26）。列出的拆判字组 id：册 `codepoints:` 归一时
+    不再留「人裁／该组判出的刻形照录」的例外，各出口（match_ref／match_replace／human／字组）放行字都落到册指定码位。"""
     ruling_by_u: bool = False
     """裁定按字格永久编号 u 查（CV0 T3 2026-11-24，执行方案 https://claude.ai/artifact/NksDge9ZxaEyebAgnS8s8Q；书级，缺省关、关时不进参数 dump、行为不变；
     开的册 seed_admit 起往下过期，L1）。开：`_vis_ruling_pass` 与 fold 遍在窗口键、版本等价、格锚点都没中之后再查一档——
@@ -549,6 +565,10 @@ class SeedAdmitParams(BaseModel):
     """书级：这几组补放（lift）时，整理本对位字（现役对位缺格时用坐标对位字）是组里另一个字、与组给的字不同 → 不放，留人审
     （`group_flow_ref_dissent`；只降不放）。起因（2026-11-03 史記文淵閣本）：山由出 sy 整字 HOG 的模板来自殿本，史記写本山常被判成出
     （标签山的格里判出 143、判山 27），第 6 轮 06:93:4:1a、alt_cut 02:20:6:2b 山被放成出。空＝不启用（不进参数 dump）。"""
+    group_flow_near_p: dict[str, float | dict[str, float]] = Field(default_factory=dict)
+    """书级（Sheldon 2026-11-26）：形近含义不同的字组读第三步收尾（`glyph_analyzer`）给的组内各字校准概率 p，`{"guan": 0.98}`＝组内最高 p ≥ 0.98
+    才由字形放行（也可按字给：`{"guan": {"宫": 0.955, "官": 0.999}}`，没列的字不放；官宫的校准表只标定宫、官 p＝1−p宫，官样本多、门槛要高），不够高的照旧交文意（`groups.methods.NearP`；组的方法数组里有 `near_p` 的才用，现在只有 官宫宮 guan）。方法与文意都有答案且不同 → 送审；
+    复核时放行字与它的字不同 → 降审（只降不改字）。门槛按人核格定，不用现行文本当真值。空＝不启用（缺省，不进参数 dump、不读 `glyph_analyzer`）。"""
     group_flow_ref_alias: dict[str, str] = Field(default_factory=dict)
     """书级（全唐文 11-20，sheldon「整理本作 間 的格不再挡本书刻的 閒」）：字组流程里整理本字（及坐标对位字）先按这张表换掉再判，
     `{"間": "閒"}`＝本书只刻 閒、整理本的 間 来自殿本模板，不当 ref_dissent。只影响字组流程（`groups.flow`），不改对位产物与其他通道。
@@ -658,6 +678,36 @@ class SeedAdmitParams(BaseModel):
     候选＝本格字、整理本、库前三（`glyph_match` candidates）；不因候选互为异体跳过，改为**出口闸**：给出的字须等于整理本字，
     或与整理本字同属本书码位表／异体表一组，否则留审。判法、门槛、`skip_chars`／`skip_groups` 不变；`evidence.near_knn.via = near_gap`。
     全唐文 r9b variant_pair 164 格：给字 63，看图错 2（元←无、尸←戶，都被出口闸拦下），放 61 错 0。"""
+    seg_box_check: list[str] = []
+    """字框几何闸（CV2，2026-11-27，朱楓林集 MBJ 报 3:4:7 碎格被放成「一」进了发布文本）：按格高、列宽判字框，命中的一律退回待审，
+    doubt 码 `seg_defect`（待审原因 seg_defect）。写要开的判据：`sliver`（Step3 格高 <0.35 格）、`frame_line`（框线扁条）、`speck`（墨点）、
+    `split_pair`（一字劈两框，与邻框合起来 <1.25 格）、`tall`（过高框 >1.6 格）；`[all]`＝全开。判据与阈值见
+    `seed_admit_lanes.seg_box_defects`。**按书开、按书挑判据**：殿本「一」本来就扁（frame_line 误中），史記卷首大字题会中 tall。
+    缺省空＝关，关时不进参数 dump。"""
+
+    ink_marks: bool = False
+    """格级墨迹记号判非字（CV2 2026-11-28，朱楓林集 MBJ 报）：读 Step4 `cell_shrink.ink_marks` 打的格旗（要一起开）。
+    印（旗 `ink_seal`，或已判 `occluded` 的格）：参校本对位（align_ref）这格无字 → 判非字放行（通道 `seal`，doubt `lane_seal`，
+    证据 `lane.via=ink_seal`、`nonchar`）；对位有字 → 按被印遮挡送审（doubt `occluded`）。参校本不分行的书没有坐标对位，
+    `lane_seal` 的 coord_blank 分支走不到，这条按逐字对位补上。墨点（旗 `ink_speck`）：对位无字 → 判非字放行（通道 `blank_ink`，
+    `lane.via=ink_speck`）；对位有字、或贴着同列别的字（`SPECK_HALF_GAP`，多是切坏的半字）→ 送审（doubt `seg_defect`）。人裁、排除名单不动。缺省关，不进 dump。"""
+
+    @field_validator("seg_box_check", mode="before")
+    @classmethod
+    def _seg_box_kinds(cls, v):
+        from .seed_admit_lanes import SEG_BOX_CRITERIA
+        if v in (None, False):
+            return []
+        if v is True:
+            v = ["all"]
+        v = [str(x) for x in ([v] if isinstance(v, str) else v)]
+        if "all" in v:
+            return list(SEG_BOX_CRITERIA)
+        bad = [x for x in v if x not in SEG_BOX_CRITERIA]
+        if bad:
+            raise ValueError(f"seed_admit.seg_box_check 不认 {bad}，可写 {list(SEG_BOX_CRITERIA)} 或 all")
+        return [x for x in SEG_BOX_CRITERIA if x in v]
+
     symbol_review: bool = True    # 2026-10-24 sheldon 定缺省开（殿本 vol04–20 原本逐册开着）
     """特殊符号送审（`doc/design/特殊符号进字符候选集-设计.md` S3，2026-10-24 起缺省开；关时 `symbol_review`／`symbol_min_human`
     不进 dump，`params_hash` 不变）。与册配置 `font.charset.symbols`（5-b 字表收符号）配套开。
@@ -677,6 +727,11 @@ class SeedAdmitParams(BaseModel):
     只收符号；遮挡（印章）格、排除名单格、人裁格不动；对位没说空格（整理本这一位有字）的不放。空＝关（不进 dump）。"""
     symbol_ref_blank_cov: float = 0.97
     """`symbol_ref_blank` 的库 cov 下限（库对这个符号的匹配度；本书圈号实测 0.977–0.999）。"""
+    symbol_ref_blank_from: str = ""
+    """书级，缺省空（关，不进参数 dump，行为不变）。`symbol_ref_blank` 再放宽一档：本格字（`rec.char`）在这串字里（如 `口囗□日四`，圈号 ○ 的图被误判成它们）、
+    库首位也在这串字里、库前三名里有 `symbol_ref_blank` 的符号且 cov ≥ 门槛、与库首位 cov 差 ≤ 0.03、整理本此位空（或 `symbol_ref_gap` 放宽后无对位）→ 放行为该符号。
+    起因：史記 17/40/41 册约 14 格 ○ 被判口（GUJI-777，SJ 11-27）。遮挡、人裁、排除名单照旧不动；证据 lane 记 `from`。**没做单圈形状检测**（本通道拿不到字块图），
+    靠「整理本此位空＋库前三含○＋cov 近」收口；日／目误报风险由这三条挡。需 `symbol_ref_blank` 非空才生效。"""
     symbol_ref_gap: bool = False
     """`symbol_ref_blank` 放宽到「整理本这里没字」（坐标对位没有这一位的条目，`coord.get(id) is None`，不是空格 `""`；
     A24 第 5 轮，长期计划线程转 SJ 史記 r9：ref_gap 里 17 格库首位是 ○、cov 0.92–0.999）。需 `symbol_ref_blank` 非空才生效。
@@ -971,12 +1026,21 @@ class SeedAdmitParams(BaseModel):
     `ref_lib_coord_dissent`（硬疑问，补放通道不再按现役字放回）、落人审（全唐文 r11 11-05：去借库后本书库缺
     麒／褚／俘 刻例，库首位落到 麟／諸／俾，现役对位跟着错位成 equal，ref_lib 照放；坐标对位是对的。r11 ref_lib
     226 格里有坐标对位的 14 格、两边不一致 9 格，看图 7 格坐标对、2 格现役对）。缺省开（2026-11-25 CV4 起缺省改成三本主力书都设的值，Sheldon 11-24 定；参数 dump 仍按旧缺省去键，设了旧值或没设而用新缺省的册指纹分别照旧／改变）；关时逐字节同旧行为、不进 dump。"""
-    solo_coord_dissent: bool = False
+    solo_coord_dissent: bool = True
     """match_solo 系放行前看坐标对位（同 `ref_lib_coord_dissent` 的判据，GUJI-750）：坐标对位给了实字、与放行字
     （库 same 取库字，否则库候选 top1）语义不同，不单独放行，记 doubt `solo_coord_dissent`（硬疑问，补放通道不再放回）、
-    落人审。起因：史记 r49 十册 match_solo 系放行 68 格里，坐标对位字≠放行字 16 格，看图 6 格坐标对（槨→以、陪→倍、
+    落人审。缺省开（2026-11-27 CV4：殿本 large 基线 撫→廵、鶴→號 两格放错字，开后拦入人审；关时逐字节同旧行为）。起因：史记 r49 十册 match_solo 系放行 68 格里，坐标对位字≠放行字 16 格，看图 6 格坐标对（槨→以、陪→倍、
     毒→毐 ×2、理→里、旱→早）、4 格放行对（二→三 ×2、一→二 ×2：数字处坐标对位常漂）、5 格误报（坐标字是私用码／异体）、1 格不确定。
-    故豁免：坐标字不是汉字（私用码、占位）、两边都是数字、语义同字（异体）。缺省关（关时逐字节不变，不进 dump）。"""
+    故豁免：坐标字不是汉字（私用码、占位）、两边都是数字、语义同字（异体）。"""
+    note_lexicon_lib_form: bool = True
+    """note_lexicon 通道放行的字：库首位与短语字语义同、字面不同时，取库首位的形（刻形），不取短语写的形。
+    起因：殿本 large 基线 𨽾→𨽻 6 格（vol02:134、vol04:16/46/48/58/81 的夹注），库首位 𨽾 cov 0.97–0.98，短语表写 𨽻，
+    Sheldon 11-24 复核金标是 𨽾。缺省开（2026-11-27 CV4）；关时逐字节同旧行为、不进指纹。"""
+    solo_self_exemplar: bool = False
+    """match_solo 系放行前看库判 same 的刻例（matched_id）在哪：就在本页本列（册／页／列同、格号不论）→ 不放行，记 doubt
+    `solo_self_exemplar` 落人审。起因：殿本 vol01:88:6:9b 管→總、vol02:150:3:14 鶴→號，刻例都在本页本列相邻格。
+    **缺省关**（2026-11-27 CV4 评估后没开）：库里不分刻例是不是人裁的，脉经 01 第 11、12 页（目录页，列里人裁刻例很多）
+    开了会把 17 个本来放对的格送审，殿本 vol01 多送 1 格；要开须先让它只认非人裁刻例。关时逐字节同旧行为、不进指纹。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
     variant_graph_fingerprint: str = ""
@@ -1073,13 +1137,26 @@ class SeedAdmitParams(BaseModel):
     cov 门槛降到这个值（2026-11-08，全唐文 002／003 姓氏韻編，形近字线；书级，缺省关，`None`＝关、不进 dump）。
     其余条件（5-b 作证、领先、可信刻例数、形近表／字组／硬疑问）照 `solo_5b_cov`。依据：front4 002／003 待审里
     cov 0.95–0.98、库判 same、5-b 同意、过其余条件的 1,703 格（张劉德崔孫鄭…442 种字）按字排图看，未见错放（1 格 費 存疑）。"""
+    solo_5b_scope: Literal["any", "no_ref"] = "any"
+    """`solo_5b_cov` 开着时放哪些格（2026-11-26，Sheldon 定参校本属性：无参照放行只在无参照页，CV0）。
+
+    - `any`（缺省，旧行为）：整格没有任何整理本对位的格都算，不管在哪一页；
+    - `no_ref`：只放①无参照页上的格——册配置 `reference_profile` 声明 `kind: none` 的页，或 `page_kinds.no_ref`
+      （`no_ref_pages`）的页；②有参校本的页上，坐标对位说参校本这一位是缺字（〓、图位，`GAP_CHARS`）的格。
+      有参校本的页上「一个对位字都没拿到」的格多是对位或切分出了事，只靠字形库放更险，留待审。
+      全唐文 main 包 8 册实数：none 页 7,513 格不变；有参校本页上 94 格（约 0.06%）改回待审（其中参校本标缺字的仍放）。
+    缺省 `any` 不进参数 dump，`params_hash` 不变。"""
     no_ref_pages: list[int | str] = []
     """无参校本页（册配置用 `page_kinds: {no_ref: [...]}` 写，不直接写这里）：参校本里本来就没有这段文字的页
     （脉经 01 林億序、06 牒文，2026-11-19 用户定）。这些页对不上参校本是常态、不是切分坏，按 `no_ref_params`
     换一套放行参数。写法同页号（整数或 "5-7"）。空＝没有这类页（不进 dump）。"""
     no_ref_params: dict = {}
-    """`no_ref_pages` 上换用的 seed_admit 参数（书级），如 `{solo_5b_cov: 0.95, solo_5b_min_n: 1}`：只在这些页
-    叠在本步参数上，别的页不变。键须是本步参数名（不许再嵌 `no_ref_*`）。空＝不换（不进 dump）。"""
+    """无参照页上换用的 seed_admit 参数（书级），如 `{solo_5b_cov: 0.95, solo_5b_min_n: 1}`：只在这些页
+    叠在本步参数上，别的页不变。无参照页＝`no_ref_pages`（`page_kinds.no_ref`）或册配置 `reference_profile` 声明
+    `kind: none` 的页（11-27 起两种写法同一口径）。键须是本步参数名（不许再嵌 `no_ref_*`）。空＝不换（不进 dump）。"""
+    ref_accuracy: str = ""
+    """自动填：`reference_profile` 段上压低的准确度摘要（如 `18-19:low`），进指纹；没有压低段为空、不进 dump。
+    整册的档由 `references[].accuracy` 推出的 `reference_trust` 等字段本身进指纹（见 `seed_admit_page_params.derive_trust`）。"""
     book_lanes: dict = {}
     """书级无参照补放通道的取值（2026-11-24 CV4，Sheldon 定）：交给书仓 `code/` 覆盖的钩子 `impl/keben/admit_lanes.noref_lanes`，
     cv 不解释其中的键，原样进参数指纹；`data`（路径表，相对数据目录）是通道要读的数据文件，内容哈希进 `book_lanes_fingerprint`。
@@ -1349,14 +1426,18 @@ class SeedAdmitParams(BaseModel):
       → 放行整理本形。带 `ctx_guard_ref` 的格只在上下文字也是这一对时放。
     不同义的形近对不进这张表。表是一套书的数据，写在册 yaml；空 = 关（不进 dump）。"""
     follow_ref_variants: bool = False
-    """书级：`follow_ref` 不限表——整理本字（坐标对位字，没有时看现役对位字）与库首位／已放行字**同义异体**
+    """**派生，不从册配置读**（2026-11-28 Sheldon 定：参校本四维是唯一入口）：由本页参照的 `references[].accuracy`／`script`／`form`
+    推出（`seed_admit_page_params.derive_trust`），册里写了也不采用（迁移期并存，起跑时提示）。下面是这一档的行为说明。
+    书级：`follow_ref` 不限表——整理本字（坐标对位字，没有时看现役对位字）与库首位／已放行字**同义异体**
     （本步异体关系 `vmap.semantic` 相同、字面不同）的对子都照录整理本形，判据同 `follow_ref`（待审格放行、已放行格改回）。
     Sheldon 2026-11-01（史記文淵閣本）：「四库全书有一个置信度非常高的参校本，与其暂归一，不如按参校本取字；
     万一参校本有错，我们还可以回过头来再次整理」——字组拆不开的写法、码位异体（隠𨼆隱、傳𫝊）落整理本码位，
     暂归一放行的格也改回整理本形；证据 `follow_ref.via=variants`／`lane.via=variants` 留痕，方便按参校本错误回查。
     没有参校本的书别开。False＝只认 `follow_ref` 表（不进 dump）。"""
     reference_trust: Literal["none", "high", "very_high"] = "none"
-    """书级「参校本可信度」（缺省 `none`＝不额外信任，不进参数 dump；史記文淵閣本 2026-11-02，用户定：把「按参校本走」收成一个有语义的参数）。
+    """**派生，不从册配置读**（2026-11-28 Sheldon 定：参校本四维是唯一入口）：由本页参照的 `references[].accuracy`／`script`／`form`
+    推出（`seed_admit_page_params.derive_trust`），册里写了也不采用（迁移期并存，起跑时提示）。下面是这一档的行为说明。
+    书级「参校本可信度」（缺省 `none`＝不额外信任，不进参数 dump；史記文淵閣本 2026-11-02，用户定：把「按参校本走」收成一个有语义的参数）。
 
     四库系书有一个置信度很高的参校本（同一底本的整理文本）。机器认的字与参校本一致、又没有强反证时，就按参校本走，
     不再因为某个弱解法弃权或反对而送人审。档位逐级叠加：
@@ -1367,14 +1448,17 @@ class SeedAdmitParams(BaseModel):
         日曰目／己已巳／入人八／一二 有专门解法，不碰；
       ② 字组复核：解法全弃权的己已巳、曾會㑹（`abstain_ref_ok`）、字组补放只有字形路给参校字的日曰（`lift_shape_ref`）、
         只有字形路 ids 反对而字＝参校字的廣賔 還遺 衞衛 等（`REFERENCE_TRUST_SHAPE_GROUPS`）→ 不降审、不退人审；
-      ③ 异体拆不开的写法取参校本码位并留痕（`follow_ref_variants`）。
+      ③ 异体拆不开的写法取参校本码位并留痕（`follow_ref_variants`，2026-11-28 起由准确度另推，`script: faithful` 且库不压时才开，
+        不再由本档隐含）。
     - `very_high`：另加「库认不出」的格——库首位不是参校字、但格带 `ctx_guard_ref`（文意与参校本不同）、库首位 cov < 0.975、
       且本列对位健康（列内已放行格字＝参校字占比 ≥ 0.8、至少 3 格）→ 也按参校本放，evidence `lane.blind=true` 留痕。
 
     这几项原先是 `group_flow_abstain_ref_ok`／`group_flow_lift_shape_ref`／`follow_ref_variants` 等分散开关，现在由本参数一并导出；
     旧开关仍可单独写（取并集），按书微调用它们。史記 01–10 册 F／G 类看图核对：廣 23、還 12、G 类 89 格几乎全是参校本对。"""
     ref_lib_coord: bool = False
-    """只开 `reference_trust: high` 的第 ① 项（整理本字＝库首位＝本格字 → 放行，通道 `ref_lib_coord`），不带 ②③ 与书级其他放宽
+    """**派生，不从册配置读**（2026-11-28 Sheldon 定：参校本四维是唯一入口）：由本页参照的 `references[].accuracy`／`script`／`form`
+    推出（`seed_admit_page_params.derive_trust`），册里写了也不采用（迁移期并存，起跑时提示）。下面是这一档的行为说明。
+    只开 `reference_trust: high` 的第 ① 项（整理本字＝库首位＝本格字 → 放行，通道 `ref_lib_coord`），不带 ②③ 与书级其他放宽
     （A24 2026-11-03，第 3 轮 N 类）。殿本整理本不是整本可信（不能开 `reference_trust`），但「整理本坐标对位字、库首位、
     本格字三方一致」只被 `near_form`／上下文 margin 不足挡下的格，看图 28/28 读对（页错位的 vol56 p75 除外，那页带 never_match 护栏）。
     判据同 `ref_lib_coord_decide`，门槛用 `ref_lib_coord_cov`／`ref_lib_coord_gap`（比 reference_trust 的 0.90／0.005 严）。
@@ -1391,7 +1475,9 @@ class SeedAdmitParams(BaseModel):
     # ── `ref_lib_coord_gap` = 0.01（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     #    只在 `ref_lib_coord` 开着、`reference_trust` 关着时用：库首位 cov 下限，与语义不同的最好对手的领先下限。
     ref_topk_follow: bool = False
-    """库前 5 名候选里有整理本字、且与首位 cov 差 ≤ `REFERENCE_TRUST_TOPK_GAP` 时按整理本放（史記文淵閣本 2026-11-03，
+    """**派生，不从册配置读**（2026-11-28 Sheldon 定：参校本四维是唯一入口）：由本页参照的 `references[].accuracy`／`script`／`form`
+    推出（`seed_admit_page_params.derive_trust`），册里写了也不采用（迁移期并存，起跑时提示）。下面是这一档的行为说明。
+    库前 5 名候选里有整理本字、且与首位 cov 差 ≤ `REFERENCE_TRUST_TOPK_GAP` 时按整理本放（史記文淵閣本 2026-11-03，
     第 2 轮 P 类「机器字≠整理本」90 + 「整理本改字层」71 格看图：161 格里整理本字对的 ≥ 95%，库首位是形近字抢先；
     整理本字在库前 5 名的 59 格逐格看图全是整理本对，整理本字不在前 5 的 102 格里才出现机器对、整理本错的几例）。
     要 `reference_trust: very_high`、本列对位健康（列内已放行格字＝整理本字占比 ≥ 0.8、至少 3 格）、
@@ -1481,7 +1567,8 @@ class SeedAdmitParams(BaseModel):
         return frozenset(self.group_flow_lift_shape_ref) | (frozenset(REFERENCE_TRUST_LIFT_SHAPE_GROUPS) if self._rt_on("lift_shape_ref") else frozenset())
 
     def _follow_variants(self) -> bool:
-        return self.follow_ref_variants or self._rt_on("follow_ref_variants")
+        """照录参校本异体：只看派生的 `follow_ref_variants`（very_high/high＋script faithful＋不按刻形录字，见 `derive_trust`）。"""
+        return self.follow_ref_variants
 
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler, info):
@@ -1513,6 +1600,8 @@ class SeedAdmitParams(BaseModel):
         """退役参数（`_RETIRED`）：写的是退役前的缺省值就丢掉；写了别的值报错，免得那本书的开关悄悄失效。"""
         if not isinstance(data, dict):
             return data
+        # 11-27 的过渡开关（#1979），11-28 起准确度分档恒开：写了也丢掉
+        data = {k: v for k, v in data.items() if k not in ("trust_from_accuracy", "ref_variants_off")}
         bad = []
         for k in [k for k in data if k in _RETIRED]:
             v = data[k]

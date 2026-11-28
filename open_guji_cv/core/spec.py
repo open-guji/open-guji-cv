@@ -183,6 +183,10 @@ class StepSpec:
     gate: GateSpec | None = None
     """这个 Step 出口挂的闸（P0 只有 Step2 有），由 `core.step.attach_gate` 事后
     挂上——不需要在这里手写，写在这里只是给类型看。"""
+    enabled_by: str | None = None
+    """**按参数开关的可选步骤**（2026-11-27，第三步重构）：参数字段名。这个字段为假（空 dict／False／0）时，
+    常规整条管线跑（`Engine._enabled`）直接跳过这一步，不出产物；手工点名照跑。新步骤缺省关、各书不受影响靠它。
+    不进指纹。"""
     parallel_safe: bool = False
     """`run_page` 页间互不依赖、无跨页累积状态、不写非按页隔离的共享文件，可以
     安全地用页级 `ProcessPoolExecutor` 并行跑（`Engine.run(jobs=N)`）。**默认 False**

@@ -26,7 +26,7 @@ from pathlib import Path
 from .core import hooks
 from .utils.image_io import imread as cv_imread  # 中文路径安全的读图（裸 cv2.imread 遇中文路径静默返回 None）
 
-DEFAULT_PIPELINE = "keben_body_v2"
+DEFAULT_PIPELINE = "guji_default"   # 2026-11-28 三链合一；按册的版式展开，旧链 id 仍认
 
 
 # ── handlers ─────────────────────────────────────────────────────────
@@ -34,8 +34,8 @@ def _engine(book_id: str, pipeline_id: str, params: str | None = None, quiet: bo
     from .core.book import load_book
     from .core.engine import Engine
     from .core.pipeline import load_pipeline
-    pl = load_pipeline(pipeline_id)
     book = load_book(book_id)
+    pl = load_pipeline(pipeline_id, book=book)     # `guji_default` 按册的版式展开；旧链 id／`链@版式` 照写的来
     overrides = json.loads(params) if params else None
     from .core.book_config import run_override_params
     ov_params = run_override_params()           # `--override` 里的 params：当调用方显式参数，压过册 yaml
@@ -360,7 +360,7 @@ def cmd_book(args) -> None:
         from .core.pipeline import base_param_layers, load_pipeline
         _bk = load_book(args.book)
         pl = load_pipeline(_bk.default_pipeline_id())
-        pl_id, base_layers = pl.id, base_param_layers(pl, _bk)
+        pl_id, base_layers = pl.ref, base_param_layers(pl, _bk)
     except Exception:
         pl_id, base_layers = None, []
     psrc = params_provenance(path, base_layers=base_layers)
@@ -441,6 +441,71 @@ def _ref_profile_report(book_id: str) -> dict:
         return {"error": str(e)}
 
 
+def cmd_rename_seal(args) -> None:
+    """册改名（manager `ops.rename_volume --apply`）刚做完时跑一次：把只因改名改写了文件而变的参数指纹封存进改名标记，
+    之后 `status` 把这些页算作改名（rename_only）。封存之后这些文件再变，照常过期。"""
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    pages = eng.book.resolve_pages(args.pages)
+    keys = {k.strip() for k in args.keys.split(",") if k.strip()} if args.keys else None
+    sealed = eng.seal_rename(pages=pages, keys=keys)
+    if args.json:
+        print(json.dumps(sealed, ensure_ascii=False))
+        return
+    if not sealed:
+        print(f"{eng.book.id}：没有只差参数指纹的步，不用封存")
+    for sid, kv in sealed.items():
+        print(f"  {sid:16s} 封存 " + "、".join(f"{k} {a}→{b}" for k, (a, b) in kv.items()))
+
+
+def _migrate_convert(eng):
+    """`decide migrate-name` 的指纹换算：对改名后的新名 Step 重算指纹，**只有上游（除收尾自己的 sha）与参数都没变的页才换**，
+    别的页保持原样、照常过期。"""
+    from .core.decide_names import LEGACY_ADMIT_STEP, NEW_ADMIT_STEP
+    from .core.spec import page_key  # noqa: F401
+    from .core.step import STEPS
+
+    def convert(step_id, key, entry):
+        step = STEPS.get(step_id)
+        if step is None or not key.startswith("p"):
+            return {}
+        eng.store._manifests.clear()                       # 收尾 manifest 刚改过，别读旧缓存
+        try:
+            page = int(key[1:])
+            fp, ups, ph = eng.fingerprint(step, page)
+        except Exception:                                  # noqa: BLE001 —— 算不出就不换，照常过期
+            return {}
+        if fp is None or ph != entry.params_hash:
+            return {}
+        old_up = {(NEW_ADMIT_STEP if k == LEGACY_ADMIT_STEP else k): v for k, v in (entry.upstream or {}).items()}
+        if {k: v for k, v in (ups or {}).items() if k != NEW_ADMIT_STEP} != {k: v for k, v in old_up.items() if k != NEW_ADMIT_STEP}:
+            return {}
+        return {"fingerprint": fp, "self_hash": eng.self_hash(step), "upstream": ups}
+    return convert
+
+
+def cmd_migrate_name(args) -> None:
+    """收尾步 `seed_admit/` → `char_decide/` 原地改名迁移（只改名不删、指纹按新名换算、留 sha 清单；见 products/migrate_final.py）。"""
+    from .core.decide_names import NEW_ADMIT_STEP
+    from .core.step import STEPS
+    from .products.migrate_final import migrate, plan
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    root = eng.store.root
+    if args.dry_run:
+        rep = plan(root, args.book)
+        rep.pop("sha_before", None)
+    elif NEW_ADMIT_STEP not in STEPS:
+        raise SystemExit("本版 cv 的收尾 Step 还叫 seed_admit（产物仍写 seed_admit/），改名那一版发出后才能迁；现在只能 --dry-run 看计划")
+    else:
+        rep = migrate(root, args.book, convert=_migrate_convert(eng))
+        rep = {k: v for k, v in rep.items() if k not in ("sha_before", "sha_after")}
+    if args.json:
+        print(json.dumps(rep, ensure_ascii=False))
+        return
+    print(f"{args.book}：{rep['state']}，{rep.get('pages', 0)} 页" + (f"；下游 {', '.join(rep['downstream'])}" if rep.get("downstream") else ""))
+    if rep["state"] == "migrated":
+        print(f"  改键 {rep['pages_changed']} 页，换算指纹 {rep['fingerprint_converted']} 条；sha 清单见 {root / args.book / '_migrate_char_decide.json'}")
+
+
 def cmd_status(args) -> None:
     eng = _engine(args.book, args.pipeline, quiet=True)
     _guard_cv_version(eng.book, warn_only=True)
@@ -454,6 +519,10 @@ def cmd_status(args) -> None:
         print(json.dumps(st, ensure_ascii=False))
         return
     print(f"{st['book']} · {st['pipeline']} · {len(pages)} 页")
+    from .core.decide_names import ADMIT_STEPS, both_dirs_exist
+    if both_dirs_exist(eng.store.root, eng.book.id):
+        print(f"  ⚠ 收尾步新旧目录并存（{' 与 '.join(s + '/' for s in ADMIT_STEPS)}）：读产物以 {ADMIT_STEPS[0]}/ 为准，"
+              f"{ADMIT_STEPS[1]}/ 只在没有新目录时读；查清后删掉多余那份（或 `guji-cv decide migrate-name`）")
     if getattr(eng.book, "glyph_pin", None):
         from .core.glyph_pin import pin_state
         ps = pin_state(eng.book) or {}
@@ -890,6 +959,8 @@ COMMANDS_V2 = {
     "pipeline": cmd_pipeline,
     "step": cmd_step,
     "status": cmd_status,
+    "rename-seal": cmd_rename_seal,
+    "migrate-name": cmd_migrate_name,
     "book": cmd_book,
     "rare": cmd_rare,
     "variants": cmd_variants,
@@ -1199,7 +1270,7 @@ def register_subcommands(sub: argparse._SubParsersAction, plugins: bool = True) 
     p = sub.add_parser("pipeline", help="跑一条 pipeline（或其中一段）",
                        epilog="装了 guji-manager 时 pipeline 也是第二步「自动化流程」的命令前缀："
                               "`guji pipeline <命令> …` 等于 `guji <命令> …`，`guji pipeline commands` 列出本步命令。")
-    p.add_argument("pipeline", help=f"pipeline id，如 {DEFAULT_PIPELINE}")
+    p.add_argument("pipeline", help=f"pipeline id，如 {DEFAULT_PIPELINE}（按册的版式展开；也可写 guji_default@free，旧 id keben_body_v2 等照认）")
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
     p.add_argument("--from", dest="from_step", default=None,
                    help="起始：步骤 id 或大步名（layout 版面／cut 切字／read 识字／decide 定字）")
@@ -1343,6 +1414,20 @@ def register_subcommands(sub: argparse._SubParsersAction, plugins: bool = True) 
     p.add_argument("--json", action="store_true")
     _add_override(p)
 
+    p = sub.add_parser("rename-seal", help="册改名后封存只因改名而变的参数指纹（status 据此算 rename_only）")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all")
+    p.add_argument("--keys", default=None, help="只封这几个参数指纹（逗号分隔），如 exclusions_fingerprint；不给＝全部 *_fingerprint")
+    p.add_argument("--json", action="store_true")
+    _add_override(p)
+
+    p = sub.add_parser("migrate-name", help="收尾步产物原地改名 seed_admit/→char_decide/（只改名不删，换算指纹，留 sha 清单）")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--dry-run", action="store_true", help="只看计划（本版只能 dry-run：收尾 Step 改名那一版才能真迁）")
+    p.add_argument("--json", action="store_true")
+
     p = sub.add_parser("book", help="册配置：show 看合并后的生效配置与来源层；split 把一组册相同的部分抽成基础配置")
     p.add_argument("action", choices=["show", "split"])
     p.add_argument("book", nargs="?", default=None, help="show：册号")
@@ -1383,7 +1468,7 @@ STAGE_COMMANDS: dict[str, tuple[str, ...]] = {
     "layout": ("survey", "preclean", "split", "locate-gutter", "calibrate", "binarize"),
     "cut": (),
     "read": ("rare", "calibrate-font", "witness-align", "witness-align-stream", "seed-witness"),
-    "decide": ("variants",),
+    "decide": ("variants", "migrate-name"),
 }
 
 

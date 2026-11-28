@@ -280,3 +280,70 @@ def test_scope_human_plus_auto_takes_vision_confirmed_auto(two, tmp_path):
     from open_guji_cv.steps.glyph_match import borrow_fingerprint
     assert borrow_fingerprint(tmp_path / "human+auto.db") == "lend2#human+auto"
     assert borrowed_store(out, "human+auto").scope == "human+auto"
+
+
+def test_own_admit_shadows_borrowed_same_id(tmp_path):
+    """借库撞号（2026-11-28 汉书借史記）：两书同号的格，本书进库要用本书的图，借来那份从合并库里摘掉。"""
+    lend = _store(tmp_path, "shiji", "book-a", [("v2:01:5:1:1", "王"), ("v2:01:5:1:2", "人")])
+    own = _store(tmp_path, "hanshu", "book-b", [("v2:02:1:1:1", "以")])
+    rebuild_from_store(own, tmp_path / "m.db", extra_stores=[lend])
+    db = GlyphDB(tmp_path / "m.db")
+    mine = _png(9)
+    assert db.admit_instance("v2:01:5:1:1", "悟", mine, provenance="human")
+    lab, png = db.conn.execute("SELECT label, patch_png FROM instances WHERE instance_id='v2:01:5:1:1'").fetchone()
+    assert lab == "悟"
+    from open_guji_cv.clustering.glyph_db import encode_png, to_canonical
+    assert bytes(png) == encode_png(to_canonical(cv2.imdecode(np.frombuffer(mine, np.uint8), cv2.IMREAD_GRAYSCALE)))
+    # 借来的「王」字头没有刻例了就不留；借来的另一例不受影响
+    heads = dict(db.conn.execute("SELECT char || '@' || edition_tag, n_confirmed FROM glyphs").fetchall())
+    assert "王@book-a" not in heads and heads["人@book-a"] == 1 and heads["悟@book-b"] == 1
+    assert db.conn.execute("SELECT count(*) FROM borrowed WHERE instance_id='v2:01:5:1:1'").fetchone()[0] == 0
+    out = tmp_path / "re"
+    c = export_store(db, out)
+    db.close()
+    ids = {json.loads(l)["instance_id"] for f in (out / "instances").glob("*.jsonl")
+           for l in open(f, encoding="utf-8")}
+    assert ids == {"v2:02:1:1:1", "v2:01:5:1:1"} and c["admissions"] == 2
+
+
+def test_set_book_edition_leaves_borrowed_alone(two, tmp_path):
+    """set_book_edition 不把借来的字头、来源改归本书。"""
+    siku, qtw = two
+    rebuild_from_store(qtw, tmp_path / "m.db", extra_stores=[siku])
+    db = GlyphDB(tmp_path / "m.db")
+    r = db.set_book_edition("book-b")
+    assert r["glyph_rows_moved"] == 0 and r["glyph_rows_merged"] == 0
+    eds = {e for (e,) in db.conn.execute("SELECT DISTINCT edition_tag FROM glyphs")}
+    assert eds == {"book-a", "book-b"}
+    db.close()
+
+
+def _group(tmp_path, rows):
+    """共享刻例库样子的库：实例 id 带 ``<来源>:`` 前缀。"""
+    return _store(tmp_path, "glyphlib-wyg-v1", "glyphlib-wyg", rows)
+
+
+def test_group_lib_skips_own_prefixed_by_edition(two, tmp_path):
+    _siku, qtw = two
+    g = _group(tmp_path, [("book-b:v2:v006:5:1:1", "以"), ("lender:v2:01:1:1:1", "以"), ("lender:v2:01:1:1:2", "取")])
+    out = rebuild_from_store(qtw, tmp_path / "m.db", extra_stores=[g])
+    assert out["borrowed_instances"] == 2
+    db = GlyphDB(tmp_path / "m.db")
+    ids = {r[0] for r in db.conn.execute("SELECT instance_id FROM borrowed")}
+    assert ids == {"lender:v2:01:1:1:1", "lender:v2:01:1:1:2"}
+    assert not db.conn.execute("SELECT 1 FROM instances WHERE instance_id='book-b:v2:v006:5:1:1'").fetchone()
+    db.close()
+
+
+def test_group_lib_skips_own_prefixed_by_workspace_dir(tmp_path):
+    """组库前缀是工作区名，可以和 book_edition 不同（殿本 siku-zongmu／96mid1ogzk）。"""
+    own = _store(tmp_path, "own", "ed-x", [("v2:01:1:1:1", "以")])
+    st = tmp_path / "ws-x" / "output" / "glyph_store"
+    st.parent.mkdir(parents=True)
+    own.rename(st)
+    g = _group(tmp_path, [("ws-x:v2:01:1:1:1", "以"), ("lender:v2:01:1:1:1", "以")])
+    out = rebuild_from_store(st, tmp_path / "m.db", extra_stores=[g])
+    assert out["borrowed_instances"] == 1
+    # 显式给 self_ids 时只认给的
+    out = rebuild_from_store(st, tmp_path / "m2.db", extra_stores=[g], self_ids=["nobody"])
+    assert out["borrowed_instances"] == 2

@@ -31,6 +31,7 @@ from contextvars import ContextVar
 from functools import lru_cache
 from typing import Any
 
+from ..core.decide_names import ADMIT_STEPS, final_page_dict
 from ..core.spec import ALT_TAG
 
 _PATCH_KEY_RE = re.compile(r"^p(\d{4})c(\d{2})s(-?\d+)([ab]?)$")
@@ -176,7 +177,7 @@ def alt_cols_of(book: str, page: int, store=None) -> frozenset:
     if store is None:
         from .store import ProductStore
         store = ProductStore()
-    for step in ("seed_admit", "align_ref"):
+    for step in (*ADMIT_STEPS, "align_ref"):         # 收尾步新旧名都认（char_decide 优先）
         try:
             path = store.path(book, step, page_key(page))
             mtime = path.stat().st_mtime_ns
@@ -196,7 +197,12 @@ def _read_cols(path: str, _mtime: int, step: str = "align_ref") -> frozenset:
             raw = json.load(f)
     except (OSError, ValueError):
         return frozenset()
-    d = raw.get(step, raw) if isinstance(raw, dict) else {}
+    if not isinstance(raw, dict):
+        d = {}
+    elif step in ADMIT_STEPS:
+        d = final_page_dict(raw, strict=False)          # 页顶层键新旧都认
+    else:
+        d = raw.get(step, raw)
     return frozenset(d.get("alt_cols") or ())
 
 

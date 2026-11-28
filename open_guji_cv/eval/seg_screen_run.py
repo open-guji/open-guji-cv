@@ -93,6 +93,7 @@ def _img(ctx, book: str, kind: str, key: str):
 def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[str, list], counts: dict,
                 skip: set[int] | None = None, cell_checks: bool = True, ref_check: bool = True) -> None:
     import open_guji_cv.products.kinds  # noqa: F401
+    from ..products.final_read import read_final_store
     from ..core.spec import column_key, page_key
     from ..steps.row_segment import RowSegmentStep, load_layout
     from . import colgeom, seg_screen as ss
@@ -169,7 +170,7 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
         pitch = ss.page_pitch(cells)
         glyph_p, aref_p = store.read(book, "glyph_match", key, "glyph_match"), store.read(book, "align_ref", key, "align_ref")
         conf = ss.ref_confirmed(glyph_p, aref_p) if ref_check else {}
-        adm_p = store.read(book, "seed_admit", key, "seed_admit")
+        adm_p = read_final_store(store, book, key)      # char_decide／seed_admit 新旧目录都认
         adm_by_col = {} if adm_p is None or aref_p is None else {a.col: a for a in adm_p.columns}
         ref_p, glyph_top = ss.page_ref_glyph(aref_p, glyph_p) if adm_by_col else ({}, {})
 

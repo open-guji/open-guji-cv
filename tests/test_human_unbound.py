@@ -28,7 +28,7 @@ def _run(tmp_path, monkeypatch, params, lost, coord_only=False):
     LOST = lost
     monkeypatch.setattr(lookup, "human_chars", fake)
     ctx = RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
-                     params={"seed_admit": params}, log=lambda s: None)
+                     params={"char_decide": params}, log=lambda s: None)
     recs = [dict(slot=i + 1, verdict="same", cov=1.0, wmax=0.0, char=c, candidates=[(c, 1.0)])
             for i, c in enumerate(CHARS)]
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
@@ -40,7 +40,7 @@ def _run(tmp_path, monkeypatch, params, lost, coord_only=False):
     else:
         write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
             PAGE, BOOK, recs=[dict(slot=i + 1, align_char=c) for i, c in enumerate(CHARS)], col=COL))
-    page = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    page = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
     monkeypatch.setattr(lookup, "human_chars", real)
     return {r.slot: r for cc in page.columns for r in cc.chars}, page
 
@@ -109,7 +109,7 @@ def test_human_chars_reports_lost(tmp_path, monkeypatch):
     log = EventLog(tmp_path / "events")
     def ev(i, slot, ch, ts):
         return Event(id=f"e{i}", batch="b", seq=i, ts=ts, kind="confirm",
-                     target=Target(step="seed_admit", unit="cell", key=_key(slot)), payload={"v": "confirm", "shape": ch})
+                     target=Target(step="char_decide", unit="cell", key=_key(slot)), payload={"v": "confirm", "shape": ch})
     evs = [ev(1, 1, "火", "2026-10-01T00:00:00Z"), ev(2, 2, "土", "2026-10-01T00:00:00Z"),
            ev(3, 2, "金", "2026-10-02T00:00:00Z")]
     rows = {"e1": {"status": "review", "bound": None}, "e2": {"status": "void", "bound": None},

@@ -35,6 +35,7 @@
 本模块在 core，只放数据与纯函数，不 import steps／books。不在任何 Step 的 `code_deps` 里。
 """
 from __future__ import annotations
+from .decide_names import ADMIT_STEP_ACTIVE
 
 #: 页型 → (Step id, 参数名)。顺序即文档与报表里的显示顺序。
 KIND_PARAM: dict[str, tuple[str, str]] = {
@@ -42,7 +43,7 @@ KIND_PARAM: dict[str, tuple[str, str]] = {
     "table": ("border_detect_gate", "table_pages"),
     "cover": ("border_detect_gate", "cover_pages"),
     "roster": ("row_segment", "roster_pages"),
-    "no_ref": ("seed_admit", "no_ref_pages"),
+    "no_ref": (ADMIT_STEP_ACTIVE, "no_ref_pages"),
 }
 PAGE_KINDS = tuple(KIND_PARAM)
 #: 页内按列标表（半文半表页）：键名与 (Step id, 参数名)
@@ -164,7 +165,8 @@ def merge_into_params(params: dict[str, dict], page_kinds: dict[str, list] | Non
     tr = to_params(page_kinds)
     if not tr:
         return params
-    out = {sid: dict(kv) for sid, kv in (params or {}).items()}
+    from .decide_names import fold_admit_params
+    out = {sid: dict(kv) for sid, kv in (fold_admit_params(params) or {}).items()}   # 收尾步新旧键并认（P3a-1）
     for sid, kv in tr.items():
         for field, pages in kv.items():
             old = out.get(sid, {}).get(field)
@@ -185,6 +187,8 @@ def kinds_from_params(params: dict[str, dict] | None) -> dict[str, list]:
     """反过来：从（已合并的）`params` 里读出三个字段，得到生效的页型表。不管用户写的是新写法还是老写法，
     `BookSpec.page_kinds` 都是这张表——给 `guji pagekinds` 之类读的人用，不必再各自去三个 Step 参数里找。"""
     out: dict[str, list] = {}
+    from .decide_names import fold_admit_params
+    params = fold_admit_params(params)              # 收尾步新旧键并认（P3a-1）
     for kind, (sid, field) in KIND_PARAM.items():
         sp = (params or {}).get(sid)
         v = sp.get(field) if isinstance(sp, dict) else None     # 形状错的 params 交给后面的校验报

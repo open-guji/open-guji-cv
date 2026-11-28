@@ -15,7 +15,14 @@
           note: 职名、凡例
     reference_profile: none    # 简写：整册同一形态，等于 {default: none}
 
-- 段上**不收 `quality`**：参校本质量只在 `references[].quality` 写一处，段用 `ref:` 指过去。
+- 段上只收 `accuracy`（只许压低）：参校本准确度写在 `references[].accuracy`，段用 `ref:` 指过去。
+- 列级无参照（2026-11-28，脉经第 2 册缺文小注）：`kind: none` 段加 `cols: [8, "9-11"]`＝这些页上只有这几列没参照
+  （页本身的形态由别的段／default 定，可重叠）。align_ref 在这些列不出对位字、产物写 `none_cols`；manager 待审原因把这些格当
+  「参照缺是设计」，不算切分坏。只进声明了的页的指纹（`page_token` 加 `|nc:…`）。
+- 参校本四维（2026-11-27）写在 `references[]` 上：`form`（column/text）、`punct`（none/judou/modern）、`script`（faithful/trad/simp）、
+  `accuracy`（very_high/high/mid/low）＋`accuracy_evidence`（一句话：量法、样本、一致率）。段上可写 `accuracy`，只许压低
+  （如序跋、职名页参校本错得多）。seed_admit 按它推参校本信任档（Sheldon 11-27 定：四维是唯一入口，旧键
+  `quality`／`line_is_column`／`seed_admit.reference_trust`／`ref_lib_coord`／`follow_ref_variants`／`ref_topk_follow` 不再读）。
 - **未声明**（三层都没写）：每页 `kind_of` 返回 `column`、`declared=False`。读它的步必须把 `column` 实现成
   「今天的行为，逐字节不变」，只给 `text`／`none` 加分支，所以旧书产物不变。
 - **不要把 `reference_profile`／`rare_charset` 放进 `StepSpec.book_deps`**：`_self_payload` 把 book_deps 整份写进
@@ -39,7 +46,48 @@ KINDS = ("column", "text", "none")
 #: 未声明时每页的形态（＝今天的行为）
 DEFAULT_KIND = "column"
 _TOP_KEYS = frozenset({"default", "segments"})
-_SEG_KEYS = frozenset({"pages", "kind", "ref", "note"})
+_SEG_KEYS = frozenset({"pages", "kind", "ref", "note", "accuracy", "cols"})
+
+#: 参校本四维（`references[]` 上的键，2026-11-27 CV0，Sheldon 定「四维＋准确度分档」，门槛见 cv `doc/design/参校本四维与准确度分档.md`）。
+#: 都可不写（＝未标）。未标 accuracy＝low（不额外信任）；未标 form＝按语料自测（align_ref `_corpus_line_is_column`）。
+#: 形态：column＝一行即刻本一列；text＝不分行全文
+REF_FORMS = ("column", "text")
+#: 标点：none＝白文；judou＝句读圈点；modern＝新式标点
+REF_PUNCTS = ("none", "judou", "modern")
+#: 用字：faithful＝照录底本字形（异体、码位跟刻本）；trad＝规范繁体（异体已归一）；simp＝简体
+REF_SCRIPTS = ("faithful", "trad", "simp")
+#: 准确度（与最终定字一致率，实测口径见设计文档）：very_high ≥ 99.9%、high ≥ 99.5%、mid ≥ 98%、low 其余或没量
+ACCURACIES = ("very_high", "high", "mid", "low")
+_DIM_VALUES = {"form": REF_FORMS, "punct": REF_PUNCTS, "script": REF_SCRIPTS, "accuracy": ACCURACIES}
+
+
+def accuracy_rank(a: str | None) -> int:
+    """准确度档位的高低（未标＝-1，low＝0 … very_high＝3）。"""
+    return {"low": 0, "mid": 1, "high": 2, "very_high": 3}.get(a or "", -1)
+
+
+def check_reference_dims(references: list[dict]) -> None:
+    """`references[]` 的四维键写错就报（值不在表里）。没写的键不管；旧键 `quality`／`line_is_column` 不再读（迁移期并存不报）。"""
+    for i, r in enumerate(references or [], 1):
+        where = f"references 第 {i} 份（{_ref_name(r)}）"
+        for k, allowed in _DIM_VALUES.items():
+            v = r.get(k)
+            if v is not None and v not in allowed:
+                raise ValueError(f"{where}.{k}: 不认识 {v!r}，只认 {'、'.join(allowed)}")
+        ev = r.get("accuracy_evidence")
+        if ev is not None and not isinstance(ev, str):
+            raise ValueError(f"{where}.accuracy_evidence: 要写成一句话（量法、样本数、一致率）")
+
+
+def ref_is_column(r: dict | None) -> bool:
+    """这份参校本一行是不是刻本一列（`form: column`）。"""
+    return bool(r) and r.get("form") == "column"
+
+
+def ref_accuracy(r: dict | None) -> str:
+    """这份参校本的准确度档；未标＝low。"""
+    a = (r or {}).get("accuracy")
+    return a if a in ACCURACIES else "low"
 
 
 @dataclass(frozen=True)
@@ -49,6 +97,8 @@ class RefSegment:
     ref: int | None = None          # references[] 下标；none 段为 None
     note: str = ""
     expr: tuple = ()                # yaml 原样的页号表达式（显示用）
+    accuracy: str = ""              # 段上压低准确度（只许 ≤ 所指参校本的 accuracy）；空＝跟参校本
+    cols: tuple[int, ...] = ()      # 列级无参照（只 kind: none）：这些页上只有这几列没参照，页本身的形态照旧
 
 
 @dataclass(frozen=True)
@@ -56,6 +106,8 @@ class RefProfile:
     declared: bool = False
     default: str = DEFAULT_KIND
     segments: tuple[RefSegment, ...] = ()
+    #: 列级无参照段（`kind: none` 带 `cols`）：不占页、可与页段重叠，见 `none_cols`
+    col_segments: tuple[RefSegment, ...] = ()
     #: 未声明段、`default` 是 column／text 时用的参校本下标（references 为空时 None）
     default_ref: int | None = None
     _index: dict = field(default_factory=dict, compare=False, repr=False)
@@ -85,6 +137,32 @@ class RefProfile:
         i = self.ref_index(page)
         return references[i] if i is not None and i < len(references) else None
 
+    def none_cols(self, page: int) -> frozenset[int]:
+        """本页声明「无参照」的列号（列级 none 段的并集）；整页 none 或没声明＝空。"""
+        page = int(page)
+        if self.kind_of(page) == "none":
+            return frozenset()
+        out: set[int] = set()
+        for s in self.col_segments:
+            if page in s.pages:
+                out.update(s.cols)
+        return frozenset(out)
+
+    def accuracy_of(self, page: int, references: list[dict]) -> str:
+        """这页参照的准确度档：段上写了取段的（只会更低），否则取所指参校本的 `accuracy`（未标＝low）；无参照页＝""。"""
+        ref = self.ref_of(page, references)
+        if ref is None:
+            return ""
+        s = self._index.get(int(page))
+        if s is not None and s.accuracy:
+            return s.accuracy
+        return ref_accuracy(ref)
+
+    def script_of(self, page: int, references: list[dict]) -> str:
+        """这页参照的用字（`references[].script`）；无参照页、未标＝""。"""
+        ref = self.ref_of(page, references)
+        return str(ref.get("script") or "") if ref is not None else ""
+
     def pages_of(self, kind: str, all_pages) -> list[int]:
         if kind not in KINDS:
             raise ValueError(f"未知参照形态 {kind!r}，只认 {'、'.join(KINDS)}")
@@ -95,9 +173,11 @@ class RefProfile:
         if not self.declared:
             return None
         k = self.kind_of(page)
-        if k == DEFAULT_KIND:
+        nc = self.none_cols(page)
+        tail = ("|nc:" + ",".join(map(str, sorted(nc)))) if nc else ""
+        if k == DEFAULT_KIND and not nc:
             return None
-        return f"{k}:{self.ref_index(page)}"
+        return f"{k}:{self.ref_index(page)}{tail}"
 
     def summary(self, all_pages) -> dict:
         out = {"declared": self.declared, **{k: 0 for k in KINDS}}
@@ -143,6 +223,7 @@ def fold_layer(name: str, layer: dict, *, allow_segments: bool = True) -> dict:
 def load_reference_profile(raw, references: list[dict] | None = None) -> RefProfile:
     """合并好的 `reference_profile`（`normalize_layer` 之后的形）＋`references` → `RefProfile`。写错就报，不猜。"""
     refs = list(references or [])
+    check_reference_dims(refs)
     raw = normalize_layer(raw)
     if not raw:
         return RefProfile(declared=False, default_ref=0 if refs else None)
@@ -154,8 +235,9 @@ def load_reference_profile(raw, references: list[dict] | None = None) -> RefProf
         default_ref = _resolve_ref(None, refs, f"reference_profile.default: {default}")
     segs_raw = raw.get("segments") or []
     if not isinstance(segs_raw, list):
-        raise ValueError("reference_profile.segments: 要写成列表，每项 {pages, kind, ref?, note?}")
+        raise ValueError("reference_profile.segments: 要写成列表，每项 {pages, kind, ref?, note?, accuracy?}")
     segs: list[RefSegment] = []
+    col_segs: list[RefSegment] = []
     owner: dict[int, int] = {}
     for i, s in enumerate(segs_raw, 1):
         where = f"reference_profile.segments 第 {i} 段"
@@ -163,8 +245,8 @@ def load_reference_profile(raw, references: list[dict] | None = None) -> RefProf
             raise ValueError(f"{where}: 要写成 {{pages, kind, ref?, note?}}")
         extra = sorted(set(map(str, s)) - _SEG_KEYS)
         if extra:
-            why = "（参校本质量只写在 references[].quality，段上用 ref: 指过去）" if "quality" in extra else ""
-            raise ValueError(f"{where}: 不认识 {', '.join(extra)}{why}，只认 pages、kind、ref、note")
+            why = "（段上写 accuracy：只许压低所指那份参校本的档）" if "quality" in extra else ""
+            raise ValueError(f"{where}: 不认识 {', '.join(extra)}{why}，只认 pages、kind、ref、note、accuracy")
         if "pages" not in s or "kind" not in s:
             raise ValueError(f"{where}: pages、kind 都要写")
         expr = s["pages"]
@@ -185,17 +267,45 @@ def load_reference_profile(raw, references: list[dict] | None = None) -> RefProf
             ref = None
         else:
             ref = _resolve_ref(s.get("ref"), refs, f"{where}（kind: {kind}）")
-            if kind == "column" and refs[ref].get("line_is_column") is False:
-                raise ValueError(f"{where}: kind: column 指向的参校本 {_ref_name(refs[ref])} 写着 line_is_column: false，自相矛盾")
+            if kind == "column" and refs[ref].get("form") == "text":
+                raise ValueError(f"{where}: kind: column 指向的参校本 {_ref_name(refs[ref])} 写着 form: text，自相矛盾")
+        cols_raw = s.get("cols")
+        if cols_raw is not None:
+            if kind != "none":
+                raise ValueError(f"{where}: cols（列级无参照）只许写在 kind: none 的段上")
+            if isinstance(cols_raw, (int, str)) and not isinstance(cols_raw, bool):
+                cols_raw = [cols_raw]
+            try:
+                cols = tuple(sorted(set(_expand_pages(list(cols_raw)))))
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"{where}: cols 要写成列号列表（整数或 \"8-11\"）：{e}") from None
+            if not cols or any(c < 1 for c in cols):
+                raise ValueError(f"{where}: cols 要写成从 1 起的列号")
+            if s.get("accuracy"):
+                raise ValueError(f"{where}: 列级无参照段不能写 accuracy")
+            col_segs.append(RefSegment(pages=pages, kind=kind, note=str(s.get("note") or ""), expr=tuple(expr), cols=cols))
+            continue
+        acc = s.get("accuracy") or ""
+        if acc:
+            if acc not in ACCURACIES:
+                raise ValueError(f"{where}.accuracy: 不认识 {acc!r}，只认 {'、'.join(ACCURACIES)}")
+            if ref is None:
+                raise ValueError(f"{where}: kind: none 的段不能写 accuracy")
+            top = ref_accuracy(refs[ref])
+            if accuracy_rank(acc) > accuracy_rank(top):
+                raise ValueError(f"{where}: accuracy: {acc} 高于所指参校本 {_ref_name(refs[ref])} 的 accuracy: {top}"
+                                 f"（未标按 low）；段上只许压低")
         for p in pages:
             if p in owner:
                 raise ValueError(f"{where}: 第 {p} 页已在第 {owner[p]} 段里，段与段不能重叠")
             owner[p] = i
-        segs.append(RefSegment(pages=pages, kind=kind, ref=ref, note=str(s.get("note") or ""), expr=tuple(expr)))
-    if default == "column" and default_ref is not None and refs[default_ref].get("line_is_column") is False:
+        segs.append(RefSegment(pages=pages, kind=kind, ref=ref, note=str(s.get("note") or ""), expr=tuple(expr),
+                               accuracy=acc))
+    if default == "column" and default_ref is not None and refs[default_ref].get("form") == "text":
         raise ValueError(f"reference_profile.default: column 指向的参校本 {_ref_name(refs[default_ref])} "
-                         f"写着 line_is_column: false，自相矛盾")
-    return RefProfile(declared=True, default=default, segments=tuple(segs), default_ref=default_ref)
+                         f"写着 form: text，自相矛盾")
+    return RefProfile(declared=True, default=default, segments=tuple(segs), default_ref=default_ref,
+                      col_segments=tuple(col_segs))
 
 
 def lint(book, all_pages=None) -> list[str]:

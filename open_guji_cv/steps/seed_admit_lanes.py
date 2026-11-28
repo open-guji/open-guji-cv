@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from .seed_admit_cell_state import SEG_BOX_CRITERIA  # noqa: F401  2026-11-28 搬到 cell_state；seed_admit_params 的 seg_box_check 校验仍从这里取
+
 from .seed_admit_params import SeedAdmitParams  # noqa: F401  注解用
 
 import re
@@ -239,11 +241,12 @@ def solo_5b_decide(*, cands: list, rare_top: str | None, n_lib: dict | int, doub
 
 def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare, coord: dict[str, str],
                   keben: dict[str, int],
-                  mmap_raw: dict | None = None) -> int:
+                  mmap_raw: dict | None = None, lacuna_only: bool = False) -> int:
     """无参照格「库首位＋5-b 作证」：只把**仍待审**、无任何整理本对位的格升为放行。→ 升级格数。见 `SeedAdmitParams.solo_5b_cov`。
 
     `mmap_raw`：`consensus_fallback` 退档前的 glyph_match 记录。无参照格没有整理本字，共识升档的 same
-    一律被退回 unsure，`solo_5b_same_cov` 要认的正是这批「库原判 same」，所以按退档前的记录看。"""
+    一律被退回 unsure，`solo_5b_same_cov` 要认的正是这批「库原判 same」，所以按退档前的记录看。
+    `lacuna_only`：本页有参校本且 `solo_5b_scope=no_ref`，只放坐标对位为缺字（`GAP_CHARS`）的格。"""
     if rare is None:
         return 0
     from ..clustering.seeding import NEAR_FORM_CHARS
@@ -258,6 +261,8 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
                 continue
             if rec.id in amap or (coord.get(rec.id) or "") not in ("", *GAP_CHARS):
                 continue                  # 有整理本对位的格归别的通道
+            if lacuna_only and (coord.get(rec.id) or "") not in GAP_CHARS:
+                continue                  # solo_5b_scope=no_ref：有参校本的页上只放参校本标了缺字的位
             m = mmap.get(rec.id)
             if m is None or not m.candidates:
                 continue
@@ -406,42 +411,6 @@ def _evict_review_pass(ctx: RunContext, page: int, out: list, cells: dict) -> in
                 n += 1
     if hits:
         ctx.log(f"seed_admit p{page}: 撤库重审 {len(hits)} 格退回待审（doubt evict_review）：{'；'.join(hits)}")
-    return n
-
-
-def _symbol_ref_blank_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: dict) -> int:
-    """符号字块遇整理本空格位（`symbol_ref_blank`）：库首位是册里点名的符号、cov 够、对位说此位是空格 → 放行为该符号（升）。
-    → 新放行格数。放在 `symbol_review` 之后，把它降下去的那批圈号接回来。"""
-    syms = frozenset(p.symbol_ref_blank)
-    n = 0
-    for col in out:
-        col_cov = sum(1 for r in col.chars or [] if coord.get(r.id) is not None) if p.symbol_ref_gap else 0
-        for rec in col.chars or []:
-            if rec.provenance == "human" or rec.channel == "human":
-                continue
-            ds = {d for d in (rec.doubts or []) if isinstance(d, str)}
-            if "occluded" in ds or "excluded" in ds or (rec.evidence or {}).get("occluded"):
-                continue
-            c0 = coord.get(rec.id)
-            gap = c0 is None and p.symbol_ref_gap and col_cov >= p.symbol_ref_gap_min_col
-            if c0 != "" and not gap:
-                continue
-            if rec.char and rec.char not in syms:
-                continue
-            m = mmap.get(rec.id)
-            cands = list(getattr(m, "candidates", None) or [])
-            if not cands or cands[0][0] not in syms or float(cands[0][1]) < (p.symbol_ref_gap_cov if gap else p.symbol_ref_blank_cov):
-                continue
-            sym, cov = cands[0][0], float(cands[0][1])
-            _demote(rec, "symbol_ref_blank")
-            ev = dict(rec.evidence or {})
-            ev["lane"] = {"lane": "symbol_ref_blank", "lib": sym, "cov": round(cov, 4),
-                          "prev_doubts": list(rec.doubts or []), **({"via": "gap"} if gap else {})}
-            ev.pop("symbol", None)
-            rec.evidence = ev
-            rec.admit, rec.channel, rec.provenance, rec.char = True, "symbol_ref_blank", "match", sym
-            rec.doubts = ["lane_symbol_ref_blank"]
-            n += 1
     return n
 
 
@@ -1058,47 +1027,6 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
             rec.evidence = {**ev, "lane": {"lane": name, **lev, "prev_doubts": list(rec.doubts or [])},
                             "no_glyph_lib": True}
             rec.doubts = [f"lane_{name}"]
-            n += 1
-    return n
-
-
-def _blank_ink_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: dict, conflict: frozenset, vmap) -> int:
-    """`blank_ink_nonchar`：整理本空格位上有墨、库认不出的格判非字放行。→ 放行格数。只升不降。"""
-    n = 0
-    for col in out:
-        recs = col.chars or []
-        ref_n = agree = 0
-        for rec in recs:
-            ch = coord.get(rec.id)
-            if not ch or is_gap(ch):
-                continue
-            ref_n += 1
-            m = mmap.get(rec.id)
-            top = (m.candidates[0][0] if m and m.candidates else None) or rec.char
-            agree += int(bool(top) and vmap.semantic(top) == vmap.semantic(ch))
-        if agree < p.blank_ink_col_min_agree or agree < p.blank_ink_col_min_frac * ref_n:
-            continue
-        for rec in recs:
-            doubts = set(rec.doubts or [])
-            if (rec.admit or rec.channel == "human" or rec.provenance == "human" or "excluded" in doubts
-                    or "occluded" in doubts or doubts & _LANE_HARD):
-                continue
-            if coord.get(rec.id, None) != "" or rec.id in conflict:
-                continue
-            m = mmap.get(rec.id)
-            if m is None:
-                continue
-            top = m.candidates[0] if m.candidates else None
-            cov = float(top[1]) if top else 0.0
-            if m.verdict == "same" or cov >= p.blank_ink_max_cov:
-                continue
-            ev = rec.evidence or {}
-            rec.admit, rec.channel, rec.provenance, rec.char = True, "blank_ink", "blank_ink", None
-            rec.evidence = {**ev, "lane": {"lane": "blank_ink", "nonchar": True, "ref_blank": True,
-                                           "verdict": m.verdict, "lib": top[0] if top else None,
-                                           "cov": round(cov, 4), "prev_doubts": sorted(doubts)},
-                            "no_glyph_lib": True}
-            rec.doubts = ["blank_ink"]
             n += 1
     return n
 

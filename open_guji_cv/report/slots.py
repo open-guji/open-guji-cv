@@ -61,10 +61,12 @@ ctx/库/OCR 猜测）。同一页在「最终文本」里和「被比对的文�
 """
 from __future__ import annotations
 from ..products.alt_view import read_view as _read_view   # alt_cut：读挑中的那套切法
+from ..core.decide_names import ADMIT_STEP_ACTIVE
 
 from dataclasses import dataclass, field
 
 from ..core.spec import page_key
+from ..products.final_read import read_final_store
 from ..errors import ProductMissing
 from ..products.kinds.cells import CellRec, PageCells
 from ..products.kinds.recog import AdmitRec, PageAdmit
@@ -73,8 +75,8 @@ from ..utils.jiazhu_order import sort_by_reading
 
 CELLS_STEP = "row_segment"          # 刻本链的产出者；现代链是 row_segment_runs，见 cells_step()
 CELLS_KIND = "cells"
-ADMIT_STEP = "seed_admit"
-ADMIT_KIND = "seed_admit"
+ADMIT_STEP = ADMIT_STEP_ACTIVE
+ADMIT_KIND = ADMIT_STEP_ACTIVE
 
 
 def cells_step(book: str) -> str:
@@ -139,7 +141,7 @@ def page_slots(store: ProductStore, book: str, page: int,
     key = page_key(page)
     step = cells_step(book)
     cells: PageCells | None = _read_view(store, book, step, key, CELLS_KIND)  # type: ignore[assignment]
-    admit: PageAdmit | None = store.read(book, ADMIT_STEP, key, ADMIT_KIND)  # type: ignore[assignment]
+    admit: PageAdmit | None = read_final_store(store, book, key)  # type: ignore[assignment]   # char_decide／seed_admit 新旧目录都认
     if admit is None:
         raise ProductMissing(f"{book} 第 {page} 页没有 {ADMIT_STEP} 产物（先跑到 Step7）")
     if cells is None:

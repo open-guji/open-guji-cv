@@ -16,7 +16,7 @@ cv 只做 guji-manager 第二步 `pipeline` 里的「跑 CV 管线」，管线�
 cv 自己的命令行入口是 `guji-cv`（`python -m open_guji_cv` 同）；guji-manager 通过总入口 `guji pipeline …` 调同一批命令。大步工具可带前缀：`guji-cv layout preclean …`、`guji-cv read rare …`。
 
 ```bash
-guji-cv pipeline keben_body_v2 vol04 -w <工作区> --pages 9 --from layout --to cut   # 跑一段，可写大步名或步骤 id
+guji-cv pipeline guji_default vol04 -w <工作区> --pages 9 --from layout --to cut   # 跑一段，可写大步名或步骤 id
 guji-cv step row_segment vol04 -w <工作区> --pages 9                       # 只跑一步
 guji-cv status vol04 -w <工作区> --pages all                               # 各步新鲜／过期／缺失
 guji-cv version --json                                                           # 装着的 cv 版本与契约版本
@@ -28,6 +28,7 @@ guji-cv version --json                                                          
 
 | 文档 | 内容 |
 |---|---|
+| [验收标准.md](验收标准.md)、[bench登记表.md](bench登记表.md) | 每个大步、小步要达到的标准（接口、文档、可控、可测试，2026-11-28 用户定）；各小步 benchmark 与测试集登记 |
 | [版本号规矩.md](版本号规矩.md) | 分支、发版、tag、Wiki 随 MINOR 重改 |
 | [开关登记表.md](开关登记表.md) | 每个开关的证据与负责人 |
 | [参考/字格永久编号u.md](参考/字格永久编号u.md) | 字格永久编号 u：cv 读什么（裁定按 u 查、身份账只读）、`ruling_by_u` 怎么开、各版本线、换单导出带 u、字形库为什么不改键 |
@@ -38,7 +39,7 @@ guji-cv version --json                                                          
 | [参考/受控重跑.md](参考/受控重跑.md)、[参考/性能统计.md](参考/性能统计.md)、[参考/longrun.md](参考/longrun.md) | 重跑分级、耗时、断点续跑 |
 | [参考/exp_framework.md](参考/exp_framework.md)、[参考/cloud_eval.md](参考/cloud_eval.md) | A/B 实验与评测 |
 | [参考/modern_print_pipeline.md](参考/modern_print_pipeline.md) | 现代排印链 |
-| [formats/](formats/README.md) | guji-page、pages.json、人裁事件等格式 |
+| [formats/](formats/README.md) | guji-page、pages.json、裁定事件等格式 |
 
 ## 其他
 

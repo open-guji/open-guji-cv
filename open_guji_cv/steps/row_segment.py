@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import inspect
+import numpy as np
 from typing import Literal
 
 from pydantic import BaseModel, field_validator, model_serializer, model_validator
@@ -48,18 +49,22 @@ def _layout_path(rel: str):
 
 
 def load_layout(rel: str, book: str) -> dict[tuple[int, int], dict]:
-    """逐列格位表（`scripts/dzg_layout.py` 产出）→ 本册 {(页, 列): 行}。缓存按文件签名失效。"""
+    """逐列格位表（`scripts/dzg_layout.py` 产出）→ 本册 {(页, 列): 行}。缓存按文件签名失效。
+    表行的 `vol` 是本册名或本册 yaml `aliases` 里的旧名都认（2026-11-27 册号位数统一：册改名后表不改写，
+    钉了 sha 的语料表也不必另出一份；没写 `aliases` 的册行为逐位不变）。"""
     import json
+    from ..core.volume_alias import alias_map
     p = _layout_path(rel)
     if not p.exists():
         raise FileNotFoundError(f"layout_prior 指的表不存在：{p}（先跑 scripts/dzg_layout.py）")
-    key = (_sig(p), book)
+    names = {book, *(a for a, n in alias_map(None).items() if n == book)}
+    key = (_sig(p), book, tuple(sorted(names)))
     if key not in _LAYOUT_CACHE:
         out: dict[tuple[int, int], dict] = {}
         for ln in p.read_text(encoding="utf-8").splitlines():
             if ln.strip():
                 r = json.loads(ln)
-                if r.get("vol") == book:
+                if r.get("vol") in names:
                     out[(int(r["page"]), int(r["col"]))] = r
         _LAYOUT_CACHE[key] = out
     return _LAYOUT_CACHE[key]
@@ -777,6 +782,108 @@ CUT_REPAIR = {"cut_gap_guard": 0.08, "cut_free_seam": 0.35, "cut_gap_keep_glyph"
               "cut_white_row": 0.35, "cut_glyph_line": 0.35}
 
 
+class StraddleMergeParams(BaseModel):
+    """`RowSegmentParams.straddle_merge` 的判据（朱楓林集 01 册实测，见 `straddle_pairs`）。"""
+    band_w: float = 0.2
+    """界行两侧各量多宽（×列宽 ref_w）。"""
+    band_min: float = 0.28
+    outer_max: float = 0.08
+    """离界行 0.45–0.85 列宽那两条（两列各自的字身位置）的墨比都 ≤ 它。骑线字只占界行两侧，两列本来的字位是空的（朱楓林集 5 册
+    卷端 38 格全是 0.00–0.01）；界行上一团墨污、两旁是正常字时（05 册 47 页「于」「剥」之间）这两条有字身（0.44／0.18）。"""
+    min_col_w: float = 0.8
+    """两列的文字带（`content_x`）都至少这么宽（×ref_w）才看。列窗认错、一列劈成两窄列时（朱楓林集 04 册 23 页 93、69px，ref_w 147），
+    劈线穿过字中间，两条都满墨，整列误认骑线；正常列 ≥0.9。"""
+    """界行左右两条的墨比都 ≥ 它才算骑线。朱楓林集 01 册：骑线字 8 格 0.33–0.50，其余有字格对最高 0.23（列首／列尾格框线行已剔）。"""
+
+
+#: `straddle_pairs` 量「两列本来的字位」的那两条：离界行这么多 ×ref_w
+OUTER_BAND = (0.45, 0.85)
+
+
+def straddle_pairs(gray: np.ndarray, pc: PageCells, p: StraddleMergeParams) -> list[tuple[int, int, int, int]]:
+    """骑线字：写在两列之间界行上（界行在此断开）、被两列各劈一半的字。→ [(右列, 右格, 左列, 左格)]。
+
+    相邻两列（列号 c 在右、c+1 在左，文字带都 ≥ `min_col_w`×列宽）里纵向重叠过半、至少一格有字的一对格：界行（两格之间、墨最多的那条像素列）
+    左右各 `band_w`×列宽的两条里墨比都 ≥ `band_min`（横贯的框线行先剔掉），而离界行 `OUTER_BAND` 的两条（两列各自的字身位置）
+    墨比都 ≤ `outer_max`。正常的字离界行有空白，骑线字压在线上、两列本来的字位空着。
+    `gray` 是 `RunContext.raw_page`（左上原点），格的 `quad_page` 右上原点。只看正文整格（不看雙行小注 a/b 半格）。"""
+    H, W = gray.shape[:2]
+    rw = float(pc.ref_w or 0)
+    if rw <= 0:
+        return []
+    ink = gray < 128
+    w = max(2, int(p.band_w * rw))
+
+    def box(c):
+        xs = [W - 1 - q[0] for q in c.quad_page]
+        ys = [q[1] for q in c.quad_page]
+        return min(xs), min(ys), max(xs), max(ys)
+
+    def _band_w(c) -> float:
+        return float(c.content_x[1] - c.content_x[0]) if c.content_x else 0.0
+
+    cols = {c.col: c for c in pc.columns if c.ok}
+    out = []
+    for col, cc in sorted(cols.items()):
+        lc = cols.get(col + 1)
+        if lc is None or not (_band_w(cc) >= p.min_col_w * rw and _band_w(lc) >= p.min_col_w * rw):
+            continue                       # 列窗没认对（一列劈成两窄列，朱楓林集 04 册 23 页）：「界行」穿过字中间，不算
+        right = [(c, box(c)) for c in cc.cells if not c.sub and c.quad_page]
+        left = [(c, box(c)) for c in lc.cells if not c.sub and c.quad_page]
+        used: set[int] = set()
+        for a, ba in right:
+            for b, bb in left:
+                if b.slot in used or (a.kind == "blank" and b.kind == "blank"):
+                    continue
+                ov = min(ba[3], bb[3]) - max(ba[1], bb[1])
+                if ov < 0.5 * min(ba[3] - ba[1], bb[3] - bb[1]):
+                    continue
+                bx = int(round((ba[0] + bb[2]) / 2))
+                y0, y1 = max(0, int(max(ba[1], bb[1]))), min(H, int(min(ba[3], bb[3])))
+                lo = max(0, bx - 14)
+                prof = ink[:, lo:bx + 15].sum(0)
+                if y1 <= y0 or prof.size == 0:
+                    continue
+                rx = lo + int(prof.argmax())
+                if rx - w < 0 or rx + w >= W:
+                    continue
+                seg = ink[y0:y1]
+                keep = seg[:, rx - w:rx + w + 1].mean(1) < 0.85      # 横贯的框线行
+                if keep.sum() >= 0.5 * len(keep):
+                    seg = seg[keep]
+                lft, rgt = float(seg[:, rx - w:rx - 4].mean()), float(seg[:, rx + 5:rx + w].mean())
+                o0, o1 = int(OUTER_BAND[0] * rw), int(OUTER_BAND[1] * rw)
+                outer = max(float(seg[:, max(0, rx - o1):rx - o0].mean()) if rx - o0 > 0 else 0.0,
+                            float(seg[:, rx + o0:min(W, rx + o1)].mean()) if rx + o0 < W else 0.0)
+                if min(lft, rgt) >= p.band_min and outer <= p.outer_max:
+                    out.append((col, a.slot, col + 1, b.slot))
+                    used.add(b.slot)
+                    break
+    return out
+
+
+def _apply_straddle(pc: PageCells, pairs) -> PageCells:
+    """骑线字合成一格放进右列（先读的那列，用户 2026-11-27 定）：右列那格记字（`kind=char`）、旗 `straddle:<左列>:<左格>`；
+    左列那格记空（`kind=blank`）、旗 `straddle_into:<右列>:<右格>`。格线、格号不动；Step4 按旗在原图上裁整字字块。"""
+    if not pairs:
+        return pc
+    upd: dict[tuple[int, int], tuple[str, str]] = {}
+    for rc, rs, lc, ls in pairs:
+        upd[(rc, rs)] = ("char", f"straddle:{lc}:{ls}")
+        upd[(lc, ls)] = ("blank", f"straddle_into:{rc}:{rs}")
+    cols = []
+    for cc in pc.columns:
+        if not any((cc.col, c.slot) in upd for c in cc.cells):
+            cols.append(cc)
+            continue
+        cells = []
+        for c in cc.cells:
+            u = upd.get((cc.col, c.slot)) if not c.sub else None
+            cells.append(c if u is None else c.model_copy(update={"kind": u[0], "flags": [*c.flags, u[1]]}))
+        cols.append(cc.model_copy(update={"cells": cells}))
+    return pc.model_copy(update={"columns": cols})
+
+
 class RowSegmentParams(BaseModel):
     n_body_slots: int | None = None      # None = Book.chars_per_line
     n_raised: int = 0                    # 抬头多出的格数；版式先验，raised 不自动推
@@ -824,6 +931,10 @@ class RowSegmentParams(BaseModel):
     #: 本册格级钉子（manual-cells）的内容指纹，有钉子时 `book_params` 自动填；soft：钉子推了只报漂移（`guji status` 的 drift），
     #: 不判过期——钉子生效要交单从 row_segment 重跑涉及页（A22 F1 方案 A，2026-11-10）
     manual_cells_fingerprint: str = ""
+    straddle_merge: StraddleMergeParams | None = None
+    """骑线字合一格（CV2 2026-11-28，朱楓林集 MBJ 报）：卷端「新安」「裔孫」写在两列之间的界行上（界行在此断开），
+    照界行切每字劈成左右两半。开了（写 `{}` 用缺省判据）就按 `straddle_pairs` 认出这种格对，合成一格放进右列（先读的那列）
+    对应格位、左列那格记空（`_apply_straddle`，用户 11-27 定）；Step4 在原图上裁整字字块。人定的列不动。缺省 None＝关，不进 dump。"""
     #: 职名页按整理本字数重切（史記文淵閣本，`books/shiji_wyg/roster_segment.refit_column`）：殆知阁源记录目录
     #: （放 0243.jsonl 等，如 `daizhige`）与页钉位表（语料目录下的名字，同 align_ref.page_pins）。两个都给才开；只有实现了 `page_ref_lines` 的套书用得上，
     #: 殿本的职名页实现不认，关时产物逐字节不变。
@@ -935,6 +1046,17 @@ class RowSegmentParams(BaseModel):
     #: 按表格网少违一格（7 对 8），无先验格网落选，下半格线错位多出空格。开着时：无先验格网违表＋劈字不多于中选格网 `layout_off_tol`
     #: 格以内、且劈字、格高不匀、穿字（逐项按序比）严格更好，就改取它。书级；0＝关（缺省，不进参数哈希）。
     layout_off_tol: int = 0
+    #: **无先验格网总出场**（2026-11-27，CV2；全唐文开 `border_detect.vline_track` 后）：缺省只有现有候选格网个个都劈字
+    #: （`_split_chars` ≥1）时才试无先验格网（`layout_off`）。劈字只数高 0.3–1.5 格的连通体，多块拼成的字（碑、百、於）被按表
+    #: 多切一格数不出来，竖线跟踪让 period 动 1–3px 后按表格网劈字数掉到 0，无先验格网连出场都没有（039 31:9、055 49:1、
+    #: 067 64:6）。开时总试，出场后仍按原条件（字数比表少、格高不更不匀）入候选，选不选照旧按打分（配 `layout_off_tol`）。
+    #: 书级；False＝关（缺省，不进参数哈希）。
+    layout_off_always: bool = False
+    #: **列端框线格的贴框距离**（2026-11-27，CV2；全唐文开 `border_detect.vline_track` 后）：列端格「只有版框线」
+    #: （`seg/profile.frame_only_edge_cells`）要求格里的墨全落在离上／下版框线这么多格高以内。全唐文上框粗条下隔 25–40px
+    #: 一道细线，列图上细线离 border_top 正在 0.2 格高（约 40px）的刀刃上：竖线跟踪让 period 动 1–3px，046 47:4、55:7、
+    #: 57:2、80:1 等首格细线就从「记空」翻成「字」（frame_line 字进 char_index）。书级；0.2＝缺省（不进参数哈希）。
+    frame_edge_near: float = 0.2
     #: **字间界线判官**（2026-11-26，CV2；`impl/keben/boundary_net`）：`models/<名>/model.pt` 的小 CNN 看切线上下各一格，判是不是两字之间；
     #: 挑定格网后、终切前，只重排「上下都是正文字」的内部线（格数不变，现线判官分 < `boundary_net_p` 才许挪到隔着墨的另一条缝）。
     #: 治写本高字字内白缝当字缝（史記 42:66:4「而｜佗」等）。书级（模型按书训，名字带版本号）；空＝关（缺省，不进参数哈希）。
@@ -982,6 +1104,10 @@ class RowSegmentParams(BaseModel):
     #: 缺省 0.75 是殿本标定（正文字跨度中位 0.59）；脉经字宽，正文字跨度中位 0.79、73% 过 0.75，左右结构的字（肺、脉、謂、師）
     #: 中缝一宽就被劈成 a/b，取 0.82。只影响切分（`segment_column`），交接闸的 `column_frac` 不变。书级参数；0.75＝缺省（不进参数哈希）。
     jiazhu_span_t: float = 0.75
+    #: **雙行小注单格判据去边重量**（2026-11-28，CV2；全唐文开 `border_detect.vline_track` 后）：单格判据落空时上下各去掉这么多
+    #: ×格高再量一次。格线相位偏几像素、上一字的字脚伸进本格顶上，整宽的字脚把中缝填死，这一格量不出缝（053 75:3「學」脚压住
+    #: 「字闕」，整段小注少一格）。书级；0＝关（缺省，不进参数哈希）。
+    jiazhu_edge_trim: float = 0.0
     #: **切点修整串一键开**（2026-11-18 A22 统一优化 U2）：史記 r76–r80 定下、脉经照抄的五个切点开关一组开，
     #: 没单写的项取 `CUT_REPAIR` 里的值（单写了的照单写的）。书配置只写 `cut_repair: true` 一行。缺省关（不进参数哈希）。
     cut_repair: bool = False
@@ -1088,6 +1214,8 @@ class RowSegmentParams(BaseModel):
         冻结册升 cv 版本不会被判成「参数变了」报警（D 10-19）。开着时照常进指纹。"""
         d = handler(self)
         if isinstance(d, dict):
+            if self.straddle_merge is None:
+                d.pop("straddle_merge", None)
             if not (self.roster_ref_corpus and self.roster_ref_pins):
                 for k in ("roster_ref_corpus", "roster_ref_pins", "roster_ref_fingerprint"):
                     d.pop(k, None)
@@ -1139,6 +1267,10 @@ class RowSegmentParams(BaseModel):
                 d.pop("row_pitch", None)
             if not self.layout_off_tol:
                 d.pop("layout_off_tol", None)
+            if self.frame_edge_near == 0.2:
+                d.pop("frame_edge_near", None)
+            if not self.layout_off_always:
+                d.pop("layout_off_always", None)
             if not self.boundary_net:
                 d.pop("boundary_net", None)
                 d.pop("boundary_net_p", None)
@@ -1159,6 +1291,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_cc_min", None)
             if self.jiazhu_span_t == 0.75:
                 d.pop("jiazhu_span_t", None)
+            if not self.jiazhu_edge_trim:
+                d.pop("jiazhu_edge_trim", None)
             d.pop("cut_repair", None)          # 展开后的各项照常进 dump，开关本身不进（同值的老写法指纹一致）
             if self.page_map == "off":
                 d.pop("page_map", None)
@@ -1301,6 +1435,8 @@ class RowSegmentStep(Step):
             raise ValueError(f"row_segment.jiazhu_cc_min：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         if p.jiazhu_span_t != 0.75 and "jiazhu_span_t" not in inspect.signature(segment_column).parameters:
             raise ValueError(f"row_segment.jiazhu_span_t：本册套书的 {RB.__name__}.segment_column 没有这个参数")
+        if p.jiazhu_edge_trim and "jiazhu_edge_trim" not in inspect.signature(segment_column).parameters:
+            raise ValueError(f"row_segment.jiazhu_edge_trim：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
             if getattr(p, k_) and k_ not in inspect.signature(segment_column).parameters:
                 raise ValueError(f"row_segment.{k_}：本册套书的 {RB.__name__}.segment_column 没有这个参数")
@@ -1316,7 +1452,7 @@ class RowSegmentStep(Step):
             pc = self._run_roster(ctx, p, page, gate, wins)
             # 开了 `roster_grid_slots`：人裁整列格的号也是格网号（可跳号），格数按格网算
             grid_n = (p.n_body_slots or ctx.book.chars_per_line or 0) if p.roster_grid_slots else 0
-            return {"cells": _apply_manual_cells(pc, manual, gate, wins, grid_n=grid_n)}
+            return {"cells": _apply_manual_cells(pc, manual, gate, wins, grid_n=grid_n, geoms=_page_manual_geom(ctx.book.id, page))}
         book_resolved = ov.cuts          # 人裁回流的切点：slot_above → kind，给 segment_column 收敛候选
         book_slots = ov.slots            # 逐列字数＋字距匀不匀（`review/slot_count_cards.py`；p33c19 22 字 vs 常量 21）
         book_solo = ov.solo              # 人指认的單行小注格
@@ -1485,6 +1621,7 @@ class RowSegmentStep(Step):
                        if getattr(p, k_) and final},
                     **({"jiazhu_cc_min": p.jiazhu_cc_min} if p.jiazhu_cc_min != 500 else {}),
                     **({"jiazhu_span_t": p.jiazhu_span_t} if p.jiazhu_span_t != 0.75 else {}),
+                    **({"jiazhu_edge_trim": p.jiazhu_edge_trim} if p.jiazhu_edge_trim else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:
@@ -1663,7 +1800,9 @@ class RowSegmentStep(Step):
                     if _split_out(best) - _split_out(plain_) >= STAIN_GRID_MARGIN:
                         best, stained = None, False
                 if best is None:
-                    if min(s_[1] for s_ in scores) > 0:
+                    # 缺省只在现有候选个个都劈字时才请无先验格网出场；`layout_off_always`（书级）开时不看这一条——劈字只数像一个字的大连通体，
+                    # 多块拼成的字（碑、百、於）被按表多切一格也数不出来（全唐文开竖线跟踪后 039 31:9、055 49:1、067 64:6）
+                    if p.layout_off_always or min(s_[1] for s_ in scores) > 0:
                         r3 = _seg(n_body_col, (gate_raised, gc.top_slack, {}, None, None))
                         # 无先验格网格高不能比现有候选更不匀：少的那个字若是空白被压矮、两字并进一格挤出来的，不是表多了字
                         if (r3 is not None and _n_chars(r3.cells) < len(occ)
@@ -1771,7 +1910,7 @@ class RowSegmentStep(Step):
                     hit = _frame_only_edge_cells(img if img.ndim == 2 else img.mean(axis=2), [(c.y0, c.y1) for c in byy],
                                                  gc.content_x, base.get("border_top"),
                                                  r.bottom_bar_y if r.bottom_bar_y is not None else base.get("border_bottom"),
-                                                 gate.period, p.ink_threshold)
+                                                 gate.period, p.ink_threshold, near_frac=p.frame_edge_near)
                     if _edge_fo_hook is not None:      # 书级补认（row_hooks.edge_frame_only），与缺省判据取并集
                         hit = sorted(set(hit) | set(_edge_fo_hook(
                             img if img.ndim == 2 else img.mean(axis=2), [(c.y0, c.y1) for c in byy],
@@ -1882,7 +2021,12 @@ class RowSegmentStep(Step):
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
         pc = self._header_ref_flags(ctx, p, page, pc)
         pc = self._roster_cols(ctx, p, page, gate, wins, pc)
-        pc = _apply_manual_cells(pc, manual, gate, wins)
+        if p.straddle_merge is not None:
+            pairs = straddle_pairs(ctx.raw_page(page), pc, p.straddle_merge)
+            if manual:
+                pairs = [t for t in pairs if t[0] not in manual and t[2] not in manual]
+            pc = _apply_straddle(pc, pairs)
+        pc = _apply_manual_cells(pc, manual, gate, wins, geoms=_page_manual_geom(ctx.book.id, page) if manual else None)
         if alt_out:
             # 卷端标题列、人工指定的列已换掉主切法，备选不再有意义：只留主切法仍是本步切出来那份的列
             mains = {id(c.cells) for c in out}
@@ -2143,8 +2287,133 @@ class RowSegmentStep(Step):
         return PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
 
 
+#: 钉子按列图几何变化换算后，格框角点最大位移超过这么多 px 的列打 `manual_cells_remapped`、出口闸送人核（CV0 11-26）。
+MANUAL_REMAP_FLAG_PX = 3.0
+
+
+def _page_manual_geom(book: str, page: int) -> dict[int, dict]:
+    """本页整列钉子写入时的列图几何底：`col → geom`（manager v0.6.35 `seg_pin.column_geom` 写进
+    `input.column_basis.geom`；格式见 manager doc/参考/钉子上游底.md）。没记的钉子不在表里。"""
+    from ..feedback.lookup import MANUAL_CELLS_SHARD, _manual_items_lenient
+    from ..gold.store import verdict_store
+    store = verdict_store()
+    try:
+        items = store.list(MANUAL_CELLS_SHARD, legacy=False)
+    except Exception:  # noqa: BLE001
+        items = _manual_items_lenient(store.items_path(MANUAL_CELLS_SHARD))
+    out: dict[int, dict] = {}
+    for it in items:
+        if it.status != "active" or str(it.anchor.book) != book or it.anchor.page != page or it.anchor.col is None:
+            continue
+        g = ((it.input or {}).get("column_basis") or {}).get("geom")
+        if isinstance(g, dict):
+            out[int(it.anchor.col)] = g
+    return out
+
+
+def _geom_vline(v: list):
+    from ..seg.frame_types import VLine
+    return VLine(x_at_top=float(v[0]), slope=float(v[1]), k2=v[2], k3=v[3], y1=v[4], y2=v[5])
+
+
+def _geom_of(wrec, page_w: int) -> dict:
+    """现行列窗的几何底，口径同 manager `seg_pin.column_geom`（取整位数一致，才能逐项比）。"""
+    def line(ln):
+        d = ln.model_dump(mode="json")
+        r = lambda x, n: None if x is None else round(float(x), n)  # noqa: E731
+        return [r(d["x_at_top"], 3), r(d["slope"], 6), r(d.get("k2"), 6), r(d.get("k3"), 6),
+                r(d.get("y1"), 3), r(d.get("y2"), 3)]
+    return {"page_w": int(page_w), "left": line(wrec.left_line), "right": line(wrec.right_line),
+            "top_y": round(float(wrec.top_y), 3), "bottom_y": round(float(wrec.bottom_y), 3),
+            "ruled": bool(getattr(wrec, "ruled", False))}
+
+
+_GEOM_KEYS = ("page_w", "left", "right", "top_y", "bottom_y", "ruled")
+
+
+def _page_to_col(mapper: ColumnMapper, X: float, Y: float, guess: tuple[float, float]) -> tuple[float, float]:
+    """原图左上原点 (X, Y) → 这个映射的列图坐标：牛顿迭代解 `to_page_tl(x, y) = (X, Y)`（三段、ruled 都适用；
+    列图与原图近似等比，几步就收敛）。"""
+    import numpy as np
+    x, y = guess
+    for _ in range(30):
+        fx, fy = mapper.to_page_tl(x, y)
+        ex, ey = fx - X, fy - Y
+        if abs(ex) < 1e-3 and abs(ey) < 1e-3:
+            break
+        h = 0.5
+        ax, ay = mapper.to_page_tl(x + h, y)
+        bx, by = mapper.to_page_tl(x, y + h)
+        j = np.array([[(ax - fx) / h, (bx - fx) / h], [(ay - fy) / h, (by - fy) / h]])
+        try:
+            dx, dy = np.linalg.solve(j, [ex, ey])
+        except np.linalg.LinAlgError:
+            break
+        x, y = x - float(dx), y - float(dy)
+    return x, y
+
+
+def _remap_manual_spec(spec: list[dict], old: ColumnMapper, new: ColumnMapper) -> tuple[list[dict], float]:
+    """钉子格框（旧列图坐标）经原图换到新列图坐标：四角各换、取外接框。→ (新格表, 角点最大位移 px)。"""
+    out, worst = [], 0.0
+    for c in spec:
+        xs, ys = [], []
+        for x, y in ((c["x0"], c["y0"]), (c["x1"], c["y0"]), (c["x1"], c["y1"]), (c["x0"], c["y1"])):
+            X, Y = old.to_page_tl(float(x), float(y))
+            nx, ny = _page_to_col(new, X, Y, (float(x), float(y)))
+            worst = max(worst, abs(nx - x), abs(ny - y))
+            xs.append(nx)
+            ys.append(ny)
+        out.append({**c, "x0": round(min(xs), 1), "x1": round(max(xs), 1),
+                    "y0": round(min(ys), 1), "y1": round(max(ys), 1)})
+    return out, worst
+
+
+def _remap_manual(manual: dict[int, list[dict]], geoms: dict[int, dict] | None, wins: PageWindows,
+                  page: int | None = None) -> tuple[dict[int, list[dict]], set[int]]:
+    """按钉子写入时记的列图几何底（manager `column_basis.geom`）把钉子换到现行列图（CV0 11-26 批的钉子护栏）。
+
+    - 几何与现行列窗一致（绝大多数）→ 原样，逐字节不变；
+    - 不一致 → 经旧／新两个列图映射换算；角点最大位移 > `MANUAL_REMAP_FLAG_PX` 的列返回在 flagged 里（打旗送人核）；
+    - 没记几何底的老钉子 → 原样套（同以前），只在 stderr 提示一次（不进产物，免得老钉子所在页全部变样）。
+    → (换算后的钉子表, 要打 `manual_cells_remapped` 的列)。"""
+    import sys
+    if not manual:
+        return manual, set()
+    geoms = geoms or {}
+    page_w = wins.page_size[0]
+    out, flagged, nobasis = dict(manual), set(), []
+    for col, spec in manual.items():
+        g = geoms.get(col)
+        wrec = wins.column(col)
+        if g is None:
+            nobasis.append(col)
+            continue
+        if wrec is None:
+            continue
+        now = _geom_of(wrec, page_w)
+        if all(now.get(k) == g.get(k) for k in _GEOM_KEYS):
+            continue
+        try:
+            old = ColumnMapper(int(g["page_w"]), _geom_vline(g["left"]), _geom_vline(g["right"]),
+                               float(g["top_y"]), float(g["bottom_y"]), ruled=bool(g.get("ruled")))
+        except (KeyError, TypeError, ValueError, IndexError):
+            nobasis.append(col)
+            continue
+        new_spec, worst = _remap_manual_spec(spec, old, ColumnMapper.of(page_w, wrec))
+        out[col] = new_spec
+        if worst > MANUAL_REMAP_FLAG_PX:
+            flagged.add(col)
+            print(f"⚠️ manual-cells p{page}c{col}：列图几何变了，钉子已换算到新列图（最大位移 {worst:.1f}px），送人核",
+                  file=sys.stderr)
+    if nobasis:
+        print(f"ℹ️ manual-cells p{page} 列 {sorted(nobasis)}：钉子没记列图几何底，照原坐标套（列图变了不会自动换算；"
+              f"manager `guji pipeline seg pins-backfill-geom` 可补）", file=sys.stderr)
+    return out, flagged
+
+
 def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: GateManifest,
-                        wins: PageWindows, grid_n: int = 0) -> PageCells:
+                        wins: PageWindows, grid_n: int = 0, geoms: dict[int, dict] | None = None) -> PageCells:
     """人工指定的整列格（`lookup.resolved_manual_cells`）替换算法切出的那一列。
 
     与职名页同一套下游约定：列级 flags 带 `roster`（闸3 不按版式格数拦、Step4 不按格线裁）加 `manual_cells`，
@@ -2154,6 +2423,7 @@ def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: Gate
     最大号的大者（同职名分支），最大号超过格数的列打 `roster_slot_overflow`。0（缺省）＝照旧按不同号的个数。"""
     if not manual:
         return pc
+    manual, remapped = _remap_manual(manual, geoms, wins, pc.page) if geoms is not None else (manual, set())
     page_w = wins.page_size[0]
     cols = []
     for cc in pc.columns:
@@ -2188,7 +2458,7 @@ def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: Gate
             over = ["roster_slot_overflow"] if top > grid_n else []
         cols.append(ColumnCells(
             ok=True, n_body_slots=n_pos, cells=cells, boundaries=[], em=None,
-            flags=["roster", "manual_cells", *over], col=cc.col, n_raised=0, period=gate.period,
+            flags=["roster", "manual_cells", *over, *(["manual_cells_remapped"] if cc.col in remapped else [])], col=cc.col, n_raised=0, period=gate.period,
             ref_w=gate.ref_w, content_x=gc.content_x, border_top=gc.border_top,
             border_bottom=gc.border_bottom, top_slack=0.0))
     return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=cols)

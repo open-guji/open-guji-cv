@@ -133,6 +133,9 @@ class CutGateStep(Step):
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: CutGateParams = ctx.params_for(self)  # type: ignore[assignment]
         geom: GateManifest = ctx.product("column_geometry", page)
+        cells = ctx.product("cells", page) if ctx.has_product("cells", page) else None
+        remapped = {cc.col for cc in (cells.columns if cells is not None else [])
+                    if "manual_cells_remapped" in (cc.flags or [])}
         wins: PageWindows = merged_windows(ctx, page)
         cols = wins.columns
         gcols = {g.col: g for g in geom.columns}
@@ -275,6 +278,9 @@ class CutGateStep(Step):
                 flags.append("frame_residue：" + "、".join(
                     f"{end}端残留满宽段 {run} 行" for end, run in residue)
                     + f"（≥{p.frame_residue_min_run} 行判为版框没削干净，flag 不算错）")
+            if c.col in remapped:
+                # 人钉的格按列图几何变化换算过（row_segment 1.54 起，v0.9.6 钉子护栏），只记不拦，口径同 row_segment_gate
+                flags.append("manual_cells_remapped：人钉的格按列图几何变化换算到新列图，位移超过 3px，待人核")
             if p.tier == "gold":
                 reasons.append("human_verdict：金标准入尚未接入（P2）")
             if c.col in table_cols and c.col in non_body and non_body[c.col][0] == "table":

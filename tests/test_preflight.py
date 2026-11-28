@@ -1,6 +1,8 @@
 """`ops/preflight.py`（GUJI-654）：起跑前查这次要跑的步骤本机缺不缺依赖。用假引擎，不碰真书。"""
 from __future__ import annotations
 
+from helpers import patch_seed_admit
+
 from types import SimpleNamespace
 
 import pytest
@@ -10,7 +12,7 @@ from open_guji_cv import preflight
 
 
 def _eng(cut_judge="unet", shadow_veto=False):
-    vals = {"row_segment": SimpleNamespace(cut_judge=cut_judge), "seed_admit": SimpleNamespace(shadow_veto=shadow_veto)}
+    vals = {"row_segment": SimpleNamespace(cut_judge=cut_judge), "char_decide": SimpleNamespace(shadow_veto=shadow_veto)}
     return SimpleNamespace(_params=lambda step: vals.get(step.spec.id, SimpleNamespace()))
 
 
@@ -21,7 +23,7 @@ def _no(monkeypatch, *mods):
 def test_everything_present_is_silent(monkeypatch):
     monkeypatch.setattr(preflight, "_have", lambda m: True)
     monkeypatch.setattr(preflight.Path, "is_file", lambda self: True)
-    assert preflight.check(_eng(shadow_veto=True), ["row_segment", "rare_candidates", "seed_admit"]) == []
+    assert preflight.check(_eng(shadow_veto=True), ["row_segment", "rare_candidates", "char_decide"]) == []
 
 
 def test_missing_torch_only_matters_for_steps_that_use_it(monkeypatch):
@@ -34,8 +36,8 @@ def test_missing_torch_only_matters_for_steps_that_use_it(monkeypatch):
 
 def test_shadow_veto_needs_joblib(monkeypatch):
     _no(monkeypatch, "joblib")
-    assert preflight.check(_eng(shadow_veto=False), ["seed_admit"]) == []
-    [m] = preflight.check(_eng(shadow_veto=True), ["seed_admit"])
+    assert preflight.check(_eng(shadow_veto=False), ["char_decide"]) == []
+    [m] = preflight.check(_eng(shadow_veto=True), ["char_decide"])
     assert "shadow_veto" in m and "joblib" in m
 
 
@@ -56,10 +58,10 @@ def test_human_events_dir_missing_refuses(monkeypatch):
     monkeypatch.setattr(preflight, "_have", lambda m: True)
     eng = SimpleNamespace(_params=lambda step: SimpleNamespace(use_human_verdicts=True, db_path="g.db", shadow_veto=False))
     monkeypatch.setattr(preflight, "_human_events_missing", lambda db: "事件目录却不在")
-    assert preflight.check(eng, ["seed_admit"]) == ["事件目录却不在"]
+    assert preflight.check(eng, ["char_decide"]) == ["事件目录却不在"]
     assert preflight.check(eng, ["glyph_match"]) == []
     monkeypatch.setattr(preflight, "_human_events_missing", lambda db: None)
-    assert preflight.check(eng, ["seed_admit"]) == []
+    assert preflight.check(eng, ["char_decide"]) == []
 
 
 def test_human_events_missing_checks_dir_and_library(monkeypatch, tmp_path):
@@ -69,11 +71,11 @@ def test_human_events_missing_checks_dir_and_library(monkeypatch, tmp_path):
     db.write_bytes(b"")
     root = tmp_path / "feedback"
     monkeypatch.setattr(ev, "default_feedback_root", lambda: root)
-    monkeypatch.setattr(sa, "_human_shapes", lambda p: {"b:1:1:1": "甲"})
+    patch_seed_admit(monkeypatch, "_human_shapes", lambda p: {"b:1:1:1": "甲"})
     assert "事件目录" in preflight._human_events_missing(str(db))       # 有人裁、没事件目录
     (root / "events").mkdir(parents=True)
     assert preflight._human_events_missing(str(db)) is None             # 事件目录在
     (root / "events").rmdir()
-    monkeypatch.setattr(sa, "_human_shapes", lambda p: {})
+    patch_seed_admit(monkeypatch, "_human_shapes", lambda p: {})
     assert preflight._human_events_missing(str(db)) is None             # 库里没人裁（新书）
     assert preflight._human_events_missing(str(tmp_path / "none.db")) is None

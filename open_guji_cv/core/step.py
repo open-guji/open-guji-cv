@@ -26,8 +26,32 @@ if TYPE_CHECKING:
 
 
 # ── 注册表 ───────────────────────────────────────────────────────────
-STEPS: dict[str, "Step"] = {}
-KINDS: dict[str, ProductKindSpec] = {}
+class _AliasDict(dict):
+    """注册表：收尾步旧名 `seed_admit` 当 `char_decide`（P3a-3，2026-11-28 改名；过渡期旧名照样查得到，撤旧名前先通知）。
+    只影响按键查（`[]`／`in`／`get`），遍历、`keys()` 只有新名。"""
+
+    def _canon(self, k):
+        from .decide_names import canonical_step
+        return canonical_step(k) if isinstance(k, str) else k
+
+    def __missing__(self, k):
+        c = self._canon(k)
+        if c != k and dict.__contains__(self, c):
+            return dict.__getitem__(self, c)
+        raise KeyError(k)
+
+    def __contains__(self, k):
+        return dict.__contains__(self, k) or (self._canon(k) != k and dict.__contains__(self, self._canon(k)))
+
+    def get(self, k, default=None):
+        try:
+            return self[k]
+        except KeyError:
+            return default
+
+
+STEPS: dict[str, "Step"] = _AliasDict()
+KINDS: dict[str, ProductKindSpec] = _AliasDict()
 
 
 def register_kind(kind: ProductKindSpec) -> ProductKindSpec:
@@ -37,7 +61,40 @@ def register_kind(kind: ProductKindSpec) -> ProductKindSpec:
     return kind
 
 
+#: 读「本页每列格数」的步（2026-11-27，朱楓林集序页六行十四字、正文九行二十字）：册配置写了 `chars_per_line_pages`
+#: 时，这几步跑点名页期间 `ctx.book.chars_per_line` 换成表里的数（`_cpl_page_view`）。换在注册处、不改各步代码：
+#: 步模块的代码指纹不动，没写表的册产物与指纹逐位不变；写了表的册由 `engine._self_payload` 加键 `cpl_pages` 过期。
+CPL_PAGES_STEPS = frozenset({"border_detect", "column_geometry", "column_gate", "row_segment",
+                             "row_segment_gate", "cut_gate"})
+
+
+def _cpl_page_view(run_page: Callable) -> Callable:
+    """包一层 `run_page`：点名页期间 `ctx.book` 换成 `chars_per_line` 改为本页数的浅拷贝，跑完换回。
+    各步自己的 `chars_per_line`／`n_body_slots`／`expected_slots` 参数显式写了的仍优先（与册级 `chars_per_line` 同口径）。"""
+    import copy
+    import functools
+
+    @functools.wraps(run_page)
+    def wrapped(self, ctx, page, *a, **kw):
+        book = getattr(ctx, "book", None)
+        table = getattr(book, "chars_per_line_pages", None) or {}
+        n = table.get(int(page)) if table else None
+        if not n or n == book.chars_per_line:
+            return run_page(self, ctx, page, *a, **kw)
+        view = copy.copy(book)
+        view.chars_per_line = int(n)
+        ctx.book = view
+        try:
+            return run_page(self, ctx, page, *a, **kw)
+        finally:
+            ctx.book = book
+    wrapped._cpl_page_view = True  # type: ignore[attr-defined]
+    return wrapped
+
+
 def register_step(cls: type["Step"]) -> type["Step"]:
+    if cls.spec.id in CPL_PAGES_STEPS and not getattr(cls.run_page, "_cpl_page_view", False):
+        cls.run_page = _cpl_page_view(cls.run_page)  # type: ignore[method-assign]
     inst = cls()
     sid = inst.spec.id
     if sid in STEPS and type(STEPS[sid]) is not cls:
@@ -76,6 +133,8 @@ def resolve_step_id(name: str) -> str:
     是 kind_id 就解到产出它的 step_id；两者都不是就报错，报错里列出
     已注册的 kind_id 供对照（截了前 30 个，免得刷屏）。
     """
+    from .decide_names import canonical_step      # 收尾步旧名 seed_admit 归到 char_decide（P3a-3）
+    name = canonical_step(name)
     if name in STEPS:
         return name
     if name in KINDS:

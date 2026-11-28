@@ -20,8 +20,11 @@ import json
 from collections.abc import Iterator
 from pathlib import Path
 
+from .volume_alias import alias_event_dict, alias_map
+
 #: 不按页寻址、不受页表 rev 判据管的事件种类。
-GATE_EXEMPT_KINDS = frozenset({"glyph_audit", "ctx_ruling"})   # 裁定按窗口内容键，不按页号锚，换图源不影响它（2026-10-31）
+GATE_EXEMPT_KINDS = frozenset({"glyph_audit", "ctx_ruling",   # 裁定按窗口内容键，不按页号锚，换图源不影响它（2026-10-31）
+                               "vis_glyph"})                   # 第三步看图缓存按字块图 sha 寻址（2026-11-28，GM4；manager source_rebase 同表）
 
 
 _REV_CACHE: dict[str, tuple[tuple[int, int], int | None]] = {}
@@ -130,6 +133,8 @@ def iter_event_records(events_dir: Path, *, gate: RevGate | bool = True,
     g = gate if isinstance(gate, RevGate) else (RevGate(sibling_books_dir(d)) if gate else None)
     if not d.is_dir():
         return
+    # 册旧名换新名（core.volume_alias；11-27 册号位数统一）：只在过闸读（gate）时换，维护工具（gate=False）看原样
+    amap = alias_map(g.books_dir if g is not None and g.books_dir is not None else sibling_books_dir(d)) if g is not None else {}
     for f in sorted(d.glob(pattern)):
         with open(f, encoding="utf-8") as fh:
             for line in fh:
@@ -140,6 +145,8 @@ def iter_event_records(events_dir: Path, *, gate: RevGate | bool = True,
                     e = json.loads(line)
                 except ValueError:
                     continue
+                if amap:
+                    e = alias_event_dict(e, amap)
                 if g is not None and not g.admits_dict(e):
                     continue
                 yield f, e

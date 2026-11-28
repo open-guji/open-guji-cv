@@ -118,6 +118,8 @@ class FlowConfig:
     ctx_agree: frozenset = frozenset()                 # 书级：`dissent_keep`／`ref_pair` 里列入此名单的组，还要本组文意（ctx）同意放行字／整理本字才生效（A24 Z02 11-07；入人八 rr）
     ref_pair: frozenset = frozenset()                  # 书级：这几组补放／联合判卡住时「整理本字＝本组解法给的字、反对的只有图像路」取整理本字（`_ref_pair_pick`；seed_admit `group_flow_ref_pair`）
     ref_pair_margin: float = 1.5                       # `ref_pair` 里图像路反对票的 margin 上限（seed_admit `group_flow_ref_pair_margin`）
+    near_p: dict = field(default_factory=dict)         # 第三步收尾的组内各字校准概率：格 id → {字: p}（seed_admit 读 `glyph_analyzer`，只在 `group_flow_near_p` 开时填）
+    near_p_min: dict = field(default_factory=dict)     # 组 id → 放行所需的最低 p；没列的组不跑 `near_p` 方法（seed_admit `group_flow_near_p`）
     ref_pair_coord: bool = False                       # 书级：`ref_pair` 的组联合判卡住、现役对位缺时，坐标对位字＝本组给的字且没有任何解法（含搭档）给别字 → 取它（`_ref_pair_coord_pick`；seed_admit `group_flow_ref_pair_coord`，A24 Z07 11-07）
 
 
@@ -341,6 +343,8 @@ def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_
     trail: list[dict] = []
     picks: list[str] = []
     for name in (f.review_solvers if alt else f.solvers):
+        if name == "near_p" and g not in cfg.near_p_min:
+            continue                       # 书没开 `group_flow_near_p`：当没有这个方法（留痕、产物都不变）
         v = _solve(name, g, r, cands, ref, cfg, left, right, patch_fn, review=alt, coord=coord)
         trail.append({"solver": name, "char": v.char, "why": v.why, **({"via": v.via} if v.via != name else {}),
                       **v.extra})
@@ -1027,7 +1031,8 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             else:
                 decision = "keep"
         r.evidence = {**(r.evidence or {}), "group": {"id": g, "mode": mode, "pick": ch, "why": why,
-                                                       "decision": decision, "solvers": trail}}
+                                                       "decision": decision, "solvers": trail,
+                                                       "members": "".join(sorted(GROUPS[g].members))}}
     return res
 
 

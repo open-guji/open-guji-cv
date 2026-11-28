@@ -146,8 +146,8 @@ def test_no_ref_kind_maps_to_seed_admit_and_swaps_params_on_those_pages_only():
     """无参校本页（脉经 林億序／牒文，2026-11-19）：page_kinds.no_ref → seed_admit.no_ref_pages，
     这些页上叠 no_ref_params，别的页原样；都没配时不进 dump（指纹不动）。"""
     from open_guji_cv.steps.seed_admit import SeedAdmitParams, no_ref_page_params
-    assert PK.to_params(PK.load_page_kinds({"no_ref": ["5-7"]})) == {"seed_admit": {"no_ref_pages": ["5-7"]}}
-    assert make_book(page_kinds={"no_ref": [51, 52]}).params["seed_admit"] == {"no_ref_pages": [51, 52]}
+    assert PK.to_params(PK.load_page_kinds({"no_ref": ["5-7"]})) == {"char_decide": {"no_ref_pages": ["5-7"]}}
+    assert make_book(page_kinds={"no_ref": [51, 52]}).params["char_decide"] == {"no_ref_pages": [51, 52]}
     base = SeedAdmitParams()
     assert "no_ref_pages" not in base.model_dump() and "no_ref_params" not in base.model_dump()
     p = SeedAdmitParams(no_ref_pages=["5-7"], no_ref_params={"solo_5b_cov": 0.95, "solo_5b_min_n": 1})
@@ -158,3 +158,21 @@ def test_no_ref_kind_maps_to_seed_admit_and_swaps_params_on_those_pages_only():
         no_ref_page_params(SeedAdmitParams(no_ref_pages=[1], no_ref_params={"nope": 1}), 1)
     with pytest.raises(ValueError, match="不认的参数"):
         no_ref_page_params(SeedAdmitParams(no_ref_pages=[1], no_ref_params={"no_ref_pages": [2]}), 1)
+
+
+def test_no_ref_params_also_on_reference_profile_none_pages():
+    """册配置 reference_profile 声明 none 的页与 page_kinds.no_ref 同一口径：no_ref_params 也叠上（参校本 bug 修 CV0 11-27）；
+    text 页、未声明的册不叠；没配 no_ref_params 时原样返回同一对象（指纹不动）。"""
+    import types
+    from open_guji_cv.core.ref_profile import load_reference_profile
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams, no_ref_page_params
+    prof = load_reference_profile({"default": "text", "segments": [{"pages": ["5-7"], "kind": "none"}]}, [{"file": "x.txt"}])
+    book = types.SimpleNamespace(reference_profile=prof)
+    p = SeedAdmitParams(no_ref_params={"solo_5b_cov": 0.95, "solo_5b_min_n": 1})
+    assert (no_ref_page_params(p, 6, book).solo_5b_cov, no_ref_page_params(p, 6, book).solo_5b_min_n) == (0.95, 1)
+    assert no_ref_page_params(p, 8, book) is p                     # text 页
+    assert no_ref_page_params(p, 6) is p                           # 没给册（老调用）
+    undeclared = types.SimpleNamespace(reference_profile=load_reference_profile(None, [{"file": "x.txt"}]))
+    assert no_ref_page_params(p, 6, undeclared) is p
+    bare = SeedAdmitParams()
+    assert no_ref_page_params(bare, 6, book) is bare               # 没配 no_ref_params

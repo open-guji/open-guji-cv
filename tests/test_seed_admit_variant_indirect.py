@@ -48,8 +48,8 @@ def _run(tmp_path, monkeypatch, *, candidates, align_char, margin=None,
         write_product(ctx, "context_decide", PAGE, context_decision=page_decision(
             PAGE, BOOK, col=COL, recs=[dict(slot=SLOT, char="丙", margin=margin,
                                             source="prior")]))
-    ctx.params["seed_admit"] = SeedAdmitParams(**(params or {}))
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    ctx.params["char_decide"] = SeedAdmitParams(**(params or {}))
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 

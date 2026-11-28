@@ -20,7 +20,8 @@ def test_reference_trust_levels_and_dump():
     off, hi, vh = (SeedAdmitParams(reference_trust=t) for t in ("none", "high", "very_high"))
     assert off._rt_rank() == 0 and not off._rt_shape_ref_ok() and not off._rt_abstain_ref_ok() and not off._follow_variants()
     assert hi._rt_rank() == 1 and "guang" in hi._rt_shape_ref_ok() and {"jys", "zh"} <= hi._rt_abstain_ref_ok()
-    assert "ry" in hi._rt_lift_shape_ref() and hi._follow_variants()
+    assert "ry" in hi._rt_lift_shape_ref() and not hi._follow_variants()   # 11-28 起照录异体另推，不随档隐含
+    assert SeedAdmitParams(reference_trust="high", follow_ref_variants=True)._follow_variants()
     assert vh._rt_rank() == 2
     assert vh.model_dump()["reference_trust"] == "very_high"
     # 旧开关仍可单独写，取并集

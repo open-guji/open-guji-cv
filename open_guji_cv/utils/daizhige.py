@@ -237,9 +237,10 @@ def half_layout_rows(h: Half, vol: str, page: int) -> list[dict]:
 LAYOUT_FIELDS = ("slots", "notes", "half", "raised")
 
 
-def apply_overrides(rows: list[dict], path: Path, vols: set[str] | None = None) -> list[dict]:
+def apply_overrides(rows: list[dict], path: Path, vols: set[str] | None = None,
+                    as_vol: str | None = None) -> list[dict]:
     """人核过的覆盖行（`layout_overrides.jsonl`：册/页/列 + 要改的字段 + why）盖到推出的行上；
-    表里没有的列整行补进来。"""
+    表里没有的列整行补进来。`as_vol`：覆盖行的册名一律当这一册（册改名后表里还是旧名，11-28）。"""
     if not Path(path).exists():
         return rows
     at = {(r["vol"], r["page"], r["col"]): r for r in rows}
@@ -249,7 +250,7 @@ def apply_overrides(rows: list[dict], path: Path, vols: set[str] | None = None) 
         o = json.loads(ln)
         if vols and o["vol"] not in vols:
             continue
-        k = (o["vol"], o["page"], o["col"])
+        k = (as_vol or o["vol"], o["page"], o["col"])
         r = at.get(k)
         if r is None:
             r = at[k] = {"vol": k[0], "page": k[1], "col": k[2], "dzg": "override",

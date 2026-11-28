@@ -30,9 +30,9 @@ def _run(tmp_path, monkeypatch, *, cands, params=None, guard=None, verdict="unsu
                                          cov=cands[0][1], wmax=3.0, guard=guard, candidates=list(cands), via=via)]))
     write_product(ctx, "context_decide", PAGE, context_decision=page_decision(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, char=None, margin=0.0, source="prior")]))
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"patch_missing": "skip", "consensus_fallback": True,
+    ctx.params["char_decide"] = SeedAdmitParams(**{"patch_missing": "skip", "consensus_fallback": True,
                                                    **(params or {})})
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 

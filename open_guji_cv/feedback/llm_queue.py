@@ -13,6 +13,12 @@
 
     python -m open_guji_cv.feedback.llm_queue export vol20 vol21 --products <产物根> --out 待裁.jsonl
     python -m open_guji_cv.feedback.llm_queue import 答案.jsonl --model session --batch llm-session-20261105
+
+第三步看图 `glyph_vis` 的离线 ask（只看字块图、写 `<feedback>/vis_glyph/`，与上面第四步文意 ask 互不相干）挂在同一命令组下，
+实现与流程见 `feedback/vis_queue.py`：
+
+    python -m open_guji_cv.feedback.llm_queue vis-export vol20 vol21 -w <工作区> --out 看图待判/ [--pages 1-30]
+    python -m open_guji_cv.feedback.llm_queue vis-import 看图待判/answers.jsonl --name A24
 """
 from __future__ import annotations
 
@@ -21,11 +27,13 @@ import json
 import sys
 from pathlib import Path
 
+from ..core.decide_names import final_dir, final_page_dict
+
 PENDING = "abstain:llm_pending"
 
 
 def _cells(page_doc: dict):
-    body = page_doc.get("seed_admit", page_doc)
+    body = final_page_dict(page_doc, strict=False)
     for col in body.get("columns") or []:
         for r in col.get("chars") or []:
             yield r
@@ -103,14 +111,29 @@ def main(argv=None) -> int:
     i.add_argument("answers")
     i.add_argument("--model", default="session", help="记进裁定的 model 字段（谁判的）")
     i.add_argument("--batch", default=None, help="裁定批次名（feedback/rulings/<批次>.jsonl），缺省 llm-ctx-<日期>")
+    ve = sub.add_parser("vis-export", help="第三步 glyph_vis 的 pending ask → 题图 PNG＋manifest（feedback/vis_queue）")
+    ve.add_argument("books", nargs="+", help="册号")
+    ve.add_argument("-w", "--workspace", default=None, help="书的工作区（缺省读 GUJI_WORKSPACE）")
+    ve.add_argument("--products", default="", help="产物根；缺省本机产物根")
+    ve.add_argument("--pages", default=None, help="只扫这些页，如 1-30,45；缺省全册（只能配一册用）")
+    ve.add_argument("--out", required=True, help="输出目录（img/、manifest.jsonl、prompt.md）")
+    ve.add_argument("--overwrite", action="store_true", help="输出目录已有 manifest 时覆盖（旧答案没导入会对不上题号）")
+    vi = sub.add_parser("vis-import", help="对话看图判的答案写回 vis_glyph 缓存（只写本机）")
+    vi.add_argument("answers")
+    vi.add_argument("--name", required=True, help="判题人名，写成 model=session:<名>")
+    vi.add_argument("--manifest", default=None, help="导出时的 manifest；缺省答案文件同目录的 manifest.jsonl")
+    vi.add_argument("--batch", default=None, help="缓存批次名（<feedback>/vis_glyph/<批次>.jsonl），缺省 glyph-vis-session-<日期>")
+    vi.add_argument("-w", "--workspace", default=None, help="书的工作区（定 feedback 根；缺省读 GUJI_WORKSPACE）")
     a = ap.parse_args(argv)
+    if a.cmd in ("vis-export", "vis-import"):
+        return _vis_main(a)
     if a.cmd == "export":
         if a.products:
             root = Path(a.products)
         else:
             from ..products.store import default_products_root
             root = default_products_root()
-        files = [f for b in a.books for f in sorted((root / b / "seed_admit").glob("p*.json"))]
+        files = [f for b in a.books for f in sorted(((final_dir(root, b) or root / b / "seed_admit")).glob("p*.json"))]
         rows = collect(files)
         Path(a.out).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
         print(f"{len(files)} 页 → 待裁 {len(rows)} 问（{sum(len(r['cells']) for r in rows)} 格）→ {a.out}", file=sys.stderr)
@@ -118,6 +141,44 @@ def main(argv=None) -> int:
         res = import_answers(_read_jsonl(Path(a.answers)), model=a.model, batch=a.batch)
         print(json.dumps(res, ensure_ascii=False))
     return 0
+
+
+def _vis_main(a) -> int:
+    import os
+
+    from . import vis_queue as VQ
+    if a.workspace:
+        os.environ["GUJI_WORKSPACE"] = str(Path(a.workspace).expanduser().resolve())
+    elif os.environ.get("GUJI_WORKSPACE"):
+        print(f"  未给 -w，用 GUJI_WORKSPACE={os.environ['GUJI_WORKSPACE']}", file=sys.stderr)
+    if a.cmd == "vis-export":
+        out = Path(a.out)
+        if (out / VQ.MANIFEST).exists() and not a.overwrite:
+            print(f"{out / VQ.MANIFEST} 已有：上一批答案导入了再导，或加 --overwrite", file=sys.stderr)
+            return 2
+        pages = VQ.parse_pages(a.pages)
+        if pages is not None and len(a.books) > 1:
+            print("--pages 只能配一册用", file=sys.stderr)
+            return 2
+        rows, pngs, rep = VQ.collect([(VQ.book_ctx(b, a.products or None), pages) for b in a.books])
+        VQ.write_export(out, rows, pngs)
+        print(json.dumps(rep, ensure_ascii=False), file=sys.stderr)
+        print(f"待判 {rep['questions']} 题（{rep['cells']} 格）→ {out}；按 {out / VQ.PROMPT_FILE} 判完存 answers.jsonl，"
+              f"再 vis-import", file=sys.stderr)
+        return 0
+    ans = Path(a.answers)
+    man = Path(a.manifest) if a.manifest else ans.parent / VQ.MANIFEST
+    if not man.exists():
+        print(f"找不到 manifest：{man}（用 --manifest 指定）", file=sys.stderr)
+        return 2
+    rep = VQ.import_answers(VQ.read_jsonl(ans), VQ.read_jsonl(man), name=a.name, batch=a.batch)
+    print(json.dumps(rep, ensure_ascii=False))
+    if rep["not_accepted"]:
+        print(f"⚠ 本书 glyph_vis.accept_models 没列 {rep['model']}：重跑不会命中，先在书配置里加上", file=sys.stderr)
+    if rep["written"] or rep["updated"]:
+        print("缓存内容不进指纹：要从 glyph_vis 起 force 重跑才生效，如 "
+              "`guji-cv pipeline <管线> <册> -w <工作区> --from glyph_vis --force`（只写了本机，没推中心库）", file=sys.stderr)
+    return 1 if rep["rejected"] else 0
 
 
 if __name__ == "__main__":

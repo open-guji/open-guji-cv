@@ -55,6 +55,8 @@ def run(v):
         for r in res: fo.write(json.dumps(r,ensure_ascii=False)+'\n')
 if __name__=='__main__':
     from concurrent.futures import ThreadPoolExecutor
-    vs=[f'vol{n:02d}' for n in range(1,100)]
+    # 册名从命令行给（11-27 起册号位数按全书册数统一、会改号，不再写死 vol01–vol99 补位）
+    vs=sys.argv[1:]
+    if not vs: sys.exit('用法：python scan_codes.py <册名> …（按工作区 books/ 里现行册名）')
     with ThreadPoolExecutor(5) as ex: list(ex.map(run,vs))
     print('done')
