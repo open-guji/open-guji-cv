@@ -3313,6 +3313,15 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
         ("open_guji_cv.feedback.seg_overrides", "81f5eb066e4d8fca8df69f95ef375ffb3196ccd30e850a35c099ee9648733fd0"))),
 }
 
+# 只用了 SPLITS 某条拆分里一块、本来就不该列全的 Step：(步骤 id, SPLITS 的旧模块名) → 理由。
+# tests/test_seg_move.py 的「几块要列全」守卫对这里登记的组合放行。只在这一步生来就没有旧模块、
+# 用不着合回旧哈希时登记（多列一块会白让各书过期）；要合回的照常把几块都列进 code_deps。
+SPLIT_PARTIAL_OK: dict[tuple[str, str], str] = {
+    ("cut_gate", "guji_book.quantangwen.jiazhu_split"):
+        "cut_gate（11-27 起）只调 impl.keben.jiazhu_split.column_frac 量夹注列比例，不读人定切分 seg_overrides；"
+        "全唐文 k8 起书仓已不 fork jiazhu_split，cut_gate 指纹从没含过旧的书仓 jiazhu_split，无可合回（2026-11-28，CV2）",
+}
+
 
 def _table() -> dict[str, dict[str, str]]:
     t: dict[str, dict[str, str]] = {}
