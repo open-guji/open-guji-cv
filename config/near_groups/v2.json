@@ -39,7 +39,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -84,7 +86,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -114,7 +118,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -160,7 +166,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -207,7 +215,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -257,7 +267,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -334,7 +346,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -366,7 +380,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -479,7 +495,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -2924,7 +2942,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -2973,7 +2993,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -3021,13 +3043,14 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "pair_shape"
+     "pair_shape",
+     "flow_shape"
     ],
     "context": true,
     "aspect": false,
     "action": "admit",
     "threshold": null,
-    "note": "大太：全唐文 pair_shape/2（cv #2015）"
+    "note": "大太：全唐文 pair_shape/2（cv #2015）；5a.2 字组看图判法 flow_shape（结构拆分 A4）"
    },
    "methods": [
     "ctx",
@@ -3112,7 +3135,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -3168,7 +3193,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -3197,7 +3224,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -3288,7 +3317,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -3318,7 +3349,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -3363,7 +3396,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -3485,7 +3520,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -3515,7 +3552,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -3674,7 +3713,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -3798,7 +3839,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -3828,7 +3871,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -3877,7 +3922,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -3936,7 +3983,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -4018,7 +4067,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -4238,7 +4289,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -4405,7 +4458,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -4528,7 +4583,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -4578,7 +4635,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -4627,7 +4686,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -4751,13 +4812,14 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "book_knn"
+     "book_knn",
+     "flow_shape"
     ],
     "context": true,
     "aspect": false,
     "action": "admit",
     "threshold": null,
-    "note": "门族（閒間 等）：全唐文书级刻例近邻 _book_knn_pass 搬进 3b（cv #2019）"
+    "note": "门族（閒間 等）：全唐文书级刻例近邻 _book_knn_pass 搬进 3b（cv #2019）；5a.2 字组看图判法 flow_shape（结构拆分 A4）"
    },
    "methods": [
     "ids",
@@ -5009,7 +5071,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5054,7 +5118,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5179,7 +5245,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5209,7 +5277,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5239,7 +5309,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5284,7 +5356,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5320,7 +5394,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5509,13 +5585,14 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "rr_shape"
+     "rr_shape",
+     "flow_shape"
     ],
     "context": true,
     "aspect": false,
     "action": "admit",
     "threshold": null,
-    "note": "入人八：第四步 _rr_shape_pass 搬进 3b（cv #2000）"
+    "note": "入人八：第四步 _rr_shape_pass 搬进 3b（cv #2000）；5a.2 字组看图判法 flow_shape（结构拆分 A4）"
    },
    "methods": [
     "ctx",
@@ -5654,7 +5731,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5683,7 +5762,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -5731,7 +5812,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5780,7 +5863,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5810,7 +5895,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5844,7 +5931,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5874,7 +5963,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5948,7 +6039,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -5996,7 +6089,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -6026,7 +6121,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -6056,7 +6153,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -6086,7 +6185,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -6146,7 +6247,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -6213,7 +6316,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -6369,7 +6474,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -6415,7 +6522,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -6462,7 +6571,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -6519,7 +6630,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -6703,13 +6816,14 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "pair_shape"
+     "pair_shape",
+     "flow_shape"
     ],
     "context": true,
     "aspect": false,
     "action": "admit",
     "threshold": null,
-    "note": "王玉：全唐文 pair_shape/2（cv #2015）"
+    "note": "王玉：全唐文 pair_shape/2（cv #2015）；5a.2 字组看图判法 flow_shape（结构拆分 A4）"
    },
    "methods": [
     "ctx",
@@ -6759,7 +6873,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -6789,7 +6905,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -6834,7 +6952,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -6919,7 +7039,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -7067,7 +7189,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -7116,7 +7240,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -7148,7 +7274,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -7209,7 +7337,9 @@
     "top1"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -7266,7 +7396,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -7296,13 +7428,14 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "pair_shape"
+     "pair_shape",
+     "flow_shape"
     ],
     "context": true,
     "aspect": false,
     "action": "admit",
     "threshold": null,
-    "note": "還遺：全唐文 pair_shape/2（cv #2015）"
+    "note": "還遺：全唐文 pair_shape/2（cv #2015）；5a.2 字组看图判法 flow_shape（结构拆分 A4）"
    },
    "methods": [
     "ctx",
@@ -7349,7 +7482,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -7447,7 +7582,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -7491,7 +7628,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -7537,7 +7676,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -7643,7 +7784,9 @@
     "top1"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": true,
     "aspect": false,
     "action": "admit",
@@ -7698,7 +7841,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -7775,7 +7920,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -7810,7 +7957,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -7855,7 +8004,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "flow_shape"
+    ],
     "context": false,
     "aspect": false,
     "action": "admit",
@@ -7976,13 +8127,14 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "stroke_veto"
+     "stroke_veto",
+     "flow_shape"
     ],
     "context": true,
     "aspect": false,
     "action": "admit",
     "threshold": null,
-    "note": "于千子干：stroke_veto 的 qg 组（千／干）挂在这里（3b 书配置 ref: zy、chars: [千, 干]），cv #2024"
+    "note": "于千子干：stroke_veto 的 qg 组（千／干）挂在这里（3b 书配置 ref: zy、chars: [千, 干]），cv #2024；5a.2 字组看图判法 flow_shape（结构拆分 A4）"
    },
    "methods": [
     "zy_strokes",

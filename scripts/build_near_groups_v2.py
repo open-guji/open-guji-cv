@@ -218,9 +218,10 @@ def _flow_img() -> frozenset:
     return frozenset(IMG_SOLVERS) | FLOW_IMG_EXTRA
 
 
-def default_handling(g: dict, methods: list | None = None) -> dict:
+def default_handling(g: dict, methods: list | None = None, gid: str | None = None) -> dict:
     """一组的缺省处理方式（＝现役行为，2026-11-28）：
-    - `methods`：[]（看图方法要人定，写在 handling.json）；
+    - `methods`：注册组里有只吃字块图的方法（`shape_stage.shape_methods`）→ [flow_shape]（5a.2 字组看图判法，结构拆分 A4）；
+      其余 []（别的看图方法要人定，写在 handling.json）；
     - `context`：第四步 group_flow 的方法（`methods`／`review_methods`／`form_methods`）里有文意 `ctx` → true；
     - `aspect`：false（现役宽高比只有 seed_admit `_fold_pass` 对日曰一组，日曰在 handling.json 里定 true）；
     - `action`：group_flow 有看图解法（`flow.IMG_SOLVERS`＋`near_p`），或 `methods` 里有现役会放行／改字的 3b 方法
@@ -228,7 +229,10 @@ def default_handling(g: dict, methods: list | None = None) -> dict:
     - `threshold`：null。
     `methods` 给了就按它算 action（人定表里写了 methods 没写 action 时用）。"""
     flow = set(g.get("methods") or ()) | set(g.get("review_methods") or ()) | set(g.get("form_methods") or ())
-    ms = list(methods or ())
+    if methods is None:
+        from open_guji_cv.groups.shape_stage import shape_methods
+        methods = ["flow_shape"] if gid and shape_methods(gid) else []
+    ms = list(methods)
     admit = bool(flow & _flow_img()) or bool(set(ms) & ADMIT_METHODS)
     return {"methods": ms, "context": "ctx" in flow, "aspect": False, "action": "admit" if admit else "evidence",
             "threshold": None}
@@ -261,9 +265,9 @@ def read_handling(path: Path) -> dict[str, dict]:
     return out
 
 
-def _handling(g: dict, over: dict | None) -> dict:
+def _handling(g: dict, over: dict | None, gid: str | None = None) -> dict:
     over = over or {}
-    h = default_handling(g, over.get("methods"))
+    h = default_handling(g, over.get("methods"), gid)
     for k in HANDLING_KEYS:
         if k in over:
             h[k] = list(over[k]) if k == "methods" else over[k]
@@ -343,7 +347,7 @@ def build(reg: list[dict], pairs: dict[str, dict], book_pairs: dict[str, tuple[d
     if unknown:
         raise ValueError(f"handling 里的组 {unknown} 登记表里没有（组 id 写错了？）")
     for gid, g in groups.items():
-        g["handling"] = _handling(g, handling.get(gid))
+        g["handling"] = _handling(g, handling.get(gid), gid)
 
     order = sorted(groups, key=lambda g: (g.startswith(PAIR_PREFIX), g))
     groups = {gid: dict(sorted(groups[gid].items())) for gid in order}

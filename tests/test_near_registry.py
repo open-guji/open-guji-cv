@@ -261,7 +261,7 @@ def test_default_handling_follows_current_flow():
     t = B.build(REG, {"天夭": _p("near_groups")})
     h = {gid: g["handling"] for gid, g in t["groups"].items()}
     assert h["guan"] == {"methods": [], "context": True, "aspect": False, "action": "admit", "threshold": None}   # near_p
-    assert h["wm"] == {"methods": [], "context": True, "aspect": False, "action": "admit", "threshold": None}     # bars
+    assert h["wm"] == {"methods": ["flow_shape"], "context": True, "aspect": False, "action": "admit", "threshold": None}   # bars；有字形方法 → flow_shape（A4）
     assert h["sz"]["context"] is False and h["sz"]["action"] == "admit"                                          # ids
     assert h["p:天夭"] == {"methods": [], "context": False, "aspect": False, "action": "evidence", "threshold": None}
     ctx_only = B.build([_reg("ry", "日曰", methods=["ctx"])], {})["groups"]["ry"]["handling"]
@@ -307,11 +307,13 @@ def test_committed_v2_two_types_and_handling():
     for gid, aspect, action in (("jys", False, "evidence"), ("ry", True, "admit")):
         assert reg.handling_of(gid) == {"methods": [], "context": True, "aspect": aspect, "action": action,
                                         "threshold": None, "note": reg.handling_of(gid)["note"]}
+    from open_guji_cv.groups.shape_stage import shape_methods
     want = B.read_handling(B.HANDLING)
     for gid, g in reg.groups.items():
         h = reg.handling_of(gid)
         assert set(h["methods"]) <= set(METHODS)
-        assert h["methods"] == want.get(gid, {}).get("methods", [])
+        dflt = ["flow_shape"] if shape_methods(gid) else []          # 有 5a.2 字形方法的注册组缺省挂 flow_shape（结构拆分 A4）
+        assert h["methods"] == want.get(gid, {}).get("methods", dflt)
         assert h["aspect"] is (gid == "ry")                               # 现役宽高比只有 ry
     assert "cnn_small" in reg.handling_of("guan")["methods"]              # 殿本 gong（宫宮官）挂 cnn_small 不受影响
     assert "stroke_veto" in reg.handling_of("zy")["methods"]              # qg（千干）挂在 zy 下
