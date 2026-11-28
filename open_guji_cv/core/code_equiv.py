@@ -2961,10 +2961,6 @@ ENTRIES: tuple[Equiv, ...] = (
           new="1208d13d6d057505ed9a3ec385895367f6f7fa9ae4a0b5fed72a5013021487c8",
           old="66b4b39a9704d4d6fd516910d7b7ed9493393287cfb4b2a394e9f4121ba6ab2e",
           evidence=_NONE_COLS_1128),
-    Equiv(module="open_guji_cv.products.kinds.recog",
-          new="daf5e69b08b6aca4046aa8fe80b1435c5f48e1204a2dd68a24dfb7bf1ccb2d9f",
-          old="e5e77318387b3f6205604e2efe15bd4ea83f41f4212904a1f2a0a7a1ec5e05c5",
-          evidence=_NONE_COLS_1128),
     # 全唐文开竖线跟踪后切字适配：row_segment 加 frame_edge_near、layout_off_always（缺省关）；frame_only_edge_cells 加 near_frac（CV2 11-28）
     Equiv(module='open_guji_cv.steps.row_segment',
           new='1c455cf504c6486727bf1d7f2d1406a9f9b86d356e9380ca7872bd5c54fcd10c',
