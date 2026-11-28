@@ -20,9 +20,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..bench import BenchCtx, BenchResult, BenchSpec, Guard, register, skipped
 # dataset 护栏 11-28 挪进框架（`execute` 自动判）；这两个名字留着兼容旧调用
-from ..bench import apply_dataset_guards, dataset_guards  # noqa: F401
+from ..bench import (  # noqa: F401
+    BenchCtx,
+    BenchResult,
+    BenchSpec,
+    Guard,
+    apply_dataset_guards,
+    dataset_guards,
+    register,
+    skipped,
+)
 
 REPO = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO / "scripts"

@@ -187,7 +187,7 @@ def dataset_guards(bench_id: str, book: str, dataset: str | Path | None) -> list
     return out
 
 
-def apply_dataset_guards(r: "BenchResult", ctx: "BenchCtx") -> "BenchResult":
+def apply_dataset_guards(r: BenchResult, ctx: BenchCtx) -> BenchResult:
     """按 dataset 护栏表逐条判（同 `apply_guards` 的口径）；越线 → regressed，指标缺了记 unverified（不算过）。
     已判过（`src: dataset guards`）的不再判，可重复调。"""
     if r.status not in ("ok", "regressed") or any(g.get("src") == "dataset guards" for g in r.guards):
