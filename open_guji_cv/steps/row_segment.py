@@ -891,10 +891,10 @@ def _apply_straddle(pc: PageCells, pairs) -> PageCells:
 class RowSegmentParams(BaseModel):
     n_body_slots: int | None = None      # None = Book.chars_per_line
     n_raised: int = 0                    # 抬头多出的格数；版式先验，raised 不自动推
-    ink_threshold: int = 128
-    min_ink_ratio: float = 0.01
-    raise_tol: float = 2.0
-    detect_jiazhu: bool = True
+    ink_threshold: int = 128             # 二值门槛：灰度 < 此值算墨
+    min_ink_ratio: float = 0.01          # 格内墨占比（裁紧前的格框上算）低于此判空白格
+    raise_tol: float = 2.0               # 格顶高出 border_top 超过这么多像素记 Cell.raised（抬头格）
+    detect_jiazhu: bool = True           # 认雙行小注段并拆 a/b（关了整列按正文切）
     only_admitted: bool = True           # 只切过闸的列
     seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（seg/seam.py）
     cut_judge: str = "unet_f64"          # 候选池裁判：unet_f64（双精度、跨 CPU 逐位一致；2026-11-18 起缺省，A22 开关收敛 11-13 定）| unet（单精度，seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
@@ -925,8 +925,8 @@ class RowSegmentParams(BaseModel):
     #: 首格/末格/抬头格里墨的外接框竖向 ≤ `dash_h_frac`×period 且横向 ≤ `dash_w_frac`×列宽的，kind 记 `blank`
     #: 而不是没字的 `char`。阈值未经真图标定（云端没有原图），先按 S2 实测「虚线跨度 ≤29 行 ≈ 0.25 period」取。
     dash_blank: bool = False
-    dash_h_frac: float = 0.3
-    dash_w_frac: float = 0.25
+    dash_h_frac: float = 0.3             # dash_blank：墨外接框竖向 ≤ 此值×period 才算虚线残段
+    dash_w_frac: float = 0.25            # dash_blank：墨外接框横向 ≤ 此值×列宽才算虚线残段
     #: 职名页密排段**按本书字形库重切**（overview#450，2026-10-07，`impl/keben/roster_glyph`）：
     #: 压扁粘连字几何上数不准字数，拿库里刻例比相似度定切法。默认关；开了才读库、才填指纹。
     roster_glyph_refine: bool = False
@@ -943,7 +943,7 @@ class RowSegmentParams(BaseModel):
     #: （放 0243.jsonl 等，如 `daizhige`）与页钉位表（语料目录下的名字，同 align_ref.page_pins）。两个都给才开；只有实现了 `page_ref_lines` 的套书用得上，
     #: 殿本的职名页实现不认，关时产物逐字节不变。
     roster_ref_corpus: str = ""
-    roster_ref_pins: str = ""
+    roster_ref_pins: str = ""            # 职名页按整理本重切的页钉位表（语料目录下的名字），与 roster_ref_corpus 都给才开
     roster_ref_fingerprint: str = ""     # 两个文件的内容指纹，开着时自动填
     #: **大印下的卷端标题列去印点后照样按整理本字数切**（史記文淵閣本 2026-11-02）：卷首页大印压着卷题、撰者行，
     #: 原先这些列整列不改（印泥斑点按字数重切会被切成字），格网乱切、机器给不出字，01–10 册约 220 格送审。
@@ -1065,7 +1065,7 @@ class RowSegmentParams(BaseModel):
     #: 挑定格网后、终切前，只重排「上下都是正文字」的内部线（格数不变，现线判官分 < `boundary_net_p` 才许挪到隔着墨的另一条缝）。
     #: 治写本高字字内白缝当字缝（史記 42:66:4「而｜佗」等）。书级（模型按书训，名字带版本号）；空＝关（缺省，不进参数哈希）。
     boundary_net: str = ""
-    boundary_net_p: float = 0.05
+    boundary_net_p: float = 0.05         # boundary_net：现线判官分低于此才许挪到另一条缝
     #: **等距格网末线外推到末字墨外沿**（2026-11-09，殿本 vol28 列尾下溢，`row_boundaries.fit_grid_end`）：末线是列尾、不是字缝，
     #: 有的册版面两端字距被拉开、末字坐在下版框细线上（vol28 末字心偏下 0.09 格、字高 1.06 倍，r6 旧图、r8 新图都有），
     #: 等距末线切进末字下半截。开着时中选格网定下后（只在最后重切那一遍，不影响挑格网）末线下有墨就顺墨往下走到第一段白行或
@@ -1090,8 +1090,8 @@ class RowSegmentParams(BaseModel):
     #: （戈钩内侧白走廊，代/或/實）；`cut_white_row`（格高倍数，史記 0.35）仍劈字时挪到 ± 这么多格内最近的整行白，护字内白缝；
     #: `straight_seam_ink` 直线候选的 seam_ink 记真墨（原来写死 0，只是记录）。都只在最终那遍切用。书级参数；关（缺省）不进参数哈希。
     cut_gap_keep_glyph: bool = False
-    cut_white_row: float = 0.0
-    straight_seam_ink: bool = False
+    cut_white_row: float = 0.0           # 仍劈字时挪到 ± 这么多格高内最近的整行白（史記 0.35）；0＝关
+    straight_seam_ink: bool = False      # 直线候选的 seam_ink 记真墨（原来写死 0）
     #: **按连通块归属画线**（2026-11-17，史記 r79 ①类，`row_boundaries._glyph_line`）：`cut_white_row` 之后选中那条仍劈开单字大小的连通块，
     #: 被劈的块按离哪边别的墨近整块归那边，逐列取上格墨之下、下格墨之上离原线最近的 y（± 这么多格高内，不限坡度）。
     #: 上下字交错（上字捺尾伸进下格、下字点画顶进上格）。拿不准归哪边、某列上下墨重叠就不动。书级参数；0＝关（缺省，不进参数哈希）。
@@ -1135,7 +1135,7 @@ class RowSegmentParams(BaseModel):
     #: 行里带 `cells`（整列写定，`scripts/yolo_alt_cells.py`：YOLO 框字＋小注分类器，夹注分 a/b）时按格出备选（旗 `alt_cells`，
     #: 裁图走职名列逐格裁法，配 `cell_shrink.manual_ink_fit`），列图高与表的 `col_h` 差过 `LAYOUT_CUTS_H_TOL` 不套。
     alt_cuts: str = ""
-    alt_cuts_fingerprint: str = ""
+    alt_cuts_fingerprint: str = ""       # alt_cuts 表内容 sha，开着时自动填
     #: 表里带 `cells`（整列写定，格式同 manual-cells 的 `expected.cells`）的行出的备选，**顶掉** `alt_nojz` 那份（一列只有一份备选）。
     #: False（缺省，不进参数 dump）＝本列已有 alt_nojz 备选就不出。
     alt_cells_first: bool = False
@@ -1146,15 +1146,15 @@ class RowSegmentParams(BaseModel):
     #: 第四档 `pins`（2026-10-31）：书有逐页钉位表（`page_map_pins`，corpus 下相对路径），按钉位直接出本册
     #: 格位表、不做墨量配页（史記文淵閣本；见 row_segment_pagemap 模块头）。
     page_map: Literal["off", "loose", "strict", "pins"] = "off"
-    page_map_pins: str = ""
+    page_map_pins: str = ""              # 自动配页的逐页钉位表（corpus 下相对路径），pins 档必填
     #: 自动配页的**参照类型**（2026-11-06，Sheldon 定按文本类型、不按书）：`column_slots`（缺省，逐列带格位：
     #: daizhige 逐列本，表全由参照定）／`column_text`（逐列无格位：`#@ 半叶头`＋一行一列的逐列文本，corpus 下
     #: `page_map_ref_file`；配页比各列字数、格位用本页图像量，见 `row_segment_coltext.py`）。column_text 的钉位表
     #: （`page_map_pins`，一行 `{"book","page","head"}`）在 strict/loose 档当硬约束、`pins` 档只按它出表；
     #: 人核改格写 `page_map_overrides`（corpus 下 jsonl，`{"vol","page","col",字段…}`，`"drop": true` 删列）。
     page_map_ref: Literal["column_slots", "column_text"] = "column_slots"
-    page_map_ref_file: str = ""
-    page_map_overrides: str = ""
+    page_map_ref_file: str = ""          # column_text 参照的逐列文本文件（corpus 下）
+    page_map_overrides: str = ""         # 自动配页人核改格表（corpus 下 jsonl，`drop: true` 删列）
     page_map_fingerprint: str = ""       # daizhige＋本册钉页、改格＋算法版本，`RowSegmentStep.book_params` 填
 
     @model_validator(mode="after")
