@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import inspect
+import numpy as np
 from typing import Literal
 
 from pydantic import BaseModel, field_validator, model_serializer, model_validator
@@ -785,6 +786,91 @@ CUT_REPAIR = {"cut_gap_guard": 0.08, "cut_free_seam": 0.35, "cut_gap_keep_glyph"
               "cut_white_row": 0.35, "cut_glyph_line": 0.35}
 
 
+class StraddleMergeParams(BaseModel):
+    """`RowSegmentParams.straddle_merge` 的判据（朱楓林集 01 册实测，见 `straddle_pairs`）。"""
+    band_w: float = 0.2
+    """界行两侧各量多宽（×列宽 ref_w）。"""
+    band_min: float = 0.28
+    """界行左右两条的墨比都 ≥ 它才算骑线。朱楓林集 01 册：骑线字 8 格 0.33–0.50，其余有字格对最高 0.23（列首／列尾格框线行已剔）。"""
+
+
+def straddle_pairs(gray: np.ndarray, pc: PageCells, p: StraddleMergeParams) -> list[tuple[int, int, int, int]]:
+    """骑线字：写在两列之间界行上（界行在此断开）、被两列各劈一半的字。→ [(右列, 右格, 左列, 左格)]。
+
+    相邻两列（列号 c 在右、c+1 在左）里纵向重叠过半、至少一格有字的一对格：界行（两格之间、墨最多的那条像素列）
+    左右各 `band_w`×列宽的两条里墨比都 ≥ `band_min`（横贯的框线行先剔掉）。正常的字离界行有空白，骑线字压在线上，两条都满。
+    `gray` 是 `RunContext.raw_page`（左上原点），格的 `quad_page` 右上原点。只看正文整格（不看雙行小注 a/b 半格）。"""
+    H, W = gray.shape[:2]
+    rw = float(pc.ref_w or 0)
+    if rw <= 0:
+        return []
+    ink = gray < 128
+    w = max(2, int(p.band_w * rw))
+
+    def box(c):
+        xs = [W - 1 - q[0] for q in c.quad_page]
+        ys = [q[1] for q in c.quad_page]
+        return min(xs), min(ys), max(xs), max(ys)
+
+    cols = {c.col: c for c in pc.columns if c.ok}
+    out = []
+    for col, cc in sorted(cols.items()):
+        lc = cols.get(col + 1)
+        if lc is None:
+            continue
+        right = [(c, box(c)) for c in cc.cells if not c.sub and c.quad_page]
+        left = [(c, box(c)) for c in lc.cells if not c.sub and c.quad_page]
+        used: set[int] = set()
+        for a, ba in right:
+            for b, bb in left:
+                if b.slot in used or (a.kind == "blank" and b.kind == "blank"):
+                    continue
+                ov = min(ba[3], bb[3]) - max(ba[1], bb[1])
+                if ov < 0.5 * min(ba[3] - ba[1], bb[3] - bb[1]):
+                    continue
+                bx = int(round((ba[0] + bb[2]) / 2))
+                y0, y1 = max(0, int(max(ba[1], bb[1]))), min(H, int(min(ba[3], bb[3])))
+                lo = max(0, bx - 14)
+                prof = ink[:, lo:bx + 15].sum(0)
+                if y1 <= y0 or prof.size == 0:
+                    continue
+                rx = lo + int(prof.argmax())
+                if rx - w < 0 or rx + w >= W:
+                    continue
+                seg = ink[y0:y1]
+                keep = seg[:, rx - w:rx + w + 1].mean(1) < 0.85      # 横贯的框线行
+                if keep.sum() >= 0.5 * len(keep):
+                    seg = seg[keep]
+                lft, rgt = float(seg[:, rx - w:rx - 4].mean()), float(seg[:, rx + 5:rx + w].mean())
+                if min(lft, rgt) >= p.band_min:
+                    out.append((col, a.slot, col + 1, b.slot))
+                    used.add(b.slot)
+                    break
+    return out
+
+
+def _apply_straddle(pc: PageCells, pairs) -> PageCells:
+    """骑线字合成一格放进右列（先读的那列，用户 2026-11-27 定）：右列那格记字（`kind=char`）、旗 `straddle:<左列>:<左格>`；
+    左列那格记空（`kind=blank`）、旗 `straddle_into:<右列>:<右格>`。格线、格号不动；Step4 按旗在原图上裁整字字块。"""
+    if not pairs:
+        return pc
+    upd: dict[tuple[int, int], tuple[str, str]] = {}
+    for rc, rs, lc, ls in pairs:
+        upd[(rc, rs)] = ("char", f"straddle:{lc}:{ls}")
+        upd[(lc, ls)] = ("blank", f"straddle_into:{rc}:{rs}")
+    cols = []
+    for cc in pc.columns:
+        if not any((cc.col, c.slot) in upd for c in cc.cells):
+            cols.append(cc)
+            continue
+        cells = []
+        for c in cc.cells:
+            u = upd.get((cc.col, c.slot)) if not c.sub else None
+            cells.append(c if u is None else c.model_copy(update={"kind": u[0], "flags": [*c.flags, u[1]]}))
+        cols.append(cc.model_copy(update={"cells": cells}))
+    return pc.model_copy(update={"columns": cols})
+
+
 class RowSegmentParams(BaseModel):
     n_body_slots: int | None = None      # None = Book.chars_per_line
     n_raised: int = 0                    # 抬头多出的格数；版式先验，raised 不自动推
@@ -832,6 +918,10 @@ class RowSegmentParams(BaseModel):
     #: 本册格级钉子（manual-cells）的内容指纹，有钉子时 `book_params` 自动填；soft：钉子推了只报漂移（`guji status` 的 drift），
     #: 不判过期——钉子生效要交单从 row_segment 重跑涉及页（A22 F1 方案 A，2026-11-10）
     manual_cells_fingerprint: str = ""
+    straddle_merge: StraddleMergeParams | None = None
+    """骑线字合一格（CV2 2026-11-28，朱楓林集 MBJ 报）：卷端「新安」「裔孫」写在两列之间的界行上（界行在此断开），
+    照界行切每字劈成左右两半。开了（写 `{}` 用缺省判据）就按 `straddle_pairs` 认出这种格对，合成一格放进右列（先读的那列）
+    对应格位、左列那格记空（`_apply_straddle`，用户 11-27 定）；Step4 在原图上裁整字字块。人定的列不动。缺省 None＝关，不进 dump。"""
     #: 职名页按整理本字数重切（史記文淵閣本，`books/shiji_wyg/roster_segment.refit_column`）：殆知阁源记录目录
     #: （放 0243.jsonl 等，如 `daizhige`）与页钉位表（语料目录下的名字，同 align_ref.page_pins）。两个都给才开；只有实现了 `page_ref_lines` 的套书用得上，
     #: 殿本的职名页实现不认，关时产物逐字节不变。
@@ -1096,6 +1186,8 @@ class RowSegmentParams(BaseModel):
         冻结册升 cv 版本不会被判成「参数变了」报警（D 10-19）。开着时照常进指纹。"""
         d = handler(self)
         if isinstance(d, dict):
+            if self.straddle_merge is None:
+                d.pop("straddle_merge", None)
             if not (self.roster_ref_corpus and self.roster_ref_pins):
                 for k in ("roster_ref_corpus", "roster_ref_pins", "roster_ref_fingerprint"):
                     d.pop(k, None)
@@ -1890,6 +1982,11 @@ class RowSegmentStep(Step):
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
         pc = self._header_ref_flags(ctx, p, page, pc)
         pc = self._roster_cols(ctx, p, page, gate, wins, pc)
+        if p.straddle_merge is not None:
+            pairs = straddle_pairs(ctx.raw_page(page), pc, p.straddle_merge)
+            if manual:
+                pairs = [t for t in pairs if t[0] not in manual and t[2] not in manual]
+            pc = _apply_straddle(pc, pairs)
         pc = _apply_manual_cells(pc, manual, gate, wins, geoms=_page_manual_geom(ctx.book.id, page) if manual else None)
         if alt_out:
             # 卷端标题列、人工指定的列已换掉主切法，备选不再有意义：只留主切法仍是本步切出来那份的列

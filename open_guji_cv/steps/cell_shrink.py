@@ -28,6 +28,158 @@ MANUAL_INK_FIT_REV = 2
 """`manual_ink_fit` 裁法修订号（进开了的书的参数 dump）。改 `_manual_fit_crop` 的产物就加 1。"""
 
 
+class InkMarkParams(BaseModel):
+    """`CellShrinkParams.ink_marks` 的判据（朱楓林集 01 册 13,668 字框实测，中位字宽 103px：印 6 格、墨点 16 格，见 `ink_mark_flags`）。"""
+    char_w: float | None = None
+    """参考字宽（px）；None＝本页正文字框宽中位数（本页正文字框不足 5 个时不判印的宽度一支）。大字序页中位数偏大，按书写定值更稳。"""
+    seal_w: float = 1.6
+    seal_ink: float = 0.45
+    frag_px: int = 60
+    frag_n: int = 15
+    speck_ink: float = 0.085
+    speck_aspect: float = 3.0
+
+
+def ink_mark_flags(ink: np.ndarray, width: float, height: float, char_w: float | None,
+                   p: InkMarkParams) -> list[str]:
+    """一个字框的墨迹记号：`ink` 是原图上字框内的二值墨（1＝墨）。→ [`ink_seal`] / [`ink_speck`] / []。
+
+    印：宽 ≥ `seal_w`×`char_w` 且墨比 ≥ `seal_ink`（实心印），或面积 ≤ `frag_px` 的连通块 ≥ `frag_n` 个（框线印，印文碎）；
+    墨点：墨量 < `speck_ink`×`char_w`² 且宽高比 < `speck_aspect`。朱楓林集 01 册：印中 9:5:7/8/10/11（序末两方实心印各占两格）、
+    37:1:19/20（卷端框线印），墨点 16 格（12 格非字墨点、4 格切坏半字），无误报。"""
+    import cv2
+    if ink.size == 0:
+        return []
+    out: list[str] = []
+    n, _lab, st, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
+    frags = int((st[1:, 4] <= p.frag_px).sum())
+    if (char_w and width >= p.seal_w * char_w and float(ink.mean()) >= p.seal_ink) or frags >= p.frag_n:
+        out.append("ink_seal")
+    elif char_w and int(ink.sum()) < p.speck_ink * char_w * char_w \
+            and max(width, height) / max(1.0, min(width, height)) < p.speck_aspect:
+        out.append("ink_speck")
+    return out
+
+
+def _mark_ink(ctx: RunContext, page: int, cols: list, p: InkMarkParams) -> None:
+    """`ink_marks`：逐个字格按原图量墨，旗加到 `CharRec.flags`（就地改）。"""
+    gray = ctx.raw_page(page)
+    H, W = gray.shape[:2]
+    char_w = p.char_w
+    if char_w is None:
+        ws = sorted(r.width for c in cols for r in c.chars if r.cell_type == "char" and not r.sub)
+        char_w = float(np.median(ws)) if len(ws) >= 5 else None
+    for c in cols:
+        for r in c.chars:
+            if r.cell_type != "char" or not r.bbox_page:
+                continue
+            x0, y0, x1, y1 = r.bbox_page               # 右上原点
+            lx0, lx1 = max(0, int(W - 1 - x1)), min(W, int(W - 1 - x0) + 1)
+            ya, yb = max(0, int(y0)), min(H, int(y1) + 1)
+            ink = (gray[ya:yb, lx0:lx1] < INNER_INK_THRESHOLD).astype(np.uint8)
+            for f in ink_mark_flags(ink, r.width, r.height, char_w, p):
+                if f not in r.flags:
+                    r.flags.append(f)
+
+
+#: 骑线字（row_segment `straddle_merge` 打的格旗）：`straddle:<左列>:<左格>` 记在右列（先读的那列）那一格上，
+#: `straddle_into:<右列>:<右格>` 记在左列被并掉的那一格上。
+STRADDLE_FLAG, STRADDLE_INTO_FLAG = "straddle:", "straddle_into:"
+
+
+def _straddle_partner(cell) -> tuple[int, int] | None:
+    for f in cell.flags or []:
+        if f.startswith(STRADDLE_FLAG):
+            c_, s_ = f[len(STRADDLE_FLAG):].split(":")
+            return int(c_), int(s_)
+    return None
+
+
+def straddle_patch(ctx: RunContext, page: int, cells: PageCells, col: int, slot: int, padding_ratio: float):
+    """骑线字的整字字块：右列 (col, slot) 与它旗上记的左列格两格合起来，在原图上取墨裁。→ (字块, bbox_tr) 或 None。
+
+    两格外接框内的连通块，质心落在框里、又不是长线（高 >1.5 格高或宽 >1.5 列宽：界行、框线）的留下，其余抹白；
+    按留下的墨收紧框、外扩 `padding_ratio`×格高。坐标：`bbox_tr` 右上原点（同 `CharRec.bbox_page`）。"""
+    import cv2
+    cc = cells.column(col)
+    cell = next((c for c in (cc.cells if cc else []) if c.slot == slot and not c.sub), None)
+    part = _straddle_partner(cell) if cell is not None else None
+    if part is None:
+        return None
+    oc = cells.column(part[0])
+    other = next((c for c in (oc.cells if oc else []) if c.slot == part[1] and not c.sub), None)
+    if other is None or not cell.quad_page or not other.quad_page:
+        return None
+    gray = ctx.raw_page(page)
+    H, W = gray.shape[:2]
+    pts = [*cell.quad_page, *other.quad_page]
+    bx0, bx1 = W - 1 - max(q[0] for q in pts), W - 1 - min(q[0] for q in pts)
+    by0, by1 = min(q[1] for q in pts), max(q[1] for q in pts)
+    per = float(cc.period or cells.period or (by1 - by0))
+    rw = float(cells.ref_w or (bx1 - bx0) / 2)
+    m = int(round(per * 0.5))
+    X0, Y0 = max(0, int(bx0) - m), max(0, int(by0) - m)
+    X1, Y1 = min(W, int(bx1) + m + 1), min(H, int(by1) + m + 1)
+    ink = (gray[Y0:Y1, X0:X1] < INNER_INK_THRESHOLD).astype(np.uint8)
+    n, lab, st, cen = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    keep = np.zeros(n, bool)
+    part_ids = []
+    ix0, iy0, ix1, iy1 = int(bx0) - X0, int(by0) - Y0, int(bx1) - X0 + 1, int(by1) - Y0 + 1
+    for i in range(1, n):
+        cx, cy = cen[i][0] + X0, cen[i][1] + Y0
+        if st[i, 2] > 1.5 * rw:
+            continue
+        if bx0 <= cx <= bx1 and by0 <= cy <= by1 and st[i, 3] <= 1.5 * per:
+            keep[i] = True
+        elif st[i, 3] <= 2.5 * per:
+            part_ids.append(i)
+    mask = keep[lab]
+    if part_ids:
+        # 跨格粘连的墨（朱楓林集 37 页「裔」「孫」连成一块）：本格框里占 ≥30% 的那块，只取框内那截
+        inner = np.zeros_like(mask)
+        inner[max(0, iy0):iy1, max(0, ix0):ix1] = True
+        for i in part_ids:
+            m_i = lab == i
+            got = m_i & inner
+            if got.sum() >= 0.3 * st[i, 4]:
+                mask |= got
+    if not mask.any():
+        return None
+    ys, xs = np.nonzero(mask)
+    pad = int(round(per * padding_ratio))
+    tx0, tx1 = max(0, int(xs.min()) - pad), min(X1 - X0, int(xs.max()) + pad + 1)
+    ty0, ty1 = max(0, int(ys.min()) - pad), min(Y1 - Y0, int(ys.max()) + pad + 1)
+    patch = gray[Y0:Y1, X0:X1].copy()
+    patch[~mask] = 255
+    patch = np.ascontiguousarray(patch[ty0:ty1, tx0:tx1])
+    lx0, lx1, ly0, ly1 = X0 + tx0, X0 + tx1 - 1, Y0 + ty0, Y0 + ty1 - 1
+    return patch, (float(W - 1 - lx1), float(ly0), float(W - 1 - lx0), float(ly1))
+
+
+def _apply_straddle(ctx: RunContext, page: int, cells: PageCells, out: list, padding_ratio: float) -> None:
+    """骑线字（Step3 `straddle_merge` 的格旗）：右列那格换成整字字块、外接框；左列那格记空、不出字块（就地改 `out`）。"""
+    recs = {(c.col, r.slot): r for c in out for r in c.chars if not r.sub}
+    for cc in cells.columns:
+        for cell in cc.cells:
+            part = _straddle_partner(cell)
+            if part is None or cell.sub:
+                continue
+            r, lr = recs.get((cc.col, cell.slot)), recs.get(part)
+            got = straddle_patch(ctx, page, cells, cc.col, cell.slot, padding_ratio)
+            if r is None or got is None:          # 左列那格 Step3 记空了，Step4 多半不发记录（lr 为 None），无需再记
+                continue
+            patch, box = got
+            key = r.patch_key or (cell_key(page, cc.col, cell.slot))
+            ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, patch))
+            r.patch_key, r.cell_type, r.bbox_page = key, "char", tuple(round(v, 2) for v in box)
+            r.width, r.height = float(box[2] - box[0]), float(box[3] - box[1])
+            r.cand_variants = []
+            r.flags = [f for f in r.flags if f != "lost_patch"] + [f"{STRADDLE_FLAG}{part[0]}:{part[1]}"]
+            if lr is not None:
+                lr.cell_type, lr.patch_key, lr.cand_variants = "empty", None, []
+                lr.flags = [f for f in lr.flags if f != "lost_patch"] + [f"{STRADDLE_INTO_FLAG}{cc.col}:{cell.slot}"]
+
+
 class CellShrinkParams(BaseModel):
     strategy: str = "component_owner"     # | padding_box
     padding_ratio: float = 0.08
@@ -132,10 +284,18 @@ class CellShrinkParams(BaseModel):
     （`_manual_fit_crop`）。缺省关＝旧行为（按框外扩 padding 直接裁）。开（史記）：正文定框多是满宽、上下相接的
     网格框，外扩的 padding 带进上下邻字，图块认错（08:124:5 连续 7 字、04:122:1、10:2:6；SJ 11-10 报）。"""
 
+    ink_marks: InkMarkParams | None = None
+    """格级墨迹记号（CV2 2026-11-28，朱楓林集 MBJ 报）：按原图上字框里的墨给字格打旗，下游 seed_admit `ink_marks` 据旗判非字。
+    `ink_seal`（藏书印：宽 ≥ seal_w×参考字宽且墨比 ≥ seal_ink，或面积 ≤ frag_px 的碎块 ≥ frag_n 个——框线印的印文碎）、
+    `ink_speck`（墨点：墨量 < speck_ink×参考字宽²且宽高比 < speck_aspect，扁的「一」不中）。参考字宽 `char_w`（px）不写就取本页正文字框宽中位数。
+    只打旗、不改框与字块。缺省 None＝关，不进 dump。判据与阈值见 `InkMarkParams`、`ink_mark_flags`。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
         d = handler(self)
+        if isinstance(d, dict) and self.ink_marks is None:
+            d.pop("ink_marks", None)
         if isinstance(d, dict) and not self.frame_line_max_off:
             d.pop("frame_line_max_off", None)
         if isinstance(d, dict) and not self.frame_line_grow:
@@ -694,6 +854,10 @@ class CellShrinkStep(Step):
                                   for cc in cells.columns]
         alt = [self._column_chars(ctx, page, cc, wins, page_w, frame_lines, seal, alt=True, inner=inner)
                for cc in cells.alt_columns]
+        if any(_straddle_partner(c) for cc in cells.columns for c in cc.cells):
+            _apply_straddle(ctx, page, cells, out, ctx.params_for(self).padding_ratio)  # type: ignore[attr-defined]
+        if ctx.params_for(self).ink_marks is not None:  # type: ignore[attr-defined]
+            _mark_ink(ctx, page, out, ctx.params_for(self).ink_marks)  # type: ignore[attr-defined]
         if alt:
             return {"char_index": PageChars(page=page, columns=out, alt_columns=alt)}
         return {"char_index": PageChars(page=page, columns=out)}
@@ -859,6 +1023,10 @@ class CellShrinkStep(Step):
         cc = (next((c for c in cells.alt_columns if c.col == col), None) if alt else cells.column(col))
         if cc is None or not cc.ok:
             raise KeyError(f"第 {page} 页第 {col} 列没有可用的字格")
+        if not alt and not sub and any(c.slot == slot and _straddle_partner(c) for c in cc.cells):
+            got = straddle_patch(ctx, page, cells, col, slot, ctx.params_for(self).padding_ratio)  # type: ignore[attr-defined]
+            if got is not None:
+                return got[0]
         cimg = memo["imgs"].get(col) if memo is not None else None
         if cimg is None:
             cimg = ctx.image("column_image", column_key(page, col))
