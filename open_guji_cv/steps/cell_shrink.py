@@ -182,8 +182,8 @@ def _apply_straddle(ctx: RunContext, page: int, cells: PageCells, out: list, pad
 
 class CellShrinkParams(BaseModel):
     strategy: str = "component_owner"     # | padding_box
-    padding_ratio: float = 0.08
-    min_ink_ratio: float = 0.01
+    padding_ratio: float = 0.08          # 紧框收好后四周外扩 这个比例×格高（字块留边）
+    min_ink_ratio: float = 0.01          # 格内墨占比低于此当空格，不出紧框
     seal_flag: bool = True
     """印章／大片污损遮挡格打 `seal_region` 旗（2026-09-30 L2，overview#318）：判据就是
     `steps/occlusion.page_occluded`（与 seed_admit 入库闸同一入口、同一组默认阈值），**只打标不改几何**——

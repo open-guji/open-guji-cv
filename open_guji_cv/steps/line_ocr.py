@@ -19,7 +19,7 @@ from ..impl.free.free_rectify import rectify_gray
 
 
 class LineOcrParams(BaseModel):
-    device: str = "cpu"
+    device: str = "cpu"           # 行识别模型跑在哪：cpu／cuda
 
 
 _READERS: dict[str, free_ocr.LineReader] = {}

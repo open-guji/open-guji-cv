@@ -21,8 +21,8 @@ from ._warpmap import ColumnMapper
 
 
 class RowSegmentRunsParams(BaseModel):
-    ink_threshold: int = 128
-    only_admitted: bool = True
+    ink_threshold: int = 128         # 二值门槛：灰度 < 此值算墨
+    only_admitted: bool = True       # 只切过了列出口闸的列（不过的列不出格）
     blank_min_frac: float = 0.8      # 首尾空出 ≥ 此 × em 才记一个 blank 项
     small_char_frac: float = 0.8     # 字高 < 此 × em 标 small
     extend_max_frac: float = 0.6     # 首末项向外最多扩多少 em

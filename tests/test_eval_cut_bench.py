@@ -90,3 +90,47 @@ def test_clean_ink_box():
     assert why == "ok" and box == [W - 90.0, 120.0, W - 60.0, 170.0]
     ink[190:230, 70:75] = True                            # 跨下格界：不干净
     assert cut_ink.clean_ink_box(ink, W, quad) == (None, "跨格界")
+
+
+# ---------------------------------------------------------------- bench 统一接口（eval/benches/cut_parts.py）
+def _ctx(tmp_path, gold):
+    from open_guji_cv.eval.bench import BenchCtx
+    return BenchCtx("bk", ["01"], tmp_path / "work", {"gold": str(gold)})
+
+
+def test_bench_cut_gate_items(tmp_path):
+    from open_guji_cv.eval.benches import cut_parts
+    b, prod = _bench(tmp_path)
+    (prod / "cut_gate").mkdir()
+    gm = {"page": 5, "admitted": True, "columns": [
+        {"col": 1, "admitted": False, "reject": ["L1c 列宽"], "flags": []},
+        {"col": 2, "admitted": True, "reject": [], "flags": ["L2b 噪点"]},
+        {"col": 3, "admitted": True, "reject": [], "flags": []},
+        {"col": 4, "admitted": True, "reject": [], "flags": []}]}
+    (prod / "cut_gate" / "p0005.json").write_text(json.dumps({"gate_manifest": gm, "row_segment_gate_manifest": {"columns": []}}))
+    work = tmp_path / "work" / "bench"
+    work.mkdir(parents=True)
+    (work / "bk").symlink_to(b)
+    r = cut_parts._gate_score(_ctx(tmp_path, b), tmp_path / "run")
+    assert r.metrics["any_recall"] == 1.0 and r.metrics["block_recall"] == 1.0
+    assert {x["id"]: x["ok"] for x in r.items} == {"01:5:1": True, "01:5:2": False, "01:5:3": True, "01:5:4": True}
+
+
+def test_bench_cut_frame_shard(tmp_path):
+    from open_guji_cv.eval.benches import cut_parts
+    gold = tmp_path / "ds" / "char-segmentation" / "cut-bench" / "bk"
+    gold.mkdir(parents=True)
+    sh = tmp_path / "ds" / "char-segmentation" / "shrink-ink"
+    sh.mkdir()
+    rows = [{"key": "k1", "book": "bk", "vol": "01", "page": 5, "col": 1, "slot": 1, "sub": None, "tight": [10, 10, 50, 60]},
+            {"key": "k2", "book": "bk", "vol": "01", "page": 5, "col": 1, "slot": 2, "sub": None, "tight": [10, 110, 50, 160]},
+            {"key": "x", "book": "other", "vol": "01", "page": 5, "col": 1, "slot": 3, "sub": None, "tight": [0, 0, 1, 1]}]
+    sh.joinpath("items.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
+    assert cut_parts._P_INK(gold, "bk", []) == {"01": [5]}                   # 只挑这本书
+    prod = tmp_path / "run" / "ws" / "products" / "01" / "cell_shrink"
+    prod.mkdir(parents=True)
+    chars = [{"slot": 1, "bbox_page": [10, 10, 50, 60]}, {"slot": 2, "bbox_page": [10, 118, 50, 160]}]   # 第 2 格上边收 8px：切笔
+    prod.joinpath("p0005.json").write_text(json.dumps({"char_index": {"page": 5, "columns": [{"col": 1, "chars": chars}]}}))
+    r = cut_parts._frame_score("cut-2e-ink", "shrink-ink", 6.0)(_ctx(tmp_path, gold), tmp_path / "run")
+    assert r.n == 2 and r.metrics["cut"] == 1 and r.metrics["iou90"] == 0.5
+    assert {x["id"]: x["ok"] for x in r.items} == {"k1": True, "k2": False}

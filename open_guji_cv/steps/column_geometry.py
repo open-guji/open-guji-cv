@@ -91,8 +91,8 @@ class ColumnGeometryParams(BaseModel):
     职名页、个别页列数与册级不同时用；一般同 `vline_overrides` 配用（给出本页全部竖线）。border_detect、border_detect_gate、
     column_gate 三处都要写同一张表。缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
     count_mode: str = "exact"           # exact：列数必须等于版式列数 | detected：列数由 Step1 探出，只要求 ≥1（现代链）
-    width_tol: float = 0.15
-    ink_threshold: int = 128
+    width_tol: float = 0.15           # 列宽偏离本页中位宽超过这个比例算列宽异常（同 cut_gate L1c）
+    ink_threshold: int = 128          # 二值门槛：灰度 < 此值算墨
     bottom_slack: float = 16.0     # 下界在版框线之外再放多少，见 border_bottom 注释
     chars_per_line: int | None = None   # None = Book.chars_per_line；算 n_raised_hint 的基准
     span_ink: float = 0.05         # 量墨跨度时算「有墨」的行墨门槛

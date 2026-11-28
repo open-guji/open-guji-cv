@@ -21,7 +21,7 @@ TIGHT_INNER_BAR_PEAK = 0.5
 
 
 class ColumnBandParams(BaseModel):
-    ink_threshold: int = 128
+    ink_threshold: int = 128          # 二值门槛：灰度 < 此值算墨（竖直墨量投影用）
     tight_rule_band: bool = False
     """两侧界行判带收紧（写本开，史記）：贴边界行取衰减后的第一个谷（`column_text_band` first_valley），
     内侧孤立窄条峰到 TIGHT_INNER_BAR_PEAK 才当第二道线抹（缺省 0.10，殿本页边列内框淡到 0.12）。缺省关＝殿本旧行为。

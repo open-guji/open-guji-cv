@@ -31,13 +31,14 @@ layouts:
     #   block_detect   分块：版框 + 长线 → 文字块（人标 layout_hints 可整页 skip、圈块、给列数）
     #   column_trace   块内找列：剪切校斜 + 投影 DP + 最省墨竖缝 → 每列左右弯缝
     #   line_ocr       逐列送识别软件（PaddleOCR）读文本行，给 cell_cut 定区、定字数（要装 `.[cpu]`）
-    #   cell_cut       列内切字：大字 / 双行小注 / 单行小注分区，各自切字
-    # 2c 以后暂未接（free_cells 不是 cells），recognition 槽写空；接法（free_to_cells）见设计第二期。
+    #   cell_cut       列内切字：大字 / 双行小注 / 单行小注分区，各自切字 → free_cells
+    #   free_to_cells  转标准字格（第二期，2026-11-28）：弯缝列逐行拉直成列图，free_cells 换成列图坐标的 cells，
+    #                  另出 column_windows（带 free_map 逆映射）、column_image；2e cell_shrink 起照骨架缺省接上
     slots:
       layout: [block_detect]
       columns: [column_trace, line_ocr]
-      cells: [cell_cut]
-      recognition: []
+      cells: [cell_cut, free_to_cells]
+      # recognition 用骨架缺省
   print:
     title: 现代排印（竖排）
     # 与 grid 的差别只在切分线前三步：line_detect 顶替 border_detect（按墨柱找列，产同一种 borders）、

@@ -29,7 +29,7 @@ class LineDetectGateParams(BaseModel):
 @register_step
 class LineDetectGateStep(Step):
     spec = StepSpec(
-        id="line_detect_gate", title="Step1→2 交接闸（现代印刷）", version="1.0", unit="page",
+        id="line_detect_gate", title="1 版面出口闸（现代印刷）", version="1.0", unit="page",
         consumes=("line_index",), produces=("border_detect_gate_manifest",),
         params=LineDetectGateParams,
     )

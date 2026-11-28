@@ -79,9 +79,9 @@ TOP_BAND = 16.0
 
 
 class SealDetectParams(BaseModel):
-    min_peak: float = 20.0
-    min_cover: float = 0.5
-    min_score: float = 0.25
+    min_peak: float = 20.0   # 大印：网格里中等墨点密度的峰值下限
+    min_cover: float = 0.5   # 小印：模板笔画处有墨的比例下限
+    min_score: float = 0.25   # 小印：覆盖率减底色墨率的分数下限
     overrides: dict[int, list[dict]] = Field(default_factory=dict)
     """页号 → 人核的印列表 `[{"kind": "stain"|"crisp", "bbox": [x0, y0, x1, y1]}]`（规范空间）；空表＝无印。"""
     stain_pages: list[int] | None = None
@@ -297,7 +297,7 @@ def detect_seals(gray: np.ndarray, p: SealDetectParams, borders=None) -> list[Se
 @register_step
 class SealDetectStep(Step):
     spec = StepSpec(
-        id="seal_detect", title="印章定位", version="1.4", unit="page",   # 1.4：大印要紧贴版框上边——上边往下一条的墨点密度 ≥ TOP_BAND，新图源正文页不再误判大印；1.3：版框宽偏离原扫描尺度 15% 以上的页（换图源 siku-qiefen-v2），小印模板按比例匹配、笔画覆盖区按印框大小缩放；1.2：只有够宽的密度区才按大印套版框正方形，窄的按小印取模板位置；小印覆盖门槛 0.6→0.5（vol21–50 卷末印淡）；1.1：大印外框按版框定（正方形）
+        id="seal_detect", title="1c 印章定位", version="1.4", unit="page",   # 1.4：大印要紧贴版框上边——上边往下一条的墨点密度 ≥ TOP_BAND，新图源正文页不再误判大印；1.3：版框宽偏离原扫描尺度 15% 以上的页（换图源 siku-qiefen-v2），小印模板按比例匹配、笔画覆盖区按印框大小缩放；1.2：只有够宽的密度区才按大印套版框正方形，窄的按小印取模板位置；小印覆盖门槛 0.6→0.5（vol21–50 卷末印淡）；1.1：大印外框按版框定（正方形）
         consumes=("raw_page", "borders"), produces=("seals",), params=SealDetectParams,
     )
 

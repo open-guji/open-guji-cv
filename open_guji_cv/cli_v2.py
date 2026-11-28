@@ -371,10 +371,17 @@ def cmd_book(args) -> None:
     except Exception as e:              # noqa: BLE001 —— 只是展示，读不了不挡 show
         gsrc = {"error": str(e)}
     rsrc = _ref_profile_report(args.book)
+    try:                                # 归层提示（X5，一期只警告）
+        from .core.config_keys import check_book, converge_hints
+        lwarn = check_book(path)
+        lhint = converge_hints(Path(path).parent)
+    except Exception as e:              # noqa: BLE001 —— 只是提示，读不了不挡 show
+        lwarn, lhint = [f"读不了：{e}"], []
     if args.json:
         print(json.dumps({"book": args.book, "effective": d, "source": src, "pipeline": pl_id,
                           "params_source": {k: {"value": v, "layer": ly} for k, (v, ly) in psrc.items()},
-                          "glyph_sources": gsrc, "reference_profile": rsrc},
+                          "glyph_sources": gsrc, "reference_profile": rsrc,
+                          "layer_warnings": lwarn, "converge_hints": lhint},
                          ensure_ascii=False, indent=1, default=str))
         return
     print(f"# 册 {args.book} 生效配置（{path}）")
@@ -401,6 +408,12 @@ def cmd_book(args) -> None:
             print(f"  5b 字表 rare_charset：{rsrc['rare_charset']}")
         for h in rsrc["hints"]:
             print(f"  ⚠ {h}")
+    if lwarn or lhint:
+        print("\n# 归层提示（core/config_keys.py 登记表；一期只提示、不拦）")
+        for w in lwarn:
+            print(f"  ⚠ {w}")
+        for h in lhint:
+            print(f"  · {h}")
     print("\n# 字形库来源（借库写在 workspace.yaml 的 glyph_lib.borrow，不在册配置五层里，整个工作区共用）")
     if gsrc.get("error"):
         print(f"  读不了：{gsrc['error']}")

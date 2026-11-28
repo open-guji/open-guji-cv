@@ -74,7 +74,7 @@ for b in books:
     keep = work / "keep" / f"{b['ws']}-{vol}"           # 只留打分要的两步，其余连同快照、缓存删掉（每册几百 MB）
     for st in ("seed_admit", "row_segment"):
         shutil.copytree(res / st, keep / st, dirs_exist_ok=True)
-    subprocess.run([sys.executable, str(here / "score.py"), "--items", str(items), "--rebind", "--out", str(part),
+    subprocess.run([sys.executable, str(here / "score.py"), "--items", str(items), "--rebind", "--max-missing", "1.0", "--out", str(part),
                     "--run", f"{b['ws']}/{vol}={keep}"], check=True, env=env)
     (done / f"{b['ws']}-{vol}.pack.json").write_text(json.dumps(packs[f"{b['ws']}/{vol}"], ensure_ascii=False))
     for d in (work / "exp" / cfg["name"], snap / vol, cache / vol):
@@ -84,6 +84,6 @@ for b in books:
 out = work / f"{a.name}.jsonl"
 out.write_text("".join(p.read_text() for p in parts))
 print("\n== 动态层合计")
-subprocess.run([sys.executable, str(here / "score.py"), "--items", str(items), "--rebind", "--out", "/dev/null"]
+subprocess.run([sys.executable, str(here / "score.py"), "--items", str(items), "--rebind", "--max-missing", "1.0", "--out", "/dev/null"]
                + sum([["--run", f"{p.stem.rsplit('-', 1)[0]}/{p.stem.rsplit('-', 1)[1]}={work / 'keep' / p.stem}"] for p in parts], [])
                + (["--against", a.against, "--flips", str(work / f"{a.name}-flips.tsv")] if a.against else []), check=True)

@@ -118,6 +118,7 @@ def main() -> None:
     ap.add_argument("--dump", default=None, help="把逐对分数存成 npz")
     ap.add_argument("--from-dump", default=None, help="跳过打分，直接读 npz")
     ap.add_argument("--out", default=None, help="报告 JSON")
+    ap.add_argument("--rows", default=None, help="逐对结果（操作点上判得对不对）写到这个 jsonl（`guji bench` 翻转清单用）")
     ap.add_argument("--include-excluded", action="store_true",
                     help="连排除名单里的坏图块一起量（默认跳过）")
     ap.add_argument("--no-fold", action="store_true",
@@ -219,6 +220,13 @@ def main() -> None:
                          "recall": r_ and round(r_, 5),
                          "tp": tp, "fp": fp, "n_same": pos}
         report[f"by_{key}"] = sub
+
+    if args.rows:
+        with open(args.rows, "w", encoding="utf-8") as fh:
+            for k, p in enumerate(pairs):
+                fh.write(json.dumps({"id": f"{p['a']}|{p['b']}", "ok": bool(passed[k] == is_same[k]),
+                                     "origin": p["origin"], "label": p["label"], "passed": bool(passed[k])},
+                                    ensure_ascii=False) + "\n")
 
     if args.out:
         Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=1),

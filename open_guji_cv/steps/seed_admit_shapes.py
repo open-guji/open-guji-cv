@@ -95,11 +95,12 @@ def _gd_near(ctx, page: int, method: str):
     return gd.near_map(method)
 
 
+# 保留本地现算（C2 查过，不删）：3b 没跑、备选切法列、模型指纹不一致三种情形都退回本地现算，不是 4d 缺席才用。
 def _near_from_3b(ctx, page: int, method: str, model_path: str, by_pair: bool = False, use_gd: bool = True) -> dict:
     """3b `glyph_near` 里某个看图方法的原样判法结果：{格 id: 证据（去掉 `method` 键）}（CV4 11-28，第四步重构 4d 接 3b）。
 
     只收主切法格（3b 只算主切法；备选切法列调用方退回本地现算）、证据里没有 `error` 的格。
-    3b 用的模型必须与本步书级参数指的是同一份（比 `near_methods.method_fingerprint`），不一致报错，不混用。
+    3b 用的模型必须与本步书级参数指的是同一份（比 `near_methods.method_fingerprint`），不一致时警告、本页该方法退回本地现算（不混用，不报错；CV4 11-28 转缺省开后改，原为报错）。
     读不到 3b 产物（没跑、没开组）→ 空表，全部本地现算。
     `by_pair`（part_shape：一个模型挂多对，每组一对）：键是 (格 id, 对里两字)，指纹按 {path, pair} 逐对比。
     `use_gd`：先读 4d `group_decision` 产物里的快照（P3c）；4d 步自己取快照时传 False。"""
@@ -126,9 +127,11 @@ def _near_from_3b(ctx, page: int, method: str, model_path: str, by_pair: bool = 
         wants = ({method_fingerprint(method, {"path": model_path, "pair": list(k[1])}) for k in got} if by_pair
                  else {method_fingerprint(method, model_path)})
         want = ", ".join(sorted(wants - have))
-        if want:
-            raise ValueError(f"seed_admit p{page}：3b glyph_near 的 {method} 模型与书级参数指的不是同一份"
-                             f"（本步 {want}；3b {pn.methods_sha or '空'}），先让两边指同一个模型再跑")
+        if want:                           # 缺省全开后不再整批停：警告一次，这个方法本页退回本地现算（结果与不读 3b 相同）
+            if hasattr(ctx, "log"):
+                ctx.log(f"⚠️ seed_admit p{page}：3b glyph_near 的 {method} 模型与书级参数指的不是同一份"
+                        f"（本步 {want}；3b {pn.methods_sha or '空'}），本页该方法退回本地现算；让两边指同一个模型可读 3b")
+            return {}
     return got
 
 

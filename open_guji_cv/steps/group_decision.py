@@ -33,6 +33,13 @@ _NEAR_SPECS = {
     "pair_shape": (None, False), "book_knn": (None, False), "near_knn": (None, False), "stroke_veto": (None, False),
 }
 
+#: 3b 看图方法 → 4d 书级模型参数名（全空＝这本书没配这个方法，不取 3b 快照）。
+_NEAR_MODEL_FIELDS = {
+    "rr_shape": ("group_flow_rr_shape",), "wu_shape": ("group_flow_wu_shape",), "hou_shape": ("group_flow_hou_shape",),
+    "part_shape": ("group_flow_part_shape",), "pair_shape": ("group_flow_pair_shape", "group_flow_pair_shapes"),
+    "book_knn": ("group_flow_book_knn",), "near_knn": ("group_flow_near_knn",), "stroke_veto": ("stroke_veto",),
+}
+
 #: 本步读的 `SeedAdmitParams` 字段（进本步指纹）：字组流程全部 `group_flow*`，加上面几个入口、宽高比、整理本字用到的。
 _SEED_EXTRA = ("fold_groups", "fold_aspect", "consensus_fallback", "reference_trust", "no_ref_params", "no_ref_pages",
                "ref_accuracy")
@@ -63,6 +70,8 @@ def near_snapshot(ctx: RunContext, page: int, p) -> dict[str, list[dict]]:
         if spec is None:
             continue
         path, by_pair = spec
+        if not any(getattr(p, f, None) for f in _NEAR_MODEL_FIELDS[m]):    # 缺省 8 个全开后：这本书没配这个方法的 4d 模型，4d 本地也不跑它，不取快照
+            continue
         got = (_near_from_3b(ctx, page, m, getattr(p, path), by_pair=by_pair, use_gd=False) if path
                else _near_by_model_from_3b(ctx, page, m, use_gd=False))
         out[m] = pack_near(m, got)
@@ -146,7 +155,7 @@ class GroupDecisionStep(Step):
                    "open_guji_cv.steps.seed_admit", "open_guji_cv.steps.seed_admit_cell_state", "open_guji_cv.steps.seed_admit_groups",
                    "open_guji_cv.steps.seed_admit_pick", "open_guji_cv.steps.seed_admit_veto", "open_guji_cv.steps.seed_admit_altcut",
                    "open_guji_cv.steps.seed_admit_reasons", "open_guji_cv.steps.seed_admit_page_params", "open_guji_cv.steps.decide",
-                   "open_guji_cv.steps.seed_admit_common", "open_guji_cv.steps.seed_admit_params", "open_guji_cv.steps.cell_state",
+                   "open_guji_cv.steps.seed_admit_common", "open_guji_cv.steps.seed_admit_params", "open_guji_cv.steps.seed_admit_vis3", "open_guji_cv.steps.cell_state",
                    "open_guji_cv.steps.seed_admit_shapes",   # 读 3b 快照的两个读口住在这里（_near_from_3b／_near_by_model_from_3b）
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.registry", "open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_methods._base", "open_guji_cv.groups.near_methods.cnn_small", "open_guji_cv.groups.near_methods.rr_shape", "open_guji_cv.groups.near_methods.wu_shape", "open_guji_cv.groups.near_methods.hou_shape", "open_guji_cv.groups.near_methods.part_shape", "open_guji_cv.groups.near_methods.pair_shape", "open_guji_cv.groups.near_methods.book_knn", "open_guji_cv.groups.near_methods.near_knn", "open_guji_cv.groups.near_methods.stroke_veto", "open_guji_cv.groups.near_methods.flow_shape", "open_guji_cv.groups.near_methods.pair_clf", "open_guji_cv.groups.near_registry",
                    "open_guji_cv.products.kinds.group_decision"),

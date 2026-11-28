@@ -33,7 +33,139 @@ def test_build_cell_state_synthetic(tmp_path):
     a = (ds / "decide-bench/cell-state/w1/items.jsonl").read_bytes()
     rows = [json.loads(x) for x in a.decode().splitlines()]
     assert [r["expected"]["state"] for r in rows] == ["char"]          # 空字的格不收
-    b = (ds / "decide-bench/cell-state/siku-zongmu/items.jsonl").read_text()
-    assert json.loads(b)["expected"]["state"] == "non_char"
+    other = [d for d in (ds / "decide-bench/cell-state").iterdir() if d.is_dir() and d.name != "w1"]   # instances 的 non_char 归到殿本子目录
+    assert len(other) == 1
+    assert json.loads((other[0] / "items.jsonl").read_text())["expected"]["state"] == "non_char"
     subprocess.run(cmd, check=True, capture_output=True)
     assert (ds / "decide-bench/cell-state/w1/items.jsonl").read_bytes() == a   # 重跑逐字节相同
+
+
+# ---------------------------------------------------------------- score.py：缺格率与退出码（11-28 CV4 修）
+def _make_run(tmp_path, n_gold, n_cells):
+    """自造：n_gold 个金标格，产物只有前 n_cells 格，都放行、字对。"""
+    root = tmp_path / "run" / "v1"
+    (root / "char_decide").mkdir(parents=True)
+    chars = [{"id": f"v1:1:1:{i}", "char": "字", "admit": True, "channel": "match_ref", "evidence": {}} for i in range(1, n_cells + 1)]
+    (root / "char_decide" / "p0001.json").write_text(json.dumps({"char_decide": {"page": 1, "columns": [{"col": 1, "chars": chars}]}}), encoding="utf-8")
+    items = [{"id": f"w:v1:1:1:{i}", "anchor": {"ws": "w", "book": "v1", "page": 1, "key_at_freeze": f"v1:1:1:{i}"},
+              "expected": {"char": "字"}, "status": "active", "book_title": "书"} for i in range(1, n_gold + 1)]
+    ip = tmp_path / "items.jsonl"
+    ip.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in items) + "\n", encoding="utf-8")
+    return ip, root
+
+
+def _score(ip, root, *extra):
+    cmd = [sys.executable, "-m", "open_guji_cv.eval.decide_bench.score", "--items", str(ip), "--run", f"v1={root}", "--no-substeps", *extra]
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def test_score_large_missing_is_not_a_pass(tmp_path):
+    ip, root = _make_run(tmp_path, n_gold=10, n_cells=2)         # 缺格 80%：wrong_admit=0 不能算通过
+    r = _score(ip, root)
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "不算通过" in r.stdout and "✓" not in r.stdout.split("wrong_admit")[1].splitlines()[0]
+    assert _score(ip, root, "--max-missing", "1.0").returncode == 0
+
+
+def test_score_complete_run_passes(tmp_path):
+    ip, root = _make_run(tmp_path, n_gold=10, n_cells=10)
+    r = _score(ip, root)
+    assert r.returncode == 0 and "wrong_admit = 0  ✓" in r.stdout
+
+
+# ---------------------------------------------------------------- 统一接口里的 decide／decide-gate
+def test_decide_registered_and_sections(tmp_path, monkeypatch):
+    from open_guji_cv.eval import bench as B
+    from open_guji_cv.eval.benches import decide as D
+    assert B.get("decide").primary == "wrong_admit" and B.get("decide-gate").owner == "CV4"
+    assert {g.metric for g in B.get("decide").guards} >= {"wrong_admit", "missing_rate", "flip_worse"}
+    rows = [{"id": "a", "book": "书", "truth": "字", "algo": "字", "rule": "admit:x", "outcome": "放对", "a4": "对", "group_mode": None,
+             "c4_flag": False, "c4_mark": False, "c4_excl": False, "ctx_char": "字", "ctx_src": "context", "errloc": "—"},
+            {"id": "b", "book": "书", "truth": "字", "algo": "他", "rule": "admit:group", "outcome": "放错字", "a4": "错位",
+             "group_mode": "lift", "c4_flag": True, "c4_mark": True, "c4_excl": False, "ctx_char": None, "ctx_src": None, "errloc": "4c"},
+            {"id": "c", "book": "书", "truth": "字", "algo": None, "rule": None, "outcome": "缺格", "a4": "—", "group_mode": None,
+             "c4_flag": False, "c4_mark": False, "c4_excl": False, "ctx_char": None, "ctx_src": None, "errloc": "切分"}]
+    pred = tmp_path / "p.jsonl"
+    pred.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in rows) + "\n", encoding="utf-8")
+    ctx = B.BenchCtx(book="w", vols=[], work=tmp_path, res={})
+    monkeypatch.setattr(D, "_vols", lambda c: ["v1"])          # 不读 dataset
+    r = D.score(ctx, pred)
+    m = r.metrics
+    assert m["wrong_admit"] == 1 and m["missing"] == 1 and m["a4_misaligned"] == 1 and m["c4_missed_char"] == 1
+    assert m["d4_group_wrong_admit"] == 1 and m["b4_context_precision"] == 1.0 and m["errloc"] == {"4c": 1, "切分": 1}
+    B.apply_guards(B.get("decide"), r)
+    assert r.status == "regressed"      # 放错字 1、缺格率 33%
+
+
+def test_decide_dianben_id_alias(tmp_path):
+    from open_guji_cv.eval.benches import decide as D
+    old = D.DATASET_WS["96mid1ogzk"]                      # dataset 分片里殿本的旧写法
+    assert "96mid1ogzk" in D.BOOKS and old not in D.BOOKS
+    (tmp_path / "bench.yaml").write_text(f"books:\n  - {{ws: {old}, vol: vol01}}\n  - {{ws: 988g3f0wsu, vol: '03'}}\n", encoding="utf-8")
+    assert D._book_vols(tmp_path, "96mid1ogzk", []) == ["vol01"]
+    assert D._book_vols(tmp_path, "988g3f0wsu", []) == ["03"]
+
+
+def test_rough_metrics_new_wrong_vs_frozen_baseline():
+    from open_guji_cv.eval.benches import decide as D
+    base = {"variants": {"A": {"review_rate_body": 0.0120, "wrong_cells": ["v:1:1:1", "v:1:1:2"]}}}
+    cur = {"cells_body": 1000, "review_rate_body": 0.0145, "labelled_judged": 90, "wrong_admits": 3,
+           "wrong_cells": ["v:1:1:1", "v:1:1:2", "v:2:2:2"], "label_drift": 0, "label_missing": 1}
+    m, why = D.rough_metrics({"labels": 100, "variants": {"A": cur}, "frozen_baseline": base})
+    assert m["wrong_admit"] == 1 and m["new_wrong_cells"] == ["v:2:2:2"] and m["known_wrong"] == 2     # 基线本来就错的不算这次的账
+    assert m["review_rate_diff"] == 0.0025 and len(why) == 2                                          # 新增错放＋送审率回归
+    assert m["missing_rate"] == 0.01
+
+
+def test_rough_metrics_ab_uses_variant_new_wrong():
+    from open_guji_cv.eval.benches import decide as D
+    a = {"cells_body": 10, "review_rate_body": 0.1, "labelled_judged": 5, "wrong_admits": 1, "wrong_cells": ["x"], "label_drift": 0, "label_missing": 0}
+    b = {**a, "wrong_admits": 1, "wrong_cells": ["y"], "new_wrong": ["y"], "review_rate_diff": 0.0}
+    m, why = D.rough_metrics({"labels": 5, "variants": {"A": a, "B": b}})
+    assert m["wrong_admit"] == 1 and m["known_wrong"] == 0 and why == ["新增错放 1 格"]
+    b2 = {**b, "new_wrong": [], "wrong_cells": ["x"]}
+    assert D.rough_metrics({"labels": 5, "variants": {"A": a, "B": b2}})[1] == []
+
+
+def test_rough_set_routing(tmp_path):
+    from open_guji_cv.eval import bench as B
+    from open_guji_cv.eval.benches import decide as D
+    rb = tmp_path / "rough-bench"
+    rb.mkdir()
+    (rb / "bench.yaml").write_text("books: [vol04, vol05]\n", encoding="utf-8")
+    ctx = B.BenchCtx(book="96mid1ogzk", vols=[], work=tmp_path, res={"dataset": tmp_path}, args={"set": "rough"})
+    assert D._vols(ctx) == ["vol04", "vol05"]
+    assert D._book_vols(rb, "988g3f0wsu", []) == []                       # 粗校只有殿本
+    assert set(D.plan(tmp_path / "decide-bench" / "small", "96mid1ogzk", [])) >= {"vol04", "vol05"}
+
+
+def test_group_check_metrics(tmp_path):
+    from open_guji_cv.eval.benches import decide as D
+    assert D.group_check_metrics(tmp_path / "none.json")["d4_human_checked"] is None        # 缺数据不假装 0
+    (tmp_path / "g.json").write_text(json.dumps({"checked": 10, "mismatch": 3, "drift": 2, "mismatch_cells": []}), encoding="utf-8")
+    m = D.group_check_metrics(tmp_path / "g.json")
+    assert (m["d4_human_checked"], m["d4_human_mismatch"], m["d4_human_mismatch_real"]) == (10, 3, 1)
+
+
+def test_rough_snapshot_fetch_skips_present_and_fails_loudly(tmp_path, monkeypatch):
+    from open_guji_cv.eval.benches import decide as D
+    snap = tmp_path / "snap"
+    (snap / "vol05" / "char_decide").mkdir(parents=True)               # vol05 已有，不取
+    calls = []
+
+    class R:
+        returncode, stdout, stderr = 0, "", ""
+
+    def fake(cmd, **kw):
+        calls.append(cmd)
+        return R()
+    monkeypatch.setattr(D.subprocess, "run", fake)
+    D._fetch_rough_snapshots({"snapshot_packs": {"vol04": "L4", "vol05": "L5"}}, snap, str(tmp_path))
+    assert len(calls) == 1 and calls[0][calls[0].index("fetch") + 1] == "vol04" and "L4" in calls[0]
+    R.returncode, R.stderr = 1, "boom"
+    try:
+        D._fetch_rough_snapshots({"snapshot_packs": {"vol09": "L9"}}, snap, str(tmp_path))
+    except RuntimeError as e:
+        assert "vol09" in str(e)
+    else:
+        raise AssertionError

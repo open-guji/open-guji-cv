@@ -197,6 +197,7 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "normalize_patch": ("clustering.normalize", "normalize_patch"),
     # 候选字线（CV3 2026-11-28）：manager `guji audit cands` 给已发册待审卡现算 cands/1
     "glyph_candidate_mod": ("steps.glyph_candidate", None),
+    "bench_mod": ("eval.bench", None),   # benchmark 统一接口（CV0 11-28，manager `guji bench`）
     "context_rank_mod": ("steps.context_rank", None),
     "ctx_fill_mod": ("clustering.ctx_fill", None),
     "_SHAPE_PAIR_OF": ("clustering.match", "_SHAPE_PAIR_OF"),
@@ -410,6 +411,10 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "_corpus_text": ("steps.align_ref", "_corpus_text"),
     "BookSpec": ("core.book", "BookSpec"),
     "FORBIDDEN_IN_OVERRIDE": ("core.book_config", "FORBIDDEN_IN_OVERRIDE"),
+    # 配置组层（CV0 2026-11-28）：书级生效配置（组∪书）、解析 groups:、组配置禁写检查
+    "effective_defaults": ("core.book_config", "effective_defaults"),
+    "book_groups": ("core.book_config", "book_groups"),
+    "check_group_layer": ("core.book_config", "check_group_layer"),
     # guji-manager rulings-hits／collect 落 AI 裁定（2026-11-20）
     "RulingLog": ("feedback.rulings", "RulingLog"),
     "RulingStore": ("feedback.rulings", "RulingStore"),

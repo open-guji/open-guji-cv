@@ -72,7 +72,7 @@ def frame_residue(cleaned: np.ndarray, band: tuple[int, int],
 
 
 class ColumnEndParams(BaseModel):
-    ink_threshold: int = 128
+    ink_threshold: int = 128          # 二值门槛：灰度 < 此值算墨（找上下端框线用）
 
 
 def _legacy_band(ctx: RunContext, page: int, col: int) -> tuple[int, int] | None:

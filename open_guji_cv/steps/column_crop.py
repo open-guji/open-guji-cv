@@ -26,9 +26,9 @@ from .column_warp import side_floor
 
 
 class ColumnCropParams(BaseModel):
-    ink_threshold: int = 128
+    ink_threshold: int = 128          # 二值门槛：灰度 < 此值算墨
     min_blob_area: int = 6            # denoise_column
-    side_floor_look: float = 0.25
+    side_floor_look: float = 0.25     # 交接闸 L2 用：两侧各看进去多少比例的宽度（同 column_warp）
 
 
 @register_step
