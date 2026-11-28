@@ -688,6 +688,12 @@ _LEGACY_BAND_1127 = ("旧产物包重放（CV4 算法待办 #13）：column_end 
 _SEG_BOX_1127 = ('seed_admit 字框几何闸 seg_box_check（CV2，缺省空、不进参数 dump；空时 _seg_box_pass 不调，seed_admit_lanes 只多常量与新函数 seg_box_defects／_seg_box_pass）：朱楓林集 01 册 6 页（3,10,25,50,86,104，rev-001-r0 包 cv0.9.6 当上游）seed_admit 与 origin/dev fde00a0 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-27（CV2，MBJ 碎格放行成「一」）')
 
 
+_LAYOUT_ALIAS_1128 = ("row_segment.load_layout 认册 yaml 的 aliases（CV0 2026-11-28，册号位数统一：脉经 01→1 后备选格表 vol \"01\" 行仍归第 1 册，殿本 vol01 格位表同）："
+                      "没写 aliases 的册 names＝{本册名}，`r.get('vol') in names` 与原 `== book` 逐行同真，缓存键只多一段同值元组，"
+                      "表行集合与原来逐项相同，产物逐字节不变；目前没有任何册写 aliases（改名迁移从 11-28 脉经起）。"
+                      "单测 tests/test_dzg_layout.py::test_load_layout_reads_old_volume_name_via_aliases（无 aliases／读不到册配置都只认本名）。"
+                      "哈希按合入时 origin/dev 重算。")
+
 _TRK_CLIP_1127 = ("vline_track 淡线兜底 _trk_gray_line 取行号只封上界（np.minimum(…, h-1)）：原先行号 ≥ 页高必抛 IndexError、该页失败，"
                   "没抛错的页行号都 < 页高，min 是恒等，产物逐字节同（负行号照旧）。汉书 26 册 13 页（1,2,3,4,6,20,50,80,110,140,165,175 对 v0.9.9 border_detect 逐字节同；"
                   "p5 原 120px 窄条由报错改为跑通）；单测 test_gray_fallback_page_shorter_than_frame。2026-11-27（CV0，WYG #18261）")
@@ -2898,6 +2904,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="81f54a4eb44c0617d592e1e1c4656e7204e6d6461c15845c9d31bdac3065632a",
           old="21dac7395856fdfb4777801d1973a37e1a3c5c905b15b2e20f2fd71ba009f610",
           evidence=_REF_ACC_1127),
+    # 格位表／备选格表认册旧名 aliases（CV0 11-28，册号位数统一）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="f824d42d1404c02ed897097ee1388709b508ce820bddda3bad8df4a2f012c984",
+          old="f4812f0b455a1f3cfb40fe24a6a844d5c7ddbf9b5708842ad327c3a2a1baa690",
+          evidence=_LAYOUT_ALIAS_1128),
 )
 
 
