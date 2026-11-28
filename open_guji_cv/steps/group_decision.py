@@ -30,7 +30,7 @@ from .seed_admit_pick import _consensus_fallback
 _NEAR_SPECS = {
     "rr_shape": ("group_flow_rr_shape", False), "wu_shape": ("group_flow_wu_shape", False), "hou_shape": ("group_flow_hou_shape", False),
     "part_shape": ("group_flow_part_shape", True),
-    "pair_shape": (None, False), "book_knn": (None, False), "near_knn": (None, False),
+    "pair_shape": (None, False), "book_knn": (None, False), "near_knn": (None, False), "stroke_veto": (None, False),
 }
 
 #: 本步读的 `SeedAdmitParams` 字段（进本步指纹）：字组流程全部 `group_flow*`，加上面几个入口、宽高比、整理本字用到的。

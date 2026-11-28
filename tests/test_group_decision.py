@@ -51,10 +51,10 @@ def test_entry_config_matches_flow_config_on_entry_fields():
 
 
 def test_pack_near_roundtrip_all_key_shapes():
-    assert "part_shape" in PAIR_KEYED and {"pair_shape", "book_knn", "near_knn"} <= MODEL_KEYED
+    assert "part_shape" in PAIR_KEYED and {"pair_shape", "book_knn", "near_knn", "stroke_veto"} <= MODEL_KEYED
     ev = {"char": "八", "why": "x", "score": 0.5}
     cases = {"rr_shape": {"a:1:1:2": ev}, "part_shape": {("a:1:1:3", ("剌", "刺")): ev},
-             "pair_shape": {("a:1:1:4", "pair_shape=abc"): ev}, "near_knn": {("a:1:1:5", "near_knn=zz"): ev}}
+             "pair_shape": {("a:1:1:4", "pair_shape=abc"): ev}, "near_knn": {("a:1:1:5", "near_knn=zz"): ev}, "stroke_veto": {("a:1:1:6", "stroke_veto=q"): ev}}
     st = PageGroupDecision(page=1, near={m: pack_near(m, g) for m, g in cases.items()}, ran=[f"near:{m}" for m in cases])
     back = PageGroupDecision.model_validate_json(st.model_dump_json())
     for m, g in cases.items():

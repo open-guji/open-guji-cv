@@ -14,7 +14,7 @@ from ...core.step import register_kind
 
 #: 3b 方法里键是「(格 id, 对里两字)」的（一个模型挂多对）与键是「(格 id, 方法指纹)」的；其余键是格 id。
 PAIR_KEYED = frozenset({"part_shape"})
-MODEL_KEYED = frozenset({"pair_shape", "book_knn", "near_knn"})
+MODEL_KEYED = frozenset({"pair_shape", "book_knn", "near_knn", "stroke_veto"})
 
 
 class GroupDecisionRec(BaseModel):
@@ -39,7 +39,7 @@ class PageGroupDecision(BaseModel):
     """{格 id: [宽, 高]}（`char_index`，收尾 `fold_aspect` 直接读；逐格同 `_fold_pass(wh=…)`）。"""
     near: dict[str, list[dict]] = Field(default_factory=dict)
     """3b 看图判法的原样结论快照 `{方法: [{k: 键, ev: 证据}…]}`，键与 `seed_admit_shapes._near_from_3b／_near_by_model_from_3b` 同形：
-    普通方法 `[格 id]`；part_shape `[格 id, [字, 字]]`；pair_shape／book_knn／near_knn `[格 id, 模型指纹]`。"""
+    普通方法 `[格 id]`；part_shape `[格 id, [字, 字]]`；pair_shape／book_knn／near_knn／stroke_veto `[格 id, 模型指纹]`。"""
     handling: dict[str, dict] = Field(default_factory=dict)
     """按组的处理方式（登记表 `handling`：看图方法、文意、门槛、放行或只出证据）。**本版留空、收尾不读**，登记表字段定稿后在这里记快照。"""
 
