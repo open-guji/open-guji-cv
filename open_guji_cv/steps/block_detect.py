@@ -42,7 +42,7 @@ class BlockDetectParams(BaseModel):
     split_depth: int = 3           # auto_vsplit 时递归切的层数（上下 → 左右 → 上下）
     banxin: str = "auto"           # 版心在哪侧：auto | left | right | odd_left | odd_right | none
     banxin_min: int = 20           # 版心线离框边的距离范围（px）
-    banxin_max: int = 120
+    banxin_max: int = 120   # 版心线搜索的最大宽度 px
     banxin_line: float = 0.04      # 细竖线强度（框内列均值）够这个才算版心线
     banxin_pad: int = 1            # 块裁到版心线里面再让几 px（1.9 起 4→1：字常贴着版心线，让多了切字，Sheldon 10-28 p32）
     banxin_gap: float = 0.35       # 线探不到时，书脊侧最空竖缝的墨 ≤ 此 × 框内中位才算版心分界

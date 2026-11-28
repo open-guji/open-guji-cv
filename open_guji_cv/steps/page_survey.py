@@ -35,8 +35,8 @@ RATIO_LOW_DEFAULT = 0.7
 
 
 class PageSurveyParams(BaseModel):
-    ratio_high: float = RATIO_HIGH_DEFAULT
-    ratio_low: float = RATIO_LOW_DEFAULT
+    ratio_high: float = RATIO_HIGH_DEFAULT   # 宽或高超过本册中位数的这个倍数算异常（缺省 1.3）
+    ratio_low: float = RATIO_LOW_DEFAULT   # 宽或高低于本册中位数的这个倍数算异常（缺省 0.7）
     whitelist: dict[int, str] = Field(default_factory=dict)
     """页号 → 白名单理由（如「卷端双叶横拼，确认无正文」）。**必须写理由**，
     空字符串不算数——`run_page` 会直接把空理由当成没配（见下）。命中白名单的页

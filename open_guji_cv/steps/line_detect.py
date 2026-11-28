@@ -20,7 +20,7 @@ from ..impl.modern.line_layout import detect_lines, layout_to_borders
 
 
 class LineDetectParams(BaseModel):
-    ink_threshold: int = 128
+    ink_threshold: int = 128   # 二值化墨阈值（灰度低于它算墨）
     col_ink_min: float = 0.008      # 列方向投影里算「有墨」的墨占比下限
     min_width_frac: float = 0.15    # 窄于 em × 此值的墨段当噪点丢掉
     body_lo: float = 0.75           # 正文列宽下限（× em）

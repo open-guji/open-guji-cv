@@ -79,9 +79,9 @@ TOP_BAND = 16.0
 
 
 class SealDetectParams(BaseModel):
-    min_peak: float = 20.0
-    min_cover: float = 0.5
-    min_score: float = 0.25
+    min_peak: float = 20.0   # 大印：网格里中等墨点密度的峰值下限
+    min_cover: float = 0.5   # 小印：模板笔画处有墨的比例下限
+    min_score: float = 0.25   # 小印：覆盖率减底色墨率的分数下限
     overrides: dict[int, list[dict]] = Field(default_factory=dict)
     """页号 → 人核的印列表 `[{"kind": "stain"|"crisp", "bbox": [x0, y0, x1, y1]}]`（规范空间）；空表＝无印。"""
     stain_pages: list[int] | None = None

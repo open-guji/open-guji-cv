@@ -370,7 +370,7 @@ def _apply_vline_override(res, xs: list[float], chord_slope: bool = False) -> No
 
 class BorderDetectParams(BaseModel):
     expected_cols: int | None = Field(default=None, description="列数先验；None = 用 Book 的 expected_cols")
-    ink_threshold: int = 128
+    ink_threshold: int = 128   # 二值化墨阈值（灰度低于它算墨）
 
     column_grid_pages: list[int | str] = []
     """页级网格模式：点名的页竖线走 `column_grid`（版框定死、列距均匀），其余页照书级配置。

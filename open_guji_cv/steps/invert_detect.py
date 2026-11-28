@@ -72,7 +72,7 @@ REGION_PAD = 150       # 往黑条上下各看多远（台阶带的高段可以�
 
 
 class InvertDetectParams(BaseModel):
-    min_flipped: int = MIN_FLIPPED
+    min_flipped: int = MIN_FLIPPED   # 一块黑条里至少翻白几道界行才报候选
 
 
 def black_strips(ink: np.ndarray) -> list[tuple[int, int, int, int]]:

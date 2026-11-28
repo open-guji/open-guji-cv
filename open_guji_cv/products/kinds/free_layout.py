@@ -25,16 +25,16 @@ class RuleRec(BaseModel):
     a: float                        # 横线：右端（x_tr=0）处 y；竖线：顶端（y=0）处 x_tr
     slope: float                    # 横线 dy/dx_tr；竖线 dx_tr/dy
     lo: float                       # 沿线方向覆盖范围（横线是 x_tr，竖线是 y）
-    hi: float
-    n_strips: int
+    hi: float   # 沿线覆盖范围上端
+    n_strips: int   # 支撑这条线的条带数
 
 
 class BlockRec(BaseModel):
     index: int                      # 读序，从 1 起
-    box: Box
+    box: Box   # 块外框，页面坐标
     kind: str = "text"              # text | skip
     source: str = "auto"            # auto | hint
-    cols_hint: int | None = None
+    cols_hint: int | None = None   # 人标的列数先验；没有为空
     pitch_hint: float | None = None  # 人标的列距先验（px）
     vrules: list[float] = Field(default_factory=list)   # 块内竖线 x_tr（块中线高度处）
     ruled: bool = False             # 人标：有界栏但列宽不齐的正文（列宽放宽、列里按横界栏断开）
@@ -44,20 +44,20 @@ class BlockRec(BaseModel):
 
 
 class LayoutBlocks(BaseModel):
-    page: int
-    width: int
-    height: int
+    page: int   # 页号
+    width: int   # 原图宽 px
+    height: int   # 原图高 px
     page_type: str = "body"         # body | skip（人标整页不切）
     hinted: bool = False            # 这页有人标提示
     frame: Box | None = None        # 版框内沿
-    frame_found: dict[str, bool] = Field(default_factory=dict)
+    frame_found: dict[str, bool] = Field(default_factory=dict)   # 版框四边（top/bottom/left/right）各自是否探到
     spine: str | None = None        # 版心在图的哪一侧：left | right | None（不知道）
     banxin: float | None = None     # 版心线 x_tr（探到了才有；块已裁到它里面）
-    rules: list[RuleRec] = Field(default_factory=list)
-    blocks: list[BlockRec] = Field(default_factory=list)
+    rules: list[RuleRec] = Field(default_factory=list)   # 页上探到的长横竖线
+    blocks: list[BlockRec] = Field(default_factory=list)   # 文字块，按读序
     # 拉正参数（block_detect 1.7 起；None = 没拉）：本产物和下游两种产物的坐标都在拉正后的图上。
     # 字段见 impl/free/free_rectify.make_warp`（原图左上原点像素）；取拉正后的图用 `rectify_gray(raw, warp)`。
-    warp: dict | None = None
+    warp: dict | None = None   # 拉正参数；None＝没拉
 
 
 class ColumnRec(BaseModel):
