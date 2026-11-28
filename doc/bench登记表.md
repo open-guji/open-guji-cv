@@ -21,9 +21,20 @@
 | 3d 其他特征 | `cell_traits` | CV3 | | | | | | | |
 | 3e 看图大模型 | `glyph_vis` | CV3 | | | 触发量、答对率 | | | | |
 | 识字收尾 | `glyph_analyzer` | CV3 | | | 未定格前 1／前 10、ECE | | | | |
-| 4a 参照对位 | `align_ref` | CV4 | decide-bench `score.py` 子步指标 | ai-team（待搬） | 错位格数 | 好列被换坏 | decide-bench | 殿本、史記 03 部分、脉经 01 | ai-team `A24/decide-bench/子步指标-基线报告-2026-11-28.md` |
-| 4b 上下文 | `context_decide`、`context_rank` | CV4 | decide-bench；候选线脚本 | ai-team（待搬） | 前 1／前 3、伤害率 | | context-correction、confusable-context、char-candidates | 殿本为主 | 同上 |
-| 4c 格况 | `cell_state` | CV4 | decide-bench 子步指标 | ai-team（待搬） | 各状态精确率、召回率 | 有字判无字（漏字） | 待建 decide-bench/cell-state | | 同上 |
-| 4d 字组 | `group_decision` | CV4 | decide-bench 子步指标 | ai-team（待搬） | 判定率 | 判定格错字 | char-groups、字组定向金标 | 全唐文三组起步 | 同上 |
-| 定字收尾 | `char_decide` | CV4 | decide-bench `run.py`／`score.py`；rough-bench | ai-team（待搬） | 放行率、拦住·首选对 | 放错字 | decide-bench small／large、动态层 | 殿本、史記 03、脉经 01 | 同上 |
-| 定字 gate | `decide_gate` | CV4 | `gate_bench.py` | ai-team（待搬） | 检出率、误报率 | fail 数不增 | 事故回归例 | 殿本 | ai-team `A24/decide-bench/gate-bench-2026-11-28.md` |
+| 4a 参照对位 | `align_ref` | CV4 | `python -m open_guji_cv.eval.decide_bench.score` 子步指标（`run` 一键） | cv `eval/decide_bench/` | 错位格数 | 好列被换坏 | decide-bench/small、large（金标按原图框锚定） | 殿本 vol01／vol02／vol04、史記 01–03、全唐文 004／005／008、脉经 01 | ai-team `A24/decide-bench/子步指标-基线报告-2026-11-28.md`（B4 待转进本仓 doc/） |
+| 4b 上下文 | `context_decide`、`context_rank` | CV4 | `python -m open_guji_cv.eval.decide_bench.score` 子步指标；候选线脚本 | cv `eval/decide_bench/` | 前 1／前 3、伤害率 | 伤害率不增 | decide-bench/small、large；context-correction、confusable-context、char-candidates | 殿本为主 | ai-team `A24/decide-bench/子步指标-基线报告-2026-11-28.md`（B4 待转进本仓 doc/） |
+| 4c 格况 | `cell_state` | CV4 | `python -m open_guji_cv.eval.decide_bench.score` 子步指标（4c 漏字，现从 evidence 反推；4c 独立产物接上后读 cell-state 金标） | cv `eval/decide_bench/` | 各状态精确率、召回率 | 有字判无字（漏字）为 0 | decide-bench/cell-state（char＋non_char，按书子目录，v0.1.0 起步） | 史記 03、全唐文 004、殿本 vol01（non_char 只有殿本）；缺 seal／occluded／seg_bad 金标，标注暂停（11-28） | ai-team `A24/decide-bench/子步指标-基线报告-2026-11-28.md`（B4 待转进本仓 doc/） |
+| 4d 字组 | `group_decision` | CV4 | `python -m open_guji_cv.eval.decide_bench.score` 子步指标 | cv `eval/decide_bench/` | 判定率 | 判定格错字为 0 | decide-bench/small、large；char-groups（字组定向金标，扩殿本、史記暂缓：Sheldon 11-28 标注暂停） | 全唐文三组起步 | ai-team `A24/decide-bench/子步指标-基线报告-2026-11-28.md`（B4 待转进本仓 doc/） |
+| 定字收尾 | `char_decide` | CV4 | `python -m open_guji_cv.eval.decide_bench.run`（冻结层）、`python -m open_guji_cv.eval.decide_bench.dyn`（动态层）、`python -m open_guji_cv.eval.decide_bench.score`（打分＋`--against` 翻转清单）；rough-bench | cv `eval/decide_bench/` | 放行率、拦住·首选对率 | 放错字为 0；翻转清单变坏格为 0 | decide-bench small（9,422）／large（11,355）；动态层沿用二者 | 殿本 vol01／vol02／vol04、史記 01–03、全唐文 004／005／008、脉经 01；按书报分 | ai-team `A24/decide-bench/子步指标-基线报告-2026-11-28.md`（B4 待转进本仓 doc/） |
+| 定字 gate | `decide_gate` | CV4 | `python -m open_guji_cv.eval.decide_bench.gate_bench` | cv `eval/decide_bench/` | 检出率、误报率 | fail 数不增 | 事故回归例；decide-bench 产物盖回 | 殿本 | ai-team `A24/decide-bench/gate-bench-2026-11-28.md` |
+
+## 第四步脚本说明（CV4，2026-11-28）
+
+`open_guji_cv/eval/decide_bench/` 的四个脚本都是命令行入口，`python -m open_guji_cv.eval.decide_bench.<名> --help` 看参数；金标在 open-guji-dataset `decide-bench/`。
+
+- **主指标**：`wrong_admit`（放错字，**必须为 0**）、`variant_admit`、`admit_rate`、`review_top1_ok`；`score` 另按书出 4a／4b／4c／4d 子步指标和每格「错因位置」。
+- **按书报分**：所有输出按书分行（册号跨书重名时用 `工作区id/册`）。
+- **翻转清单**：`score --against <上次结果>` 出好转／变坏／其它；`run --params` 出 B 对 A 的翻转。变坏格数 0 才自合。
+- **干净环境**：`run` 要备好工作区（册配置、书仓 `code/`、模型、钉版字形库、原图），见 dataset `decide-bench/README.md`；`score`、`gate_bench` 只读产物目录。`tests/test_decide_bench_eval.py` 守脚本能起、cell-state 构建可重复。
+- **cell-state 分片**：`build_cell_state` 从 small 与 instances 已有人裁生成，不新增标注。
+
