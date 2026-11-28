@@ -1,0 +1,149 @@
+# cv config/ 文件登记（整改清单 X7，CV0 2026-11-28）
+# 每条管 config/ 下一个文件或一个目录（目录以 / 结尾，管其下全部文件）。守卫：tests/test_config_registry.py
+#   —— config/ 下每个进 git 的文件都要被某条管到；每条都至少管到一个文件。
+# 字段：
+#   scope  通用 | 来自书:<书> | 应归组:<组> | 历史 | 待查
+#          「来自书」= 从某部书的数据得出、别的书照用不一定对；「应归组」= 以后搬进该组；「待查」= 来源说不清，由负责线补
+#   readers  读它的代码（证据）
+#   owner    负责线
+#   todo     要做的事（没有就不写）
+entries:
+  - path: charset/
+    scope: 通用
+    readers: [hanzi/symbols.py]
+    owner: CV3
+  - path: confusable_font_clean.json
+    scope: 待查
+    readers: [clustering/confusable.py（按字体档拼名读）]
+    owner: CV3
+  - path: confusable_font_degraded.json
+    scope: 待查
+    readers: [clustering/confusable.py, scripts/eval_guard_ceiling.py]
+    owner: CV3
+  - path: confusable_human.json
+    scope: 待查
+    readers: [clustering/confusable.py, clustering/near_route.py]
+    owner: CV3
+  - path: corpus-registry.json
+    scope: 通用
+    readers: [core/corpus_files.py]
+    owner: CV0
+    note: 底库语料表（R2 真源，按 sha 钉）
+  - path: dicts/
+    scope: 待查
+    readers: [gold/store.py, manager_api]
+    owner: CV4
+  - path: eval/
+    scope: 待查
+    readers: []
+    owner: CV2
+  - path: font-registry.json
+    scope: 通用
+    readers: [core/font_files.py]
+    owner: CV0
+  - path: fonts/
+    scope: 通用
+    readers: [ops/model_blobs.py, manager_api]
+    owner: CV0
+  - path: gloss/
+    scope: 通用
+    readers: [gloss.py, clustering/rare_panel.py]
+    owner: CV4
+  - path: groups/
+    scope: 来自书:殿本
+    readers: [ops/model_blobs.py, manager_api]
+    owner: CV3
+    note: 字组 ids_bank（已进模型系统）；史記证明 mn 组对写本不准
+    todo: 登「只给刻本」；写本另出
+  - path: hanzi/
+    scope: 通用
+    readers: [hanzi/pack.py, hanzi/build.py, hanzi/schema.py]
+    owner: CV3
+  - path: ids/
+    scope: 通用
+    readers: [hanzi/ids.py, hanzi/build.py]
+    owner: CV3
+  - path: iron_extra_confusable.json
+    scope: 待查
+    readers: [clustering/iron_evidence.py, steps/seed_admit_params.py]
+    owner: CV4
+  - path: jiazhu/
+    scope: 待查
+    readers: [gold/adapters/flat_expected.py, manager_api]
+    owner: CV2
+  - path: kangxi/
+    scope: 通用
+    readers: [hanzi/schema.py, hanzi/importers.py]
+    owner: CV3
+  - path: model-provenance.json
+    scope: 通用
+    readers: [core/model_pack.py, scripts/train_boundary_net.py]
+    owner: CV0
+  - path: model-registry.json
+    scope: 通用
+    readers: [core/model_pack.py, clustering/sim_cnn.py]
+    owner: CV0
+  - path: near_form_ctx_jys.json
+    scope: 来自书:殿本
+    readers: [utils/near_form_ctx.py]
+    owner: CV4
+    note: 己已巳文意表
+    todo: 评估后归 wyd 语料组或标通用
+  - path: near_groups/
+    scope: 待查
+    readers: [clustering/confusable.py, clustering/near_route.py]
+    owner: CV3
+  - path: near_groups.json
+    scope: 待查
+    readers: [clustering/confusable.py, clustering/near_route.py]
+    owner: CV3
+  - path: near_groups_drop.tsv
+    scope: 待查
+    readers: [clustering/near_route.py, scripts/build_near_groups.py]
+    owner: CV3
+  - path: pua/
+    scope: 来自书:殿本
+    readers: [utils/pua_v2_codes.py]
+    owner: CV0
+    note: siku-qiefen-v2 图源私用码
+  - path: rekey_502fa04d0c_to_current.json
+    scope: 历史
+    readers: [scripts/rekey_triplets_by_patch.py]
+    owner: CV0
+    todo: 核实无人再读后删
+  - path: seal_templates/
+    scope: 来自书:殿本
+    readers: [steps/seal_detect.py, steps/occlusion.py, products/kinds/seals.py]
+    owner: CV1
+    todo: 模板全取自殿本册页；写本印章另出或归 wyd
+  - path: variants/books/
+    scope: 来自书:殿本
+    readers: [core/corpus_pin.py, variant_ledger.py]
+    owner: CV3
+    note: 用字账缺省键 wuyingdian_zongmu 写在代码里
+    todo: 缺省改取书 ID，殿本显式写
+  - path: variants/form_freq.tsv
+    scope: 来自书:殿本
+    readers: [groups/edge_pairs.py]
+    owner: CV3
+    note: 殿本书级语料（A24 11-04）
+  - path: variants/edge_pair_exclude.tsv
+    scope: 通用
+    readers: [steps/seed_admit_common.py, steps/seed_admit_params.py]
+    owner: CV4
+  - path: variants/local_edges.json
+    scope: 待查
+    readers: []
+    owner: CV3
+  - path: variants/never_group.json
+    scope: 通用
+    readers: []
+    owner: CV3
+  - path: variants/report.json
+    scope: 待查
+    readers: []
+    owner: CV3
+  - path: variants/variants.json
+    scope: 通用
+    readers: []
+    owner: CV3
