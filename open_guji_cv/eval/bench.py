@@ -22,7 +22,8 @@ from typing import Any, Callable
 SCHEMA = 1
 STATUSES = ("ok", "regressed", "skipped", "no_gold", "failed")   # failed：跑崩了（不是结论，护栏按不过算）
 #: 资源种类（manager 按这些取，填进 ctx.res 的同名键）
-NEEDS = ("gold", "config", "code", "raw", "products", "glyph_lib", "models", "corpus", "torch", "gpu", "ocr")
+#: bench5b：5b 评测集 cache/glyph_bench、oov_bench（不进数据集仓，manager 按钉死 sha 从冻结包 train_bundle.zip 解；GM2 11-28）
+NEEDS = ("gold", "config", "code", "raw", "products", "glyph_lib", "models", "corpus", "bench5b", "torch", "gpu", "ocr")
 
 
 @dataclass(frozen=True)

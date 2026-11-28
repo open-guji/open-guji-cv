@@ -19,8 +19,10 @@ from pathlib import Path
 
 from ..bench import BenchCtx, BenchResult, BenchSpec, Guard, register
 
-BOOKS = ("siku-zongmu", "988g3f0wsu", "995ejelvk0")
-GOLD = {b: f"near-form-guard/{b}" for b in BOOKS}
+BOOKS = ("96mid1ogzk", "988g3f0wsu", "995ejelvk0")
+#: 书 id → dataset 目录名（殿本真 id 是 96mid1ogzk；dataset 里目录沿用旧名 siku-zongmu，同 decide.py 的 DATASET_WS）
+DATASET_WS = {"96mid1ogzk": "siku-zongmu"}
+GOLD = {b: f"near-form-guard/{DATASET_WS.get(b, b)}" for b in BOOKS}
 HARD = set("己已巳日曰")
 
 

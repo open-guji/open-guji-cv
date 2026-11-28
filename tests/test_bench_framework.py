@@ -118,3 +118,9 @@ def test_registry_doc_lists_every_bench_id():
     live = {s.id for s in B.all_specs() if not s.deprecated}
     assert not live - listed, f"登记表「bench id」列漏了: {sorted(live - listed)}"
     assert not listed - {s.id for s in B.all_specs()}, f"登记表写了没登记的 bench: {sorted(listed - {s.id for s in B.all_specs()})}"
+
+
+def test_needs_accepts_bench5b():
+    from open_guji_cv.eval import bench as B
+    B.BenchSpec(id="t-5b", title="t", steps=("glyph_match",), owner="CV3", gold="x", needs=("bench5b",),
+                primary="acc", run=lambda c: c.work, score=lambda c, p: None)
