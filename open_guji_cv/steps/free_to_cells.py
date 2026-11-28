@@ -32,7 +32,6 @@ from ..products.kinds.borders import VLineRec
 from ..products.kinds.cells import CellRec, ColumnCells, PageCells
 from ..products.kinds.columns import BorderTrim, ColumnWindowRec, PageWindows
 from ..products.kinds.free_layout import ColumnRec, FreeCellRec, FreeCells, FreeColumns
-from ..seg.frame_types import VLine
 from ._warpmap import ColumnMapper
 
 SUB = {"jiazhu_a": "a", "jiazhu_b": "b"}
@@ -140,7 +139,7 @@ class FreeToCellsStep(Step):
         produces=("cells", "column_windows", "column_image"), params=FreeToCellsParams,
         code_deps=("open_guji_cv.impl.free.free_map", "open_guji_cv.impl.free.free_cells",
                    "open_guji_cv.impl.free.free_blocks", "open_guji_cv.impl.free.free_rectify",
-                   "open_guji_cv.steps._warpmap", "open_guji_cv.seg.frame_types"),
+                   "open_guji_cv.steps._warpmap"),
         parallel_safe=True,
     )
 
@@ -169,8 +168,8 @@ class FreeToCellsStep(Step):
             fm = {"xa": int(xa), "y0": y0, "h": y1 - y0, "w": int(wc), "rows": rows_runs(L), "warp": lb.warp}
             xl, xr = W - 1 - (xa + float(L.min())), W - 1 - (xa + float(L.max()) + wc - 1)   # 右上原点：左线 x 大
             rec = ColumnWindowRec(
-                col=col.col, left_line=VLineRec.of(VLine(x_at_top=xl, slope=0.0)),
-                right_line=VLineRec.of(VLine(x_at_top=xr, slope=0.0)),
+                col=col.col, left_line=VLineRec(x_at_top=xl, slope=0.0),
+                right_line=VLineRec(x_at_top=xr, slope=0.0),
                 top_y=float(y0), bottom_y=float(y1), border_top_y=float(y0), border_bottom_y=float(y1),
                 border_top_in_column=0.0, border_bottom_in_column=float(y1 - y0),
                 warped_size=(int(wc), int(y1 - y0)), band=(0, int(wc)),
