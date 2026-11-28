@@ -196,6 +196,7 @@ _DUMP_DROP_HASH: tuple = (
 )
 
 _DUMP_DROP: tuple = (
+    (lambda p: not p.read_3c, ("read_3c",)),
     (lambda p: not p.solo_self_exemplar, ("solo_self_exemplar",)),
     (lambda p: not p.seg_box_check, ("seg_box_check",)),
     (lambda p: not p.ink_marks, ("ink_marks",)),
@@ -1569,6 +1570,25 @@ class SeedAdmitParams(BaseModel):
     def _follow_variants(self) -> bool:
         """照录参校本异体：只看派生的 `follow_ref_variants`（very_high/high＋script faithful＋不按刻形录字，见 `derive_trust`）。"""
         return self.follow_ref_variants
+
+    read_3c: bool = False
+    """「按图首位」读口（`rare_ref`、`symbol_review`、`group_flow_pair_shape_nm_5b`）改读 3c `glyph_candidate` 首位，不读 5-b `rare_candidates`
+    （A7，2026-11-28）。**缺省关、关时不进参数 dump**，产物逐字节同。用分数／来源／阈值的通道（`rare_ref_sparse`、`solo_5b_cov`、
+    `book_lanes`、`ref_lib_5b_veto`、shadow_veto）仍读 5-b，阈值按 5-b 标的，换余弦要重标，本开关不动它们。"""
+
+    @property
+    def rare_ref_5b(self) -> bool:
+        """给 `optional_consumes_when`：`rare_ref` 开且没改读 3c。"""
+        return bool(self.rare_ref) and not self.read_3c
+
+    @property
+    def symbol_review_5b(self) -> bool:
+        return bool(self.symbol_review) and not self.read_3c
+
+    @property
+    def cand_3c_on(self) -> bool:
+        """给 `optional_consumes_when`：改读 3c 且有读口在用。"""
+        return self.read_3c and bool(self.rare_ref or self.symbol_review or self.group_flow_pair_shape_nm_5b)
 
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler, info):

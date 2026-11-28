@@ -87,9 +87,9 @@ def _symbol_review_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: l
     """特殊符号送审（只降级，放在各补放遍之后、human_unbound 之前）。→ 降级格数。见 `SeedAdmitParams.symbol_review`。"""
     from collections import Counter
 
-    from .align_ref import rare_topk_map
+    from .align_ref import topk_src_map
     from ..hanzi.symbols import is_symbol
-    rtop = rare_topk_map(_opt(ctx, "rare_candidates", page), 1)
+    rtop = topk_src_map(ctx, page, 1, getattr(p, "read_3c", False))
     n_human = Counter(c for c in human_shapes.values() if is_symbol(c))
     n = 0
     for col in out:

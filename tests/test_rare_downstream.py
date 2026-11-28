@@ -52,13 +52,20 @@ def page_rare(page: int, book: str, cands: dict[int, list[str]], col: int = 1) -
 def test_declared_as_gated_optional_upstream(sid, field):
     spec = STEPS[sid].spec
     assert "rare_candidates" in spec.optional_consumes
-    assert ("rare_candidates", field) in spec.optional_consumes_when
+    gate = {"rare_topk": "rare_5b_on", "rare_ref": "rare_ref_5b"}[field]      # A7：开关另有 read_3c 分流到 3c
+    assert ("rare_candidates", gate) in spec.optional_consumes_when
+    assert "glyph_candidate" in spec.optional_consumes
     assert "rare_candidates" not in spec.consumes
     # seed_admit 的 rare_ref、symbol_review 2026-10-24 起缺省开，这里显式关掉看门控
     off = spec.params(**({"rare_ref": False, "symbol_review": False} if sid == "seed_admit" else {}))
     assert "rare_candidates" not in live_optional_consumes(spec, off)
     on = off.model_copy(update={field: 5 if field == "rare_topk" else True})
     assert "rare_candidates" in live_optional_consumes(spec, on)
+    assert "glyph_candidate" not in live_optional_consumes(spec, on)
+    on3 = on.model_copy(update={"read_3c": True})              # 改读 3c：5-b 不再进指纹（seed_admit 另有分数类通道，此处只关了的情形）
+    assert "glyph_candidate" in live_optional_consumes(spec, on3)
+    if sid != "seed_admit":
+        assert "rare_candidates" not in live_optional_consumes(spec, on3)
 
 
 @pytest.mark.parametrize("P,kw,fields,off_kw", [

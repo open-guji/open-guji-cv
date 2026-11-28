@@ -297,6 +297,39 @@ def rare_topk_map(rare, k: int) -> dict[str, list[str]]:
     return out
 
 
+def cand_topk_map(cand, k: int) -> dict[str, list[str]]:
+    """3c `glyph_candidate` 产物（`PageCand`）→ {字位 id: 前 k 个候选字（按余弦名次，去重）}。
+
+    与 `rare_topk_map` 同返回形状，**只取名次、不取分数**（A7，2026-11-28：第四步读口改读 3c，缺省关）。
+    `cand` 为 None 或 `k <= 0` → 空表；`ran=False` 的格没有候选，不进表。
+    """
+    if cand is None or k <= 0:
+        return {}
+    out: dict[str, list[str]] = {}
+    for cc in cand.columns:
+        for r in cc.chars:
+            if not r.ran:
+                continue            # 图读不出的格：没有这一路（与缺格同），不当空候选
+            seen: list[str] = []
+            for it in r.cands:
+                c = it[0] if it else None
+                if c and c not in seen:
+                    seen.append(c)
+                if len(seen) >= k:
+                    break
+            if seen:
+                out[r.id] = seen
+    return out
+
+
+def topk_src_map(ctx, page: int, k: int, read_3c: bool) -> dict[str, list[str]]:
+    """第四步各读口取「按图前 k 名」的统一入口：`read_3c` 关＝读 5-b `rare_candidates`（旧，缺省，逐字节同）；
+    开＝读 3c `glyph_candidate`。"""
+    if read_3c:
+        return cand_topk_map(_opt(ctx, "glyph_candidate", page), k)
+    return rare_topk_map(_opt(ctx, "rare_candidates", page), k)
+
+
 def rrf_carrier(pixel: list, cnn: list[str], k: int = 60) -> str | None:
     """库候选（`[(字, cov), …]`，按 cov 降序）与 5-b 候选（按名次）做 RRF 取首位。
     同分时 5-b 名次靠前的赢（R 道实测借库书上 CNN 首位几乎严格优于像素首位）。
@@ -452,6 +485,20 @@ class AlignRefParams(BaseModel):
     前几名。**0 = 关（缺省）**——不读 5-b、不进指纹（`optional_consumes_when`）、
     也不进参数哈希（见 `_drop_off_rare`），四庫等书产物与加这个字段之前逐字节相同。
     书 yaml `params: {align_ref: {rare_topk: 5}}` 打开。实测见模块头同日一节。"""
+
+    read_3c: bool = False
+    """`rare_topk > 0` 时「按图前几名」改读 3c `glyph_candidate`（余弦名次）而不是 5-b `rare_candidates`（A7，2026-11-28）。
+    **缺省关、关时不进参数 dump**，产物逐字节同。开时 5-b 不再进指纹，3c 进。"""
+
+    @property
+    def rare_5b_on(self) -> bool:
+        """给 `optional_consumes_when` 用：读 5-b 的开关（`rare_topk` 开且没改读 3c）。"""
+        return bool(self.rare_topk) and not self.read_3c
+
+    @property
+    def cand_3c_on(self) -> bool:
+        """给 `optional_consumes_when` 用：读 3c 的开关。"""
+        return bool(self.rare_topk) and self.read_3c
 
     coord: str = "auto"
     """按坐标对位（2026-09-28，D 道 overview#195；见 `steps/align_ref_coord` 模块头）。
@@ -627,6 +674,8 @@ class AlignRefParams(BaseModel):
         d = handler(self)
         if isinstance(d, dict) and not self.rare_topk:
             d.pop("rare_topk", None)
+        if isinstance(d, dict) and not self.read_3c:
+            d.pop("read_3c", None)
         if isinstance(d, dict) and not self.page_pins:
             for k in ("page_pins", "page_pins_fingerprint", "pin_min_equal_frac"):
                 d.pop(k, None)
@@ -808,8 +857,8 @@ def _dzg_null_pins(sig: tuple) -> frozenset:
 class AlignRefStep(Step):
     spec = StepSpec(
         id="align_ref", title="Step5-d 整理本对齐", version="2.9", unit="cell",   # 参校本属性 reference_profile（B 块 2026-11-08，未声明的册逐字节不变、不升号）：none 页不读语料不对位、note「本页无参照（配置）」＋ref_kind，text 页不做坐标对位、不当借位邻页；2.9：逐列本全角「？」（录不出的字）按 〓 占一个字位（原先当标点丢掉、其后整列错一格，vol20 p133 列 5）；书级 coord_blank_ink 空格位有墨的列照样按格位配（缺省关、关时不进参数 dump；A22 S02 深挖 11-06，vol19 满文页）；2.8：对位字流与坐标偏移保留扩展 A、B–J 汉字（原先只留 U+4E00–9FFF，㣲 𮅕 𮪍 被删、对位断段；A23 诊断、A24 11-06）；2.7：逐列本小注里的全角空格占一个字位（两条小注并成一段时中间空一格，「無卷數　江西|廵撫採進本」此前右行后半整体上移一位，配不上退回旧对位、a/b 配错；A22 11-05）；2.6：row_segment 钉页 dzg:null 的页不做坐标对位（A22 11-04，殿本 vol56 p75–78 错收他书页）；2.5：按半叶头定位时，过了整理本半叶末行的列退回原因记 COORD_PAST_LEAF（A32 11-01，卷末印页）；2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
-        consumes=("glyph_match",), optional_consumes=("rare_candidates", "cells"),
-        optional_consumes_when=(("rare_candidates", "rare_topk"),),
+        consumes=("glyph_match",), optional_consumes=("rare_candidates", "glyph_candidate", "cells"),
+        optional_consumes_when=(("rare_candidates", "rare_5b_on"), ("glyph_candidate", "cand_3c_on")),
         produces=("align_ref",),
         params=AlignRefParams,
         needs=("corpus",),
@@ -870,7 +919,7 @@ class AlignRefStep(Step):
                                               note=REF_NONE_NOTE, ref_kind="none")}
         match: PageMatch | None = _opt(ctx, "glyph_match", page)
         ocr: PageOcr | None = None          # Step5-c 已删（2026-10-18）：OCR 这一路恒缺席
-        rare = (rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
+        rare = (topk_src_map(ctx, page, p.rare_topk, p.read_3c)
                 if p.rare_topk else None)
         out = self._run_legacy(ctx, p, page, match, ocr, rare)
         if kind == "text":
@@ -890,7 +939,7 @@ class AlignRefStep(Step):
                         continue
                     m = _opt(ctx, "glyph_match", nb)
                     if m is not None:
-                        yield nb - page, m, (rare_topk_map(_opt(ctx, "rare_candidates", nb), p.rare_topk)
+                        yield nb - page, m, (topk_src_map(ctx, nb, p.rare_topk, p.read_3c)
                                              if p.rare_topk else None)
             attach_coord(out["align_ref"], ctx.book.id, page, match, ocr, rare,
                          _opt(ctx, "cells", page), p.corpus,

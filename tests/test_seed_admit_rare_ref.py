@@ -61,7 +61,7 @@ ON = {"rare_ref": True}
 def test_declared_as_gated_optional_upstream():
     spec = STEPS["char_decide"].spec
     for field in ("rare_ref",):
-        assert ("rare_candidates", field) in spec.optional_consumes_when
+        assert ("rare_candidates", field + "_5b") in spec.optional_consumes_when
         on = spec.params().model_copy(update={field: True})
         assert "rare_candidates" in live_optional_consumes(spec, on)
     assert "rare_candidates" not in live_optional_consumes(spec, spec.params())
