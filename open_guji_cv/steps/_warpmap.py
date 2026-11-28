@@ -47,7 +47,11 @@ class ColumnMapper:
 
     @classmethod
     def of(cls, page_width: int, wrec) -> "ColumnMapper":
-        """按 Step2 产物里的一列（`ColumnWindowRec`）建：边线、上下界、矫正方式（`ruled`）都取自产物。"""
+        """按 Step2 产物里的一列（`ColumnWindowRec`）建：边线、上下界、矫正方式（`ruled`）都取自产物。
+        自由版式的列（带 `free_map`）走 `FreeColumnMapper`。"""
+        fm = getattr(wrec, "free_map", None)
+        if fm:
+            return FreeColumnMapper(page_width, fm)
         return cls(page_width, wrec.left_line.to_vline(), wrec.right_line.to_vline(), wrec.top_y, wrec.bottom_y,
                    ruled=bool(getattr(wrec, "ruled", False)))
 
@@ -88,3 +92,30 @@ class ColumnMapper:
         q = self.quad_tr(x0, y0, x1, y1)
         xs, ys = [p[0] for p in q], [p[1] for p in q]
         return (min(xs), min(ys), max(xs), max(ys))
+
+
+class FreeColumnMapper(ColumnMapper):
+    """自由版式列（`free_to_cells`）的逆映射：列图 (x, y) → 拉正后的页 (x + xa + L[y], y0 + y) → 原图（`layout_blocks.warp`）。
+
+    L 是逐行起点（`free_map["rows"]` 游程），小数 y 取所在行；见 `impl/free/free_map.py`。"""
+
+    def __init__(self, page_width: int, fm: dict):
+        from ..impl.free.free_map import runs_rows
+        self.page_width = int(page_width)
+        self.ruled = None
+        self.bands = []
+        self.xa, self.y0 = float(fm["xa"]), float(fm["y0"])
+        self.out_h = int(fm["h"])
+        self.out_w = int(fm.get("w", 0))
+        self.rows = runs_rows(fm["rows"], self.out_h)
+        self.warp = fm.get("warp")
+
+    def to_page_tl(self, x: float, y: float) -> Point:
+        yi = int(min(max(np.floor(y), 0), max(self.out_h - 1, 0)))
+        X = float(x) + self.xa + (float(self.rows[yi]) if self.out_h else 0.0)
+        Y = float(y) + self.y0
+        if self.warp:
+            from ..impl.free.free_map import warp_points
+            xs, ys = warp_points(self.warp, [X], [Y])
+            return float(xs[0]), float(ys[0])
+        return X, Y

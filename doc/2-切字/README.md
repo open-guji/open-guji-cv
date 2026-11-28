@@ -8,7 +8,7 @@
 | 2b 字带左右边 | `column_band`（刻本） | `column_raw`、`column_windows` | `column_bands`、列图 `column_banded`（界行抹白） |
 | 2c 列端字 | `column_end`（刻本） | `column_banded`、`column_bands`、`column_windows`、`borders` | `column_ends`、列图 `column_image`（上下端抹框） |
 | 列几何 | `column_geometry`（刻本） | 2a–2c 产物 | 文字带、格线范围、页级字距；结构性不切的列（页型 skip、非正文列位、表格列） |
-| 2d 字间切分 | 刻本 `row_segment`／现代 `row_segment_runs`／自由版式 `cell_cut` | `column_image`、`column_bands`、`column_ends`、版式先验、人定切分 | `cells`（字格＋类型＋读序） |
+| 2d 字间切分 | 刻本 `row_segment`／现代 `row_segment_runs`／自由版式 `cell_cut`＋`free_to_cells`（转标准字格） | `column_image`、`column_bands`、`column_ends`、版式先验、人定切分 | `cells`（字格＋类型＋读序） |
 | 2e 字框压缩 | `cell_shrink` | `cells`、`column_image`、`column_bands` | `char_index`（紧框＋flags）、`char_patch`（字块图） |
 | 出口闸 | `cut_gate`（挂 `cell_shrink`，刻本）；现代 `column_gate` | 2a–2e 全部产物 | `gate_manifest`、`row_segment_gate_manifest`；只出裁决，不挡中间步 |
 
@@ -17,6 +17,7 @@
 - 单列拉直 2026-11-22 起从 1 版面移来（用户定：1 版面只认位置、判类型；射影、缩放、字与框线分离整个归切字）。步骤 id、产物、指纹不变。
 - 各步的输入输出、闸、参数缺省值：[步骤与产物.md](步骤与产物.md)（从代码生成）。
 - 人定切分（15 种，优先级）：[切分覆盖.md](切分覆盖.md)。
+- 自由版式转标准字格（`free_to_cells`，2026-11-28，默认链第二期）：[自由版式转标准字格.md](自由版式转标准字格.md)。
 - 切分多备选（候选切线、段分、挑中的路）的 schema：[切分多备选.md](切分多备选.md)。
 - 字间界线判官（`row_segment.boundary_net`，看字挪低分切线、格数不变；模型、借用或单独训、验收）：[字间判官.md](字间判官.md)。
 - 折线（格的 `seam_top`／`seam_bottom`、切点候选 `y`）：内存里每 x 一个 y（从 `content_x[0]` 起），产物 JSON 里存游程 `{"n", "runs": [[x, y], …]}`（2026-11-27 起，无损；旧产物的逐 x 表照读），直接读 JSON 用 `products.kinds.cells.seam_ys()` 展开。
