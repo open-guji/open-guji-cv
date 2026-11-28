@@ -6,6 +6,7 @@
 |---|---|---|
 | 3a 字形库匹配 | `glyph_match` | 每格在本书字形库里的 same／unsure／diff 三档判决与逐实例证据（指纹带库版本） |
 | 3b 生僻字候选 | `rare_candidates` | 字体模板＋CNN 的融合候选（要模型；没下游在读时自动跳过） |
+| 3d 字块图其他特征 | `cell_traits` | 每格 cut／border／residue／stain／merged／blank 原始分（未校准，缺省关；判法见 `clustering/cell_traits.py` 模块头）；收尾 `glyph_analyzer` 放进 `traits` |
 
 - 各步的输入输出、参数缺省值：[步骤与产物.md](步骤与产物.md)（从代码生成）。
 - 形近字组登记表（六处来源合一的 `near_groups/2`、schema、读口）：[形近字组登记表.md](形近字组登记表.md)。

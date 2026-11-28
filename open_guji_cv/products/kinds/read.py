@@ -1,4 +1,5 @@
-"""第三步识字的新产物（2026-11-27，Sheldon 11-26 定的第三步重构）：3b `glyph_near`、收尾 `glyph_analyzer`。
+"""第三步识字的新产物（2026-11-27，Sheldon 11-26 定的第三步重构）：3b `glyph_near`、3c `glyph_candidate`、
+3d `cell_traits`、收尾 `glyph_analyzer`。
 
 设计见 ai-team 《第三步识字重构设计》（https://claude.ai/artifact/EdSn56RuC1viVHFpafy5Fz）：
 - 3a `glyph_match` 出候选与相似度；
@@ -11,7 +12,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from ...core.spec import COLUMN_PX, ProductKindSpec
 from ...core.step import register_kind
@@ -91,6 +92,40 @@ class FinalRec(BaseModel):
     p_map: dict[str, float] = Field(default_factory=dict)
     #: p 从哪来，如 "near:cnn_small:gong"；没有任何校准来源时为空串
     p_src: str = ""
+    #: 3d `cell_traits` 的原始分 {键: 分}（cut、border、residue、stain、merged、blank…；未校准、**不是概率**，
+    #: 标定以后才进 `p_map`）。3d 没跑为空，空的不落盘（没开 3d 的书收尾产物逐字节不变）。
+    traits: dict[str, float] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_traits(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not d.get("traits"):
+            d.pop("traits", None)
+        return d
+
+
+class TraitRec(BaseModel):
+    """3d 一格的其他特征：每键一个原始分（0～1，0.5≈现行判法的门槛，未校准），`evidence` 按键放子判据的分与原始量。
+    键与判法见 `clustering/cell_traits.py` 模块头。"""
+    id: str
+    slot: int
+    sub: str | None = None
+    scores: dict[str, float] = Field(default_factory=dict)
+    evidence: dict = Field(default_factory=dict)
+
+
+class ColumnTraits(BaseModel):
+    col: int
+    chars: list[TraitRec] = Field(default_factory=list)
+
+
+class PageTraits(BaseModel):
+    page: int
+    model: str = ""                               # 判法口径版本，如 cell-traits/0
+    columns: list[ColumnTraits] = Field(default_factory=list)
+
+    def by_id(self) -> dict[str, TraitRec]:
+        return {r.id: r for c in self.columns for r in c.chars}
 
 
 class ColumnFinal(BaseModel):
@@ -114,6 +149,10 @@ GLYPH_CANDIDATE = register_kind(ProductKindSpec(
 GLYPH_NEAR = register_kind(ProductKindSpec(
     id="glyph_near", title="3b 形近字组分析", storage="numeric", unit="cell",
     schema=PageNear, coord_space=COLUMN_PX))
+
+CELL_TRAITS = register_kind(ProductKindSpec(
+    id="cell_traits", title="3d 字块图其他特征", storage="numeric", unit="cell",
+    schema=PageTraits, coord_space=COLUMN_PX))
 
 GLYPH_ANALYZER = register_kind(ProductKindSpec(
     id="glyph_analyzer", title="3 识字收尾（汇总）", storage="numeric", unit="cell",

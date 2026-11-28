@@ -21,7 +21,7 @@ def test_keben_stage_members():
     pl = load_pipeline("keben_body_v2")
     assert pl.stages["layout"] == ["page_survey", "invert_detect", "border_detect", "seal_detect"]
     assert pl.stages["cut"] == ["column_warp", "column_band", "column_end", "column_geometry", "row_segment", "cell_shrink"]
-    assert pl.stages["read"] == ["glyph_match", "glyph_near", "rare_candidates", "glyph_candidate", "glyph_analyzer"]
+    assert pl.stages["read"] == ["glyph_match", "glyph_near", "rare_candidates", "glyph_candidate", "cell_traits", "glyph_analyzer"]
     assert pl.stages["decide"] == ["align_ref", "context_decide", "context_rank", "seed_admit"]
     assert pl.stage_of("align_ref") == "decide"   # 整理本对位归 4 定字（2026-11-22 用户定）
     assert pl.stage_of("cell_shrink") == "cut"
@@ -32,7 +32,7 @@ def test_slice_by_stage_name():
     pl = load_pipeline("keben_body_v2")
     assert pl.slice("cut", "cut") == ["column_warp", "column_band", "column_end", "column_geometry", "row_segment", "cell_shrink"]
     assert pl.slice("layout", "cut")[-1] == "cell_shrink"
-    assert pl.slice("read", None) == ["glyph_match", "glyph_near", "rare_candidates", "glyph_candidate", "glyph_analyzer", "align_ref", "context_decide", "context_rank", "seed_admit"]
+    assert pl.slice("read", None) == ["glyph_match", "glyph_near", "rare_candidates", "glyph_candidate", "cell_traits", "glyph_analyzer", "align_ref", "context_decide", "context_rank", "seed_admit"]
     assert pl.slice("row_segment", "read")[-1] == "glyph_analyzer"   # 步骤 id 与大步名可混用
 
 

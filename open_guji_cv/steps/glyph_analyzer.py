@@ -1,10 +1,11 @@
 """第三步识字的收尾 `glyph_analyzer`（2026-11-27，第三步重构；设计见 ai-team《第三步识字重构设计》第四节）。
 
-在本大步各小步（3a `glyph_match`、3b `glyph_near`，以后 3c、3d）都跑完之后跑，把它们汇总成每格一条：
+在本大步各小步（3a `glyph_match`、3b `glyph_near`、3c `glyph_candidate`、3d `cell_traits`）都跑完之后跑，把它们汇总成每格一条：
 
     cands: [{char, p, evidence: {a: {...}, b: {...}}}, …]     按 p（再按 3a 分）降序
     p_map: {cut: …, border: …, residue: …, …}                 其他特征的概率；只放有校准来源的键
     p_src: "near:cnn_small:gong"                               p 从哪来
+    traits: {cut: 0.12, border: 0.8, …}                        3d 原始分（未校准；3d 没跑不落盘）
 
 **第三步不判断放不放行**，第四步只读这里的 p 定放行（Sheldon 11-26）。
 
@@ -14,7 +15,8 @@
   组外的 3a 候选 p 为 None。
 - 其余格：候选照 3a 列出，p 全为 None（`p_src` 空）。通用打分器（3a 相似度＋刻例数＋形近等特征 → p，
   字形库留一法标定）是设计里的第 5 期，还没做。
-- `p_map` 暂空：3d 其他特征还没建。
+- `p_map` 暂空：3d `cell_traits`（2026-11-28）只出原始分，没有校准来源；3d 跑了时原始分原样放进每格 `traits`
+  （{cut, border, residue, stain, merged, blank: 分}，不是概率），等人裁标注标定成 p 再写进 `p_map`。
 
 `enabled: false`（缺省）＝不跑（`StepSpec.enabled_by`）。
 """
@@ -47,8 +49,10 @@ def match_algo(gp) -> str:
     return f"cnn:{c.path}" + (f"+cov/{c.fuse}" if c.fuse else "") + (f"@{sha}" if sha else "")
 
 
-def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, cand_rec=None, cand_k: int = 10) -> FinalRec:
-    """一格：3a 记录 ＋（可选）3b 记录 → FinalRec。`calibrators`：{方法全名: 方法对象}（有 `calibrate`）。"""
+def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, cand_rec=None, cand_k: int = 10,
+               traits_rec=None) -> FinalRec:
+    """一格：3a 记录 ＋（可选）3b、3c、3d 记录 → FinalRec。`calibrators`：{方法全名: 方法对象}（有 `calibrate`）。
+    3d `traits_rec` 的原始分原样放进 `traits`（未校准，不进 `p_map`）。"""
     cands: dict[str, FinalCand] = {}
     order: list[str] = []
     for c, s in (match_rec.candidates or [])[:topk]:
@@ -97,7 +101,8 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
         if (fc.evidence.get("b") or {}).get("same_as"):
             fc.p = None
     out = sorted(cands.values(), key=lambda fc: (-(fc.p if fc.p is not None else -1.0), rank[fc.char]))
-    return FinalRec(id=match_rec.id, slot=match_rec.slot, sub=match_rec.sub, cands=out, p_src=p_src)
+    traits = dict(traits_rec.scores) if traits_rec is not None else {}
+    return FinalRec(id=match_rec.id, slot=match_rec.slot, sub=match_rec.sub, cands=out, p_src=p_src, traits=traits)
 
 
 @register_step
@@ -105,7 +110,7 @@ class GlyphAnalyzerStep(Step):
     spec = StepSpec(
         id="glyph_analyzer", title="3 识字收尾（汇总）", version="0.1", unit="cell",
         consumes=("glyph_match",), produces=("glyph_analyzer",),
-        optional_consumes=("glyph_near", "glyph_candidate"),
+        optional_consumes=("glyph_near", "glyph_candidate", "cell_traits"),
         params=GlyphAnalyzerParams,
         code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.clustering.sim_cnn"),
         enabled_by="enabled",
@@ -124,6 +129,11 @@ class GlyphAnalyzerStep(Step):
         except Exception:  # noqa: BLE001 —— 可选上游：3c 没开或没跑就当没有这一路
             cand = None
         cand_by = cand.by_id() if cand is not None else {}
+        try:
+            traits = ctx.product("cell_traits", page)
+        except Exception:  # noqa: BLE001 —— 可选上游：3d 没开或没跑就当没有这一路
+            traits = None
+        traits_by = traits.by_id() if traits is not None else {}
 
         calibrators: dict[str, object] = {}
         if near_by:
@@ -134,7 +144,8 @@ class GlyphAnalyzerStep(Step):
                     calibrators[f"{name}:{gid}"] = load_method(name, mdir)
         algo = match_algo(ctx.params_for(STEPS["glyph_match"]))
 
-        cols = [ColumnFinal(col=cm.col, chars=[merge_cell(r, near_by.get(r.id), calibrators, p.topk, algo, cand_by.get(r.id))
+        cols = [ColumnFinal(col=cm.col, chars=[merge_cell(r, near_by.get(r.id), calibrators, p.topk, algo, cand_by.get(r.id),
+                                                          traits_rec=traits_by.get(r.id))
                                                for r in cm.chars])
                 for cm in match.columns]
         return {"glyph_analyzer": PageFinal(page=page, model=MODEL, columns=cols)}
