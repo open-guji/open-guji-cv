@@ -12,7 +12,8 @@
           gong:                                   # 组 id
             chars: [宫, 宮, 官]
             fold: {宮: 宫}                         # 异体不分：触发判断时当同一个字（可缺）
-            methods: {cnn_small: models/glyph_near_gong}   # 方法名 → 模型目录（相对路径先找数据目录、再找仓根）
+            methods: {cnn_small: models/glyph_near_gong}   # 方法名 → 模型目录（相对路径先找数据目录、再找仓根）；
+                                                  # 一份文件挂多对的方法写 {path, pair}，如 {part_shape: {path: config/groups/part_shape.json, pair: [剌, 刺]}}
             trigger: member                       # member：3a 首位在组里就跑；close（缺省）：首位在组里且组内另一字分差 ≤ delta；
                                                   # cands：3a 首位或候选前 topk 名里有组内任一字就跑（从第四步搬来的判法用它罩住 4d 的触发格）
             delta: 0.03
@@ -64,6 +65,7 @@
 ## 指纹
 
 `methods_sha`（自动填）＝各组各方法模型目录里全部文件的 sha256，进参数指纹：换模型、换校准表，本步与收尾过期。
+`{path, pair}` 写法的方法另把 pair 并进指纹（`near_methods.method_fingerprint`；字符串写法的指纹逐位不变）。
 """
 from __future__ import annotations
 
@@ -150,7 +152,8 @@ class GlyphNearStep(Step):
         params=GlyphNearParams,
         needs=("model",),
         code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_registry",
-                   "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.wu_shape"),
+                   "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.part_shape", "open_guji_cv.groups.rr_shape",
+                   "open_guji_cv.groups.wu_shape"),
         enabled_by="groups",
     )
 
