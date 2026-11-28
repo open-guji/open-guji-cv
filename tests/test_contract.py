@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""pipeline / manager 契约（doc/参考/契约.md）：版本信息、manifest 新字段不进指纹。"""
+"""pipeline / manager 契约（doc/契约.md）：版本信息、manifest 新字段不进指纹。"""
 import json
 
 import pytest

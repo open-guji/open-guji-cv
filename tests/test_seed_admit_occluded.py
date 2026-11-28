@@ -66,8 +66,7 @@ def test_clean_page_has_no_occlusion():
 
 
 # ── Step7 ────────────────────────────────────────────────────────────────
-def _run_seed(tmp_path, monkeypatch, *, params=None, coord=None, fallback=None, seals=None, align=None,
-              lib=("same", 0.999)):
+def _run_seed(tmp_path, monkeypatch, *, params=None, coord=None, fallback=None):
     img, cells = _page_and_cells()
     ctx = make_ctx(tmp_path, make_book(BOOK), raw={PAGE: img}, monkeypatch=monkeypatch)
     if params is not None:
@@ -76,9 +75,8 @@ def _run_seed(tmp_path, monkeypatch, *, params=None, coord=None, fallback=None, 
         ctx._raw[PAGE] = img
     # 列 3：slot 3 在印章里（库 same 0.999，平时 match_solo 直接放行）；slot 2 是印章切出的假格；
     # slot 15 在印章外，照常放行。
-    recs = [MatchRec(id=f"{BOOK}:{PAGE}:3:{s}", slot=s, verdict=lib[0] if s != 15 else "same",
-                     char="衡" if (lib[0] == "same" or s == 15) else None, cov=lib[1] if s != 15 else 0.999,
-                     candidates=[("衡", lib[1] if s != 15 else 0.999)]) for s in (2, 3, 15)]
+    recs = [MatchRec(id=f"{BOOK}:{PAGE}:3:{s}", slot=s, verdict="same", char="衡", cov=0.999,
+                     candidates=[("衡", 0.999)]) for s in (2, 3, 15)]
     write_product(ctx, "glyph_match", PAGE,
                   glyph_match=PageMatch(page=PAGE, columns=[ColumnMatch(col=3, ok=True, chars=recs)]))
     write_product(ctx, "context_decide", PAGE,
@@ -87,11 +85,8 @@ def _run_seed(tmp_path, monkeypatch, *, params=None, coord=None, fallback=None, 
     coord = coord if coord is not None else [
         CoordRec(id=f"{BOOK}:{PAGE}:3:2", col=3, slot=2, ref_char=""),
         CoordRec(id=f"{BOOK}:{PAGE}:3:3", col=3, slot=3, ref_char="衡")]
-    if seals is not None:
-        from open_guji_cv.products.kinds.seals import PageSeals
-        write_product(ctx, "seal_detect", PAGE, seals=PageSeals(page=PAGE, width=1100, height=2300, seals=seals))
     write_product(ctx, "align_ref", PAGE,
-                  align_ref=PageAlignRef(page=PAGE, anchored=bool(align), coord=coord, chars=align or [],
+                  align_ref=PageAlignRef(page=PAGE, anchored=False, coord=coord,
                                          coord_fallback=fallback or {}))
     sa = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
     return {r.slot: r for cc in sa.columns for r in cc.chars}, sa
@@ -122,6 +117,9 @@ def test_past_leaf_column_defaults_to_blank(tmp_path, monkeypatch):
     assert got[3].evidence["occluded"]["ref_blank"]
     got, _ = _run_seed(tmp_path / "b", monkeypatch, params=p, coord=[], fallback={"3": "列行对应不成立"})
     assert got[3].evidence["occluded"]["via"] == "none"
+    got, _ = _run_seed(tmp_path / "c", monkeypatch, coord=[], fallback={"3": COORD_PAST_LEAF},
+                       params=SeedAdmitParams(lane_seal=False, occluded_past_leaf_blank=False))
+    assert got[3].evidence["occluded"]["via"] == "none"
 
 
 def test_ref_empty_column_defaults_to_blank_only_when_switched_on(tmp_path, monkeypatch):
@@ -135,66 +133,6 @@ def test_ref_empty_column_defaults_to_blank_only_when_switched_on(tmp_path, monk
     got, _ = _run_seed(tmp_path / "c", monkeypatch, params=p, coord=[], fallback={"3": "列行对应不成立"})
     assert got[3].evidence["occluded"]["via"] == "none"
     assert "occluded_ref_empty_blank" not in SeedAdmitParams(db_path="x").model_dump()
-
-
-def _seal_hits(monkeypatch):
-    import open_guji_cv.steps.occlusion as occ_mod
-    monkeypatch.setattr(occ_mod, "page_occluded", lambda ctx, page, p: {(c, s, ""): 9.0 for c, s in SEAL})
-
-
-def test_manual_seal_cells_default_to_blank_only_when_switched_on(tmp_path, monkeypatch):
-    """`occluded_manual_seal_blank`（书级，缺省关）：人定印框（`source="manual"`）压着、没有坐标对位字的遮挡格
-    记 coord_blank（全唐文 046–060，QTW 11-21）；算法认的印、坐标对位给了字的格不动。"""
-    from open_guji_cv.products.kinds.seals import Seal
-    _seal_hits(monkeypatch)
-    coord = [CoordRec(id=f"{BOOK}:{PAGE}:3:2", col=3, slot=2, ref_char="衡")]
-
-    def run(path, params, source, lib=("diff", 0.7)):   # 印框：列 3（x 700..800）slot 2..8（y 200..900）
-        seal = Seal(kind="stain", bbox=(700, 200, 800, 900), score=1.0, source=source)
-        return _run_seed(path, monkeypatch, params=params, coord=coord, seals=[seal], lib=lib)[0]
-
-    off = run(tmp_path / "a", SeedAdmitParams(lane_seal=False), "manual")
-    assert off[3].evidence["occluded"]["via"] == "none"                  # 缺省关：行为不变
-    p = SeedAdmitParams(lane_seal=False, occluded_manual_seal_blank=True)
-    on = run(tmp_path / "b", p, "manual")
-    assert on[3].char is None and on[3].evidence["occluded"]["via"] == "coord_blank"
-    assert on[3].evidence["occluded"]["ref_blank"]
-    assert on[2].char == "衡" and on[2].evidence["occluded"]["via"] == "coord"   # 印压真字：照旧
-    algo = run(tmp_path / "c", p, "frame")
-    assert algo[3].evidence["occluded"]["via"] == "none"                 # 算法认的印不受影响
-    lanes = run(tmp_path / "d", SeedAdmitParams(occluded_manual_seal_blank=True), "manual")
-    assert lanes[3].admit and lanes[3].char is None                      # R5 判非字，不进待审
-    # 印压真字保险：库认得出（unsure 首位 ≥ occluded_seal_keep_cov，或 same）就不判空
-    for lib in (("unsure", 0.95), ("same", 0.99)):
-        kept = run(tmp_path / f"e{lib[0]}", p, "manual", lib=lib)
-        assert kept[3].evidence["occluded"]["via"] == "none", lib
-    low = run(tmp_path / "f", p, "manual", lib=("unsure", 0.91))
-    assert low[3].evidence["occluded"]["via"] == "coord_blank"
-    assert "occluded_seal_keep_cov" not in SeedAdmitParams(db_path="x").model_dump()
-    assert "occluded_manual_seal_blank" not in SeedAdmitParams(db_path="x").model_dump()
-    assert SeedAdmitParams(db_path="x", occluded_manual_seal_blank=True).model_dump()["occluded_manual_seal_blank"]
-
-
-def test_align_char_on_seal_does_not_block_past_leaf_blank(tmp_path, monkeypatch):
-    """`occluded_seal_align_yield`（书级，缺省关）：过了半叶末行的列，印纹上被现役对位硬配的字不挡 past_leaf 判空，
-    那一格的 align 默认字也让位给 coord_blank（全唐文 057 p90 8:19、9:21，A22 11-21）。"""
-    from open_guji_cv.products.kinds.recog import AlignRec
-    from open_guji_cv.steps.align_ref_coord import COORD_PAST_LEAF
-    _seal_hits(monkeypatch)
-    align = [AlignRec(id=f"{BOOK}:{PAGE}:3:2", col=3, slot=2, align_char="一", align_op="equal")]
-    fb = {"3": COORD_PAST_LEAF}
-    off, _ = _run_seed(tmp_path / "a", monkeypatch, params=SeedAdmitParams(lane_seal=False), coord=[],
-                       fallback=fb, align=align, lib=("diff", 0.7))
-    assert off[2].evidence["occluded"]["via"] == "align" and off[3].evidence["occluded"]["via"] == "none"
-    p = SeedAdmitParams(lane_seal=False, occluded_seal_align_yield=True)
-    on, _ = _run_seed(tmp_path / "b", monkeypatch, params=p, coord=[], fallback=fb, align=align, lib=("diff", 0.7))
-    assert on[2].char is None and on[2].evidence["occluded"]["via"] == "coord_blank"
-    assert on[3].char is None and on[3].evidence["occluded"]["via"] == "coord_blank"
-    # 遮挡格外（slot 15）有现役对位字：整列照旧不算空列
-    out = align + [AlignRec(id=f"{BOOK}:{PAGE}:3:15", col=3, slot=15, align_char="衡", align_op="equal")]
-    keep, _ = _run_seed(tmp_path / "c", monkeypatch, params=p, coord=[], fallback=fb, align=out, lib=("diff", 0.7))
-    assert keep[2].evidence["occluded"]["via"] == "align" and keep[3].evidence["occluded"]["via"] == "none"
-    assert "occluded_seal_align_yield" not in SeedAdmitParams(db_path="x").model_dump()
 
 
 # ── 文本层 ────────────────────────────────────────────────────────────────
@@ -244,6 +182,24 @@ def test_rescue_is_off_by_default_so_clear_char_stays_occluded():
     img, cells, cell = _with_clear_char()
     hit = page_occluded(_ctx_with(img, cells), PAGE, SeedAdmitParams())
     assert (cell[0], cell[1], "") in hit
+
+
+def test_rescue_returns_only_the_clear_char_cell_not_the_speckled_ones():
+    from open_guji_cv.steps.occlusion import page_occluded, text_ink_fraction
+    img, cells, cell = _with_clear_char()
+    frac = text_ink_fraction(img, cells)
+    assert frac[(cell[0], cell[1], "")] >= 0.29
+    assert all(v < 0.05 for k, v in frac.items() if k != (cell[0], cell[1], "") and k[0] in (2, 3, 4, 5)
+               and 2 <= k[1] <= 8), "斑点格的大块墨占比应接近 0"
+    base = page_occluded(_ctx_with(img, cells), PAGE, SeedAdmitParams())
+    on = page_occluded(_ctx_with(img, cells), PAGE, SeedAdmitParams(occluded_rescue_ink=0.15))
+    assert (cell[0], cell[1], "") in base and (cell[0], cell[1], "") not in on
+    assert set(base) - set(on) == {(cell[0], cell[1], "")}, "只救这一格，别的遮挡格不动"
+
+
+def test_rescue_param_is_absent_from_dump_when_off():
+    assert "occluded_rescue_ink" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(occluded_rescue_ink=0.15).model_dump()["occluded_rescue_ink"] == 0.15
 
 
 def test_callers_without_the_field_keep_working():

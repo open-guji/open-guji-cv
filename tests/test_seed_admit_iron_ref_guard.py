@@ -8,6 +8,10 @@ class _Ident:
         return c
 
 
+def test_guard_default_on():
+    assert SeedAdmitParams().iron_ref_guard is True
+
+
 def test_guard_blocks_vol03_cases():
     for iron, ref in [("曰", "白"), ("夬", "夫"), ("而", "面")]:
         assert context_conflicts_ref(iron, ref, _Ident())

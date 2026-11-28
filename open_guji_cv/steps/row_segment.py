@@ -10,7 +10,7 @@ from __future__ import annotations
 import inspect
 from typing import Literal
 
-from pydantic import BaseModel, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, model_serializer, model_validator
 
 from ..core.book import _expand_pages
 from ..core.spec import StepSpec, column_key
@@ -18,11 +18,10 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.cells import CellRec, ColumnCells, CutPointCandidates, PageCells, SeamCandidate
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
-from ..seg.cut_select import ckpt_fingerprint, get_judge, scale_suffix
+from ..seg.cut_select import ckpt_fingerprint, get_judge
 from ..seg.profile import frame_only_edge_cells as _frame_only_edge_cells
 from ..impl.keben.row_grid import fit_page_grids
-from ..impl.keben import boundary_net as _bnet
-from ..impl.keben.row_boundaries import slot_mask_from_occupied, _thin_bar, ROW_SPLIT_FLAG
+from ..impl.keben.row_boundaries import slot_mask_from_occupied, _thin_bar
 
 #: 行切分正门（`segment_column` 等）所在的缺省模块。套书可复制一份到 books/<套书>/ 并在 `core/seg_set.OVERRIDES`
 #: 登记覆盖（全唐文 books/quantangwen，2026-11-04）；`run_page` 按册取（`_row_boundaries`）。
@@ -762,11 +761,6 @@ ALT_CUT_REV = 2
 """`alt_cut` 备选出法修订号（进开了的书的参数 dump）。改备选格网或「出不出备选」的判据就加 1。"""
 
 
-ALT_NOJZ_FLAG = "alt_nojz：不认雙行小注的备选（列里认出的小注段按大字格切），下游按列挑"
-ALT_CUTS_FLAG = "alt_cuts：按备选格线表切的备选（如 YOLO 字框定的格线），下游按列挑"
-ALT_CELLS_FLAG = "alt_cells：备选格线表里整列写定的格（YOLO 框字＋小注分类器），下游按列挑"
-
-
 def _alt_same_ink_cells(main_cells, alt_cells) -> bool:
     """`alt_cut` 的备选格网和主切法「有字格」是否一模一样（框、种类、半边全同；格号、空格不比）。
 
@@ -779,12 +773,6 @@ def _alt_same_ink_cells(main_cells, alt_cells) -> bool:
     return ink(main_cells) == ink(alt_cells)
 
 
-#: `cut_repair: true` 展开的切点修整串（史記 k24–k26 书配置原值；脉经同值）：零墨缝护栏 → 零墨折线 → 换线不劈新字 →
-#: 整行白 → 按连通块归属画线。见各参数注。
-CUT_REPAIR = {"cut_gap_guard": 0.08, "cut_free_seam": 0.35, "cut_gap_keep_glyph": True,
-              "cut_white_row": 0.35, "cut_glyph_line": 0.35}
-
-
 class RowSegmentParams(BaseModel):
     n_body_slots: int | None = None      # None = Book.chars_per_line
     n_raised: int = 0                    # 抬头多出的格数；版式先验，raised 不自动推
@@ -794,24 +782,15 @@ class RowSegmentParams(BaseModel):
     detect_jiazhu: bool = True
     only_admitted: bool = True           # 只切过闸的列
     seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（seg/seam.py）
-    cut_judge: str = "unet_f64"          # 候选池裁判：unet_f64（双精度、跨 CPU 逐位一致；2026-11-18 起缺省，A22 开关收敛 11-13 定）| unet（单精度，seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
+    cut_judge: str = "unet"              # 候选池裁判：unet（seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
     #                                      | unet_f64：同一判官双精度前向＋双精度缩放，跨 CPU 逐位一致（S9，慢约 4 倍，改产物）
     judge_fingerprint: str = ""          # 裁判权重指纹，自动填（进 Step 指纹：换权重 → Step3 产物自动 stale）
-    #: **判官画布缩放上限**（2026-11-18，《脉经》MJ，`seg/cut_select.scale_suffix`）：判官窗口缩到不超过这么多倍才进 U-Net。
-    #: 字比判官训练集（字高≈110px）大的书判官会失灵（脉经字高≈156px，escalate 76%），脉经取 0.7。只改判官看到的画布。
-    #: 书级参数；1.0＝关（缺省，不进参数哈希；seg check 的 cut_through 同用）。白底靠册配置 ink（cv #1650）。
-    cut_judge_scale: float = 1.0
     detect_bottom_bar: bool = True       # 列里还躺着下版框线时下界改用它（row_boundaries.find_bottom_frame_bar）
     #: **职名页分支**（overview#450，S4，2026-10-06）：列在这里的页不走固定格数 DP，改走
     #: `impl/keben/roster_segment`（不定字数、二维递归切）。默认空 = 关，别的书别的页产物逐字节不变。
     #: 只在册配置里点名开（`params: {row_segment: {roster_pages: ["89-132"]}}`），不自动判页型——
     #: 闸1 判不出职名页（见 row_segment_gate 模块头 L0u 一节），点名是人定的。
     roster_pages: list[int | str] = []
-    #: **按列的职名列**（2026-11-19，《脉经》）：`{页: [列号…]}`，点名的列走职名页分支（不定字数、不定字高），
-    #: 本页其余列照正文切。正文页里夹一两列职名（《脉经》各卷卷端「朝散大夫……臣林億等類次」25 字挤在 20 格的列里）时用；
-    #: 整页都是职名用 `roster_pages`。册配置里写 `page_kinds: {roster_cols: {11: [2]}}`（`core/page_kinds.py` 翻成本参数）。
-    #: 只有一两列量不出全页「臣」行，字形库细切（`roster_glyph_refine`）改把整列当官衔区。缺省空，空时不进参数 dump。
-    roster_cols: dict[int, list[int | str]] = {}
     #: **职名列按格网位置编号**（Sheldon 2026-11-19，ZM 转；殿本 vol01 职名页 87–130）：职名分支切出的字不再按字连续编号，
     #: 改按格网位置编——列首、字间空着的格都占号（`impl/keben/roster_segment.grid_slots`）：大字按版框内 `chars_per_line`
     #: 等分的格；雙行小字一格一字的按格网，比格密的（vol01 p88）按本段字距，左行比右行低一字就从下一号起。号严格递增、
@@ -938,16 +917,6 @@ class RowSegmentParams(BaseModel):
     #: 下一格的字块带着上字的笔画碎片（用户 2026-11-03 人审表）。大印下的列仍取等距格网（`_under_stain`，与本开关无关）。
     #: 书级；`uniform`＝缺省，不进参数哈希。
     row_pitch: Literal["uniform", "free"] = "uniform"
-    #: **无先验格网（`layout_off`）的违表容差**（2026-11-26，CV2；全唐文 060:3:3）：格位表与图对不上时（表 22 格、列里 14 字加空白），
-    #: 无先验格网的违表格数天然多，原先要「违表＋劈字」严格不多于按表的格网才选得上——刀刃：版面换三段竖线后 period 206→205，
-    #: 按表格网少违一格（7 对 8），无先验格网落选，下半格线错位多出空格。开着时：无先验格网违表＋劈字不多于中选格网 `layout_off_tol`
-    #: 格以内、且劈字、格高不匀、穿字（逐项按序比）严格更好，就改取它。书级；0＝关（缺省，不进参数哈希）。
-    layout_off_tol: int = 0
-    #: **字间界线判官**（2026-11-26，CV2；`impl/keben/boundary_net`）：`models/<名>/model.pt` 的小 CNN 看切线上下各一格，判是不是两字之间；
-    #: 挑定格网后、终切前，只重排「上下都是正文字」的内部线（格数不变，现线判官分 < `boundary_net_p` 才许挪到隔着墨的另一条缝）。
-    #: 治写本高字字内白缝当字缝（史記 42:66:4「而｜佗」等）。书级（模型按书训，名字带版本号）；空＝关（缺省，不进参数哈希）。
-    boundary_net: str = ""
-    boundary_net_p: float = 0.05
     #: **等距格网末线外推到末字墨外沿**（2026-11-09，殿本 vol28 列尾下溢，`row_boundaries.fit_grid_end`）：末线是列尾、不是字缝，
     #: 有的册版面两端字距被拉开、末字坐在下版框细线上（vol28 末字心偏下 0.09 格、字高 1.06 倍，r6 旧图、r8 新图都有），
     #: 等距末线切进末字下半截。开着时中选格网定下后（只在最后重切那一遍，不影响挑格网）末线下有墨就顺墨往下走到第一段白行或
@@ -959,40 +928,6 @@ class RowSegmentParams(BaseModel):
     #: 给个格高倍数（史記 0.4）就在格线定下后把仍劈着字（切割量 ≥0.025 格高²）的格线在 ±这么多格内挪到切割量最小处（≤原位 1/4 才挪），
     #: 格数、格号不变，首末线不动。只在挑定格网后的最终那遍切用（同 grid_end_fit，不影响挑格网）。书级参数；0＝关（缺省，不进参数哈希）。
     snap_cut: float = 0.0
-    #: **切点白缝护栏**（2026-11-17，史記 r76 扁字收边坏，`row_boundaries._gap_guard`）：切点选定后（规则、U-Net 改选、扩池自动改选），
-    #: 选中的那条不在白缝里（逐列白段 10 百分位 < 这么多格高）、候选池里另有一条在白缝里的，改用白走廊最宽的那条。
-    #: 写本 U-Net 把上字底横、下字头当邻字的（「畫/一」改选到畫底横上面的 1px 缝、「靈/七」放着 20px 字缝不用走直线劈底横），
-    #: Step4 跟着折线分墨，扁字一→二。只在最终那遍切用。书级参数；0＝关（缺省，不进参数哈希）。
-    cut_gap_guard: float = 0.0
-    #: **零墨折线候选**（2026-11-17，史記 r77 切分清零，`row_boundaries._free_seam`）：切点选定后选中那条仍劈开单字大小的连通块，
-    #: 在 ±这么多格内找最省墨折线（不穿墨，或穿墨 ≤ 原线一半且不再劈那块），加进候选池并改选；只修墨大半在上格的块（上字笔画伸进下格），换线后整块归上格、别的块不换边才换。
-    #: 管上字戈钩／长捺伸进下格、两字不相碰（伐/曰、城/范）。只在最终那遍切用。书级参数；0＝关（缺省，不进参数哈希）。
-    cut_free_seam: float = 0.0
-    #: **史記 r78 三个切点开关**（2026-11-17，`row_boundaries` 文档）：`cut_gap_keep_glyph` cut_gap_guard 换过去的线不许劈开原线没劈的字
-    #: （戈钩内侧白走廊，代/或/實）；`cut_white_row`（格高倍数，史記 0.35）仍劈字时挪到 ± 这么多格内最近的整行白，护字内白缝；
-    #: `straight_seam_ink` 直线候选的 seam_ink 记真墨（原来写死 0，只是记录）。都只在最终那遍切用。书级参数；关（缺省）不进参数哈希。
-    cut_gap_keep_glyph: bool = False
-    cut_white_row: float = 0.0
-    straight_seam_ink: bool = False
-    #: **按连通块归属画线**（2026-11-17，史記 r79 ①类，`row_boundaries._glyph_line`）：`cut_white_row` 之后选中那条仍劈开单字大小的连通块，
-    #: 被劈的块按离哪边别的墨近整块归那边，逐列取上格墨之下、下格墨之上离原线最近的 y（± 这么多格高内，不限坡度）。
-    #: 上下字交错（上字捺尾伸进下格、下字点画顶进上格）。拿不准归哪边、某列上下墨重叠就不动。书级参数；0＝关（缺省，不进参数哈希）。
-    cut_glyph_line: float = 0.0
-    #: **大分歧扩池候选相对门槛改选**（2026-11-18，脉经，`row_boundaries._adopt_expanded`）：现选与 U-Net 分歧 ≥ `ADOPT_REL_MIN`（1500px）、
-    #: 绝对门槛（`ADOPT_DIS`/`ADOPT_INK`）没有可选的扩池候选时，取分歧 ≤ min(`ADOPT_REL_CAP`, 这么多倍×现选分歧) 的那条（不限穿墨；干净格线仍只换不穿墨的）。
-    #: 字大（脉经 ≈156px）、笔画粗时，正确的 U-Net 引导缝常穿墨 20–55px、分歧几十到两百，绝对门槛全挡在外，格线切进下字头（善、黄、痛）。
-    #: 只在最终那遍切用。书级参数；0＝关（缺省，不进参数哈希）。
-    adopt_rel: float = 0.0
-    #: **雙行小注噪点段否决门槛**（2026-11-18 A22 U3，`jiazhu_split.link_runs` 的 `cc_min`）：段中位「两侧较小最大连通体」低于这么多 px
-    #: 整段当纸面碎点否决。缺省 500 是殿本小字标定；脉经小字笔画细（单字最大连通体 200–600px）取 200。书级参数；500＝缺省（不进参数哈希）。
-    jiazhu_cc_min: int = 500
-    #: **雙行小注单格判据的跨度下限**（2026-11-19 MJ，`jiazhu_split.gap_center` 的 `span_t`）：墨跨度/列距不到这么多的格不当双行小注。
-    #: 缺省 0.75 是殿本标定（正文字跨度中位 0.59）；脉经字宽，正文字跨度中位 0.79、73% 过 0.75，左右结构的字（肺、脉、謂、師）
-    #: 中缝一宽就被劈成 a/b，取 0.82。只影响切分（`segment_column`），交接闸的 `column_frac` 不变。书级参数；0.75＝缺省（不进参数哈希）。
-    jiazhu_span_t: float = 0.75
-    #: **切点修整串一键开**（2026-11-18 A22 统一优化 U2）：史記 r76–r80 定下、脉经照抄的五个切点开关一组开，
-    #: 没单写的项取 `CUT_REPAIR` 里的值（单写了的照单写的）。书配置只写 `cut_repair: true` 一行。缺省关（不进参数哈希）。
-    cut_repair: bool = False
     #: 原 `seal_gap_slots_empty`、`seal_inkcut`（大印下表中间空格位记空、剔印泥再切）两个书级开关 2026-11-10 搬进书级代码：
     #: 缺省实现 `impl/keben/seal_ink`（不做），史記书仓 `code/seal_ink.py` 覆盖。见 `_RETIRED`。
     #: **备选切法**（2026-11-03，史記文淵閣本第 7 轮，设计稿 https://claude.ai/artifact/NVqgK8BS2GietVShFnoqUU）：
@@ -1000,23 +935,6 @@ class RowSegmentParams(BaseModel):
     #: align_ref 坐标对位挑和整理本吻合多的那份（写本有些列字不在格网上：题署、篇题大字、夹注行数与表不合）。
     #: 书级开关；False＝关（缺省，不进参数哈希，产物逐字节不变）。
     alt_cut: bool = False
-    #: **不认小注的备选**（2026-11-19 脉经，GUJI-774）：主切法认出雙行小注（有 jiazhu_a/b 格）的列，另按同样格网、
-    #: 不认雙行小注再切一份放进 `alt_columns`，下游照 `alt_cut` 的路按列挑。起因：脉经左右结构的大字（則何肺脉眩瞤）
-    #: 中间有白缝，被认成雙行小注劈成 a/b（第 1 册 4 段、2–6 册数十段）；几何量（墨高、缝宽、连通体）和真小注重叠分不开，
-    #: 要靠库匹配与参照文字按列挑（align_ref `alt_select: admit`）。书级开关；False＝关（缺省，不进参数哈希）。
-    alt_nojz: bool = False
-    #: **备选格线表**（2026-11-20 脉经，GUJI-774）：逐列格线表（jsonl，行 `{vol, page, col, cuts, col_h}`，格式同格位表的人定格线
-    #: `cuts`，见 `_layout_cuts`）的路径（相对工作区，或 `corpus/…`）。表里有的列另按表的格线切一份放进 `alt_columns`，下游照
-    #: `alt_cut` 的路按列挑（align_ref `alt_select: admit`）。起因：脉经序页、正文字有高有低，等距 20 格累积错位、把 4 个字切成 5 格
-    #: （01 7:7「景之書并」）；`scripts/yolo_alt_cuts.py` 用 yolo_tool 单字模型在列图上框字、格线放在相邻字框之间。直接替换主切法时
-    #: 上下结构高字常被劈成两框（聾→龍耳），所以只作备选。空＝关（缺省，不进参数 dump）；表内容 sha 自动填进 `alt_cuts_fingerprint`。
-    #: 行里带 `cells`（整列写定，`scripts/yolo_alt_cells.py`：YOLO 框字＋小注分类器，夹注分 a/b）时按格出备选（旗 `alt_cells`，
-    #: 裁图走职名列逐格裁法，配 `cell_shrink.manual_ink_fit`），列图高与表的 `col_h` 差过 `LAYOUT_CUTS_H_TOL` 不套。
-    alt_cuts: str = ""
-    alt_cuts_fingerprint: str = ""
-    #: 表里带 `cells`（整列写定，格式同 manual-cells 的 `expected.cells`）的行出的备选，**顶掉** `alt_nojz` 那份（一列只有一份备选）。
-    #: False（缺省，不进参数 dump）＝本列已有 alt_nojz 备选就不出。
-    alt_cells_first: bool = False
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -1056,27 +974,6 @@ class RowSegmentParams(BaseModel):
                 import hashlib
                 _FP_CACHE[key] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
             object.__setattr__(self, "layout_fingerprint", _FP_CACHE[key])
-        return self
-
-    @model_validator(mode="after")
-    def _fill_alt_cuts_fingerprint(self):
-        if self.alt_cuts and not self.alt_cuts_fingerprint:
-            p = _layout_path(self.alt_cuts)
-            if not p.exists():
-                raise ValueError(f"alt_cuts 开着但表不存在：{p}（先跑 scripts/yolo_alt_cuts.py）")
-            key = ("alt_cuts",) + _sig(p)
-            if key not in _FP_CACHE:
-                import hashlib
-                _FP_CACHE[key] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
-            object.__setattr__(self, "alt_cuts_fingerprint", _FP_CACHE[key])
-        return self
-
-    @model_validator(mode="after")
-    def _apply_cut_repair(self):
-        if self.cut_repair:
-            for k_, v_ in CUT_REPAIR.items():
-                if not getattr(self, k_):
-                    object.__setattr__(self, k_, v_)
         return self
 
     @model_validator(mode="after")
@@ -1122,21 +1019,12 @@ class RowSegmentParams(BaseModel):
                 d.pop("layout_tail_empty", None)
             if not self.jiazhu_rows:
                 d.pop("jiazhu_rows", None)
-            if not self.roster_cols:
-                d.pop("roster_cols", None)
             if not self.roster_grid_slots:
                 d.pop("roster_grid_slots", None)
             if not self.jiazhu_single_head:
                 d.pop("jiazhu_single_head", None)
             if not self.jiazhu_half_a:
                 d.pop("jiazhu_half_a", None)
-            if not self.alt_nojz:
-                d.pop("alt_nojz", None)
-            if not self.alt_cuts:
-                d.pop("alt_cuts", None)
-                d.pop("alt_cuts_fingerprint", None)
-            if not self.alt_cells_first:
-                d.pop("alt_cells_first", None)
             if not self.alt_cut:
                 d.pop("alt_cut", None)
             else:
@@ -1145,29 +1033,10 @@ class RowSegmentParams(BaseModel):
                 d["alt_cut_rev"] = ALT_CUT_REV
             if self.row_pitch == "uniform":
                 d.pop("row_pitch", None)
-            if not self.layout_off_tol:
-                d.pop("layout_off_tol", None)
-            if not self.boundary_net:
-                d.pop("boundary_net", None)
-                d.pop("boundary_net_p", None)
             if not self.grid_end_fit:
                 d.pop("grid_end_fit", None)
             if not self.snap_cut:
                 d.pop("snap_cut", None)
-            if not self.cut_gap_guard:
-                d.pop("cut_gap_guard", None)
-            if not self.cut_free_seam:
-                d.pop("cut_free_seam", None)
-            if self.cut_judge_scale == 1.0:
-                d.pop("cut_judge_scale", None)
-            for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
-                if not getattr(self, k_):
-                    d.pop(k_, None)
-            if self.jiazhu_cc_min == 500:
-                d.pop("jiazhu_cc_min", None)
-            if self.jiazhu_span_t == 0.75:
-                d.pop("jiazhu_span_t", None)
-            d.pop("cut_repair", None)          # 展开后的各项照常进 dump，开关本身不进（同值的老写法指纹一致）
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
@@ -1180,22 +1049,13 @@ class RowSegmentParams(BaseModel):
                 d.pop("page_map_overrides", None)
         return d
 
-    @field_validator("cut_judge_scale")
-    @classmethod
-    def _check_judge_scale(cls, v: float) -> float:
-        # 0.4 判官已崩（字太小），再小没有意义；大于 1 等于放大，画布装不下
-        if not (0.3 < v <= 1.0):
-            raise ValueError(f"row_segment.cut_judge_scale 要在 (0.3, 1.0] 内，给了 {v}")
-        return v
-
     @model_validator(mode="after")
     def _fill_judge_fingerprint(self):
         # 与 glyph_match.GlyphMatchParams.db_fingerprint 同一套路：模型是外部可变状态，
         # 不进指纹的话换了权重产物还显示 fresh。权重缺失时为空串 → 与裁判可用时指纹不同。
         if self.cut_judge in ("unet", "unet_f64") and not self.judge_fingerprint:
             fp = ckpt_fingerprint()
-            object.__setattr__(self, "judge_fingerprint", fp + (":f64" if fp and self.cut_judge == "unet_f64" else "")
-                               + (scale_suffix(self.cut_judge_scale) if fp else ""))
+            object.__setattr__(self, "judge_fingerprint", fp + (":f64" if fp and self.cut_judge == "unet_f64" else ""))
         # 字形库精修：只在开关开着时解析库路径、填指纹——关着时参数逐字段不变（同 seed_admit.human_fingerprint）
         if self.roster_glyph_refine:
             if not self.roster_glyph_db:
@@ -1211,7 +1071,7 @@ class RowSegmentParams(BaseModel):
 class RowSegmentStep(Step):
     spec = StepSpec(
         id="row_segment", title="Step3 单列文字切分", version="1.54", unit="column",   # 1.54：列端表空格里居中（纵向居格中、横向没满宽）的粗横（「一」）不当框线记空（_blank_frame_junk，殿本 vol21 186:7 列首「一」被记空，格数少一，用户 2026-11-18 格高异常）；1.53：列中间两个有字格夹着的空白格里有居中细横（「一」，墨比 0.004–0.011 不到 min_ink_ratio）救回成字格（殿本 vol45 46:8、vol46 76:8 等 10 列格数少一，用户 2026-11-18 格高异常根因）；1.52：框线判空认叠横画数字（「二」「三」去掉长竖后剩 ≥2 道薄而不满宽的横画，不当框角，殿本 vol68 230:9、vol63 116:9，用户 2026-11-17 格高异常根因）；1.51：框线判空认闭口方框字——格内左右两侧各有长竖、夹 ≥2 道横档的（曰日口目）不再当框角记空（殿本 vol14 32 葉 7 列「曰」被判空并进邻格，用户 2026-11-16）；1.50：表说整列空的列记空认大印印边墨——格与大印框重叠不到一半、但格里 ≥70% 的墨（按连通块）落在印框里也记空（印边压着相邻空列切出碎格，史記 r53，SJ 2026-11-13）；有字的列、丢字、挑格网仍按框重叠；1.49：卷端题列（_header_columns）起格把 1.48 记空的框线格（frame_line）照旧算上，格号回到 1.47（史記 01 p119 c2 1–6 被挪成 2–7，SJ r27）；1.48：列端格只有版框线记空（seg/profile.frame_only_edge_cells，各书一律，A22 P5 2026-11-10）：物理首／末格里的墨（宽 ≥8% 列宽）全贴着上／下版框线（≤0.2 格高）、且有一行 ≥ 半列宽 → 记空、打 edge_frame_only 旗（列级）、格上打 frame_line（「不是字」的标记，manager resolve 的 new_not_char 认它），表说有字也照记，人裁整列不走（史記 04 p125/p141、殿本 vol28 p102 卷末空列末格切出框线「字」）；加软参数 manual_cells_fingerprint（本册格级钉子内容指纹，推钉子只报漂移不判过期）；1.47：殿本职名页大字雙行整段分栏（相邻左右各一字的矮带连成一段整段分栏、分栏后按两侧墨心修正归边）＋偏右小字「臣」上限 0.8→0.9em（殿本 vol01 新图 001-r6 切坏格，一律生效；只有职名页分支走，史記写本用自己的实现不变）；参校本属性 reference_profile（B 块 2026-11-08，未声明的册逐字节不变、不升号）：写了 reference_profile 的册 layout_prior 缺表不拦（缺表的页纯几何切）；自动配页不配 none／text 页、整册没有逐列页就不配页；离线格位表有行照用（表是几何先验，与有无参校本无关，全唐文 001 姓氏韵编）；1.46：layout_raise_box 缺省开（闸认出真抬头框、表记不抬头时按闸级数重编表），重编的候选四项打分不比原表差就取（同分不再让给原表）；1.45：等距格网中选时，表挪一格也只比挪一格的等距格网（DP 挪一格会压空白、字整列错一格，vol64 p211 c1 等）；挪一格的等距格网改配挪过的表（夹注、半格按表认）；1.44：等距格网优先，别的格网坏格数严格更少才换；等距格线落缝改就近（挪远要付代价，不再挪进字内空当）——格高一致强制执行（用户 2026-11-01，vol21/64/98 格高偏差 >20% 的列 2054→219，劈字 314→278）；1.43：格高不匀把空白段也算上（一段空白切出的格数多过它总高合的 period 数，多出的算不匀；列首两格空白切成三个矮格、字整列挤错一格），无先验格网格高比现有候选更不匀时不取（vol98 p100 c3 等 4 列）；1.42：职名页分支认写本（史記文淵閣本）——斜贴邻字的偏右小「臣」按全页臣行拆出、列端扁框线残段不当字、落在印里的字丢掉（读 seals）；1.41：大印下的列等距格网在印外比按打分的格网多劈 ≥2 个字时按打分挑（挤格列，vol48 p34、vol46 p106）；1.40：layout_prior 候选格网加「表整列挪一格」（格号 ±1，违表严格更少才选；大印下只在等距格网间比违表），整理本起格差一格的列（vol68 p31 c7–c9）不再丢首字、列末多空字格；1.39：自动配页 page_map（off/loose/strict，书级；开着时 Step3 开跑前按全册列窗口与 daizhige 对齐、边跑边生成本册格位表，见 row_segment_pagemap.py），缺省 off 逐字节不变；1.38：候选格网打分加格高不匀（_uneven，排在劈字后、穿字前）；选中的格网有一格挤两字时在字缝补一条格线、按打分去掉一条（_merged_cuts，殿本个别列字排得比整页格网密）；1.37：layout_prior 开着而表里没有本册就报错（不再悄悄当关）；1.36：干净格线两侧格高偏 >15% 也过 U-Net 探针；扩池候选与 U-Net 几乎一致、穿墨少就自动改选（字内空隙里的格线把字头/点切给上一格）；1.35：layout_prior 缺省开（缺省表不在当关）；1.34：大印压着列首的列（_under_stain）直接取表的等距格网，不再按坏格挑（印泥斑点让闸抬头、DP 挤格，字整列错一格而格号集合不变）；1.33：列端表空格的印改读印章定位 `seals` 产物——大印按框、小印按笔画覆盖区量（_in_seal），去掉模板窗口找印与表空段墨团（_empty_zone_seal），并纠正印框与格坐标空间不一致（印框原是左上原点）；1.32：模板没认出的印（空心印）和模板框没盖住的印边：相邻列的表空段同高都有像字的墨，就当印框（_empty_zone_seal）；1.31：列端表空格里被切成雙行小注半格的印章墨也记空；1.30：表说半格、判据认成單行小注的格按半格发（jiazhu_a/b）；1.29：列端表空格里墨只是一两道竖线的格记空（印框边、界行残段）；1.28：印框记空挪进候选格网打分之前（同框线碎墨，先记空再打分），單行小注格也记；1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（impl/keben/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
-        consumes=("column_geometry", "column_windows", "column_image"), optional_consumes=("seals",), produces=("cells",),
+        consumes=("gate_manifest", "column_windows", "column_image"), optional_consumes=("seals",), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.impl.keben.row_boundaries", "open_guji_cv.impl.keben.row_grid", "open_guji_cv.impl.keben.jiazhu_split",
                    "open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.impl.keben.column", "open_guji_cv.seg.seam",
@@ -1220,8 +1080,7 @@ class RowSegmentStep(Step):
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",
                    "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige",
                    "open_guji_cv.impl.keben.jiazhu_step", "open_guji_cv.impl.keben.seal_ink",
-                   "open_guji_cv.impl.keben.row_hooks", "open_guji_cv.feedback.seg_overrides",
-                   "open_guji_cv.impl.keben.boundary_net"),
+                   "open_guji_cv.impl.keben.row_hooks", "open_guji_cv.feedback.seg_overrides"),
         soft_params=("roster_glyph_fingerprint", "manual_cells_fingerprint"),
         path_params=("roster_glyph_db", "layout_prior", "roster_ref_corpus", "roster_ref_pins", "page_map_pins",
                      "page_map_ref_file", "page_map_overrides"),
@@ -1301,18 +1160,7 @@ class RowSegmentStep(Step):
                              f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
         if p.snap_cut and "snap_cut" not in inspect.signature(segment_column).parameters:
             raise ValueError(f"row_segment.snap_cut：本册套书的 {RB.__name__}.segment_column 没有这个参数")
-        if p.cut_gap_guard and "cut_gap_guard" not in inspect.signature(segment_column).parameters:
-            raise ValueError(f"row_segment.cut_gap_guard：本册套书的 {RB.__name__}.segment_column 没有这个参数")
-        if p.cut_free_seam and "cut_free_seam" not in inspect.signature(segment_column).parameters:
-            raise ValueError(f"row_segment.cut_free_seam：本册套书的 {RB.__name__}.segment_column 没有这个参数")
-        if p.jiazhu_cc_min != 500 and "jiazhu_cc_min" not in inspect.signature(segment_column).parameters:
-            raise ValueError(f"row_segment.jiazhu_cc_min：本册套书的 {RB.__name__}.segment_column 没有这个参数")
-        if p.jiazhu_span_t != 0.75 and "jiazhu_span_t" not in inspect.signature(segment_column).parameters:
-            raise ValueError(f"row_segment.jiazhu_span_t：本册套书的 {RB.__name__}.segment_column 没有这个参数")
-        for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
-            if getattr(p, k_) and k_ not in inspect.signature(segment_column).parameters:
-                raise ValueError(f"row_segment.{k_}：本册套书的 {RB.__name__}.segment_column 没有这个参数")
-        gate: GateManifest = ctx.product("column_geometry", page)
+        gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
         # 列级／格级人定切分一处读（feedback/seg_overrides.py；总表与优先级见 doc/切分覆盖.md）。按需读：职名页只读整列钉子。
@@ -1324,7 +1172,7 @@ class RowSegmentStep(Step):
             pc = self._run_roster(ctx, p, page, gate, wins)
             # 开了 `roster_grid_slots`：人裁整列格的号也是格网号（可跳号），格数按格网算
             grid_n = (p.n_body_slots or ctx.book.chars_per_line or 0) if p.roster_grid_slots else 0
-            return {"cells": _apply_manual_cells(pc, manual, gate, wins, grid_n=grid_n, geoms=_page_manual_geom(ctx.book.id, page))}
+            return {"cells": _apply_manual_cells(pc, manual, gate, wins, grid_n=grid_n)}
         book_resolved = ov.cuts          # 人裁回流的切点：slot_above → kind，给 segment_column 收敛候选
         book_slots = ov.slots            # 逐列字数＋字距匀不匀（`review/slot_count_cards.py`；p33c19 22 字 vs 常量 21）
         book_solo = ov.solo              # 人指认的單行小注格
@@ -1332,8 +1180,7 @@ class RowSegmentStep(Step):
         book_forced_main = ov.forced_main    # 「正文当小注」：别拆
         book_head_raise = ov.head_raise      # 逐列抬头级数（Step1 按同一张表补框；表级数不同时 _reraise）
         # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
-        judge = (get_judge(f64=p.cut_judge == "unet_f64", scale=p.cut_judge_scale)
-                 if p.cut_judge in ("unet", "unet_f64") else None)
+        judge = get_judge(f64=p.cut_judge == "unet_f64") if p.cut_judge in ("unet", "unet_f64") else None
         book_pins = ov.pins              # 人拖过的切线钉住（只收带页面坐标的裁决）
         if p.page_map != "off" and not _ref_has_column(ctx.book):
             layout = {}                      # 册配置说整册没有逐列参照：没东西可配页
@@ -1342,7 +1189,6 @@ class RowSegmentStep(Step):
             layout = layout_for(ctx, p.page_map, _pm_pins(p), _pm_ref(p))
         else:
             layout = load_layout(p.layout_prior, ctx.book.id) if p.layout_prior else {}
-        alt_cuts_tab = load_layout(p.alt_cuts, ctx.book.id) if p.alt_cuts else {}
         if p.layout_prior and not layout and not _ref_declared(ctx.book):
             # 表在、开关开着，表里却一行本册都没有：多半是新册没生成表（殿本 vol11–20 首跑就这样悄悄当关，
             # 逐格全对 94.7% vs 带表 100%）。宁可拦下，不悄悄退回无先验。
@@ -1358,7 +1204,6 @@ class RowSegmentStep(Step):
         _step_impl = importlib.import_module(resolve(ctx.book, _JZ_STEP))
         _seal_impl = importlib.import_module(resolve(ctx.book, _SEAL_INK))
         free_split = getattr(_step_impl, "free_split", None)
-        row_split = getattr(_step_impl, "row_split", None)
         # 雙行小注逐步切（史記）：本页各列整理本的夹注段分法；缺省实现返回 None（不切）
         step_notes = None
         if p.jiazhu_rows and p.roster_ref_corpus and p.roster_ref_pins:
@@ -1458,8 +1303,6 @@ class RowSegmentStep(Step):
             # C/D 字数先验只看格的 y0/y1/kind/slot；折线与判官只写 seam_top/seam_bottom 和 cut_candidates，不动格的 y0/y1/kind。
             # 所以试切一律 seam_band=0、不叫判官，挑定之后对中选的那一遍按原参数重切一次，再补上列端记空（_blank_frame_junk
             # 原地改 kind，重切出来的是新对象）。产物逐字节不变（code_equiv 验证）。
-            nojz = [False]                  # alt_nojz 的备选那一遍：不认雙行小注
-
             def _seg(n_body: int, alt: tuple | None = None, grid: bool = False, bounds: list[float] | None = None,
                      final: bool = False):
                 n_r, t_s, l_kw, f_jz, f_main = (alt if alt is not None else
@@ -1469,7 +1312,7 @@ class RowSegmentStep(Step):
                     border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
                     top_slack=t_s, content_x=gc.content_x,
                     ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
-                    raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu and not nojz[0], seam_band=p.seam_band if final else 0,
+                    raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band if final else 0,
                     resolved_cuts=col_resolved or None, cut_judge=judge if final else None,
                     pinned_cuts={s_: y_ for (pg_, c_, s_), y_ in book_pins.items()
                                  if pg_ == page and c_ == gc.col} or None,
@@ -1481,18 +1324,11 @@ class RowSegmentStep(Step):
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({"jiazhu_rows": True} if p.jiazhu_rows and final else {}),
                     **({"free_split": free_split} if p.jiazhu_rows and free_split is not None and final else {}),
-                    **({"row_split": row_split} if p.jiazhu_rows and row_split is not None and final else {}),
                     **({"jiazhu_single_head": True} if p.jiazhu_single_head and _legacy_qtw else {}),
                     **({"jiazhu_half_a": True} if p.jiazhu_half_a and _legacy_qtw else {}),
                     **hook_kw,
                     **({"grid_end_fit": True} if p.grid_end_fit and final else {}),
                     **({"snap_cut": p.snap_cut} if p.snap_cut and final else {}),
-                    **({"cut_gap_guard": p.cut_gap_guard} if p.cut_gap_guard and final else {}),
-                    **({"cut_free_seam": p.cut_free_seam} if p.cut_free_seam and final else {}),
-                    **{k_: getattr(p, k_) for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel")
-                       if getattr(p, k_) and final},
-                    **({"jiazhu_cc_min": p.jiazhu_cc_min} if p.jiazhu_cc_min != 500 else {}),
-                    **({"jiazhu_span_t": p.jiazhu_span_t} if p.jiazhu_span_t != 0.75 else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:
@@ -1503,29 +1339,12 @@ class RowSegmentStep(Step):
                 res._junk = args                                    # 列端记空的参数，重切后照样补
                 return _blank_frame_junk(img, res.cells, *args)
 
-            bnet_flags: list[str] = []
-
             def _finalize(res):
                 """试切结果 → 按同样参数带折线与判官重切（再补列端记空）；不是试切出来的原样返回。"""
                 a = getattr(res, "_explore", None)
                 if a is None:
                     return res
                 n_body, alt, grid, bounds = a
-                if p.boundary_net and lay_cuts is None and not human_col:
-                    # 字间界线判官：只重排正文字｜正文字的内部线，格数不变（见参数说明）
-                    rb_ = _bnet.refine_bounds(p.boundary_net, img, res.content_x or gc.content_x, res.cells, gate.period,
-                                              p.boundary_net_p)
-                    if rb_ is not None:
-                        moves, log_ = rb_
-                        body_ = sorted((c for c in res.cells if c.kind != "blank"), key=lambda c: c.y0)
-                        nb = list(res.boundaries)
-                        for j_, y_ in moves:
-                            old_ = body_[j_].y1
-                            k_ = min(range(len(nb)), key=lambda k: abs(nb[k] - old_))
-                            nb[k_] = y_
-                        if all(b2 > b1 for b1, b2 in zip(nb, nb[1:])):
-                            bounds, grid = nb, False
-                            bnet_flags.append("boundary_net：" + "；".join(f"{o}→{n_}（{po}→{pn}）" for _, o, n_, po, pn in log_))
                 out_ = _seg(n_body, alt, grid=grid, bounds=bounds, final=True)
                 j = getattr(res, "_junk", None)
                 if j is not None:
@@ -1708,12 +1527,6 @@ class RowSegmentStep(Step):
                         shifted = shifted_u
                     if shifted and scores[min(shifted, key=key_)][0] < scores[best][0]:
                         best = min(shifted, key=key_)
-                    # 无先验格网的违表容差（`layout_off_tol`，见参数说明）：违表多出几格以内、其余三项严格更好就取它
-                    if p.layout_off_tol and cands[best][4] != "layout_off":
-                        lo_ = [i for i, c in enumerate(cands) if c[4] == "layout_off"]
-                        if lo_ and scores[lo_[0]][0] <= scores[best][0] + p.layout_off_tol \
-                                and scores[lo_[0]][1:] < scores[best][1:]:
-                            best = lo_[0]
                     # 挤格：选中的格网里有一格挤着两个字（殿本个别列字排得比整页格网密，如挖改处多刻一字）→ 在两字的缝里
                     # 补一条格线、再去掉一条，格数不变；去哪条按 _score 挑，坏格、劈字不多才换
                     for _ in range(MERGE_MAX_FIX):
@@ -1755,9 +1568,6 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue
             r = _finalize(r)
-            if bnet_flags:
-                prior_flags = list(prior_flags) + bnet_flags
-                bnet_flags.clear()
             if step_notes is not None and lay is not None and not human_col and step_notes.get(gc.col):
                 r, fl_ = _step_impl.apply(r, img, gc.content_x or (0.0, float(img.shape[1])), gate.period,
                                           step_notes[gc.col], p.ink_threshold, reading_order=reading_order)
@@ -1769,8 +1579,7 @@ class RowSegmentStep(Step):
                 mapper = None
                 if wrec is not None:
                     mapper = ColumnMapper.of(page_w, wrec)
-                # 雙行小注按小字分行（书级 `jiazhu_step.row_split`）会让一列的格数多于大字格网，按逻辑格线数算
-                n_total = max(n_body_col + n_raised_col, len(r.boundaries) - 1)
+                n_total = n_body_col + n_raised_col
                 # 列端格只有版框线（P5，2026-11-10，各书一律）：物理首／末格里的墨全贴着上／下版框线 → 记空。
                 # 表说那格有字也照记（表在该格是错的），人裁整列（manual_cells）不走这里。
                 edge_fo = []
@@ -1813,11 +1622,6 @@ class RowSegmentStep(Step):
                 flags: list[str] = list(prior_flags)
                 if edge_fo:
                     flags.append(f"edge_frame_only：列端第 {'、'.join(map(str, edge_fo))} 格只有版框线，记空")
-                extra = int(getattr(r, "row_split_extra", 0) or 0)
-                if extra:
-                    # 书级 `jiazhu_step.row_split`：n_body_slots 写逻辑格数（下游「排满」等按格号比），闸3 用 `row_split_extra` 还原物理格数
-                    flags.append(f"{ROW_SPLIT_FLAG}{extra:+d}：雙行小注按小字分行，本列比大字格网多 {extra} 个格号，段后格号顺延")
-                    base = dict(base, n_body_slots=int(base["n_body_slots"]) + extra)
                 if r.bottom_bar_y is not None:
                     # 下界换成了列里认出的下版框线（2026-09-28，overview#266）。border_bottom
                     # 一并改写：Step4 拿它当 frame_bottom 提示，把条带开到这里、在它附近找框——
@@ -1844,7 +1648,6 @@ class RowSegmentStep(Step):
                 ra = _seg(n_body_col, (gate_raised, gc.top_slack, {}, None, None))
                 if ra is not None:
                     ra = _finalize(ra)
-                    bnet_flags.clear()
                     alt_fl = ["alt_cut：不带先验的备选格网（align_ref 坐标对位按吻合数挑）"]
                     # 有意不要求 lay：备选格网本就不带版式先验，夹注段分法取自整理本页钉，与先验无关，照样逐步切
                     if step_notes is not None and not human_col and step_notes.get(gc.col):
@@ -1855,42 +1658,10 @@ class RowSegmentStep(Step):
                                alt_fl, None, occ, gate_raised)
                     if not _alt_same_ink_cells(out[-1].cells, ca.cells):
                         alt_out.append(ca)
-            if (p.alt_nojz and not human_col and r is not None and all(a_.col != gc.col for a_ in alt_out)
-                    and any(c_.kind in ("jiazhu_a", "jiazhu_b") for c_ in out[-1].cells)):
-                nojz[0] = True
-                try:
-                    rn = _seg(n_body_col, final=True) if lay_cuts is None else _seg(n_body_col, bounds=lay_cuts, final=True)
-                finally:
-                    nojz[0] = False
-                if rn is not None:
-                    cn = _emit(rn, base, [*prior_flags, ALT_NOJZ_FLAG], lay, occ, n_raised_col)
-                    if not _alt_same_ink_cells(out[-1].cells, cn.cells):
-                        alt_out.append(cn)
-            row_ac = alt_cuts_tab.get((page, gc.col)) if alt_cuts_tab else None
-            if (row_ac is not None and row_ac.get("cells") and not human_col and r is not None and lay_cuts is None
-                    and abs(int(row_ac.get("col_h") or -99) - img.shape[0]) <= LAYOUT_CUTS_H_TOL
-                    and (p.alt_cells_first or all(a_.col != gc.col for a_ in alt_out))):
-                # 整列写定的备选格（`scripts/yolo_alt_cells.py`：YOLO 框字＋小注分类器，夹注分 a/b 逐字切）
-                one = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=[out[-1]])
-                cc_ = _apply_manual_cells(one, {gc.col: row_ac["cells"]}, gate, wins).columns[0]
-                if cc_ is not out[-1] and not _alt_same_ink_cells(out[-1].cells, cc_.cells):
-                    cc_ = cc_.model_copy(update={"flags": [*cc_.flags, ALT_CELLS_FLAG]})
-                    alt_out = [a_ for a_ in alt_out if a_.col != gc.col] + [cc_]
-            elif (row_ac is not None and not row_ac.get("cells") and not human_col and r is not None and lay_cuts is None
-                    and all(a_.col != gc.col for a_ in alt_out)):
-                ac = _layout_cuts(row_ac, img.shape[0], n_raised_col)
-                if ac is not None:
-                    n_ac = len(ac) - 1 - n_raised_col
-                    ry = _seg(n_ac, bounds=ac, final=True)
-                    if ry is not None:
-                        cy = _emit(ry, dict(base, n_body_slots=n_ac), [*prior_flags, ALT_CUTS_FLAG], lay, occ, n_raised_col)
-                        if not _alt_same_ink_cells(out[-1].cells, cy.cells):
-                            alt_out.append(cy)
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
         pc = self._header_ref_flags(ctx, p, page, pc)
-        pc = self._roster_cols(ctx, p, page, gate, wins, pc)
-        pc = _apply_manual_cells(pc, manual, gate, wins, geoms=_page_manual_geom(ctx.book.id, page) if manual else None)
+        pc = _apply_manual_cells(pc, manual, gate, wins)
         if alt_out:
             # 卷端标题列、人工指定的列已换掉主切法，备选不再有意义：只留主切法仍是本步切出来那份的列
             mains = {id(c.cells) for c in out}
@@ -1961,20 +1732,6 @@ class RowSegmentStep(Step):
             out.append(new)
         return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=out)
 
-    def _roster_cols(self, ctx: RunContext, p: RowSegmentParams, page: int,
-                     gate: GateManifest, wins: PageWindows, pc: PageCells) -> PageCells:
-        """`roster_cols` 点名的列换成职名页分支切出的（不定字数）；没点名本页原样返回。
-
-        格号从 1 数（职名列不跟格网；开了 `roster_grid_slots` 按格网位置编）。只切点名的列，全页 em 也只按这几列量。职名分支切失败（ok=False）的列留格网切的。"""
-        spec = p.roster_cols.get(page) if p.roster_cols else None
-        cols = set(_expand_pages(list(spec))) if spec else set()
-        cols &= {cc.col for cc in pc.columns}
-        if not cols:
-            return pc
-        got = {cc.col: cc for cc in self._run_roster(ctx, p, page, gate, wins, only=cols, chen_fallback=True).columns
-               if cc.ok}
-        return pc.model_copy(update={"columns": [got.get(cc.col, cc) for cc in pc.columns]})
-
     @staticmethod
     def _header_ref_flags(ctx: RunContext, p: RowSegmentParams, page: int, pc: PageCells) -> PageCells:
         """`header_ref_flag`：整理本这一列是题列套语（`史記卷N`、`X第N[篇名]`）的列，列旗追加 `header_ref:<整理本行>`
@@ -1999,7 +1756,7 @@ class RowSegmentStep(Step):
     # ── 职名页分支 ────────────────────────────────────────────────────
     def _run_roster(self, ctx: RunContext, p: RowSegmentParams, page: int,
                     gate: GateManifest, wins: PageWindows, only: set[int] | None = None,
-                    despeckle: set[int] | None = None, chen_fallback: bool = False) -> PageCells:
+                    despeckle: set[int] | None = None) -> PageCells:
         """职名页：每列字数不定，`n_body_slots` = 本列实际位数（开了 `roster_grid_slots` 是格数与最大格号的大者），
         `boundaries` 为空（没有格线）。
 
@@ -2052,10 +1809,6 @@ class RowSegmentStep(Step):
                 kw["drops"] = drops
         if p.roster_top_dash:
             kw["top_dash"] = True
-        if chen_fallback and scorer is not None:
-            import inspect
-            if "chen_fallback" in inspect.signature(segment_roster_page).parameters:   # 书仓自己的职名实现可以没有
-                kw["chen_fallback"] = True
         results = dict(zip((gc.col for gc in admitted),
                            segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer, **kw)))
         col_img = {gc.col: im for gc, (im, _cx) in zip(admitted, imgs)}
@@ -2151,133 +1904,8 @@ class RowSegmentStep(Step):
         return PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
 
 
-#: 钉子按列图几何变化换算后，格框角点最大位移超过这么多 px 的列打 `manual_cells_remapped`、出口闸送人核（CV0 11-26）。
-MANUAL_REMAP_FLAG_PX = 3.0
-
-
-def _page_manual_geom(book: str, page: int) -> dict[int, dict]:
-    """本页整列钉子写入时的列图几何底：`col → geom`（manager v0.6.35 `seg_pin.column_geom` 写进
-    `input.column_basis.geom`；格式见 manager doc/参考/钉子上游底.md）。没记的钉子不在表里。"""
-    from ..feedback.lookup import MANUAL_CELLS_SHARD, _manual_items_lenient
-    from ..gold.store import verdict_store
-    store = verdict_store()
-    try:
-        items = store.list(MANUAL_CELLS_SHARD, legacy=False)
-    except Exception:  # noqa: BLE001
-        items = _manual_items_lenient(store.items_path(MANUAL_CELLS_SHARD))
-    out: dict[int, dict] = {}
-    for it in items:
-        if it.status != "active" or str(it.anchor.book) != book or it.anchor.page != page or it.anchor.col is None:
-            continue
-        g = ((it.input or {}).get("column_basis") or {}).get("geom")
-        if isinstance(g, dict):
-            out[int(it.anchor.col)] = g
-    return out
-
-
-def _geom_vline(v: list):
-    from ..seg.frame_types import VLine
-    return VLine(x_at_top=float(v[0]), slope=float(v[1]), k2=v[2], k3=v[3], y1=v[4], y2=v[5])
-
-
-def _geom_of(wrec, page_w: int) -> dict:
-    """现行列窗的几何底，口径同 manager `seg_pin.column_geom`（取整位数一致，才能逐项比）。"""
-    def line(ln):
-        d = ln.model_dump(mode="json")
-        r = lambda x, n: None if x is None else round(float(x), n)  # noqa: E731
-        return [r(d["x_at_top"], 3), r(d["slope"], 6), r(d.get("k2"), 6), r(d.get("k3"), 6),
-                r(d.get("y1"), 3), r(d.get("y2"), 3)]
-    return {"page_w": int(page_w), "left": line(wrec.left_line), "right": line(wrec.right_line),
-            "top_y": round(float(wrec.top_y), 3), "bottom_y": round(float(wrec.bottom_y), 3),
-            "ruled": bool(getattr(wrec, "ruled", False))}
-
-
-_GEOM_KEYS = ("page_w", "left", "right", "top_y", "bottom_y", "ruled")
-
-
-def _page_to_col(mapper: ColumnMapper, X: float, Y: float, guess: tuple[float, float]) -> tuple[float, float]:
-    """原图左上原点 (X, Y) → 这个映射的列图坐标：牛顿迭代解 `to_page_tl(x, y) = (X, Y)`（三段、ruled 都适用；
-    列图与原图近似等比，几步就收敛）。"""
-    import numpy as np
-    x, y = guess
-    for _ in range(30):
-        fx, fy = mapper.to_page_tl(x, y)
-        ex, ey = fx - X, fy - Y
-        if abs(ex) < 1e-3 and abs(ey) < 1e-3:
-            break
-        h = 0.5
-        ax, ay = mapper.to_page_tl(x + h, y)
-        bx, by = mapper.to_page_tl(x, y + h)
-        j = np.array([[(ax - fx) / h, (bx - fx) / h], [(ay - fy) / h, (by - fy) / h]])
-        try:
-            dx, dy = np.linalg.solve(j, [ex, ey])
-        except np.linalg.LinAlgError:
-            break
-        x, y = x - float(dx), y - float(dy)
-    return x, y
-
-
-def _remap_manual_spec(spec: list[dict], old: ColumnMapper, new: ColumnMapper) -> tuple[list[dict], float]:
-    """钉子格框（旧列图坐标）经原图换到新列图坐标：四角各换、取外接框。→ (新格表, 角点最大位移 px)。"""
-    out, worst = [], 0.0
-    for c in spec:
-        xs, ys = [], []
-        for x, y in ((c["x0"], c["y0"]), (c["x1"], c["y0"]), (c["x1"], c["y1"]), (c["x0"], c["y1"])):
-            X, Y = old.to_page_tl(float(x), float(y))
-            nx, ny = _page_to_col(new, X, Y, (float(x), float(y)))
-            worst = max(worst, abs(nx - x), abs(ny - y))
-            xs.append(nx)
-            ys.append(ny)
-        out.append({**c, "x0": round(min(xs), 1), "x1": round(max(xs), 1),
-                    "y0": round(min(ys), 1), "y1": round(max(ys), 1)})
-    return out, worst
-
-
-def _remap_manual(manual: dict[int, list[dict]], geoms: dict[int, dict] | None, wins: PageWindows,
-                  page: int | None = None) -> tuple[dict[int, list[dict]], set[int]]:
-    """按钉子写入时记的列图几何底（manager `column_basis.geom`）把钉子换到现行列图（CV0 11-26 批的钉子护栏）。
-
-    - 几何与现行列窗一致（绝大多数）→ 原样，逐字节不变；
-    - 不一致 → 经旧／新两个列图映射换算；角点最大位移 > `MANUAL_REMAP_FLAG_PX` 的列返回在 flagged 里（打旗送人核）；
-    - 没记几何底的老钉子 → 原样套（同以前），只在 stderr 提示一次（不进产物，免得老钉子所在页全部变样）。
-    → (换算后的钉子表, 要打 `manual_cells_remapped` 的列)。"""
-    import sys
-    if not manual:
-        return manual, set()
-    geoms = geoms or {}
-    page_w = wins.page_size[0]
-    out, flagged, nobasis = dict(manual), set(), []
-    for col, spec in manual.items():
-        g = geoms.get(col)
-        wrec = wins.column(col)
-        if g is None:
-            nobasis.append(col)
-            continue
-        if wrec is None:
-            continue
-        now = _geom_of(wrec, page_w)
-        if all(now.get(k) == g.get(k) for k in _GEOM_KEYS):
-            continue
-        try:
-            old = ColumnMapper(int(g["page_w"]), _geom_vline(g["left"]), _geom_vline(g["right"]),
-                               float(g["top_y"]), float(g["bottom_y"]), ruled=bool(g.get("ruled")))
-        except (KeyError, TypeError, ValueError, IndexError):
-            nobasis.append(col)
-            continue
-        new_spec, worst = _remap_manual_spec(spec, old, ColumnMapper.of(page_w, wrec))
-        out[col] = new_spec
-        if worst > MANUAL_REMAP_FLAG_PX:
-            flagged.add(col)
-            print(f"⚠️ manual-cells p{page}c{col}：列图几何变了，钉子已换算到新列图（最大位移 {worst:.1f}px），送人核",
-                  file=sys.stderr)
-    if nobasis:
-        print(f"ℹ️ manual-cells p{page} 列 {sorted(nobasis)}：钉子没记列图几何底，照原坐标套（列图变了不会自动换算；"
-              f"manager `guji pipeline seg pins-backfill-geom` 可补）", file=sys.stderr)
-    return out, flagged
-
-
 def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: GateManifest,
-                        wins: PageWindows, grid_n: int = 0, geoms: dict[int, dict] | None = None) -> PageCells:
+                        wins: PageWindows, grid_n: int = 0) -> PageCells:
     """人工指定的整列格（`lookup.resolved_manual_cells`）替换算法切出的那一列。
 
     与职名页同一套下游约定：列级 flags 带 `roster`（闸3 不按版式格数拦、Step4 不按格线裁）加 `manual_cells`，
@@ -2287,7 +1915,6 @@ def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: Gate
     最大号的大者（同职名分支），最大号超过格数的列打 `roster_slot_overflow`。0（缺省）＝照旧按不同号的个数。"""
     if not manual:
         return pc
-    manual, remapped = _remap_manual(manual, geoms, wins, pc.page) if geoms is not None else (manual, set())
     page_w = wins.page_size[0]
     cols = []
     for cc in pc.columns:
@@ -2322,7 +1949,7 @@ def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: Gate
             over = ["roster_slot_overflow"] if top > grid_n else []
         cols.append(ColumnCells(
             ok=True, n_body_slots=n_pos, cells=cells, boundaries=[], em=None,
-            flags=["roster", "manual_cells", *over, *(["manual_cells_remapped"] if cc.col in remapped else [])], col=cc.col, n_raised=0, period=gate.period,
+            flags=["roster", "manual_cells", *over], col=cc.col, n_raised=0, period=gate.period,
             ref_w=gate.ref_w, content_x=gc.content_x, border_top=gc.border_top,
             border_bottom=gc.border_bottom, top_slack=0.0))
     return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=cols)

@@ -157,21 +157,6 @@ class ImageCache:
         self.set_page_stamp(book, kind_id, key, stamp)
         return p
 
-    def put_bytes(self, book: str, kind_id: str, key: str, data: bytes, stamp: str | None = None) -> Path:
-        """把别处取回的一张已编码的图（PNG 字节）原样放进缓存，同 `put` 的临时文件＋换上、记戳规矩。
-        取回方（`core.derived.PAGE_FETCHER`）负责先核对内容。"""
-        p = self.path(book, kind_id, key)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        m = self._PAGE_RE.match(key)
-        if stamp and m and self.page_stamp(book, kind_id, key) is None \
-                and self.has_unstamped_files(book, kind_id, m.group(0)):
-            stamp = None
-        tmp = p.with_name(f".{p.stem}.tmp{os.getpid()}{p.suffix}")
-        tmp.write_bytes(data)
-        os.replace(tmp, p)
-        self.set_page_stamp(book, kind_id, key, stamp)
-        return p
-
     def has_unstamped_files(self, book: str, kind_id: str, page: str) -> bool:
         """这一页（`page` 形如 `p0024`）在记戳之前目录里就已有缓存图：首次查时看一眼目录并记住，
         之后同一页只查内存（字块目录一册几万个文件，不能每张图都扫一遍）。"""

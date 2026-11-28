@@ -570,7 +570,6 @@ def corpus_token(ws: Path | None, version: int, vol: str | None = None, dev: boo
 
 
 _CHECKED: dict[tuple[str, int, str | None], None] = {}
-_WARNED: set[tuple] = set()
 
 
 def _check_pin_once(ws: Path | None, version: int, vol: str | None = None) -> None:
@@ -586,11 +585,7 @@ def _check_pin_once(ws: Path | None, version: int, vol: str | None = None) -> No
         raise FileNotFoundError(f"册 yaml 钉了 corpus: {version}，但{e}（先跑 guji corpus build -w {ws}）") from e
     r = check_files(ws, man)
     _CHECKED[key] = None
-    # 同一工作区、同一版本、同一批不符的文件只警告一次：各册分别查（key 带册），一次 sync 摸遍 43 册时
-    # 原先同一条警告打 43 遍（GUJI-776）
-    sig = (str(ws), version, tuple(r["changed"]), tuple(r["missing"]))
-    if (r["changed"] or r["missing"]) and sig not in _WARNED:
-        _WARNED.add(sig)
+    if r["changed"] or r["missing"]:
         print(f"  ⚠️  语料库 v{version} 的清单与当前文件不符（改了 {len(r['changed'])}，缺 {len(r['missing'])}）："
               f"{(r['changed'] + r['missing'])[:5]}——指纹只看版本号，这些改动不会让产物过期；"
               f"该出新版本就 guji corpus build，或把文件改回去", file=sys.stderr)

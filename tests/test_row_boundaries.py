@@ -279,37 +279,6 @@ def test_segment_column_reading_order_is_all_a_then_all_b_within_a_run():
     assert sorted(c.order for c in r.cells) == list(range(1, len(r.cells) + 1))
 
 
-def test_segment_column_row_split_more_cells_than_grid():
-    """书级 `row_split`（脉经小字比大字矮，GUJI-774）：夹注段每行可切多于段占的大字格数；段内格号照本行第几字
-    从段首数，段占 max(a, b) 个号，段后格号顺延，`boundaries` 换成逻辑格线、和格号对得上。钩子不给就照旧。"""
-    img = _synth_column_image(jiazhu_slots=(8, 9, 10))
-    base = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W, jiazhu_rows=True)
-    calls = []
-
-    def split(ink, top, bot, n_grid, period):
-        calls.append((ink.shape[1] > 0, n_grid))
-        k = n_grid + 1 if len(calls) == 1 else n_grid      # a 行多切一格，b 行照旧
-        return [top + (bot - top) * i / k for i in range(k + 1)]
-
-    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W, jiazhu_rows=True,
-                               row_split=split)
-    assert calls == [(True, 3), (True, 3)]
-    a = sorted(c.slot for c in r.cells if c.sub == "a")
-    b = sorted(c.slot for c in r.cells if c.sub == "b")
-    assert a == [8, 9, 10, 11] and b == [8, 9, 10]
-    body = sorted(c.slot for c in r.cells if c.sub is None)
-    assert body == list(range(1, 8)) + list(range(12, N_SLOTS + 2))
-    assert len(r.boundaries) == N_SLOTS + 2
-    seq = [(c.slot, c.sub) for c in sorted(r.cells, key=lambda c: c.order)]
-    assert seq[7:14] == [(8, "a"), (9, "a"), (10, "a"), (11, "a"), (8, "b"), (9, "b"), (10, "b")]
-    # 段外格线、格不变
-    assert r.boundaries[:8] == list(base.boundaries[:8]) and r.boundaries[-3:] == list(base.boundaries[-3:])
-    # 钩子两行都不接（None）＝照旧
-    r0 = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W, jiazhu_rows=True,
-                                row_split=lambda *a_: None)
-    assert [(c.slot, c.sub, c.y0, c.y1) for c in r0.cells] == [(c.slot, c.sub, c.y0, c.y1) for c in base.cells]
-
-
 def test_segment_column_detect_jiazhu_off_keeps_whole_cells():
     img = _synth_column_image(jiazhu_slots=(8, 9, 10, 11))
     r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W,

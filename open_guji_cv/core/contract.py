@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""pipeline 与 pipeline manager 之间的契约版本（设计：doc/design/拆分-pipeline与manager.md，契约正文：doc/参考/契约.md）。
+"""pipeline 与 pipeline manager 之间的契约版本（设计：doc/design/拆分-pipeline与manager.md，契约正文：doc/契约.md）。
 
 `CONTRACT_VERSION` 是整数，**只在下面四样的格式变了、manager 需要跟着改时加一**，与 cv 版本号无关：
 

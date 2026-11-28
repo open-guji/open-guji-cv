@@ -140,22 +140,6 @@ LAYER2_EXTENT_HINT = 0.35
 #: vol02 约 200 列），就在 Step1 给的位置 ±INNER_SEARCH 行里找覆盖最高的一行（≥ INNER_COV），
 #: 连同它上沿 ≥ INNER_EDGE 的几行一起、往下全抹。只在册配置声明下端有两层时做。
 INNER_SEARCH = 10
-#: 下端候选线（第二、第三道）起点离 Step1 内框线再远过这么多行就不认（2026-11-25）：vol03 p64c1 只有一道内框，其下是「二」的两横，
-#: 横离内框线 34 行起，两道都过了跨度判据、边距带只有 8px（全是界行）也混过了边距判据。殿本真内框在 Step1 线里面 ≤25 行（CV0 评审实测）。
-FAR_FROM_INNER = 30
-#: 第三道的边距证据门槛（比 MARGIN_T=0.7 严）：殿本边距带只有两边各 5~8px、一半行是界行的墨（中位 0.5），字的横画两端
-#: 蹭进带里常有 0.8~0.88（vol04 p207c6、vol05 p23c7/p149c6 末字下横实测）；真框线满带是墨，1.0。
-THIRD_MARGIN_T = 0.95
-#: 第三道候选与上一道线之间空白不到这么多行的，只认边距证据；空白够的（vol02 夹具里隔着 8~15 行白的第三道虚线）仍按老判据认。
-#: 殿本 vol03 内框线之下紧跟的是末字（隔 2~6 行，字横画粘着字身一路连下去），vol02 的第三道虚线与前一道隔 8~15 行。
-THIRD_GAP_MIN = 8
-#: 第三道候选起点离 Step1 内框线再远过这么多行的也只认边距证据（2026-11-25，CV0 复核 vol04 p207c6、vol05 p149c6）：
-#: 末字下横与内框线隔 13 行白，只靠 THIRD_GAP_MIN 放不过；它离 Step1 线 13~15 行，vol02 的第三道虚线离 Step1 线 2~7 行（仅 145:6 为 12，宁可留残线）。
-THIRD_NEAR_INNER = 10
-#: 下端**第三道**线（剥完内外两道之后第二次找）只认边距证据（2026-11-25，ZM 报殿本列末「二/三」被判成「一」）：
-#: 末字的下横（「二」「三」满宽粗横、前面隔白）跨度够 0.85，旧判据把它当第三道线剥掉（vol21 p130c2 剥 82 行、vol03 p64c1
-#: 剥 129 行，正常 43）。真框线横贯整列、在文字带外的边距里也有墨，字止于文字带；位置分不开（Step1 线常落在外框内沿，
-#: 深剥 59–85 行有对有错），所以第三道不看跨度／Step1 位置，只看边距。第二道（内框）判据不变。
 INNER_COV = 0.35
 INNER_EDGE = 0.15
 
@@ -266,7 +250,7 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
 
     def second_layer(p: np.ndarray, ink2: np.ndarray, cut: int, gap: float | None,
                      m: np.ndarray | None = None, hint: float | None = None,
-                     glued: bool = False, margin_only: bool = False) -> int | None:
+                     glued: bool = False) -> int | None:
         """`cut` 之后找第二道框线（见 LAYER2_* 注）；找到返回它的下沿，否则 None。
 
         `hint`：Step1 内框线离这一端的行数（位置证据，见 LAYER2_EXTENT_HINT 注）。
@@ -291,11 +275,6 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             if float(p[j:k].max()) >= inset_min_peak:
                 break
             j = k                                # 噪点段（vol02 p123c9：两道框之间 3 行麻点）：跳过接着找
-        if glued and hint is not None and j > hint + INNER_SEARCH and not (
-                p[max(0, int(hint) - INNER_SEARCH):int(hint) + INNER_SEARCH + 1] > ink_eps).any():
-            return None                          # Step1 说内框在这儿、这儿却是白纸（内框磨没了），再往里的墨是字（vol05 p23c7）
-        if glued and hint is not None and j > hint + FAR_FROM_INNER:
-            return None                          # 候选起点远在 Step1 内框线之外 FAR_FROM_INNER 行以上：是字（见该常量注）
         if glued:
             k = line_end(p, j)
         else:                                    # 老口径：线之后必须归零，下沿就是归零处
@@ -320,11 +299,6 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             return None                          # 缓起：字的底边，不是线
         cols = np.where(ink2[j:k].any(axis=0))[0]
         extent = (cols[-1] - cols[0] + 1) / bw if len(cols) else 0.0
-        if margin_only and (j - cut < THIRD_GAP_MIN or hint is None or j > hint + THIRD_NEAR_INNER):   # 第三道只认边距证据（见 THIRD_MARGIN_T 注）
-            if m is not None and float(m[j:k].max()) >= THIRD_MARGIN_T and \
-                    float(m[j:k].max()) - float(np.median(m)) >= LAYER2_MARGIN_RISE:
-                return k
-            return None
         if extent >= LAYER2_EXTENT:
             return k
         if hint is not None and j - INNER_SEARCH <= hint <= k + INNER_SEARCH \
@@ -345,8 +319,8 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             # 至多再剥两道：vol02 有的列尾除了内外两道框，最外还压着一截页边/上一道框的残墨
             # （第一刀削掉的是那截，外框粗线与内框虚线都还在，p17c4 实测）
             got = 0
-            for it in range(2):
-                k = second_layer(p, ink2, px, gap, m, hint, glued, margin_only=glued and it >= 1)
+            for _ in range(2):
+                k = second_layer(p, ink2, px, gap, m, hint, glued)
                 if k is None:
                     break
                 px, got = k, got + 1
@@ -426,27 +400,30 @@ def strip_column_borders(warped_gray: np.ndarray, band: tuple[int, int] | None =
     return out
 
 
-def band_strip(warped_gray: np.ndarray, ink_threshold: int = 128, **bar_kw
-               ) -> tuple[np.ndarray, tuple[int, int], np.ndarray]:
-    """2b 定字带左右边：返回 `(去噪图, band, 界行抹白后的图)`。
+def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
+                  **kwargs) -> tuple[np.ndarray, dict]:
+    """Step2 的收尾：去噪 + 清两侧界行 + 清上下版框，返回 `(清干净的图, 诊断)`。
 
-    `clean_column` 的前半（2026-11-25 五小步拆分，算法一字未改）：`column_text_band` 必须在抹白之前的图上定带，
-    `strip_column_rules` 再抹带外的界行。`bar_kw` 是写本／全唐文的书级开关（`first_valley`、`inner_bar_span`、
-    `bar_after_min_peak`）。
+    **顺序是有讲究的，这个函数存在的意义就是把它固化下来**：
+
+    1. `column_text_band` 在**原始矫正图**上定文字带 —— 这一步必须在抹白之前
+       做，抹白之后边缘变成纯白，`column_text_band` 会判成"这侧没界行"而返回
+       整幅宽度；
+    2. `strip_column_rules` 抹掉带外的界行；
+    3. `column_border_trim` 在**抹白之后的图上、且只在文字带宽度内**算水平
+       投影 —— 两侧界行贯穿整列，不排除掉的话每一行都带着底噪，"归不归零"
+       这个判据就废了；带外那片白也要排除，否则整条曲线被稀释约 9%，
+       `ink_eps` 这类阈值全部失准。
+
+    诊断字典里带 `band` / `top`/`bottom` 的削除行数与档位，方便评测和标注页复用。
     """
+    # 写本书级（column_warp.tight_rule_band）：判带取界行后第一个谷、内侧孤立窄条要够浓才算第二道线
+    bar_kw = {k: kwargs.pop(k) for k in ("bar_after_min_peak", "first_valley") if k in kwargs}
     denoised = denoise_column(warped_gray, ink_threshold=ink_threshold)
     band = column_text_band(denoised, ink_threshold=ink_threshold, **bar_kw)
     no_rules = strip_column_rules(denoised, ink_threshold=ink_threshold, **bar_kw)
-    return denoised, band, no_rules
-
-
-def trim_ends(denoised: np.ndarray, band: tuple[int, int], no_rules: np.ndarray, ink_threshold: int = 128,
-              **kwargs) -> tuple[np.ndarray, dict]:
-    """2c 列端字：上下端抹版框，返回 `(清干净的图, {"top": …, "bottom": …})`。
-
-    `clean_column` 的后半（算法一字未改）。`denoised` 是抹界行**之前**的图——e 档的边距证据要在它上面算
-    （抹白之后带外全是白，版框横贯整列这一特征就看不见了，见 `column_border_trim` 的 `MARGIN_T` 注）。
-    """
+    # e 档的边距证据必须在**抹界行之前**的图上算——抹白之后带外全是白，
+    # 版框横贯整列这一特征就看不见了（见 column_border_trim 的 MARGIN_T 注）。
     margin_profile = None
     lo, hi = band
     if lo + (denoised.shape[1] - hi) >= MARGIN_MIN_PX:
@@ -476,20 +453,9 @@ def trim_ends(denoised: np.ndarray, band: tuple[int, int], no_rules: np.ndarray,
         out[:top_px] = 255
     if bot_px:
         out[out.shape[0] - bot_px:] = 255
-    return out, {"top": {"px": top_px, "case": top_case}, "bottom": {"px": bot_px, "case": bot_case}}
-
-
-def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
-                  **kwargs) -> tuple[np.ndarray, dict]:
-    """去噪 + 清两侧界行 + 清上下版框（= `band_strip` ＋ `trim_ends`），返回 `(清干净的图, 诊断)`。
-
-    五小步拆分（2026-11-25）后刻本链的 Step 分开调 `band_strip`（2b）与 `trim_ends`（2c）；这个合起来的入口
-    留给评测、脚本和测试。**顺序是有讲究的**：定带在抹白之前，削端在抹白之后只看文字带宽度内。
-    """
-    bar_kw = {k: kwargs.pop(k) for k in ("bar_after_min_peak", "first_valley", "inner_bar_span") if k in kwargs}
-    denoised, band, no_rules = band_strip(warped_gray, ink_threshold, **bar_kw)
-    out, diag = trim_ends(denoised, band, no_rules, ink_threshold, **kwargs)
-    return out, {"band": band, **diag}
+    return out, {"band": band,
+                  "top": {"px": top_px, "case": top_case},
+                  "bottom": {"px": bot_px, "case": bot_case}}
 
 
 #: `refine_top_by_frame`（2026-09-20）：列窗上界之上再看这么多行找版框。

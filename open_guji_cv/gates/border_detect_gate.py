@@ -86,12 +86,6 @@ class BorderDetectGateParams(BaseModel):
     4–6 条竖线，列数就对不上（vol04 第 129 叶横页）。"""
     grid_width_tol: float = 0.15
     grid_line_cover: float = 0.5
-    no_frame_skip: bool = True
-    """页上既没有字也没有栏格的页（空白封里、纯色扫描底板）按封面跳过：页型 `cover`、policy `skip`，
-    manifest 记 flag `page_type_no_frame`（2026-11-23，CV1，cv 版面已知问题 #6）。判据是原图亮度标准差
-    低于 `NO_FRAME_FLAT_STD`（全唐文 060 p93 纯暗页，网格模式在上面凑出 9 列放行；脈經 01 p4、02 p78 空白封里页，
-    列数拦住了但页型仍记 body/standard）。点名页型（`body_pages`／`table_pages`／`cover_pages`）优先。
-    2026-11-25 起缺省开（用户定），进参数 dump；不要就在册配置写 false。"""
 
     @model_serializer(mode="wrap")
     def _drop_off_pagetype(self, handler):
@@ -141,23 +135,10 @@ def _full_grid(b: Borders, raw, width_tol: float, line_cover: float) -> bool:
     return True
 
 
-NO_FRAME_FLAT_STD = 25.0   # 原图亮度标准差低于它＝页上没有字也没有框：全唐文 060 p93 纯暗页 0.3、脈經空白封里 9–22；
-                           # 79 页金标里最低的正文页是 33（脈經 06 p50），差一档
-
-
-def _no_frame(luma) -> bool:
-    """空白封里／纯色页的判据，见 `BorderDetectGateParams.no_frame_skip`。吃**原图亮度**：册配了墨层 `ink` 的书，
-    `raw_page` 给的是 Otsu 二值图，空白纸的纹理会被劈成 30% 黑点，量不出「没有字」。"""
-    import numpy as np
-    g = np.asarray(luma)
-    g = g if g.ndim == 2 else g.mean(axis=2)
-    return float(g[::8, ::8].std()) < NO_FRAME_FLAT_STD
-
-
 @register_step
 class BorderDetectGateStep(Step):
     spec = StepSpec(
-        id="border_detect_gate", title="Step1→2 交接闸", version="1.4", unit="page",   # 1.4：no_frame_skip 缺省开（空白封里、纯色底板页按封面跳过，2026-11-25 用户定）；1.3：Step1 列宽出带的页标 col_width_out_of_band（只标不拦）
+        id="border_detect_gate", title="Step1→2 交接闸", version="1.3", unit="page",   # 1.3：Step1 列宽出带的页标 col_width_out_of_band（只标不拦）
         consumes=("borders",), optional_consumes=("page_survey", "line_index"),
         produces=("border_detect_gate_manifest",),
         params=BorderDetectGateParams,
@@ -197,16 +178,6 @@ class BorderDetectGateStep(Step):
                 _full_grid(b, raw, p.grid_width_tol, p.grid_line_cover):
             grid_from = f"{page_type}/{policy}"
             page_type, policy = "body", "standard"
-        no_frame_from = None
-        if p.no_frame_skip and policy != "skip" and table_from is None and cover_from is None and \
-                not (p.body_pages and page in set(_expand_pages(p.body_pages))):
-            luma = raw
-            if getattr(ctx.book, "ink", None) is not None:      # 墨层书：raw 是二值图，另读原图亮度
-                from ..utils.image_io import imread
-                luma = imread(str(ctx._page_path(page)), 0)
-            if luma is not None and _no_frame(luma):
-                no_frame_from = f"{page_type}/{policy}"
-                page_type, policy = "cover", "skip"
         # 窄对合并（`impl/keben/column_pair_merge`）：Step1 用 expected−1 重探，在 `line_index` 的合并列上打
         # `pair_merged` 旗、并把页上列数记在 `Borders.expected_cols`。**显式认旗，不靠两个数相等去猜**。
         # 期望列数对着**本闸自己的**期望（`p.expected_cols or 书级`）减一：旗＋探出列数＝Step1 记的列数＝
@@ -234,8 +205,6 @@ class BorderDetectGateStep(Step):
             flags_forced.append(f"page_type_table：页型规则判「{table_from}」，册配置 table_pages 点名为表格页，整页暂不整理")
         if cover_from:
             flags_forced.append(f"page_type_cover：页型规则判「{cover_from}」，册配置 cover_pages 点名为书衣／封面页，整页跳过")
-        if no_frame_from:
-            flags_forced.append(f"page_type_no_frame：页型规则判「{no_frame_from}」，页上没有字也没有栏格（原图近乎纯色），按封面跳过")
         if grid_from:
             flags_forced.append(f"page_type_grid：页型规则判「{grid_from}」，但探出完整等宽的 {n_cols} 列栏格，按正文走")
         if policy == "skip":

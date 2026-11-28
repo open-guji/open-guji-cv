@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from types import SimpleNamespace as NS
 
-from tests.helpers import seed_admit_consts, split_seed_admit_consts
 from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
 from open_guji_cv.steps.seed_admit import SeedAdmitParams, _symbol_ref_blank_pass
 
@@ -12,12 +11,7 @@ B = "tbook:1"
 
 
 def _run(cells, lib, coord, **params):
-    params, consts = split_seed_admit_consts(params)
-    with seed_admit_consts(**consts):
-        return _run_p(SeedAdmitParams(db_path="x", symbol_ref_blank="○", **params), cells, lib, coord)
-
-
-def _run_p(p, cells, lib, coord):
+    p = SeedAdmitParams(db_path="x", symbol_ref_blank="○", **params)
     recs = [AdmitRec(id=f"{B}:1:{s}", slot=s, admit=c.get("admit", False), char=c.get("char"),
                      doubts=list(c.get("doubts", [])), channel=c.get("channel"),
                      provenance=c.get("provenance", ""), evidence=c.get("evidence") or {})

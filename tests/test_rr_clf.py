@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """入／人／八 字形分类器（`utils/rr_clf` + `seed_admit.rr_clf`「分歧→送审」，overview#437）。自造数据与桩模型，不读真书。"""
 from __future__ import annotations
-import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 
 import numpy as np
 import pytest
@@ -109,7 +108,7 @@ def _run(ctx, char="人"):
 
 
 def _stub(monkeypatch, pick, gated=False, p=0.9):
-    monkeypatch.setattr(_sac, "_page_patch", lambda *a, **k: _glyph("人"))
+    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: _glyph("人"))
     monkeypatch.setattr(rr, "classify", lambda g, m=None, t=0.5: {"probs": {"人": p}, "pick": pick, "gated": gated, "p": p})
 
 

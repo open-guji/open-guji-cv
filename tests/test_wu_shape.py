@@ -1,7 +1,6 @@
 """嗚鳴 书级刻形判法（`groups.wu_shape`，全唐文 11-14）：numpy 前向对得上逐点算法、门槛与弃权、seed_admit 接线。
 数据与权重全在测试里造，不读真书数据。"""
 from __future__ import annotations
-import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 
 import base64
 import json
@@ -120,7 +119,7 @@ def test_pass_skips_human_and_lifts_pending():
     try:
         mp.setattr(W, "load", lambda path: {})
         mp.setattr(W, "judge", lambda img, m: {"char": "嗚", "why": "agree", "p": 0.001})
-        mp.setattr(_sac, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
+        mp.setattr(sa, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
         assert sa._wu_shape_pass(p, [C([hum, pend, other, adm, same, refonly, cand])], amap) == 1
     finally:
         mp.undo()

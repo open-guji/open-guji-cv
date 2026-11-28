@@ -12,7 +12,7 @@ description: 刻本字形库体检——找出同字不相像的刻例（可能�
 **数据在哪（2026-10-19 写入切换后）**：字形真源在**中心库**，本机副本在数据目录
 `$GUJI_DATA_HOME/<分支>/<工作区 id>/output/glyph_store/`（缺省 `~/.guji-data`）；
 工作区里的 `output/glyph.db` 是从它重建的 SQLite 索引。字形库**不再进 git**，
-不要 `glyph-db export` 后提交，也不要往 open-guji-cv 仓里提交库或结果。见 `doc/参考/datastore.md` 第六节。
+不要 `glyph-db export` 后提交，也不要往 open-guji-cv 仓里提交库或结果。见 `doc/datastore.md` 第六节。
 
 ## 流程（照单执行）
 

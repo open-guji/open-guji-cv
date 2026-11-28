@@ -12,7 +12,7 @@ from open_guji_cv.core.step import STEPS, RunContext
 from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.products.kinds.recog import CoordRec, PageAlignRef
 from open_guji_cv.products.store import ProductStore
-from open_guji_cv.steps.seed_admit import SeedAdmitParams
+from open_guji_cv.steps.seed_admit import SeedAdmitParams, _rare_run_ids
 
 pytestmark = pytest.mark.usefixtures("no_cnn")   # CNN 通道开不开随环境变，钉成关（overview#407）
 
@@ -70,10 +70,33 @@ def test_witness_agreeing_spares_cell(tmp_path, monkeypatch):
 
 def test_rare_codepoint_needs_low_cov(tmp_path, monkeypatch):
     """罕用码位且 cov < 0.95 拦；㫖 这种本书常刻的扩展区字 cov 高，不拦。"""
-    rs = _run(_ctx(tmp_path, monkeypatch),
+    rs = _run(_ctx(tmp_path, monkeypatch, context_garble_run=0),
               [("𪜊", 0.93, "𪜊"), ("㫖", 0.98, "㫖")])
     assert not rs[0].admit and "ctx_garble_rare" in rs[0].doubts
     assert rs[1].admit and rs[1].channel == "context"
+
+
+def test_rare_run_blocks_common_chars_in_garbled_column(tmp_path, monkeypatch):
+    """整列切坏：库 top 罕用码位连成串，中间夹着的常用字（cov 不低）也拦。"""
+    cells = [("𬑹", 0.96, "𬑹"), ("小", 0.93, "𢍺"), ("是", 0.93, "𠳋"), ("世", 0.93, "𭦋"), ("讠", 0.96, "讠")]
+    rs = _run(_ctx(tmp_path, monkeypatch, context_garble_run=3), cells)
+    assert [r.admit for r in rs] == [False] * 5
+    assert "ctx_garble_run" in rs[3].doubts
+    rs = _run(_ctx(tmp_path / "off", monkeypatch, context_lib_dissent_gap=0), cells)      # 缺省关（10-21）
+    assert rs[3].admit and rs[3].channel == "context"
+    rs = _run(_ctx(tmp_path / "dissent", monkeypatch), cells)  # 库形互证（A24 10-23，缺省开）：世 不在库候选、top1 0.93 → 也拦
+    assert not rs[3].admit and "context_lib_dissent" in rs[3].doubts
+
+
+def test_rare_run_window():
+    from types import SimpleNamespace as NS
+    recs = [NS(id=str(i), char=None, candidates=[(ch, 0.9)]) for i, ch in enumerate("之𬑹而不𢍺以爲𠳋方")]
+    # 3 个罕用码位相隔 3 格：只有正中那格的 ±3 窗口凑得齐（k=3）；k=4 凑不齐；k=0 关
+    assert _rare_run_ids(recs, 3) == frozenset({"4"})
+    assert _rare_run_ids(recs, 4) == frozenset()
+    assert _rare_run_ids(recs, 0) == frozenset()
+    sparse = [NS(id=str(i), char=None, candidates=[(ch, 0.9)]) for i, ch in enumerate("㫖之而不以爲方之而㫖")]
+    assert _rare_run_ids(sparse, 3) == frozenset()
 
 
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

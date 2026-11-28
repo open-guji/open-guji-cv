@@ -77,11 +77,14 @@ def test_gates():
            2: ([("切", 0.97), ("幼", 0.96)],),         # 首位不在对里
            3: ([("幼", 0.960), ("切", 0.958)],),       # 领先对外不够
            4: ([("幼", 0.97)], "diff"),                # 库判 diff
-           5: ([("幼", 0.97)],),                       # occluded：异体形近规则先于印章（A31 10-28，恒开），照样走这张表
+           5: ([("幼", 0.97)],),                       # occluded（`occluded_variant_first` 关着时才是门）
            6: ([("幼", 0.97)],)}                       # 表外整理本字
     cells = {s: {} for s in lib}
     cells[5] = {"doubts": ["occluded"]}
     coord = {1: "㓜", 2: "㓜", 3: "㓜", 4: "㓜", 5: "㓜", 6: "幻"}
+    n, r = _run(cells, lib, coord=coord, occluded_variant_first=False)
+    assert n == 0 and all(not x.admit for x in r.values())
+    # 异体形近规则先于印章（A31 10-28，缺省开）：遮挡格照样走这张表，别的门不变
     n, r = _run(cells, lib, coord=coord)
     assert n == 1 and r[5].admit and r[5].char == "㓜" and not any(r[s].admit for s in (1, 2, 3, 4, 6))
 
@@ -139,6 +142,27 @@ def test_variants_mode_off_by_default_and_not_dumped():
     assert "follow_ref_variants" not in SeedAdmitParams(db_path="x").model_dump()
     d = SeedAdmitParams(db_path="x", follow_ref_variants=True).model_dump()
     assert d["follow_ref_variants"] is True and "follow_ref_cov" in d
+
+
+def test_variants_gap_relaxed_only_when_set_and_true_variant():
+    """`follow_ref_variants_gap`（A24 V01 深挖 11-06）：设了才放宽；只对关系层同词异体（T1／T2）、cov ≥0.93 生效。"""
+    lib = {1: ([("隱", 0.952), ("陽", 0.950)],)}                 # 领先 0.002
+    n, r = _run_v({1: {}}, lib, coord={1: "𨼆"})
+    assert n == 0                                                 # 缺省：同 follow_ref_gap 0.005
+    n, r = _run_v({1: {}}, lib, coord={1: "𨼆"}, follow_ref_variants_gap=0.002)
+    assert n == 1 and r[1].char == "𨼆"
+    # 关系层没有边的一对（𨼆—隠）不放宽
+    n, r = _run_v({1: {}}, {1: ([("隠", 0.952), ("陽", 0.950)],)}, coord={1: "𨼆"}, follow_ref_variants_gap=0.002)
+    assert n == 0
+    n, r = _run_v({1: {}}, {1: ([("隱", 0.925), ("陽", 0.923)],)}, coord={1: "𨼆"}, follow_ref_variants_gap=0.002)
+    assert n == 0                                                 # cov 不到 0.93
+
+
+def test_variants_gap_not_dumped_by_default():
+    d = SeedAdmitParams(db_path="x", follow_ref_variants=True).model_dump()
+    assert "follow_ref_variants_gap" not in d and "follow_ref_variants_cov" not in d
+    d = SeedAdmitParams(db_path="x", follow_ref_variants=True, follow_ref_variants_gap=0.002).model_dump()
+    assert d["follow_ref_variants_gap"] == 0.002
 
 
 def test_variants_not_taken_over_by_table_entry():
@@ -217,18 +241,3 @@ def test_rival_facts_fields():
     for k in ("tier", "sources", "n_bridge", "never_only", "is_variant", "never", "edge_excluded", "groups"):
         assert hasattr(f, k)
     assert isinstance(f.groups, tuple)
-
-
-def test_variants_mode_keeps_variant_rank_hook_form():
-    """史記 r71（Sheldon 11-16 圗兾凢来 照刻形写）：书级钩子 variant_rank 按刻形放的格，follow_ref 变体遍不再改回整理本形；
-    别的通道放的同一种格照旧改。"""
-    p = SeedAdmitParams(db_path="x", follow_ref_variants=True)
-    out = _page({1: {"admit": True, "char": "隠", "channel": "witness3"},
-                 2: {"admit": True, "char": "隠", "channel": "witness3"}})
-    out[0].chars[0].evidence = {"lane": {"lane": "witness3", "variant_rank": "hook", "variant_from": "隠"}}
-    out[0].chars[1].evidence = {"lane": {"lane": "witness3"}}
-    _follow_ref_pass(p, out, _mm({1: ([("隠", 0.97)],), 2: ([("隠", 0.97)],)}), {},
-                     {f"{B}:1:1": "隱", f"{B}:1:2": "隱"}, {}, _VM())
-    r = {x.slot: x for x in out[0].chars}
-    assert r[1].char == "隠" and "follow_ref" not in r[1].evidence
-    assert r[2].char == "隱" and r[2].evidence["follow_ref"]["via"] == "variants"

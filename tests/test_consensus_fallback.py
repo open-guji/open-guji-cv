@@ -21,10 +21,8 @@ def _key(slot):
 
 def test_params_dump_hidden_when_off():
     assert "consensus_as_unsure" not in ContextDecideParams(corpus_fingerprint="x").model_dump()
-    # 缺省开（CV4 11-25）；dump 仍按旧缺省去键：关时不进、开时进
-    assert "consensus_fallback" not in SeedAdmitParams(consensus_fallback=False).model_dump(mode="json", context={"hash": True})
-    assert SeedAdmitParams(consensus_fallback=False).model_dump()["consensus_fallback"] is False   # 重建用的 dump 不去键
-    assert SeedAdmitParams().model_dump()["consensus_fallback"] is True
+    assert "consensus_fallback" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(consensus_fallback=True).model_dump()["consensus_fallback"] is True
     assert ContextDecideParams(corpus_fingerprint="x", consensus_as_unsure=True).model_dump()["consensus_as_unsure"]
 
 

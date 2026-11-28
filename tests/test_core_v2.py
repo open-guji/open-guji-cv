@@ -385,7 +385,7 @@ def test_keben_body_v2_on_the_frozen_fixture_page(tmp_path, monkeypatch, ws, cnn
 
     borders = store.read(book.id, "border_detect", "p0001", "borders")
     assert len(borders.verticals) == book.expected_cols + 1
-    gate = store.read(book.id, "cut_gate", "p0001", "gate_manifest")
+    gate = store.read(book.id, "column_gate", "p0001", "gate_manifest")
     assert gate.admitted and gate.period and gate.ref_w
     cells = store.read(book.id, "row_segment", "p0001", "cells")
     assert sum(1 for c in cells.columns if c.ok) == book.expected_cols
@@ -412,8 +412,8 @@ def test_keben_body_v2_on_the_frozen_fixture_page(tmp_path, monkeypatch, ws, cnn
     # 工作（同 `test_glyph_match_step` 那条的 docstring）。原先这里写的是
     # `all(skipped)`，只在"库恰好一次都没变"时成立。
     rep = eng.run(pages=[1])
-    seg = {"border_detect", "border_detect_gate", "column_warp", "column_band", "column_end", "column_geometry",
-           "row_segment", "cell_shrink", "cut_gate"}
+    seg = {"border_detect", "border_detect_gate", "column_warp", "column_gate",
+           "row_segment", "row_segment_gate", "cell_shrink"}
     again = {o.step: o.status for o in rep.outcomes}
     assert all(again[s] == "skipped" for s in seg), \
         {s: again[s] for s in seg if again[s] != "skipped"}

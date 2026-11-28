@@ -554,11 +554,6 @@ class AlignRefParams(BaseModel):
     "align"＝本步按坐标对位吻合数挑（现行，缺省，不进参数哈希）；"admit"＝本步只出候选列（`alt_cand`）与
     备选那份坐标对位（`alt_draft`），seed_admit 两套都准入后按列定（见 `products.alt_view`）。"""
 
-    alt_text_count_slack: int = -1
-    """不分行参照页挑备选候选列的门槛补一条（2026-11-20，脉经 01）：备选那份库匹配高分格（cov≥`ALT_TEXT_COV`）的**个数**
-    不比主切法少 slack 个以上，也进候选。按占比算时，漏认的雙行小注拆对后格多了、小字库匹配分又偏低，占比反而降
-    （01 30:7 主 12/23、备选 12/29），正确的备选进不了候选。-1＝关（缺省，不进参数哈希）。"""
-
     coord_title_trust: bool = False
     """题列信坐标对位（2026-11-03，史記文淵閣本第 2 页）：本列坐标字整串合 `coord_title_formula`，且坐标对位几何上一格对一字
     （格数相等才会到这里）→ 不因「与现役对位冲突」退回整列，强冲突也不退（仍拦「空格位上库认出了字」）。
@@ -664,8 +659,6 @@ class AlignRefParams(BaseModel):
             d.pop("coord_legacy_line_guard", None)
         if isinstance(d, dict) and self.alt_select == "align":
             d.pop("alt_select", None)
-        if isinstance(d, dict) and self.alt_text_count_slack < 0:
-            d.pop("alt_text_count_slack", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -829,30 +822,6 @@ class AlignRefStep(Step):
         ref_profile_aware=True,
     )
 
-    def _text_alt_draft(self, ctx: RunContext, p, page: int, match, ocr, rare, res: PageAlignRef) -> None:
-        """不分行参照的页（`ref_kind="text"`）也让备选切法参加按列挑（row_segment `alt_nojz`／`alt_cut`，2026-11-19 脉经）：
-        候选列逐列换成备选那份重做整页 8-gram 对位，备选列的对位字放进 `alt_draft.chars`，列记 `alt_cand`，
-        交 seed_admit 两遍准入后按列定（`alt_select="admit"`）。坐标对位的页不走这里。"""
-        cells = _opt(ctx, "cells", page)
-        if cells is None or not cells.alt_columns:
-            return
-        cols = sorted({c.col for c in match.alt_columns} & {c.col for c in cells.alt_columns})
-        # 先按库匹配筛掉备选明显不像字的列（高分格占比比主切法低 ALT_TEXT_SLACK 以上；备选格网乱切的列）。
-        # 不分行参照是整页 8-gram 对位，几列一起换会互相带坏，所以每列单换一遍、只取这一列的对位字。
-        main_of = {c.col: c for c in match.columns}
-        alt_of = {c.col: c for c in match.alt_columns}
-        cols = [c for c in cols if c in main_of and _alt_text_ok(main_of[c].chars, alt_of[c].chars,
-                                                                       getattr(p, "alt_text_count_slack", -1))]
-        if not cols:
-            return
-        chars = []
-        for col in cols:
-            rare_alt = ({k: v for k, v in rare.items() if _id_col(k) != col} if rare else rare)
-            alt = self._run_legacy(ctx, p, page, match.with_alt([col]), ocr, rare_alt)["align_ref"]
-            chars += [c for c in alt.chars if c.col == col]
-        res.alt_cand = cols
-        res.alt_draft = AltDraft(chars=chars)
-
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: AlignRefParams = ctx.params_for(self)  # type: ignore[assignment]
         p = _with_book_corpus(p, ctx)
@@ -870,8 +839,6 @@ class AlignRefStep(Step):
             out["align_ref"].ref_kind = "text"
             if _coord_enabled(p, ctx.book) and match is not None:
                 out["align_ref"].coord_note = REF_TEXT_COORD_NOTE
-            if match is not None and match.alt_columns and getattr(p, "alt_select", "align") == "admit":
-                self._text_alt_draft(ctx, p, page, match, ocr, rare, out["align_ref"])
             return out
         if _coord_enabled(p, ctx.book) and match is not None and dzg_null_pinned(ctx.book.id, page):
             ar = out["align_ref"]
@@ -1638,28 +1605,6 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
         return
     from ..products.alt_view import merge_alt
     merge_alt(res, draft, chosen)
-
-
-ALT_TEXT_COV = 0.97      # 不分行参照页挑备选候选列：库匹配高分格的 cov 门槛
-ALT_TEXT_SLACK = 0.05    # 备选那份高分格占比比主切法低这么多以内才进候选
-
-
-def _alt_text_ok(main_chars, alt_chars, count_slack: int = -1) -> bool:
-    """备选那份这一列的字块像不像字（不分行参照页 `_text_alt_draft` 的候选门槛）：库匹配高分格占比不比主切法低出
-    `ALT_TEXT_SLACK`。只筛掉明显不像的；真换不换交 seed_admit 两遍准入定（大字被劈成小注的列，半字常常也是字，
-    如「肺」劈成「月」「巿」，库匹配分不出，要看参照文字）。"""
-    def hi(chars):
-        out = 0
-        for ch in chars:
-            vs = [v.cov or 0.0 for v in (ch.cand_variants or [])] + [ch.cov or 0.0]
-            out += max(vs) >= ALT_TEXT_COV
-        return out
-    if not main_chars or not alt_chars:
-        return False
-    ha, hm = hi(alt_chars), hi(main_chars)
-    if count_slack >= 0 and ha >= hm - count_slack:
-        return True
-    return ha / len(alt_chars) >= hm / len(main_chars) - ALT_TEXT_SLACK
 
 
 def _id_col(rid: str) -> int | None:

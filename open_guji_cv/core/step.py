@@ -37,40 +37,7 @@ def register_kind(kind: ProductKindSpec) -> ProductKindSpec:
     return kind
 
 
-#: 读「本页每列格数」的步（2026-11-27，朱楓林集序页六行十四字、正文九行二十字）：册配置写了 `chars_per_line_pages`
-#: 时，这几步跑点名页期间 `ctx.book.chars_per_line` 换成表里的数（`_cpl_page_view`）。换在注册处、不改各步代码：
-#: 步模块的代码指纹不动，没写表的册产物与指纹逐位不变；写了表的册由 `engine._self_payload` 加键 `cpl_pages` 过期。
-CPL_PAGES_STEPS = frozenset({"border_detect", "column_geometry", "column_gate", "row_segment",
-                             "row_segment_gate", "cut_gate"})
-
-
-def _cpl_page_view(run_page: Callable) -> Callable:
-    """包一层 `run_page`：点名页期间 `ctx.book` 换成 `chars_per_line` 改为本页数的浅拷贝，跑完换回。
-    各步自己的 `chars_per_line`／`n_body_slots`／`expected_slots` 参数显式写了的仍优先（与册级 `chars_per_line` 同口径）。"""
-    import copy
-    import functools
-
-    @functools.wraps(run_page)
-    def wrapped(self, ctx, page, *a, **kw):
-        book = getattr(ctx, "book", None)
-        table = getattr(book, "chars_per_line_pages", None) or {}
-        n = table.get(int(page)) if table else None
-        if not n or n == book.chars_per_line:
-            return run_page(self, ctx, page, *a, **kw)
-        view = copy.copy(book)
-        view.chars_per_line = int(n)
-        ctx.book = view
-        try:
-            return run_page(self, ctx, page, *a, **kw)
-        finally:
-            ctx.book = book
-    wrapped._cpl_page_view = True  # type: ignore[attr-defined]
-    return wrapped
-
-
 def register_step(cls: type["Step"]) -> type["Step"]:
-    if cls.spec.id in CPL_PAGES_STEPS and not getattr(cls.run_page, "_cpl_page_view", False):
-        cls.run_page = _cpl_page_view(cls.run_page)  # type: ignore[method-assign]
     inst = cls()
     sid = inst.spec.id
     if sid in STEPS and type(STEPS[sid]) is not cls:
@@ -156,8 +123,7 @@ def _with_book_params(p: BaseModel, step: "Step", ctx: "RunContext") -> BaseMode
     书 yaml 里显式配的字段是用户的明确决定，应该压过那几个函数算的「按本书
     convenience 默认值」，不能反过来被它们先占了「仍是默认值」这个判据的位置。
     """
-    from .pipeline import rehome_params
-    book_kv = rehome_params(getattr(ctx.book, "params", None) or {}).get(step.spec.id)
+    book_kv = (getattr(ctx.book, "params", None) or {}).get(step.spec.id)
     if not book_kv:
         return p
     # 调用方（CLI `--params`／`--override`／管线 yaml／Engine 已叠好的册配置）显式传过的字段不碰——按「写没写」判，不按「等不等于默认值」判：
@@ -236,12 +202,6 @@ def _with_book_real_proto(p: BaseModel, ctx: "RunContext") -> BaseModel:
     if fp == p.model_fingerprint:
         return p
     return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
-
-
-def _with_pua_table_pin(p: BaseModel, ctx: "RunContext") -> BaseModel:
-    """册 yaml `pua_table_pin: N` → 码表内容指纹进参数（见 `core/pua_table_pin.py`）。"""
-    from .pua_table_pin import with_pua_table_pin
-    return with_pua_table_pin(p, ctx.book)
 
 
 def _with_corpus_pin(p: BaseModel, ctx: "RunContext") -> BaseModel:
@@ -466,7 +426,6 @@ class RunContext:
         p = _with_book_step6_ai(p, self)
         p = _with_book_ledger(p, self)  # 用字账按书选（缺省键是殿本的账）
         p = _with_glyph_pin(p, self)    # 册钉了字形库：人裁、近似字指纹换成钉号
-        p = _with_pua_table_pin(p, self)  # 册钉了 PUA 码表共享层版本：码表内容指纹进参数
         p = _with_corpus_pin(p, self)   # 必须最后：册钉了语料库版本，内容指纹整体换成版本号
         if memo is not None:
             memo[step.spec.id] = p
@@ -507,18 +466,6 @@ class RunContext:
         纯防御、行为不变；实测同样跑一遍 `border_detect` 全书，RSS 从
         72MB→1410MB（改前）变成 72MB→146MB 就不再涨（改后）。
         """
-        ink = getattr(self.book, "ink", None)
-        if ink is not None:
-            # 墨层与原样亮度两种图共用这个 LRU，键带上是哪种（同一 ctx 跨步复用，见 `LUMA_STEPS`）
-            key = (page, self.step_id in self.LUMA_STEPS)
-            if key in self._raw:
-                self._raw.move_to_end(key)
-                return self._raw[key]
-            img = self._ink_page(page, ink)
-            self._raw[key] = img
-            while len(self._raw) > self._RAW_MAX:
-                self._raw.popitem(last=False)
-            return img
         if page in self._raw:
             self._raw.move_to_end(page)
             return self._raw[page]
@@ -541,30 +488,6 @@ class RunContext:
         while len(self._raw) > self._RAW_MAX:
             self._raw.popitem(last=False)
         return self._raw[page]
-
-    #: 写了 `ink` 的册上，这几步读**原样亮度图**（不做墨层转换、不二值）：
-    #: 印章是朱色的，墨层 `max`／`red` 正好把它压没，认印就得看原样；反色带检测是 Step0 体检，也看原样。
-    #: 由引擎跑步时设的 `step_id` 判（`Engine._run_one_step`、并行 worker）；没设（控制台等）一律给墨层。
-    LUMA_STEPS = frozenset({"seal_detect", "invert_detect"})
-    #: 当前在跑哪一步（引擎设，见上）
-    step_id: str | None = None
-
-    def _ink_page(self, page: int, ink) -> np.ndarray:
-        """`book.ink` 写了时的 `raw_page`：彩色读入 → 墨层（＋二值）；`LUMA_STEPS` 给原样亮度。
-        与 `utils.binarized.build_binarized` 共用 `utils.ink.ink_page`，几何看的、二值副本、人审看的是同一张。"""
-        import cv2
-        from ..utils.ink import ink_page
-        path = self._page_path(page)
-        img = imread(str(path), cv2.IMREAD_COLOR) if path.exists() else None
-        if img is None:
-            raise FileNotFoundError(f"原图缺失或读不出来: {path}")
-        if self.step_id in self.LUMA_STEPS:
-            out = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        else:
-            out = ink_page(img, ink)
-        if getattr(self.book, "writing_mode", "vertical-rl") == "horizontal-tb":
-            out = np.rot90(out, -1).copy()
-        return out
 
     def _page_path(self, page: int) -> "Path":
         """这一页从哪读：登记过预清理且产物已生成的，读修好的那张；否则读原图。
@@ -636,62 +559,8 @@ class RunContext:
         diff = {k: (then.get(k), now.get(k)) for k in sorted(set(now) | set(then)) if then.get(k) != now.get(k)}
         return diff or None
 
-    def chain_fingerprint(self, step_id: str, page: int) -> str | None:
-        """`step_id` 及它在本管线里的全部上游这一页 manifest 指纹的合哈希（16 位）：跨机器共享派生图的键
-        （2026-11-25「字块随包存 R2」）。每步指纹含自身版本、参数、代码、册配置与直接上游产物 sha，最上游吃原图 sha，
-        任何一项变了它就变。只读 manifest、不重算；哪一步这一页没有 ok 记录回 None（不取不传）。"""
-        import hashlib
-        pl = self.pipeline
-        if step_id not in pl.steps:
-            return None
-        seen: list[str] = []
-        stack = [step_id]
-        while stack:
-            cur = stack.pop()
-            if cur in seen:
-                continue
-            seen.append(cur)
-            stack.extend(pl.upstream(cur))
-        parts = []
-        pk = page_key(page)
-        for sid in sorted(seen):
-            try:
-                ent = self.store.manifest(self.book.id, sid).get(pk)
-            except Exception:                  # noqa: BLE001
-                return None
-            if ent is None or ent.status != "ok" or not ent.fingerprint:
-                return None
-            parts.append(f"{sid}:{ent.fingerprint}")
-        return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
-
-    def _page_fetch(self, kind_id: str, key: str, stamp: str | None) -> None:
-        """缓存不在时整页去别处取一次（`core.derived.PAGE_FETCHER`）。同一进程同一页只试一次。"""
-        import re as _re
-        from . import derived
-        m = _re.match(r"^p(\d{4})", key)
-        if not m or kind_id not in derived.PAGE_KINDS or not derived.page_fetch_enabled():
-            return
-        page = int(m.group(1))
-        prod = self.producer(kind_id).spec.id
-        if getattr(self, "step_id", None) == prod:
-            return                         # 产出它的那一步自己在跑：manifest 还是旧的，取回的会是上一代
-        tried = self.__dict__.setdefault("_page_fetch_tried", set())
-        if (kind_id, page) in tried:
-            return
-        tried.add((kind_id, page))
-        if self.cache.get(self.book.id, kind_id, key, stamp=stamp) is not None:
-            return
-        fp = self.chain_fingerprint(prod, page)
-        if not fp:
-            return
-        try:
-            derived.PAGE_FETCHER(self.book.id, kind_id, page, fp, self.cache, stamp)
-        except Exception as e:                 # noqa: BLE001 —— 取不到就现算
-            self.log(f"  （{kind_id} p{page:04d} 没取回：{type(e).__name__}: {str(e)[:120]}，现算）")
-
     def materialize(self, kind_id: str, key: str) -> Path:
         step = self.producer(kind_id)
-        self._page_fetch(kind_id, key, self.cache_stamp(kind_id, key))
 
         def build() -> np.ndarray:
             drift = self.render_book_drift(step, key)

@@ -31,3 +31,10 @@ def test_store_raw_keeps_ink_size_and_ignores_cache(tmp_path: Path, monkeypatch)
     assert ink(x) == ink(_raw())
     assert SA._store_ex_raw(str(db), "vol01:9:9:9") is None
 
+
+def test_default_on_and_off_survives_dump():
+    """缺省开（用户 11-05 定）；显式关要留在 dump 里，读回来还是关。"""
+    assert SA.SeedAdmitParams().iron_ex_from_store is True
+    d = SA.SeedAdmitParams(iron_ex_from_store=False).model_dump()
+    assert d["iron_ex_from_store"] is False
+    assert SA.SeedAdmitParams(**d).iron_ex_from_store is False

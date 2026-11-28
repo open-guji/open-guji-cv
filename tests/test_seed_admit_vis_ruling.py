@@ -68,6 +68,11 @@ def test_src_text_ruling_lifts_and_subclass_isolated(tmp_path):
     assert _run(CELLS, {1: "甲", 2: "", 3: "乙"}, st)[0] == 0
 
 
+def test_dump_default_clean():
+    assert "vis_rulings" not in SeedAdmitParams(db_path="x").model_dump()
+    assert SeedAdmitParams(db_path="x", vis_rulings=False).model_dump()["vis_rulings"] is False
+
+
 def test_code_conflict_demotes_admitted_not_human(tmp_path):
     st = _store(tmp_path, "甲", "乙", char="垂", ref="", admit_ok=False, subclass="PUA")
     st.put("O", "src-1", "甲", "乙", char="垂", conf="high", why="码表", model="m", cell=f"{B}:1:2")

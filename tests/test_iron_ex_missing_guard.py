@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """铁证放行遇对照刻例原图缺失 → 转待审（`seed_admit.iron_ex_missing_guard`，overview#554）：只收紧。自造数据。"""
 from __future__ import annotations
-import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 
 import open_guji_cv.steps  # noqa: F401
 import open_guji_cv.steps.seed_admit as sa
@@ -41,11 +40,29 @@ def _run(tmp_path, monkeypatch, params, n_missing):
     return {r.slot: r for cc in page.columns for r in cc.chars}
 
 
+def test_default_on():
+    assert SeedAdmitParams().iron_ex_missing_guard is True
+
+
 def test_missing_exemplar_demotes(tmp_path, monkeypatch):
     got = _run(tmp_path, monkeypatch, SeedAdmitParams(), n_missing=2)
     r = got[1]
     assert not r.admit and "iron_ex_missing" in r.doubts and r.channel != "iron"
     assert r.evidence["iron_ex_missing"] == 2
+
+
+def test_nothing_missing_same_as_guard_off(tmp_path, monkeypatch):
+    on = _run(tmp_path, monkeypatch, SeedAdmitParams(), n_missing=0)
+    off = _run(tmp_path / "b", monkeypatch, SeedAdmitParams(iron_ex_missing_guard=False), n_missing=0)
+    assert on[1].admit and on[1].channel == "iron" and on[1].char == "山"
+    assert (on[1].admit, on[1].channel, on[1].char, on[1].doubts) == \
+           (off[1].admit, off[1].channel, off[1].char, off[1].doubts)
+    assert "iron_ex_missing" not in on[1].evidence
+
+
+def test_guard_off_keeps_old_behaviour(tmp_path, monkeypatch):
+    got = _run(tmp_path, monkeypatch, SeedAdmitParams(iron_ex_missing_guard=False), n_missing=3)
+    assert got[1].admit and got[1].channel == "iron"
 
 
 def test_real_iron_decide_collects_only_cache_misses(tmp_path, monkeypatch):
@@ -67,7 +84,7 @@ def test_real_iron_decide_collects_only_cache_misses(tmp_path, monkeypatch):
         def match(self, *a, **k):
             return _Match()
 
-    monkeypatch.setattr(_sac, "_page_patch", lambda *a, **k: np.zeros((20, 20), np.uint8))
+    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: np.zeros((20, 20), np.uint8))
     monkeypatch.setattr(nm, "normalize_patch", lambda img, **k: img)
     seen = {}
 

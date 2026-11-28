@@ -1,7 +1,6 @@
 """书级部件刻形判法（`groups.part_shape`，全唐文 11-15）：截部件、多对、门槛与弃权、seed_admit 接线。
 数据与权重全在测试里造，不读真书数据。"""
 from __future__ import annotations
-import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 
 import base64
 import json
@@ -115,7 +114,7 @@ def test_pass_lifts_pending_fixes_admitted_and_skips_others():
     try:
         mp.setattr(P, "load", lambda path: model)
         mp.setattr(P, "judge", judge)
-        mp.setattr(_sac, "_page_patch", lambda ctx, page, col, slot, sub: np.zeros((5, 5) if slot == 8 else (4, 4), np.uint8))
+        mp.setattr(sa, "_page_patch", lambda ctx, page, col, slot, sub: np.zeros((5, 5) if slot == 8 else (4, 4), np.uint8))
         abst.slot = 8
         assert sa._part_shape_pass(p, [C([hum, pend, other, adm, same, guard, p2, abst])], {}) == 2
     finally:

@@ -529,13 +529,8 @@ def _dedup_by_position(results: list[LineMatch], min_dist: int) -> list[LineMatc
 
 def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: float = 90,
                          edge_margin: int = 200, expected_count: int | None = None,
-                         alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST,
-                         no_snap: tuple = ()) -> list[LineMatch]:
+                         alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST) -> list[LineMatch]:
     """整页竖直线（左右边框 + 内部界行）一次性找齐，按 x 从小到大排序。
-
-    `no_snap`：含 "left"／"right"（页面左／右边缘）的，该侧最外线落在粗条上也不往页心找内框
-    （`_snap_to_inner_rule`）。给四周單邊的书用：版框本身就是一条粗条，朝里 12–78px 内的细线
-    只会是穿字的假线（朱楓林集 01 册 p87）。缺省空＝逐位不变。
 
     先用整页列投影 + 半高宽全扫找候选峰位置（NMS 去重，`min_dist` 建议设成比
     真实线宽大一个数量级、比列距小——默认 60px 是经验值，太小会把同一条线
@@ -549,7 +544,7 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
     里 `expected_cols` 的用法一致）——按匹配度只留分数最高的 N 条，比猜一个
     通用阈值更稳。不传的话把所有候选原样返回，由调用方按分数自行判断。
     """
-    results, _ = _vline_pool(mask, min_dist, nms_percentile, edge_margin, alpha, hyst, no_snap)
+    results, _ = _vline_pool(mask, min_dist, nms_percentile, edge_margin, alpha, hyst)
     if not results:
         return []
 
@@ -601,7 +596,7 @@ def _repair_fat_pick(mask: np.ndarray, picks: list["LineMatch"], alpha: float, h
 
 
 def _vline_pool(mask: np.ndarray, min_dist: int, nms_percentile: float, edge_margin: int,
-                alpha: float, hyst: int, no_snap: tuple = ()
+                alpha: float, hyst: int
                 ) -> tuple[list[LineMatch], tuple[int, dict[float, np.ndarray]] | None]:
     """`find_vertical_lines` 截断之前的候选池：粗筛 → 逐窗口联合精搜 → 去重。
     返回 (按分数降序的候选, 粗扫曲线库)。`find_vertical_lines` 与
@@ -624,9 +619,7 @@ def _vline_pool(mask: np.ndarray, min_dist: int, nms_percentile: float, edge_mar
         sides = "right" if k == 0 else ("left" if k == len(windows) - 1 else "both")
         r = joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst,
                                         coarse_bank=bank, flank_sides=sides)
-        # 曲线下标朝右＝页面左端那条（k==0），朝左＝页面右端那条
-        skip = (k == 0 and "left" in no_snap) or (k == len(windows) - 1 and "right" in no_snap)
-        if sides != "both" and not skip:
+        if sides != "both":
             r = _snap_to_inner_rule(mask, r, sides, alpha, hyst)
         results.append(r)
 

@@ -24,5 +24,4 @@ from .. import steps as _steps  # noqa: F401 —— 兜底：确保 Step 先注�
 from . import border_detect_gate  # noqa: F401
 from . import column_gate  # noqa: F401
 from . import row_segment_gate  # noqa: F401
-from . import cut_gate  # noqa: F401  —— 切字出口闸（挂 cell_shrink）
 from . import line_detect_gate  # noqa: F401  —— 现代印刷链闸1

@@ -94,25 +94,3 @@ def test_auto_source_not_human():
     t = EventTarget(step="seed_admit", unit="cell", key="005:1:1:2")
     assert not counts_as_human(make_event("b", 1, "confirm", t, {"v": "confirm", "shape": "宫", "source": "auto"}, actor="model"))
     assert counts_as_human(make_event("b", 2, "confirm", t, {"v": "confirm", "char": "宫"}))
-
-
-def test_event_level_batches():
-    """2026-11-26 GM4 批量规则：先认 payload.level；actor=model 无 level 的按批次名 `~` 前缀查 9 个人授意批次，
-    其余算 ai。ai 仍是钉（counts_as_pin，产物不变），但不算人裁（counts_as_human）。"""
-    from open_guji_cv.feedback.events import (Event, EventTarget, counts_as_human, counts_as_pin,
-                                              event_level)
-    t = EventTarget(step="seed_admit", unit="cell", key="02:1:1:2")
-
-    def ev(batch, actor="model", **p):
-        return Event(id=f"evt_{batch}_1", batch=batch, seq=1, ts="2026-11-01T00:00:00Z", kind="confirm",
-                     target=t, payload={"v": "confirm", "shape": "公", **p}, actor=actor)
-    assert event_level(ev("r52-ctx2-2rounds")) == "ai"
-    assert event_level(ev("r77-重绑")) == event_level(ev("SJ-歲暫歸一-1125~u")) == "human"
-    assert event_level(ev("r52-ctx2-2rounds", level="human")) == "human"
-    assert event_level(ev("r77-重绑", level="ai")) == "ai"
-    assert event_level(ev("L-r2-sheet", actor="user")) == "human"
-    assert event_level(ev("x", source="vision")) is None
-    a = ev("r59-ctx2")
-    assert counts_as_pin(a) and not counts_as_human(a)
-    assert counts_as_pin(ev("x", actor="user")) and counts_as_human(ev("x", actor="user"))
-    assert not counts_as_pin(ev("x", source="auto"))

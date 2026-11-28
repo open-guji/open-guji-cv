@@ -5,7 +5,6 @@
 模型用 `build` 在造出来的特征上学（`features` 也顶替），不读真书数据。
 """
 from __future__ import annotations
-import open_guji_cv.steps.seed_admit_common as _sac  # CV4 PR3c：字块读取等搬到 seed_admit_common
 
 import json
 
@@ -70,7 +69,7 @@ def _run(tmp_path, monkeypatch, *, cands, judged, params=None, keep_load=False):
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
         PAGE, BOOK, col=COL, recs=[dict(slot=SLOT, verdict="unsure", cov=cands[0][1], wmax=4.0, char=None,
                                         candidates=cands)]))
-    monkeypatch.setattr(_sac, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
+    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
     # 接线测试用不进字组流程的字对（陪／培走 match_solo 放行），免得字组流程先把格留审
     if not keep_load:
         monkeypatch.setattr(sv, "load", lambda path: {"groups": {"jys": {"classes": {"陪": "陪", "培": "培"}}}})
@@ -134,7 +133,7 @@ def test_pass_skips_human():
     try:
         mp.setattr(sv, "load", lambda path: {"groups": {"jys": {"classes": {"己": "己", "已": "已巳"}}}})
         mp.setattr(sv, "judge", lambda img, gm: {"cls": "已巳", "why": "llr"})
-        mp.setattr(_sac, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
+        mp.setattr(sa, "_page_patch", lambda *a, **k: np.zeros((4, 4), np.uint8))
         assert sa._stroke_veto_pass(p, [C([hum])]) == 0 and hum.admit
     finally:
         mp.undo()

@@ -135,14 +135,16 @@ def test_coord_admits_when_align_missing(tmp_path, monkeypatch):
     assert r.evidence["rare_ref"] == {"rare": REF, "ref": REF, "lib": LIB, "cov": 0.95, "via": "coord"}
 
 
-def test_coord_params_dump(tmp_path, monkeypatch):
-    """`rare_ref_coord` 2026-11-23 起恒开、不再是参数；参数指纹里照原样带着（rare_ref 开时），各册指纹不变。"""
+def test_coord_switch_off_and_params(tmp_path, monkeypatch):
+    r = _run(tmp_path, monkeypatch, rare=[REF, LIB], align=None, coord=REF,
+             params={**ON, "rare_ref_coord": False})
+    assert not r.admit and "rare_ref" not in r.evidence
     db = str(tmp_path / "g.db")
     sp, pt = SeedAdmitStep.spec.soft_params, SeedAdmitStep.spec.path_params
     h = lambda p: params_hash(p, sp, pt)  # noqa: E731
     on = SeedAdmitParams(db_path=db, rare_ref=True)
     assert on.model_dump()["rare_ref_coord"] is True
-    assert h(on) != h(SeedAdmitParams(db_path=db))
+    assert h(on) != h(SeedAdmitParams(db_path=db, rare_ref=True, rare_ref_coord=False))
     # rare_ref 关着时这个字段不进 dump
     assert "rare_ref_coord" not in SeedAdmitParams(db_path=db).model_dump()
 
@@ -321,9 +323,9 @@ def test_rare_ref_nf_ok_variant_competitor():
     assert sa._rare_ref_nf_ok("凶", [("西", 0.90)], 0, 2, 0.96, are_variants) is True
 
 
-def test_rare_ref_nf_in_dump_with_rare_ref():
-    on = SeedAdmitParams(rare_ref=True, lane_witness3=False, lane_coord=False, lane_seal=False)
-    off = SeedAdmitParams(rare_ref=False, lane_witness3=False, lane_coord=False, lane_seal=False)
+def test_rare_ref_nf_not_in_dump_when_off():
+    on = SeedAdmitParams(rare_ref=True, rare_ref_coord=True, lane_witness3=False, lane_coord=False, lane_seal=False)
+    off = SeedAdmitParams(rare_ref=True, rare_ref_nf=False, lane_witness3=False, lane_coord=False, lane_seal=False)
     assert "rare_ref_nf" in on.model_dump() and "rare_ref_nf" not in off.model_dump()
 
 

@@ -78,3 +78,21 @@ def test_alias_map_conflict(tmp_path):
     with pytest.raises(ValueError):
         alias_map(tmp_path)
     assert alias_map(tmp_path / "nope") == {}
+
+
+def test_names_for(tmp_path):
+    from open_guji_cv.core.volume_alias import names_for
+    (tmp_path / "01.yaml").write_text('id: "01"\naliases: ["vol01"]\n', encoding="utf-8")
+    (tmp_path / "02.yaml").write_text('id: "02"\n', encoding="utf-8")
+    assert names_for("01", tmp_path) == {"01", "vol01"}
+    assert names_for("02", tmp_path) == {"02"}
+
+
+def test_pagemap_overrides_old_name_land_on_current_book():
+    """改格表还写旧册名：as_vol 让它盖到本册的行上，而不是另补一行旧名（11-28 殿本演练）。"""
+    from open_guji_cv.steps.row_segment_coltext import apply_overrides
+    rows = [{"vol": "01", "page": 3, "col": 2, "slots": [1], "notes": [], "half": [], "raised": 0}]
+    out = apply_overrides(rows, [{"vol": "vol01", "page": 3, "col": 2, "slots": [1, 2]}], as_vol="01")
+    assert out == [{"vol": "01", "page": 3, "col": 2, "slots": [1, 2], "notes": [], "half": [], "raised": 0}]
+    same = apply_overrides([dict(rows[0])], [{"vol": "01", "page": 3, "col": 2, "slots": [5]}])
+    assert same[0]["slots"] == [5]
