@@ -40,9 +40,10 @@ def test_plain_pending_lists_unadmitted_non_excluded_cells(tmp_path):
     out = tmp_path / "out"
     pl.main(base_args(make_products(tmp_path), out))
     doc = json.loads((out / "001.pending.json").read_text(encoding="utf-8"))
+    none = {"pending_reason": None, "pending_reason_detail": None, "form_src": None}      # P3a-1：字段在，值先留 None
     assert doc == {"rev": "vol01-r0", "cv_version": None, "cv_commit": "abc1234",
-                   "cells": [{"cell": "1:1:2", "review": "pending"},
-                             {"cell": "1:2:1a", "review": "pending"}]}
+                   "cells": [{"cell": "1:1:2", "review": "pending", **none},
+                             {"cell": "1:2:1a", "review": "pending", **none}]}
 
 
 def test_chapter_style_rev_is_accepted(tmp_path):
