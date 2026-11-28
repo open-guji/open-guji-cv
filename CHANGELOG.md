@@ -152,6 +152,10 @@
 
 ## [未发版]
 
+## [0.9.14] - 2026-11-28
+
+PATCH（L0）＝v0.9.13＋#2008（收尾步 char_decide 兼容读口；dev 条目见上文）。对 v0.9.13 全部 32 步 code_hash 全同；底库 b35 不变；各书不过期。
+
 ## [0.9.13] - 2026-11-28
 
 - 新表／读口（不进任何 Step 指纹，现役代码不改读，L0；CV3 W1 第一期 2026-11-28，Sheldon 定方向）：形近字组登记表 `config/near_groups/v2.json`（格式 `near_groups/2`），由 `scripts/build_near_groups_v2.py` 从六处来源确定性合成（注册字组表 185 组＋手工 20／人裁 42／字体 78／`near_groups.json` 572 对，去重后 619 组，类型 near／variant／fold，记 `src`；书级 pair_clf 与 3b 组用 `--pair-clf`／`--glyph-near` 出书级版本）；读口 `groups/near_registry.py`（按字查组、按类型过滤、转 3b 书配置、展开 `ref`，没写 `ref` 原样返回）。守卫 `tests/test_near_registry.py`。来源清单与第二期要改的读口见 `doc/3-识字/形近字组登记表.md`。
