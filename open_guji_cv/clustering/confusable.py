@@ -16,15 +16,20 @@
 （`seeding.NEAR_FORM_CHARS`，只认手工表）；③待审原因 N01（guji-manager `reasons._near_form`，参校字与候选成手工表对）。
 三者口径不同，别互相当同义词。全流程见 guji-manager doc/01-粗校/待审原因/near_form_guard/流程.md。
 
-## 两张表，别混
+## 三张来源表，一个读口（2026-11-28 起读形近字组登记表）
 
-- `NEVER_MATCH_FAMILIES` —— **手工核过的**，每一对都有实审案底（见各行注释）。
-  它同时供 `seeding.NEAR_FORM_CHARS` 用：那边一旦命中就**拦掉采信通道**，
+三张表的**真源**仍各自一份，但现役代码一律从形近字组登记表 `config/near_groups/v2.json`（`near_groups/2`，
+`scripts/build_near_groups_v2.py` 生成，见 `doc/3-识字/形近字组登记表.md`）里按字对的 `src` 派生，本模块不再直接读三张表
+（W1 第二期；派生结果与原先逐项相同，`tests/test_near_registry_readers.py` 守着）：
+
+- 手工表（`src=hand`）—— **手工核过的**，每一对都有实审案底（见 `config/near_groups/hand.json` 各条 `note`；
+  原先是本模块里的 `NEVER_MATCH_FAMILIES` 字面量，11-28 原样搬过去）。`NEVER_MATCH_FAMILIES` 现在是登记表里
+  `src` 含 hand 的对（按码位序），它同时供 `seeding.NEAR_FORM_CHARS` 用：那边一旦命中就**拦掉采信通道**，
   代价高，所以只放核过的。
-- `FONT_TABLE` —— 字体渲染自动跑出来的形近表（`build_confusable_families.py`）。
+- `FONT_TABLE`（`src=font`）—— 字体渲染自动跑出来的形近表（`build_confusable_families.py`）。
   它只喂**匹配侧**的降档护栏：命中只是把 `same` 降成 `unsure`，还有候选+
-  上下文兜底，代价低，宁可多拦。
-- `HUMAN_TABLE` —— **人裁确认的**形近对（`config/confusable_human.json`，27 对）：
+  上下文兜底，代价低，宁可多拦。登记表只收 τ≥`FONT_TAU` 的；`partners()` 换 τ 或换表时仍读原表。
+- `HUMAN_TABLE`（`src=human`）—— **人裁确认的**形近对（`config/confusable_human.json`）：
   「疑似错标裁决台」71 张里判「标的没错」的那 67 条，每条给出这个刻例反复
   撞上的那个字。它不是猜的形近，是**这本书上真会混**的形近，所以按对算的
   含金量比字体表高得多——留出实测见下。
@@ -63,30 +68,31 @@ FONT_TAU = 0.988
 _ENV = os.environ.get("GUJI_CONFUSABLE", "").strip().lower()
 HUMAN_TABLE = _CFG / "confusable_human.json"
 
-# 手工核过的形近否决家族。每一对都是实审案底，别凭感觉往里加。
-NEVER_MATCH_FAMILIES: list[tuple[str, str]] = [
-    ("諭", "論"), ("遺", "還"), ("圓", "圖"), ("大", "太"), ("廣", "贋"),
-    ("候", "侯"), ("間", "問"), ("已", "巳"), ("曾", "會"), ("選", "過"),
-    ("人", "入"), ("未", "末"), ("面", "而"), ("夬", "夫"), ("彖", "象"),
-    # 匕/七：margin 标定唯一阈上错例（vol02:37:6:12，diff 分支 OCR 认错）。
-    # 本表只防库匹配侧；OCR-only 路径（diff 档）管不到，属残余风险，
-    # 出路是 char-ocr 集给 OCR 分支单独立门。
-    ("匕", "七"),
-    # 日/曰：vol01:10:9:10 实审发现（裘曰修之「曰」，库内「日」对它
-    # cov 0.96 已进 unsure 带；OCR 也认成日）。同形程度全表最高。
-    ("日", "曰"),
-    # 揀/棟：vol01:9:4:12 实锤（match_solo 通道首个错例——揀选之「揀」
-    # 对库内「棟」cov 0.9802，偏旁 扌/木 之差全落一个残差窗，wmax 13）。
-    ("揀", "棟"),
-    # 己/已、己/巳：vol01:21:3:19 实锤（因己身→人裁误判巳，align/图块
-    # 目视核对后改判己）——形状判据自己会认错，这条护栏仍然要拦。
-    # 用户 2026-09-11 定：己已巳在这套刻本里其实是混用（进了 glyph_db.py
-    # 的 CONFUSABLE_GROUPS，上下文通道现在也豁免它），但那是**文意**层
-    # 的结论，跟这里**形状**层「像到不能瞎猜」的护栏是两件事——两层各
-    # 司其职，不因为文意判定放开了就跟着摘表（见 seeding.py 模块头
-    # SEMANTIC_MERGED_CHARS 附近的说明）。
-    ("己", "已"), ("己", "巳"),
-]
+HAND_TABLE = _CFG / "near_groups" / "hand.json"
+
+
+def hand_pairs(path: str | Path | None = None) -> list[tuple[str, str]]:
+    """手工表**真源**（`config/near_groups/hand.json`）里的对，原顺序原方向。只给生成登记表／`near_groups.json`
+    的脚本读；现役代码用 `NEVER_MATCH_FAMILIES`（从登记表派生）。"""
+    p = Path(path) if path else HAND_TABLE
+    return [(str(e["a"]), str(e["b"])) for e in json.loads(p.read_text(encoding="utf-8"))["pairs"]]
+
+
+def registry_pairs(*srcs: str, path: str | Path | None = None) -> list[tuple[str, str]]:
+    """形近字组登记表里 `src` 含 `srcs` 任一个的字对（无序对，两端按码位排好，去重后按码位序）。
+    一对字同在几个注册组里会在登记表里挂几次，这里只出一次。"""
+    from ..groups import near_registry
+    want = set(srcs)
+    out: set[tuple[str, str]] = set()
+    for g in near_registry.load(path).groups.values():
+        for k, e in g.pairs.items():
+            if len(k) == 2 and want & set(e.get("src") or ()):
+                out.add((k[0], k[1]) if k[0] <= k[1] else (k[1], k[0]))
+    return sorted(out)
+
+
+# 手工核过的形近否决家族：登记表里 `src` 含 hand 的对（真源与各对案底在 config/near_groups/hand.json）。
+NEVER_MATCH_FAMILIES: list[tuple[str, str]] = registry_pairs("hand")
 
 
 def _flat(p: Path) -> frozenset[tuple[str, str]]:
@@ -115,7 +121,10 @@ def font_pairs(tau: float = FONT_TAU, path: str | None = None) -> frozenset[tupl
 
 @lru_cache(maxsize=8)
 def partners(tau: float | None = FONT_TAU, path: str | None = None) -> dict[str, frozenset[str]]:
-    """字 → 它的形近对手集合。`tau=None` 表示不要字体表。"""
+    """字 → 它的形近对手集合。`tau=None` 表示不要字体表。
+
+    手工、人裁两张从登记表取；字体表在 τ 等于登记表的 `font_tau`、又没另给表时也从登记表取，
+    换了 τ（参数或 `GUJI_CONFUSABLE=<数>`）或给了 `path` 才读原字体表。"""
     human = True
     if _ENV == "off":
         tau, human = None, False
@@ -123,10 +132,14 @@ def partners(tau: float | None = FONT_TAU, path: str | None = None) -> dict[str,
         tau = None
     elif _ENV:
         tau = float(_ENV)
+    from ..groups import near_registry
     acc: dict[str, set[str]] = {}
-    pairs = set(NEVER_MATCH_FAMILIES) | (set(_flat(HUMAN_TABLE)) if human else set())
+    pairs = set(registry_pairs("hand")) | (set(registry_pairs("human")) if human else set())
     if tau is not None:
-        pairs |= set(font_pairs(tau, path))
+        if path is None and tau == near_registry.load().meta.get("font_tau"):
+            pairs |= set(registry_pairs("font"))
+        else:
+            pairs |= set(font_pairs(tau, path))
     for a, b in pairs:
         acc.setdefault(a, set()).add(b)
         acc.setdefault(b, set()).add(a)

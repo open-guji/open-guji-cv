@@ -98,13 +98,17 @@ def test_repo_pair_sources_drop_list_spares_hand_and_human(tmp_path):
     (cfg / "near_groups.json").write_text(json.dumps({"pairs": {"甲乙": {"src": ["human"], "core": True},
                                                                 "庚辛": {"src": ["lib:x"], "near": {"x": 0.98}}}},
                                                      ensure_ascii=False), encoding="utf-8")
-    (cfg / "near_groups_drop.tsv").write_text("# 注释\n甲乙\t人裁过的不受管\n丙丁\t假对\n", encoding="utf-8")
+    (cfg / "near_groups_drop.tsv").write_text("# 注释\n甲乙\t人裁过的不受管\n丙丁\t假对\n壬癸\t手工核过的不受管\n", encoding="utf-8")
+    (cfg / "near_groups").mkdir()
+    (cfg / "near_groups" / "hand.json").write_text(json.dumps({"pairs": [{"a": "曰", "b": "日"}, {"a": "壬", "b": "癸"}]},
+                                                              ensure_ascii=False), encoding="utf-8")
     got = B.repo_pair_sources(tmp_path)
     k = B.pair_key
     assert got[k("甲", "乙")]["src"] == {"human", "near_groups"}
     assert k("丙", "丁") not in got and k("戊", "己") not in got  # 剔除名单／低于 τ
     assert got[k("庚", "辛")]["near"] == {"x": 0.98} and got[k("庚", "辛")]["ng_src"] == ["lib:x"]
-    assert k("曰", "日") in got  # 手工表来自 confusable.NEVER_MATCH_FAMILIES
+    assert got[k("曰", "日")]["src"] == {"hand"}  # 手工表来自 <root>/config/near_groups/hand.json（第二期起不再从 confusable 读）
+    assert got[k("壬", "癸")]["src"] == {"hand"}
 
 
 # ── 读口 ──────────────────────────────────────────────────────────────
