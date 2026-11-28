@@ -138,7 +138,7 @@ def rare_corpus(ctx: RunContext) -> str:
 @register_step
 class RareCandidatesStep(Step):
     spec = StepSpec(
-        id="rare_candidates", title="Step5-b 生僻字候选", version="1.0", unit="cell",
+        id="rare_candidates", title="（旧）生僻字候选", version="1.0", unit="cell",
         consumes=("char_index", "char_patch"), produces=("rare_candidates",),
         params=RareCandidatesParams,
         needs=("model",),
