@@ -152,6 +152,7 @@
 
 ## [未发版]
 
+- PATCH（产物逐字节不变，code_equiv 登记；CV0 2026-11-28，脉经第 2 册缺文小注）：`reference_profile` 的 `kind: none` 段可写 `cols`（列级无参照，可与页段重叠）；align_ref 在这些列不出对位字、坐标对位与提示，产物写 `none_cols`；`page_token` 只在声明页加 `|nc:…`。manager 待审原因据此按格认「参照缺是设计」。
 ## [0.9.14] - 2026-11-28
 
 PATCH（L0）＝v0.9.13＋#2008（收尾步 char_decide 兼容读口；dev 条目见上文）。对 v0.9.13 全部 32 步 code_hash 全同；底库 b35 不变；各书不过期。
