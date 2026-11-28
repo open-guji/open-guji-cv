@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """粗校基准（M9 D6-5，GUJI-669）：在冻结的页与标签上量「人审率变化」和「错放数」。
 
+> 2026-11-28 起并进统一接口：`guji bench run decide --book 96mid1ogzk --arg set=rough`（A/B 用 `guji bench ab`）。
+> 本脚本留作别名，等 `scripts/zhengli/wave_report.py` 改读 bench 结果后再退。
+
     python scripts/eval_rough_bench.py <测试集仓>/rough-bench [--var B.yaml …] [--from seed_admit] \\
         [--snapshot <快照根>] [-w <工作区>] [--root <实验根>] [--jobs 2] [--out report.json]
 
