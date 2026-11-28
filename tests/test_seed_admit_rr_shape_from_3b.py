@@ -97,11 +97,14 @@ def test_error_cells_fall_back(model_file):  # noqa: F811
     assert _run(model_file, _Ctx(imgs, near, {0}), True) == base
 
 
-def test_model_mismatch_raises(model_file):  # noqa: F811
+def test_model_mismatch_warns_and_falls_back_local(model_file):  # noqa: F811
+    """3b 与 4d 的模型不是同一份：不报错（缺省全开后不整批停），警告一次、这个方法退回本地现算，结果与关开关相同。"""
     imgs = _probe_imgs()
+    base = _run(model_file, _Ctx(imgs, None, set(range(len(imgs)))), False)
     near = _near(model_file, imgs, _recs(len(imgs)), {0}, sha="rr:rr_shape=0000000000000000")
-    with pytest.raises(ValueError, match="不是同一份"):
-        _run(model_file, _Ctx(imgs, near, set(range(len(imgs)))), True)
+    ctx = _Ctx(imgs, near, set(range(len(imgs))))
+    assert _run(model_file, ctx, True) == base
+    assert any("不是同一份" in m and "退回本地现算" in m for m in ctx.logs)
 
 
 def test_flag_off_does_not_read_3b(model_file):  # noqa: F811
@@ -229,11 +232,12 @@ def test_part_shape_read_3b_same_as_local(part_model, k, admitted):  # noqa: F81
     ctx = _Ctx(imgs, near, set(range(n)) - covered)
     assert run(ctx, True) == base
     assert "part_shape 判法结果 读 3b 2" in ctx.logs[0]
-    # 换一对的指纹（模型文件同、对不同）→ 报错
+    # 换一对的指纹（模型文件同、对不同）→ 警告、退回本地现算（与关开关同结果）
     bad = PageNear(page=1, methods_sha=f"{k}:" + NM.method_fingerprint("part_shape", str(part_model)),
                    columns=[ColumnNear(col=1, chars=chars)])
-    with pytest.raises(ValueError, match="不是同一份"):
-        run(_Ctx(imgs, bad, set(range(n))), True)
+    bctx = _Ctx(imgs, bad, set(range(n)))
+    assert run(bctx, True) == base
+    assert any("不是同一份" in m for m in bctx.logs)
 
 
 # ── pair_shape（每对一个组、证据不带对，CV3 #2015）：按 (格 id, 本组模型指纹) 取；待审补放与 veto 两处都读 ──────
