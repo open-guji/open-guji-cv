@@ -2970,6 +2970,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='fab536ffa8ffa50bb39ea02edcffca32da3fbb59b162d86c422f9e0e6094ff79',
           old='cf88eafeacd8a4c224239bc9e7b0e2ec5332319e5022fff13809245cd3ea2f50',
           evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；全唐文开竖线跟踪后切字适配（CV2 11-28）：row_segment 加 frame_edge_near、layout_off_always，seg.profile.frame_only_edge_cells 加 near_frac，缺省同旧'),
+    # 第三步 3e glyph_vis（看图大模型，缺省关；CV3 11-28）：收尾 glyph_analyzer 可选读 glyph_vis，merge_cell 加 vis_rec 参数（缺省 None），
+    # FinalRec.vis 空不落盘、evidence.v 只在 3e 答出字时写——没开 3e 的书收尾产物逐字节不变
+    Equiv(module='open_guji_cv.steps.glyph_analyzer',
+          new='cc8e25d0ff6f542f8a668ffb7e39ae3ed2fe482883746c33ed345f20c456a608',
+          old='8203244471cd01071011fb7721b62a74d9f6ca23b25e9fb07e5497e8fef3bca1',
+          evidence='glyph_analyzer 在 vtest 3 页（--pages 1,2,3）上与 origin/dev 5910584e 产物逐字节相同；自造册 vtest（3 页×8 列×21 格含夹注半格，'
+                   '3a same/unsure/diff、3b 两组随机触发、3c、3d 都有，没有真书收尾产物可比），glyph_vis 没开；另 tests/test_glyph_vis.py '
+                   '冻结了 origin/dev 的 merge_cell 输出逐字节对照；scripts/code_equiv.py check，2026-11-28（CV3）'),
     Equiv(module="open_guji_cv.steps.seed_admit",
           new="4233b461ffe35a95c22dff68725bfd34314e0e95bd7dcd2db314103c9a75c069",
           old="26e0d0559cf43efe22b98974c931d3b6c1c84f36956b77b593eb97e2b3733e9f",
