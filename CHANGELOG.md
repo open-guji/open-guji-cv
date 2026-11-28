@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- PATCH（L0，各书指纹逐位不变；CV0 2026-11-28，Sheldon 定「三链合成一条默认链」）：`keben_body_v2`、`keben_free`、`modern_body` 三条链并成唯一一条 `guji_default`（`pipelines/guji_default.yaml`），原来的三条链成了它的三个**版式** `layout: grid｜free｜print`，只换 1b–2b 槽位里的步骤。册配置新字段 `layout:`（不进指纹）；不写按旧 `pipeline:`、`seg_set:`、书仓 `code.yaml` 的 `base:`、`edition: modern` 推，缺省 grid（`core/seg_set.layout_of`）。三个旧 id 永久当别名（`guji pipeline keben_body_v2 …`、任务库旧单照跑），也可写 `guji_default@free`；`guji_default` 不带版式时按册推。`default_pipeline_id` 改返回 `guji_default@<版式>`，`Pipeline` 加 `layout`／`ref`，`list_pipelines` 每个版式列一条，run 记录与耗时统计加 `layout` 字段。步骤 id、产物、参数层都不动：`tests/test_guji_default.py` 核旧 id 与新引用加载出的步骤、参数、每步指纹自身部分逐位相同。设计 https://claude.ai/artifact/99ihHT9o84MSKtB59YDWMp ；自由版式接 2c 以后（free_to_cells）是第二期，交 CV2。
+
 ## [0.9.16] - 测试中
 
 PATCH（CV4 2026-11-28，由第四步重构主线请求）＝v0.9.15＋dev 上此后 76 个提交整体切出（含 #2033 `seed_admit`→`char_decide` 改名与收尾写送审原因、4a–4d 拆模块与新步 `cell_state`／`group_decision`／`decide_gate`、CV3 `glyph_vis`／3b 方法、参校本四维、row_segment 新参数等）。新功能一律缺省关；改名靠 `decide migrate-name` 迁移、不用重跑。指纹变更与底库见 tag 说明。下列条目均属本版。

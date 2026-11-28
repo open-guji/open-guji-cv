@@ -56,12 +56,12 @@ def _chains_by_step() -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     for pid in list_pipelines():
         for sid in load_pipeline(pid).steps:
-            out.setdefault(sid, []).append(pid)
+            out.setdefault(sid, []).append(pid.split("@")[-1])     # 2026-11-28 三链合一：列版式 grid／free／print
     return out
 
 
 def _stage_steps() -> dict[str, list[str]]:
-    """各大步的步骤（三条链合起来，按第一次出现的顺序去重）。"""
+    """各大步的步骤（默认链三个版式合起来，按第一次出现的顺序去重）。"""
     out: dict[str, list[str]] = {st: [] for st, *_ in STAGES}
     for pid in list_pipelines():
         for st, sids in load_pipeline(pid).stages.items():
@@ -77,7 +77,7 @@ def render(stage: str, title: str, n: int, steps: list[str], chains: dict[str, l
          "> 由 `scripts/gen_stage_docs.py` 从代码生成，**不要手改**；改了 Step 或产物定义后重跑。"
          f"命令里写大步名 `{stage}`：`guji-cv pipeline <管线> <册> --from {stage} --to {stage}`。",
          "",
-         "| 步骤 id | 名称 | 单位 | 版本 | 用在哪条链 | 出口闸 |",
+         "| 步骤 id | 名称 | 单位 | 版本 | 用在哪些版式 | 出口闸 |",
          "|---|---|---|---|---|---|"]
     for sid in steps:
         sp = STEPS[sid].spec

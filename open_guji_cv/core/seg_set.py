@@ -1,7 +1,8 @@
 """套书（seg_set）登记：一册书的切分代码归哪一套（2026-10-30，Sheldon 定）。
 
-一套书 = `open_guji_cv/books/<套书>/` 下自管的切分代码。册 yaml 写 `seg_set:` 指定；不写按管线推：
-keben_body_v2 → siku_zongmu，keben_free → zengguang_youxue，modern_body → beixing。
+一套书 = `open_guji_cv/books/<套书>/` 下自管的切分代码。册 yaml 写 `seg_set:` 指定；不写按版式推
+（2026-11-28 三链合一成 `guji_default`，版式 `layout:` 取代管线 id）：grid → siku_zongmu，free → zengguang_youxue，
+print → beixing。
 shiji_wyg（史記文淵閣本，写本）、quantangwen（全唐文）从殿本分叉，必须在册 yaml（或工作区基础配置）里显式写。
 
 ## 套书各自的实现
@@ -20,19 +21,75 @@ from pathlib import Path
 #: （`core/book_code.py`）：工作区没有 code/ 时写这两个名字直接报错，不会悄悄走殿本的。
 SEG_SETS: tuple[str, ...] = ("siku_zongmu", "zengguang_youxue", "beixing")
 
-PIPELINE_SEG_SET: dict[str, str] = {
-    "keben_body_v2": "siku_zongmu",
-    "keben_free": "zengguang_youxue",
-    "modern_body": "beixing",
+#: 默认链 id（2026-11-28 三链合一）与它的三个版式。
+DEFAULT_CHAIN = "guji_default"
+LAYOUTS: tuple[str, ...] = ("grid", "free", "print")
+
+#: 合并前的三条链 id → 版式。永久当别名认（`core/pipeline.load_pipeline`、册配置里旧的 `pipeline:`）。
+LEGACY_PIPELINES: dict[str, str] = {
+    "keben_body_v2": "grid",
+    "keben_free": "free",
+    "modern_body": "print",
 }
 
-#: 套书 → 缺省走的管线（册 yaml 只写 `seg_set:` 时按它选管线，见 `core/pipeline.default_pipeline_id`）。
-#: 2026-11-03 管线重组方案 B 第一期：选管线以套书为准，`pipeline:` 只为兼容旧册 yaml 留着。
-SEG_SET_PIPELINE: dict[str, str] = {
-    "siku_zongmu": "keben_body_v2",
-    "zengguang_youxue": "keben_free",
-    "beixing": "modern_body",
+#: 版式 → 缺省套书（缺省实现）。
+LAYOUT_SEG_SET: dict[str, str] = {
+    "grid": "siku_zongmu",
+    "free": "zengguang_youxue",
+    "print": "beixing",
 }
+
+#: 套书 → 版式（册只写 `seg_set:` 时按它定版式，见 `layout_of`）。
+SEG_SET_LAYOUT: dict[str, str] = {v: k for k, v in LAYOUT_SEG_SET.items()}
+
+#: 兼容旧名（2026-11-28 前按管线 id 查）：旧链 id → 套书、套书 → 旧链 id。新代码用上面两张表。
+PIPELINE_SEG_SET: dict[str, str] = {pid: LAYOUT_SEG_SET[lay] for pid, lay in LEGACY_PIPELINES.items()}
+SEG_SET_PIPELINE: dict[str, str] = {v: k for k, v in PIPELINE_SEG_SET.items()}
+
+
+def split_ref(pid: str | None) -> tuple[str | None, str | None]:
+    """管线引用 → (链 id, 版式)。`guji_default@free` → (guji_default, free)；旧链 id → (guji_default, 它的版式)；
+    `guji_default` → (guji_default, None)；别的 id（测试用的自造管线）→ (id, None)。"""
+    if not pid:
+        return None, None
+    if "@" in pid:
+        base, lay = pid.split("@", 1)
+        if lay not in LAYOUTS:
+            raise ValueError(f"管线引用 {pid!r} 的版式 {lay!r} 不认得，可选 {list(LAYOUTS)}")
+        return base, lay
+    if pid in LEGACY_PIPELINES:
+        return DEFAULT_CHAIN, LEGACY_PIPELINES[pid]
+    return pid, None
+
+
+def validate_layout(name) -> str | None:
+    if name is None:
+        return None
+    name = str(name)
+    if name not in LAYOUTS:
+        raise ValueError(f"layout {name!r} 不认得，可选 {list(LAYOUTS)}（core/seg_set.py）")
+    return name
+
+
+def layout_of(book) -> str:
+    """这册书的版式（2026-11-28）：册配置 `layout:` ＞ 册里旧的 `pipeline:`（旧链 id）＞ 显式 `seg_set:` ＞
+    工作区书仓 `code.yaml` 的 `base:` ＞ `edition: modern` → print ＞ grid。"""
+    explicit = getattr(book, "layout", None)
+    if explicit:
+        return explicit
+    _, lay = split_ref(getattr(book, "pipeline", None))
+    if lay:
+        return lay
+    ss = getattr(book, "seg_set", None)
+    if ss and ss in SEG_SET_LAYOUT:
+        return SEG_SET_LAYOUT[ss]
+    bc = _book_code()
+    if bc is not None and ss in (None, bc.name):
+        return bc.layout
+    if getattr(book, "edition", None) == "modern":
+        return "print"
+    return "grid"
+
 
 #: 各套书自己的缺省参数文件：`books/<套书>/defaults.yaml` 的 `params:`（形状同册配置 `params:`）。
 #: 只读数据文件、不 import books（守卫 `tests/test_architecture.py`）。
@@ -87,24 +144,23 @@ def seg_set_of(book) -> str:
     bc = _book_code()
     if bc is not None:
         return bc.name                  # 册没写 seg_set、工作区有书级代码：归书级代码
-    pid = getattr(book, "pipeline", None)
-    if not pid:
-        f = getattr(book, "default_pipeline_id", None)
-        pid = f() if callable(f) else None
-    return PIPELINE_SEG_SET.get(pid, "siku_zongmu")
+    return LAYOUT_SEG_SET.get(layout_of(book), "siku_zongmu")
 
 
-def seg_set_for_run(book, pipeline_id: str | None) -> str:
-    """跑这一趟用哪套书的缺省参数：册 yaml 显式写的 `seg_set:` 优先；否则按**这趟跑的管线**推
-    （CLI `--pipeline` 换了管线就跟着换），推不出再按册本身（`seg_set_of`）。"""
+def seg_set_for_run(book, pipeline_id: str | None, layout: str | None = None) -> str:
+    """跑这一趟用哪套书的缺省参数：册 yaml 显式写的 `seg_set:` 优先；否则按**这趟跑的版式**推
+    （CLI 写 `keben_free`、`guji_default@print` 换了版式就跟着换），推不出再按册本身（`seg_set_of`）。
+    `layout` 不给就从 `pipeline_id` 里解（旧链 id 或 `链@版式`）。"""
     explicit = getattr(book, "seg_set", None)
     if explicit:
         return explicit
+    if layout is None:
+        _, layout = split_ref(pipeline_id)
     bc = _book_code()
-    if bc is not None and (not pipeline_id or pipeline_id == bc.pipeline):
+    if bc is not None and (layout is None or layout == bc.layout):
         return bc.name
-    if pipeline_id and pipeline_id in PIPELINE_SEG_SET:
-        return PIPELINE_SEG_SET[pipeline_id]
+    if layout in LAYOUT_SEG_SET:
+        return LAYOUT_SEG_SET[layout]
     return seg_set_of(book)
 
 

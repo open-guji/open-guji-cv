@@ -192,8 +192,9 @@ def test_parse_hints_rejects_bad_shape():
 
 def test_pipeline_selected_by_book_field():
     from open_guji_cv.core.pipeline import default_pipeline_id
-    assert default_pipeline_id(make_book("x", pipeline="keben_free")) == "keben_free"
-    assert default_pipeline_id(make_book("x")) == "keben_body_v2"
+    assert default_pipeline_id(make_book("x", pipeline="keben_free")) == "guji_default@free"
+    assert default_pipeline_id(make_book("x", layout="free")) == "guji_default@free"
+    assert default_pipeline_id(make_book("x")) == "guji_default@grid"
 
 
 def _mixed_page():

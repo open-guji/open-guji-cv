@@ -41,8 +41,8 @@ python -c "import torch, scipy, cv2"          # 缺件不报错只会悄悄降�
 
 guji db pull -w <工作区>                        # 册配置、字形库、语料从中心库拉
 guji start source pull vol04 -w <工作区>       # 原图
-guji-cv pipeline keben_body_v2 vol04 --pages 9 -w <工作区>                     # 四大步全跑
-guji-cv pipeline keben_body_v2 vol04 --pages 9 --from layout --to cut -w <工作区> # 只跑版面、切字
+guji-cv pipeline guji_default vol04 --pages 9 -w <工作区>                     # 四大步全跑
+guji-cv pipeline guji_default vol04 --pages 9 --from layout --to cut -w <工作区> # 只跑版面、切字
 guji pipeline product overlay vol04 row_segment --page 9 --out p9.png -w <工作区>
 ```
 
