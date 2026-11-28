@@ -173,3 +173,85 @@ def test_status_code_ok_still_flags_everything_else(world):
     assert "code_only" not in st["steps"]["t_sr_gate"]
 
 
+def _fake_rename(store, book_id="tsr", step="t_sr_gate", period=181.0):
+    """模拟 manager ops/rename_volume：改写上游产物页（sha 变），条目 sha256 换新，写改名标记。"""
+    import hashlib
+    import json
+    shamap = {}
+    m = store.manifest(book_id, step)
+    for key in ("p0001", "p0002"):
+        p = store.path(book_id, step, key)
+        old = hashlib.sha256(p.read_bytes()).hexdigest()
+        d = json.loads(p.read_text(encoding="utf-8"))
+        d["t_sr_per"]["period"] = period
+        p.write_text(json.dumps(d, sort_keys=True), encoding="utf-8")
+        new = hashlib.sha256(p.read_bytes()).hexdigest()
+        shamap[old] = new
+        m.put(dataclasses.replace(m.get(key), sha256=new))
+    (store.root / book_id / "_renamed.json").write_text(json.dumps({"from": "x", "to": book_id, "shamap": shamap}))
+    return shamap
+
+
+def test_status_rename_only_counts_as_fresh(world):
+    """11-27 老书册名「只改、不重跑」：下游只因改名改写了上游产物而过期，status 当新鲜，记 rename_only。"""
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    store.path("tsr", "t_sr_gate", "p0001")           # 确认产物在
+    import json
+    if "t_sr_per" not in json.loads(store.path("tsr", "t_sr_gate", "p0001").read_text(encoding="utf-8")):
+        pytest.skip("产物文件布局变了")
+    _fake_rename(store)
+    st = _eng(book, pl, store, cache).status()
+    assert st["steps"]["t_sr_down"]["counts"][FRESH] == 2
+    assert st["steps"]["t_sr_down"]["rename_only"] == 2
+    # 没有改名标记：照实报「上游产物变了」
+    (store.root / "tsr" / "_renamed.json").unlink()
+    st = _eng(book, pl, store, cache).status()
+    assert st["steps"]["t_sr_down"]["stale_reasons"] == {"上游产物变了": 2}
+
+
+def test_status_rename_only_still_flags_param_change(world):
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    _fake_rename(store)
+    st = _eng(book, pl, store, cache, params={"t_sr_down": {"gain": 2.0}}).status(code_ok=True)
+    assert st["steps"]["t_sr_down"]["counts"][STALE] == 2
+    assert "rename_only" not in st["steps"]["t_sr_down"]
+
+
+def test_seal_rename_accepts_fingerprint_param_changed_by_rename(world):
+    """改名改写了参数指纹读的文件（脉经 crop_exclusions 的格号 01:→1:）：封存后 status 认作改名，之后再变照常过期。"""
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    _fake_rename(store)
+    fp = {"t_sr_down": {"corpus_fingerprint": "after-rename"}}
+    st = _eng(book, pl, store, cache, params=fp).status()
+    assert st["steps"]["t_sr_down"]["counts"][STALE] == 2          # 没封存：参数变了
+    sealed = _eng(book, pl, store, cache, params=fp).seal_rename(pages=[1, 2])
+    assert list(sealed) == ["t_sr_down"] and list(sealed["t_sr_down"]) == ["corpus_fingerprint"]
+    st = _eng(book, pl, store, cache, params=fp).status()
+    assert st["steps"]["t_sr_down"]["counts"][FRESH] == 2
+    assert st["steps"]["t_sr_down"]["rename_only"] == 2
+    # 封存之后文件又变（新人裁）：对不上封存的新值，照常过期
+    st = _eng(book, pl, store, cache, params={"t_sr_down": {"corpus_fingerprint": "later"}}).status()
+    assert st["steps"]["t_sr_down"]["counts"][STALE] == 2
+    # 手写参数（不是 *_fingerprint）不封存
+    eng = _eng(book, pl, store, cache, params={"t_sr_down": {"gain": 3.0}})
+    assert "t_sr_down" not in eng.seal_rename(pages=[1, 2])
+    assert eng.status()["steps"]["t_sr_down"]["counts"][STALE] == 2
+
+
+def test_seal_rename_needs_marker(world):
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    with pytest.raises(FileNotFoundError):
+        _eng(book, pl, store, cache).seal_rename(pages=[1, 2])
+
+
+def test_seal_rename_keys_filter(world):
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    _fake_rename(store)
+    eng = _eng(book, pl, store, cache, params={"t_sr_down": {"corpus_fingerprint": "x"}})
+    assert eng.seal_rename(pages=[1, 2], keys={"exclusions_fingerprint"}) == {}
+    assert eng.status()["steps"]["t_sr_down"]["counts"][STALE] == 2
