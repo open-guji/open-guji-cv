@@ -14,9 +14,9 @@
 | 2 列几何、出口闸 | `column_geometry`、`cut_gate` | CV2 | `python -m open_guji_cv.eval.cut_bench gate` | cv `eval/` | 检出率、误报率（拦／拦或旗两档，按判据分报） | | char-segmentation/cut-bench（真值＝2d 列全对） | 史記、全唐文已量；殿本、脉经可跑未量 | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md) |
 | 2d 字间切分 | `row_segment` | CV2 | `python -m open_guji_cv.eval.cut_bench score`；cut-lattice `score.py` | cv `eval/`；dataset cut-lattice | 列字数全对、列全对、格 F1 | 好列改坏 | char-segmentation/cut-bench（random／hard 分报）、cut-lattice、char-segmentation/book-columns | 殿本、史記、全唐文、脉经；缺朱楓林集、汉书 | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md)（史記、全唐文）；殿本、脉经见 ai-team `A22/cut-bench/基线-2026-11-23.md` |
 | 2e 字框压缩 | `cell_shrink` | CV2 | `python -m open_guji_cv.eval.cut_frame`（shrink-ink 加 `--junk-tol 6`） | cv `eval/` | IoU@0.9 | 字身墨被切（切笔） | char-segmentation/shrink-ink（列中，v0.1）、cut-frame（列端） | 史記、全唐文各约 150 格（列中）＋各 60 列（列端）；殿本老分片 instances 等跑不起 | [2-切字/基线-2026-11-28.md](2-切字/基线-2026-11-28.md) |
-| 3a 字形库匹配 | `glyph_match` | CV3 | `guji eval run @read-3a`；`@read-qtw-lib`（设 `GUJI_GLYPH_DB`）；`guji eval guard` | manager | same 精度、库外拒识、首位命中、对家误认 | 库外字误认 same；残损误放；nearform 对家误认；`guards/read.yaml` 17 条 | glyph-match/advset-*、damaged-*、nearform-qtw；guards/read.yaml | 殿本、史記、全唐文 | ai-team `A23/识字benchmark-2026-11-23/`（未钉库／模型 sha，缺口） |
-| 3b 形近字组 | `glyph_near` | CV3 | `guji eval run @near`（`scripts/eval_near.py`；冻结 `scripts/build_near_bench.py`） | manager 评测器 `near` | 组内判对率、弃权率、触发量、覆盖率、方法一致率、ECE、每格耗时 | 组内误判（非弃权错判） | glyph-near/bench3b（三书 test＋fit 各一册，钉产物包标签与模型 sha256）；正式金标 char-groups/gold/<组> 标注暂停 | 殿本、史記、全唐文 | dataset `glyph-near/bench3b/baseline.json`；ai-team `CV/CV3/3b-bench-2026-11-28/` |
-| （旧）生僻字候选 | `rare_candidates` | CV3 | `guji eval run @read-3b`（套名待改，与新 3b 撞名） | manager | emb 前 10 | | rare-char、char-clustering/samples/007-qtw-firstseen | 殿本、史記、全唐文 | |
+| 3a 字形库匹配 | `glyph_match` | CV3 | **`read-3a-advset`、`read-3a-damaged`**（`guji bench run <id> --book <书>`，套 `@read-3a`）；要字形库的 e2e／nearform／sim 仍走老框架 `guji eval run @read-qtw-lib`（设 `GUJI_GLYPH_DB`）；`guji eval guard` | cv `eval/benches/read.py`（包 `scripts/eval_*.py`） | same 精度、库外拒识、首位命中、对家误认 | 库外字误认 same；残损误放；nearform 对家误认；`guards/read.yaml` 17 条 | glyph-match/advset-*、damaged-*、nearform-qtw；guards/read.yaml | 殿本、史記、全唐文 | ai-team `A23/识字benchmark-2026-11-23/`（未钉库／模型 sha，缺口） |
+| 3b 形近字组 | `glyph_near` | CV3 | **`read-3b-near`**（套 `@near`；`scripts/eval_near.py`；冻结 `scripts/build_near_bench.py`） | cv `eval/benches/read.py` | 组内判对率、弃权率、触发量、覆盖率、方法一致率、ECE、每格耗时 | 组内误判（非弃权错判） | glyph-near/bench3b（三书 test＋fit 各一册，钉产物包标签与模型 sha256）；正式金标 char-groups/gold/<组> 标注暂停 | 殿本、史記、全唐文 | dataset `glyph-near/bench3b/baseline.json`；ai-team `CV/CV3/3b-bench-2026-11-28/` |
+| （旧）生僻字候选 | `rare_candidates` | CV3 | **`read-rare`、`read-rare-firstseen`**（套 `@read-rare`；老框架套名 `@read-3b` 11-28 改 `@read-rare`，旧名留别名） | cv `eval/benches/read.py` | unseen 前 10（全唐文首次字头格：emb 前 10） | `guards/read.yaml` 4 条 | char-clustering/samples/004–007 的 rare.jsonl | 殿本、史記、全唐文 | |
 | 3c 按图候选 | `glyph_candidate` | CV3 | `guji eval run cands`（`scripts/eval_cands.py`） | manager（已登记） | 甲层难格召回@1／10／30／50 | | char-candidates（甲层难格、乙层待审卡） | 殿本、史記、全唐文 | dataset `char-candidates/baseline.json` |
 | 3d 其他特征 | `cell_traits` | CV3 | | | | | | | |
 | 3e 看图大模型 | `glyph_vis` | CV3 | | | 触发量、答对率 | | | | |
@@ -30,7 +30,7 @@
 
 ## 统一接口（CV0，2026-11-28 起）
 
-各 bench 收进一个登记表 `open_guji_cv/eval/bench.py`（`BenchSpec`／`BenchCtx`／`BenchResult`），实现放 `eval/benches/<名>.py`；命令走 guji-manager `guji bench list|fetch|run|ab|guard|show`，资源由 manager 按书备齐。结果目录 `bench-results/<bench>/<书>/<时间>/`（`result.json` schema 1、`items.jsonl`、`report.md`），status 只有 ok／regressed／skipped／no_gold，跑崩记 failed。已接：`cut-2d`（2d 行、CV2）、`decide`（定字收尾行、CV4）；其余各行由负责线 P1 接，接完把 bench id 写进本表「bench」列。分派与接入验收见 ai-team `domain/CV/规范/bench统一接口-2026-11-28.md`。
+各 bench 收进一个登记表 `open_guji_cv/eval/bench.py`（`BenchSpec`／`BenchCtx`／`BenchResult`），实现放 `eval/benches/<名>.py`；命令走 guji-manager `guji bench list|fetch|run|ab|guard|show`，资源由 manager 按书备齐。结果目录 `bench-results/<bench>/<书>/<时间>/`（`result.json` schema 1、`items.jsonl`、`report.md`），status 只有 ok／regressed／skipped／no_gold，跑崩记 failed。已接：`cut-2d`（2d 行、CV2）、`decide`（定字收尾行、CV4）、第三步 `read-*`（CV3，护栏按 `bench`＋`ws` 读 dataset `guards/read.yaml`）；其余各行由负责线 P1 接，接完把 bench id 写进本表「bench」列。分派与接入验收见 ai-team `domain/CV/规范/bench统一接口-2026-11-28.md`。
 
 ## 第四步脚本说明（CV4，2026-11-28）
 
