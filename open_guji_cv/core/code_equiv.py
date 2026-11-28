@@ -3144,6 +3144,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="86ebd9ff7f789e823ed96505e38fda1281cb377339c3db13398af8f708bcb2b2",
           old="50f75f21c3eef6f208ab3f822f19e56cb4a54b45f2279c48158166a5b93edafa",
           evidence="char_decide 在 03 231 页上与基线逐字节相同（A1 开关缺省关，证据见前行；rebase 到 dev 7f902e7b 后哈希重登，dev 合入的 vis3_shadow 非本改动）；史記 03 small"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="2aebf528f1547d752a5d0e7674a3b6d2a704ffe7ca329ab60c5d5bf0df1de045",
+          old="e17c625e507b0532a4d3c65a2ddc392dcbdd25932c3346acd68c0ddc04e54cf8",
+          evidence="char_decide 在 03 231 页与基线逐字节相同（A1 开关缺省关，证据见前行；合入 dev da40aed 后哈希重登，dev 合入的改动非本改动）；史記 03 small"),
 )
 
 
