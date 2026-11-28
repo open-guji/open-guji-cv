@@ -89,6 +89,8 @@ def test_geo_mapping_monotone_and_consistent_at_edges(models):
         else:
             assert 0.1 < sims["候"] < 0.9
     m = NM.HouShape(models["geo"])                                     # 另起一个对象改阈值，不动 load_method 的缓存
+    m.model = {**m.model, "lo": 0.6, "hi": 0.6011}                     # 窄中间档：截断不溢出，仍保序
+    assert m.sims_of({"v": 0.0}) == {"候": 1.0, "𠋫": 0.0} and m.sims_of({"v": 1.0}) == {"候": 0.0, "𠋫": 1.0}
     m.model = {**m.model, "lo": 0.6, "hi": 0.6}
     assert m.sims_of({"char": "候", "v": 0.6}) == {"候": 1.0, "𠋫": 0.0}
     assert m.sims_of({"char": "𠋫", "v": 0.6}) == {"候": 0.0, "𠋫": 1.0}

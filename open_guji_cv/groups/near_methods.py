@@ -407,7 +407,8 @@ class HouShape:
         elif v.get("v") is not None:
             lo, hi = float(self.model["lo"]), float(self.model["hi"])
             if hi - lo >= 1e-3:                 # v 已取 4 位：中间档够宽，取整挪不过 0.5
-                q = round(1.0 / (1.0 + math.exp(-math.log(9.0) * (lo + hi - 2.0 * float(v["v"])) / (hi - lo))), 4)
+                z = math.log(9.0) * (lo + hi - 2.0 * float(v["v"])) / (hi - lo)
+                q = round(1.0 / (1.0 + math.exp(-min(50.0, max(-50.0, z)))), 4)     # 截到 ±50：窄中间档时 exp 不溢出
             else:                               # 几乎没有中间档：按判出的字给分
                 q = {hou: 1.0, alt: 0.0}.get(v.get("char"), 0.5)
         else:
