@@ -3028,6 +3028,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="597765c80f3dc7b11ff370aafe9145700e36a658f6c767d44821c6956de84e23",
           old="a464dcf9f390834e92e65af26fb1795354f5d1a2b617b45558486168fe19bc37",
           evidence="同 seed_admit_params：group_flow_near_from_3b 缺省 8 个全开后，group_decision.near_snapshot 对「这本书没配该方法 4d 模型」的方法不取 3b 快照；group_decision 缺省关（无 4d 产物的书不受影响），开着的书因旧缺省为空而按书写的子集取快照，行为不变，已由单测覆盖（CV4 A3，2026-11-28）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_shapes",
+          new="8b10359572cc1c7463dbaaa8735f06375807f8771115ff4669a3f0542c54acac",
+          old="1c91dba82860bf2d86269f145ceeb12855cd475fd24a0c2e9b84d66c7c3e16e2",
+          evidence="3b 与 4d 书级模型指纹不一致时，原 `_near_from_3b` 直接 raise ValueError；group_flow_near_from_3b 缺省全开后改成警告一次、该方法本页退回本地现算（返回空表）。指纹一致、没挂 3b 的路径一行未动：殿本 small vol01 从 align_ref 起（册配置现行、不挂 3b）本分支与 dev 5dfc9e4 char_decide 204 页逐字节相同，8 方法强配的 small／large 本地现算 vs 读 3b 回放 0 翻转（见 ai-team 开开关回放-8方法-殿本-2026-11-28.md）；不一致分支由单测覆盖（rr_shape、part_shape，警告并与关开关结果相同）。（CV4 A3，2026-11-28）"),
     # CV2 11-28：全唐文 053 75:3 夹注少一格，row_segment 加 jiazhu_edge_trim（缺省关）
     Equiv(module='open_guji_cv.steps.row_segment',
           new='f235472064121bdcc7a34e6d92d10ccef4c7fbe3d60d1c1b00babd10f2bd0498',
