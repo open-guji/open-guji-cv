@@ -34,6 +34,16 @@ def _book_vols(shard: Path, book: str, vols: list) -> list[str]:
     return [str(x["vol"]) for x in b["books"] if x["ws"] == book and (not vols or str(x["vol"]) in vols)]
 
 
+def plan(gold: Path, book: str, vols: list) -> dict:
+    """册清单（small＋large 都算，manager 按它建钉版字形库）；不用原图，页是 None。"""
+    out: dict = {}
+    for s in SETS:
+        p = Path(gold).parent / s
+        if (p / "bench.yaml").exists():
+            out.update({v: None for v in _book_vols(p, book, vols)})
+    return out
+
+
 def _vols(ctx: BenchCtx) -> list[str]:
     return _book_vols(_shard(ctx), ctx.book, ctx.vols)
 
@@ -66,6 +76,7 @@ def score(ctx: BenchCtx, pred: Path) -> BenchResult:
     rv = c["拦住·首选对"] + c["拦住·首选错"]
     m = {"wrong_admit": c["放错字"], "variant_admit": c["放成异体"], "admit_rate": round(adm / n, 4),
          "review_top1_ok": round(c["拦住·首选对"] / rv, 4) if rv else None, "missing": c["缺格"],
+         "missing_rate": round(c["缺格"] / n, 4),
          "outcomes": dict(c)}
     items = [{"id": r["id"], "ok": r["outcome"] in OK, "outcome": r["outcome"], "algo": r.get("algo"),
               "truth": r.get("truth")} for r in rows]
@@ -75,8 +86,10 @@ def score(ctx: BenchCtx, pred: Path) -> BenchResult:
 register(BenchSpec(
     id="decide", title="第四步定字收尾（放错字必须 0、放行率、人审首选对率）",
     steps=("align_ref", "context_decide", "cell_state", "group_decision", "char_decide"), owner="CV4",
-    gold={b: "decide-bench/small" for b in BOOKS}, needs=("gold", "config", "code", "glyph_lib", "models", "corpus"),
+    gold={b: "decide-bench/small" for b in BOOKS}, needs=("gold", "config", "code", "raw", "glyph_lib", "models", "corpus"),
     primary="wrong_admit", run=run, score=score, cost="heavy",
-    guards=(Guard("wrong_admit", "max", 0), Guard("flip_worse", "max", 0)), suites=("decide",),
-    item_key="id", item_ok="ok",
+    # missing_rate：收尾没跑出来的格（缺原图、上游失败）也是 0 放错字，不拦就成了假通过
+    guards=(Guard("wrong_admit", "max", 0), Guard("missing_rate", "max", 0.01), Guard("flip_worse", "max", 0)),
+    suites=("decide",),
+    item_key="id", item_ok="ok", plan=plan,
     args={"set": "small｜large（缺省 small）", "layer": "frozen｜dyn（缺省 frozen；dyn 待接）"}))

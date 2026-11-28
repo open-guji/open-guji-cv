@@ -91,6 +91,7 @@ def test_decide_score(tmp_path):
     ctx = B.BenchCtx("bk", [], tmp_path, {"dataset": str(tmp_path)})
     r = decide.score(ctx, p)
     assert r.metrics["wrong_admit"] == 1 and r.metrics["admit_rate"] == 0.5 and r.metrics["review_top1_ok"] == 0.5
+    assert r.metrics["missing_rate"] == 0.0
     assert [x["ok"] for x in r.items] == [True, False, True, False] and r.vols == ["01"]
     r = B.apply_guards(B.get("decide"), r)
     assert r.status == "regressed"
