@@ -1348,3 +1348,92 @@ def _seg_box_pass(ctx: RunContext, page: int, out: list, kinds=SEG_BOX_CRITERIA)
     if hits:
         ctx.log(f"seed_admit p{page}: 字框几何闸 {len(hits)} 格退回待审（doubt seg_defect）：{'；'.join(hits)}")
     return n
+
+
+#: 墨点格与同列（横向有重叠的）非墨点字框纵向相距不到这么多×本页字宽中位数，就当切坏的半字（朱楓林集 53:5:8「夫」上一竖贴着下半，-10px；
+#: 孤立墨点 ≥44px，两个相邻墨点 25:9:8/9 互不算）
+SPECK_HALF_GAP = 0.2
+
+
+def _speck_halves(char_cols) -> set[str]:
+    """`ink_speck` 格里贴着同列别的字的（`SPECK_HALF_GAP`）：切坏的半字。→ 格 id 集合。"""
+    ws = sorted(float(_g(x, "width") or 0) for c in char_cols for x in (_g(c, "chars") or [])
+                if _g(x, "cell_type") == "char" and not _g(x, "sub"))
+    if not ws:
+        return set()
+    lim = SPECK_HALF_GAP * ws[len(ws) // 2]
+    out: set[str] = set()
+    for c in char_cols:
+        xs = [x for x in (_g(c, "chars") or []) if _g(x, "cell_type") == "char" and not _g(x, "sub") and _g(x, "bbox_page")]
+        for x in xs:
+            if "ink_speck" not in (_g(x, "flags") or []):
+                continue
+            b = _g(x, "bbox_page")
+            for y in xs:
+                if y is x or "ink_speck" in (_g(y, "flags") or []):
+                    continue
+                yb = _g(y, "bbox_page")
+                if min(b[2], yb[2]) - max(b[0], yb[0]) > 0 and max(yb[1] - b[3], b[1] - yb[3]) < lim:
+                    out.add(str(_g(x, "id")))
+                    break
+    return out
+
+
+# ── 格级墨迹记号 `ink_marks`（CV2，2026-11-28，朱楓林集 MBJ 报）────────────────────────────────────
+def _ink_mark_pass(ctx: RunContext, page: int, out: list, amap: dict) -> int:
+    """`SeedAdmitParams.ink_marks`：读 Step4 格旗 `ink_seal`／`ink_speck`（`cell_shrink.ink_marks`）。→ 放行格数净增（可负）。
+
+    「对位无字」＝逐字对位（`amap`，align_ref）里这格没有参校本字。印（旗 `ink_seal` 或已判 `occluded`）：对位无字 → 非字放行
+    （通道 seal，同 `_review_lanes_pass` coord_blank 那支的写法）；有字 → 送审 occluded。墨点（旗 `ink_speck`）：对位无字 → 非字放行
+    （通道 blank_ink，同 `_blank_ink_pass`）；有字 → 送审 seg_defect。人裁、排除名单上的格不动。"""
+    try:
+        ci = ctx.product("char_index", page)
+    except Exception:                     # noqa: BLE001
+        return 0
+    flags = {str(_g(x, "id")): set(_g(x, "flags") or []) for c in (_g(ci, "columns") or []) for x in (_g(c, "chars") or [])}
+    half = _speck_halves(_g(ci, "columns") or [])
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            fl = flags.get(rec.id, set())
+            doubts = set(rec.doubts or [])
+            if rec.provenance == "human" or rec.channel == "human" or "excluded" in doubts:
+                continue
+            seal = "ink_seal" in fl or "occluded" in doubts
+            speck = "ink_speck" in fl and not seal
+            if not (seal or speck):
+                continue
+            ref = (amap.get(rec.id) or (None,))[0]
+            ev = rec.evidence or {}
+            if speck and rec.id in half:
+                ev = {**ev, "speck_half": True}       # 贴着同列别的字：多是切坏的半字，不判非字
+            if not ref and not (speck and rec.id in half):
+                if rec.admit and rec.char is None and rec.channel in ("seal", "blank_ink"):
+                    continue
+                was = rec.admit
+                lane, via = ("seal", "ink_seal") if seal else ("blank_ink", "ink_speck")
+                rec.admit, rec.channel, rec.provenance, rec.char = True, lane, lane, None
+                rec.evidence = {**ev, "lane": {"lane": lane, "via": via, "nonchar": True, "ref_blank": True,
+                                               "prev_doubts": sorted(doubts)}, "no_glyph_lib": True}
+                rec.doubts = ["lane_seal" if seal else "blank_ink"]
+                n += 0 if was else 1
+                continue
+            if seal:
+                if "occluded" in doubts and not rec.admit:
+                    continue
+                if rec.admit:
+                    _demote(rec, "ink_marks")
+                    n -= 1
+                rec.admit, rec.channel, rec.provenance, rec.char = False, None, "", ref
+                rec.evidence = {**ev, "occluded": ev.get("occluded") or {"via": "ink_seal"}}
+                rec.doubts = sorted(doubts | {"occluded"})
+            else:
+                rec.evidence = {**ev, "seg_box": sorted(set(ev.get("seg_box") or []) | {"ink_speck"})}
+                rec.doubts = list(dict.fromkeys([*(rec.doubts or []), "seg_defect"]))
+                if rec.admit:
+                    _demote(rec, "ink_marks")
+                    rec.admit, rec.channel, rec.provenance = False, None, ""
+                    n -= 1
+    if n:
+        ctx.log(f"seed_admit p{page}: 墨迹记号 放行净增 {n} 格")
+    return n
