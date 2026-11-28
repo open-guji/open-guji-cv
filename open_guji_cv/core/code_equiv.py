@@ -671,6 +671,11 @@ _REF_ACC_1127 = ("seed_admit 新开关 trust_from_accuracy（缺省关；CV0 202
                   "参数 dump 与 params_hash 不变（tests/test_ref_accuracy.py::test_switch_off_unchanged）。ref_profile 只加读法与校验，不在 code_deps。"
                   "哈希按合入时 origin/dev 重算。")
 
+_NONE_COLS_1128 = ("reference_profile 列级无参照段 cols（CV0 2026-11-28，脉经第 2 册缺文小注）：align_ref.run_page 只在本页声明了 cols 时"
+                   "（_none_cols 非空）去掉这些列的对位并写 PageAlignRef.none_cols；没声明的页原样返回、none_cols 空不落盘，"
+                   "page_token 只在声明页加 |nc:…（tests/test_ref_none_cols.py、test_ref_profile_steps.py）。中心库现无册写 cols。"
+                   "哈希按合入时 origin/dev 重算。")
+
 _DASH_ROW_1127 = ("cell_shrink 新开关 end_dash_row（缺省关，extractor.strip_dash_row 只在开时调；关时 grid 不带键、参数 dump 不变）："
                   "史記 42 册 32 页（cut-bench，--pages 2,3,14,17,18,25,27,34,38,40,43,46,54,55,59,66,69,70,78,79,81,82,93,96,98,99,100,102,106,114,117,135）、"
                   "全唐文 053 册 29 页（2,4,12,18,28,45,49,63,75,76,77,81,83,87,89,92,94,95,98,99,104,116,118,128,140,146,148,154,159）"
@@ -2951,6 +2956,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="2741e0048a40bba40cefdac9bebf011fcad3a020baeb9c2c454f96c5aa49615e",
           old="98fdf5949dc19daa7d1e913c39e02a2d6a9f5fc3683d8d9586957b882317aac0",
           evidence=_MBJ_MARKS_1128),
+    # reference_profile 列级无参照 cols（CV0 11-28）
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="1208d13d6d057505ed9a3ec385895367f6f7fa9ae4a0b5fed72a5013021487c8",
+          old="66b4b39a9704d4d6fd516910d7b7ed9493393287cfb4b2a394e9f4121ba6ab2e",
+          evidence=_NONE_COLS_1128),
+    Equiv(module="open_guji_cv.products.kinds.recog",
+          new="daf5e69b08b6aca4046aa8fe80b1435c5f48e1204a2dd68a24dfb7bf1ccb2d9f",
+          old="e5e77318387b3f6205604e2efe15bd4ea83f41f4212904a1f2a0a7a1ec5e05c5",
+          evidence=_NONE_COLS_1128),
 )
 
 

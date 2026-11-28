@@ -151,6 +151,7 @@
 
 ## [未发版]
 
+- PATCH（产物逐字节不变，code_equiv 登记；CV0 2026-11-28，脉经第 2 册缺文小注）：`reference_profile` 的 `kind: none` 段可写 `cols`（列级无参照，可与页段重叠）；align_ref 在这些列不出对位字、坐标对位与提示，产物写 `none_cols`；`page_token` 只在声明页加 `|nc:…`。manager 待审原因据此按格认「参照缺是设计」。
 ## [0.9.13] - 2026-11-28
 
 - 新表／读口（不进任何 Step 指纹，现役代码不改读，L0；CV3 W1 第一期 2026-11-28，Sheldon 定方向）：形近字组登记表 `config/near_groups/v2.json`（格式 `near_groups/2`），由 `scripts/build_near_groups_v2.py` 从六处来源确定性合成（注册字组表 185 组＋手工 20／人裁 42／字体 78／`near_groups.json` 572 对，去重后 619 组，类型 near／variant／fold，记 `src`；书级 pair_clf 与 3b 组用 `--pair-clf`／`--glyph-near` 出书级版本）；读口 `groups/near_registry.py`（按字查组、按类型过滤、转 3b 书配置、展开 `ref`，没写 `ref` 原样返回）。守卫 `tests/test_near_registry.py`。来源清单与第二期要改的读口见 `doc/3-识字/形近字组登记表.md`。
