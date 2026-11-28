@@ -4,4 +4,4 @@
 `cut_legacy`（切字旧集里 deprecated 的，CV2）、`decide`、`decide-gate`（CV4 decide-bench）、`near_form_admit`、
 `cands`（read-3c-cands、decide-4b-ctx，CV3）。各线接入见 ai-team `domain/CV/规范/bench统一接口-2026-11-28.md`。
 """
-from . import cands, cut, cut_legacy, cut_parts, decide, decide_gate, near_form_admit  # noqa: F401
+from . import cands, cut, cut_legacy, cut_parts, decide, decide_context, decide_gate, near_form_admit  # noqa: F401
