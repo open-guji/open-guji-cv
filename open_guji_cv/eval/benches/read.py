@@ -24,7 +24,8 @@ from ..bench import BenchCtx, BenchResult, BenchSpec, Guard, register, skipped
 
 REPO = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO / "scripts"
-SIKU, SHIJI, QTW = "siku-zongmu", "988g3f0wsu", "995ejelvk0"
+#: 殿本用书 id 96mid1ogzk（同 cut-2d、decide；dataset 里有的地方记旧工作区名 siku-zongmu）
+SIKU, SHIJI, QTW = "96mid1ogzk", "988g3f0wsu", "995ejelvk0"
 #: 跳过记号：run 返回它，score 照它出 skipped（run 里缺件不算跑崩）
 _SKIP = "SKIP.txt"
 

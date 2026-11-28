@@ -13,7 +13,7 @@
 指标：wrong_admit（放错字，必须 0）、variant_admit、admit_rate、review_top1_ok。
 --against：和上一次逐格比，结果变了的列成翻转清单（好转／变坏／其它）。
 """
-import argparse, re, collections, glob, json, os
+import argparse, re, collections, glob, json, os, sys
 from pathlib import Path
 
 ap = argparse.ArgumentParser()
@@ -25,6 +25,7 @@ ap.add_argument("--flips")
 ap.add_argument("--rebind", action="store_true", help="按金标原图框对现行切分的格（IoU≥0.5、次格<0.2），动态层用")
 ap.add_argument("--only-present", action="store_true", help="只评产物里有这一页的金标格（中途停掉的部分跑用；缺页的格不计缺格）")
 ap.add_argument("--no-substeps", action="store_true", help="不出子步指标与错因位置列（只出收尾口径）")
+ap.add_argument("--max-missing", type=float, default=0.01, help="缺格率上限（缺省 1%%）：超了就不算通过，打印后以退出码 3 结束。收尾大面积失败时 wrong_admit=0 是假通过")
 ap.add_argument("--cv", default=os.environ.get("GUJI_CV_REPO", str(Path(__file__).resolve().parents[3])))
 a = ap.parse_args()
 
@@ -188,7 +189,11 @@ for bk, c in M.items():
     n = sum(c.values()); adm = c["放对"] + c["放成异体"] + c["放错字"]; rv = c["拦住·首选对"] + c["拦住·首选错"]
     print(f"{bk}\t" + "\t".join(str(c[k]) for k in cols) + f"\t{adm / n:.4f}\t{(c['拦住·首选对'] / rv if rv else 0):.3f}")
 bad = [r for r in rows if r["outcome"] == "放错字"]
-print(f"wrong_admit = {len(bad)}" + ("  ✗ 必须为 0" if bad else "  ✓"))
+_miss = sum(1 for r in rows if r["outcome"] == "缺格")
+_miss_rate = _miss / len(rows) if rows else 1.0
+MISS_FAIL = _miss_rate > a.max_missing
+print(f"wrong_admit = {len(bad)}" + ("  ✗ 必须为 0" if bad else ("  ⚠ 不算通过（见下）" if MISS_FAIL else "  ✓")))
+print(f"缺格 {_miss}／{len(rows)}（{_miss_rate:.2%}，上限 {a.max_missing:.2%}）" + ("  ✗ 收尾没跑出这些格，wrong_admit=0 不可信" if MISS_FAIL else "  ✓"))
 for r in bad[:20]:
     print("  放错字", r["id"], r["truth"], "→", r["algo"], r["rule"])
 
@@ -367,3 +372,6 @@ if a.against:
     if a.flips:
         Path(a.flips).write_text("类\t格\t金标\t前字\t前结果\t前规则\t后字\t后结果\t后规则\n" + "".join(
             f"{k}\t{r['id']}\t{r['truth']}\t{o['algo']}\t{o['outcome']}\t{o['rule']}\t{r['algo']}\t{r['outcome']}\t{r['rule']}\n" for k, r, o in fl))
+
+if MISS_FAIL:
+    sys.exit(3)

@@ -17,24 +17,24 @@ class LineRec(BaseModel):
     col: int | None                  # 列位号（body / empty，右→左从 1）；其他 None
     kind: str                        # body | empty（空列位）| footnote | margin | wide | noise
     x0: float                        # 规范空间 [x0, x1]（右上原点，x 向左）
-    x1: float
-    y0: float
-    y1: float
+    x1: float   # 列右缘（规范空间 x_tr）px
+    y0: float   # 列上端 y px
+    y1: float   # 列下端 y px
     width: float                     # 列墨宽 px
-    flags: list[str] = Field(default_factory=list)
+    flags: list[str] = Field(default_factory=list)   # 列级旗标，如 col_width_out_of_band
 
 
 class LineIndex(BaseModel):
-    page: int
-    width: int
-    height: int
+    page: int   # 页号
+    width: int   # 原图宽 px
+    height: int   # 原图高 px
     em: float | None                 # 字身宽估计（正文列墨宽中位）
     pitch: float | None              # 相邻正文列中心距中位
     n_body: int                      # 有字的正文列数（不含 empty 空列位）
     block: tuple[float, float, float, float] | None = None   # 正文块 (x0, y0, x1, y1)，规范空间
     rules_v: list[tuple[float, float]] = Field(default_factory=list)   # 长竖线 x 段（规范空间）
     rules_h: list[tuple[float, float]] = Field(default_factory=list)   # 长横线 y 段
-    lines: list[LineRec] = Field(default_factory=list)
+    lines: list[LineRec] = Field(default_factory=list)   # 本页每条列（含空列位），按右→左
 
 
 LINE_INDEX = register_kind(ProductKindSpec(

@@ -453,7 +453,7 @@ def gate_metrics(bench: Path, pred_root: Path, truth: str = "exact", only=("huma
     sc = score_dir(bench, pred_root, only)
     res = {"truth": truth, "pages_no_gate": [], "columns": 0, "bad": 0, "good": 0,
            "tiers": {t: {"hit_bad": 0, "hit_good": 0} for t in ("block", "any")}, "by_set": {}, "by_reason": {},
-           "missed": [], "false_alarm": []}
+           "missed": [], "false_alarm": [], "cols": {}}
     cache: dict = {}
     for key, c in sc["cols"].items():
         vol, page, col = key.rsplit(":", 2)
@@ -469,6 +469,7 @@ def gate_metrics(bench: Path, pred_root: Path, truth: str = "exact", only=("huma
         bad = not c["exact" if truth == "exact" else "count_ok"]
         res["columns"] += 1
         res["bad" if bad else "good"] += 1
+        res["cols"][key] = {"bad": bad, "block": bool(v["block"]), "any": bool(v["block"] or v["flag"]), "set": c.get("set", "-")}
         s = res["by_set"].setdefault(c.get("set", "-"), {"columns": 0, "bad": 0, "block_hit_bad": 0, "block_hit_good": 0,
                                                        "any_hit_bad": 0, "any_hit_good": 0})
         s["columns"] += 1; s["bad"] += bad
