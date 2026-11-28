@@ -95,3 +95,12 @@ def test_decide_registered_and_sections(tmp_path, monkeypatch):
     assert m["d4_group_wrong_admit"] == 1 and m["b4_context_precision"] == 1.0 and m["errloc"] == {"4c": 1, "切分": 1}
     B.apply_guards(B.get("decide"), r)
     assert r.status == "regressed"      # 放错字 1、缺格率 33%
+
+
+def test_decide_dianben_id_alias(tmp_path):
+    from open_guji_cv.eval.benches import decide as D
+    old = D.DATASET_WS["96mid1ogzk"]                      # dataset 分片里殿本的旧写法
+    assert "96mid1ogzk" in D.BOOKS and old not in D.BOOKS
+    (tmp_path / "bench.yaml").write_text(f"books:\n  - {{ws: {old}, vol: vol01}}\n  - {{ws: 988g3f0wsu, vol: '03'}}\n", encoding="utf-8")
+    assert D._book_vols(tmp_path, "96mid1ogzk", []) == ["vol01"]
+    assert D._book_vols(tmp_path, "988g3f0wsu", []) == ["03"]

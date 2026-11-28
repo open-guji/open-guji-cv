@@ -23,7 +23,7 @@ def run(ctx: BenchCtx) -> Path:
     here = Path(__file__).resolve().parents[1] / "decide_bench"
     runs = []
     for v in D._vols(ctx):
-        runs += ["--run", f"{ctx.book}/{v}={ctx.work / 'exp' / f'bench-{ctx.book}-{v}' / 'A' / v}"]
+        runs += ["--run", f"{D.dws(ctx.book)}/{v}={ctx.work / 'exp' / f'bench-{D.dws(ctx.book)}-{v}' / 'A' / v}"]
     cmd = [sys.executable, str(here / "gate_bench.py")] + runs + [
         "--baseline", str(pred), "--out", str(ctx.work / "gate.json"), "--tsv", str(ctx.work / "gate-cells.tsv")]
     D._call(cmd, ctx, "gate.log")

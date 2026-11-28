@@ -22,7 +22,14 @@ import yaml
 from ..bench import BenchCtx, BenchResult, BenchSpec, Guard, register
 
 SETS = ("small", "large")
-BOOKS = ("988g3f0wsu", "995ejelvk0", "siku-zongmu", "99k3i35yww")
+BOOKS = ("988g3f0wsu", "995ejelvk0", "96mid1ogzk", "99k3i35yww")
+#: 书 id → dataset 分片里 anchor／bench.yaml 用的 ws 写法（殿本在 dataset 里是旧名 siku-zongmu，真 id 是 96mid1ogzk，11-28 CV2 指出）。
+#: 分片的 ws 字段不改（历史金标、翻转清单、报告都按它），只在这里认。
+DATASET_WS = {"96mid1ogzk": "siku-zongmu"}
+
+
+def dws(book: str) -> str:
+    return DATASET_WS.get(book, book)
 OK = ("放对", "拦住·首选对")
 _FOLD = [set("己已巳"), set("日曰")]          # 同 score.py：组内任一字算对
 
@@ -40,7 +47,7 @@ def _shard(ctx: BenchCtx) -> Path:
 
 def _book_vols(shard: Path, book: str, vols: list) -> list[str]:
     b = yaml.safe_load((Path(shard) / "bench.yaml").read_text(encoding="utf-8"))
-    return [str(x["vol"]) for x in b["books"] if x["ws"] == book and (not vols or str(x["vol"]) in vols)]
+    return [str(x["vol"]) for x in b["books"] if x["ws"] == dws(book) and (not vols or str(x["vol"]) in vols)]
 
 
 def plan(gold: Path, book: str, vols: list) -> dict:
@@ -85,7 +92,7 @@ def run(ctx: BenchCtx) -> Path:
         if not vols:
             raise LookupError("no_gold")
         cmd = [sys.executable, str(here / "dyn.py")] + sum([["--shard", str(s)] for s in shards], []) + [
-            "--ws", f"{ctx.book}={ctx.res['ws']}", "--work", str(ctx.work), "--name", "dyn", "--books", ",".join(vols),
+            "--ws", f"{dws(ctx.book)}={ctx.res['ws']}", "--work", str(ctx.work), "--name", "dyn", "--books", ",".join(vols),
             "--guji", _guji()]
         _call(cmd, ctx, "dyn.log")
         return ctx.work / "dyn.jsonl"
@@ -94,7 +101,7 @@ def run(ctx: BenchCtx) -> Path:
     vols = _vols(ctx)
     if not vols:
         raise LookupError("no_gold")
-    cmd = [sys.executable, str(here / "run.py"), "--shard", str(_shard(ctx)), "--ws", f"{ctx.book}={ctx.res['ws']}",
+    cmd = [sys.executable, str(here / "run.py"), "--shard", str(_shard(ctx)), "--ws", f"{dws(ctx.book)}={ctx.res['ws']}",
            "--work", str(ctx.work), "--name", "bench", "--books", ",".join(vols), "--no-warm-check", "--guji", _guji()]
     _call(cmd, ctx, "run.log")
     return ctx.work / "bench-A.jsonl"
