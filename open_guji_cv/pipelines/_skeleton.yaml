@@ -29,7 +29,7 @@ slots:
     - context_decide     # 4a 上下文（原 Step6）：库候选 + 上下文 → 门槛化定字（needs=corpus）
     - context_rank       # 按上下文排序（2026-11-27，CV3；候选字线所说的 4b）：候选按「图像分＋w·填空分」重排给卡片用，只排序不放行，缺省关（enabled）
     - cell_state         # 4c 格况（2026-11-28，CV4 P3b）：印章／遮挡／切坏／墨点等不看放行状态的证据，收尾读它；缺省关（enabled）
-    - seed_admit         # 4b 放行（原 Step7）：十条通道 → 自动进库 / 落回人审（needs=db；进库本身走 Event）
+    - char_decide        # 收尾 char_decide（原 seed_admit／Step7，2026-11-28 改名）：放行／送审与原因；十条通道 → 自动进库 / 落回人审（needs=db；进库本身走 Event）
 required: [layout, columns, cells]
 # 四大步（2026-11-22 用户定，原九步里的 Step0–7 并成四步；Step8 入库、Step9 排版输出移到 guji-manager）。
 # 切字内部分析用五小步 2a–2e（拉直、定字带左右边、列端字、字间切分、字框压缩），与 Step 的对应见 doc/2-切字/五小步.md。
@@ -39,7 +39,7 @@ stages:
   layout: [page_survey, invert_detect, "slot:layout", "slot:seals"]                  # 1 版面：只管认位置、判类型（版框、界行、抬头、页型、印章）
   cut: ["slot:columns", "slot:cells", cell_shrink]                                   # 2 切字：单列拉直（射影、缩放）、字与框线分离、切字、缩框（2026-11-22 用户定）
   read: [glyph_match, glyph_near, rare_candidates, glyph_candidate, cell_traits, glyph_analyzer]      # 3 识字：只管从字块图取证（2026-11-22 用户定）
-  decide: [align_ref, context_decide, context_rank, cell_state, seed_admit]                                     # 4 定字：整理本对位归这里（不读字块图，合文本与字形证据）
+  decide: [align_ref, context_decide, context_rank, cell_state, char_decide]                                     # 4 定字：整理本对位归这里（不读字块图，合文本与字形证据）
 # 大步收尾（2026-11-27 用户定）：每个大步可以有一个收尾步骤，在本大步其他步骤之后、下一大步之前跑，
 # 汇总本大步各小步的结果。收尾必须是本大步在管线里的最后一步（加载时校验）。不是每个大步都要有。
 finals:

@@ -96,7 +96,7 @@ def test_run_page_without_lm_marks_no_lm(monkeypatch):
 def test_default_off_and_in_decide_stage_before_seed_admit():
     assert cr.ContextRankParams().enabled is False
     d = load_pipeline("keben_body_v2").stages["decide"]
-    assert d.index("context_decide") < d.index("context_rank") < d.index("seed_admit")
+    assert d.index("context_decide") < d.index("context_rank") < d.index("char_decide")
 
 
 def test_neighbor_texts_reading_order_and_decision_overrides():

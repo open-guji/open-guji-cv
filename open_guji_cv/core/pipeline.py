@@ -168,7 +168,10 @@ class Pipeline:
         return next((k for k, v in self.stages.items() if sid in v), None)
 
     def slice(self, from_step: str | None = None, to_step: str | None = None) -> list[str]:
-        """`from_step`／`to_step` 可写步骤 id，也可写大步名（取该大步的第一步／最后一步）。"""
+        """`from_step`／`to_step` 可写步骤 id，也可写大步名（取该大步的第一步／最后一步）。收尾步旧名 `seed_admit` 当 `char_decide`（P3a-3）。"""
+        from .decide_names import canonical_step
+        from_step = canonical_step(from_step) if from_step else from_step
+        to_step = canonical_step(to_step) if to_step else to_step
         if from_step and from_step in self.stages and from_step not in self.steps:
             from_step = self._stage_end(from_step, first=True)
         if to_step and to_step in self.stages and to_step not in self.steps:

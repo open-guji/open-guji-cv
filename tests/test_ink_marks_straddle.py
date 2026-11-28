@@ -111,7 +111,7 @@ def _run(tmp_path, monkeypatch, params, boxes, ref_slots):
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
     monkeypatch.setattr(lookup, "human_chars", lambda book, log=None, stale=None, bind=None, lost=None: {})
     ctx = RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
-                     params={"seed_admit": params}, log=lambda s: None)
+                     params={"char_decide": params}, log=lambda s: None)
     chars = {1: "山", 2: "水", 3: "木", 4: "火"}
     recs = [dict(slot=s, verdict="same", cov=1.0, wmax=0.0, char=c, candidates=[(c, 1.0)]) for s, c in chars.items()]
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
@@ -119,7 +119,7 @@ def _run(tmp_path, monkeypatch, params, boxes, ref_slots):
         PAGE, BOOK, recs=[dict(slot=s, align_char=chars[s]) for s in ref_slots], col=COL))
     write_product(ctx, "cell_shrink", PAGE, char_index=PageChars(page=PAGE, columns=[
         ColumnChars(col=COL, ok=True, n_instances=len(boxes), chars=boxes)]))
-    page = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    page = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
     return {r.slot: r for cc in page.columns for r in cc.chars}
 
 

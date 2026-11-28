@@ -29,8 +29,8 @@ def _run(tmp_path, monkeypatch, *, verdict: str, params: dict | None = None):
         chars=[AlignRec(id=f"{BOOK}:{PAGE}:{COL}:{SLOT}", col=COL, slot=SLOT,
                         align_char="變", align_op="replace")]))
     # 影子闸要真字形库、字组 bian（變𠮓，按刻形）要字块，这里都没摆；group_flow 空元组不进 dump、读回会变回缺省全开，点一个无关组
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"shadow_veto": False, "group_flow": ("jys",), **(params or {})})
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    ctx.params["char_decide"] = SeedAdmitParams(**{"shadow_veto": False, "group_flow": ("jys",), **(params or {})})
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 

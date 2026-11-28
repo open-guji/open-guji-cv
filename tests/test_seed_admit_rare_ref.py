@@ -48,8 +48,8 @@ def _run(tmp_path, monkeypatch, *, rare, cands=((LIB, 0.95),), verdict="unsure",
         write_product(ctx, "align_ref", PAGE, align_ref=ar)
     if rare is not None:
         write_product(ctx, "rare_candidates", PAGE, rare_candidates=_rare({1: rare}))
-    ctx.params["seed_admit"] = SeedAdmitParams(**(params or {}))
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    ctx.params["char_decide"] = SeedAdmitParams(**(params or {}))
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 
@@ -59,7 +59,7 @@ ON = {"rare_ref": True}
 
 # ── 声明与指纹 ───────────────────────────────────────────────────────────
 def test_declared_as_gated_optional_upstream():
-    spec = STEPS["seed_admit"].spec
+    spec = STEPS["char_decide"].spec
     for field in ("rare_ref",):
         assert ("rare_candidates", field) in spec.optional_consumes_when
         on = spec.params().model_copy(update={field: True})

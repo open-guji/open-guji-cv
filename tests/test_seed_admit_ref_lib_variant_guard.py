@@ -67,8 +67,8 @@ def _candidates(top: str) -> list[tuple[str, float]]:
 def _run_with_params(ctx, params: SeedAdmitParams):
     """`ctx.params_for(step)` 先查 `ctx.params[step.spec.id]`（`core/step.py`），
     直接塞进去就是这次跑用的参数——不用伪造 pipeline yaml 那一整套解析链。"""
-    ctx.params["seed_admit"] = params
-    return STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    ctx.params["char_decide"] = params
+    return STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
 
 
 def _rec(sa):

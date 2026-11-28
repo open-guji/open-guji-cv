@@ -28,7 +28,7 @@ def test_default_off_and_registered():
     spec = STEPS["cell_state"].spec
     assert spec.enabled_by == "enabled" and cs.CellStateParams().enabled is False
     assert "cell_state" in spec.produces
-    assert "cell_state" in STEPS["seed_admit"].spec.optional_consumes
+    assert "cell_state" in STEPS["char_decide"].spec.optional_consumes
     from open_guji_cv.core.pipeline import load_pipeline
     assert "cell_state" in load_pipeline("keben_body_v2").steps
 
@@ -101,7 +101,7 @@ def _ctx(tmp_path, monkeypatch, sa_params, cs_params=None):
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
     monkeypatch.setattr(lookup, "human_chars", lambda book, log=None, stale=None, bind=None, lost=None: {})
-    params = {"seed_admit": sa_params}
+    params = {"char_decide": sa_params}
     if cs_params is not None:
         params["cell_state"] = cs_params
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache), params=params, log=lambda s: None)
@@ -135,14 +135,14 @@ def test_finale_same_with_and_without_cell_state(tmp_path, monkeypatch, params):
     boxes = [_box(1), _box(2, ["ink_seal"]), _dot(3), _dot(4), _box(5, h=200)]
     ctx = _ctx(tmp_path / "a", monkeypatch, params)
     _fill(ctx, boxes, [1, 4, 5])
-    inline = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    inline = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
 
     ctx2 = _ctx(tmp_path / "b", monkeypatch, params, cs.CellStateParams(enabled=True))
     _fill(ctx2, boxes, [1, 4, 5])
     st = STEPS["cell_state"].run_page(ctx2, PAGE)["cell_state"]
     write_product(ctx2, "cell_state", PAGE, cell_state=st)
     assert STEPS["cell_state"].spec.produces == ("cell_state",)
-    via = STEPS["seed_admit"].run_page(ctx2, PAGE)["seed_admit"]
+    via = STEPS["char_decide"].run_page(ctx2, PAGE)["char_decide"]
     assert _cells(via) == _cells(inline)
     assert (via.n_auto, via.n_review) == (inline.n_auto, inline.n_review)
     by = st.by_id()

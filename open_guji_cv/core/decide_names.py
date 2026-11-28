@@ -25,8 +25,8 @@ LEGACY_ADMIT_STEP = "seed_admit"
 ADMIT_STEPS: tuple[str, ...] = (NEW_ADMIT_STEP, LEGACY_ADMIT_STEP)
 
 #: **现在代码写的名字**（Step id、产物目录、产物种类、页顶层键、参数里生效的键、新事件的 `target.step`）。
-#: 本版仍是旧名；改名那一版只改这一行（与 Step 的 `spec.id` 同步）。
-ADMIT_STEP_ACTIVE = LEGACY_ADMIT_STEP
+#: 改名版（P3a-3，2026-11-28）起是 `char_decide`；Step 的 `spec.id`、产物种类、`consumes` 都引用本常量。
+ADMIT_STEP_ACTIVE = NEW_ADMIT_STEP
 
 
 def is_admit_step(name: str | None) -> bool:

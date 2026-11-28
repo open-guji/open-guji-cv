@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, field_validator, model_serializer
 
 from ...utils.cjk_compat import fold_compat
 
+from ...core.decide_names import ADMIT_STEP_ACTIVE
 from ...core.spec import COLUMN_PX, ProductKindSpec
 from ...core.step import register_kind
 
@@ -471,7 +472,7 @@ CONTEXT_DECISION = register_kind(ProductKindSpec(
     schema=PageDecision, coord_space=COLUMN_PX))
 
 SEED_ADMIT = register_kind(ProductKindSpec(
-    id="seed_admit", title="C1 进库准入裁决", storage="numeric", unit="cell",
+    id=ADMIT_STEP_ACTIVE, title="C1 进库准入裁决（收尾 char_decide）", storage="numeric", unit="cell",
     schema=PageAdmit, coord_space=COLUMN_PX))
 
 ALIGN_REF = register_kind(ProductKindSpec(

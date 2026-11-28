@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from ..core.decide_names import ADMIT_STEP_ACTIVE
 from ..core.spec import StepSpec
 from ..core.step import STEPS, RunContext, Step, register_step
 from ..products.kinds.cell_state import CellStateRec, PageCellState
@@ -77,7 +78,7 @@ def classify(*, occ, seal_blank: bool, seg: list[str], ink: set[str], half: bool
 
 def page_params(ctx: RunContext, page: int):
     """本页收尾用的 seed_admit 参数（含按页叠加：无参照页、准确度档），探测器必须与收尾同一份。"""
-    p = ctx.params_for(STEPS["seed_admit"])
+    p = ctx.params_for(STEPS[ADMIT_STEP_ACTIVE])
     p = no_ref_page_params(p, page, ctx.book)
     return accuracy_page_params(p, page, ctx.book)
 
@@ -160,7 +161,7 @@ class CellStateStep(Step):
     def book_params(self, p: CellStateParams, ctx: RunContext) -> CellStateParams:
         if not p.enabled:
             return p
-        sp = ctx.params_for(STEPS["seed_admit"])
+        sp = ctx.params_for(STEPS[ADMIT_STEP_ACTIVE])
         seed = {k: getattr(sp, k) for k in SEED_FIELDS}
         return p if p.seed == seed else type(p)(enabled=p.enabled, seed=seed)
 

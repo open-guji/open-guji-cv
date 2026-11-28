@@ -142,10 +142,10 @@ def test_detect_does_not_mutate_inputs():
 
 def test_gate_attached_to_seed_admit_and_isolated():
     keben = load_pipeline("keben_body_v2")
-    assert keben.gate_of("seed_admit").id == "decide_gate"
+    assert keben.gate_of("char_decide").id == "decide_gate"
     assert keben.producer_of("decide_gate").spec.id == "decide_gate"
     spec = STEPS["decide_gate"].spec
-    assert spec.produces == ("decide_gate",) and "seed_admit" in spec.consumes
+    assert spec.produces == ("decide_gate",) and "char_decide" in spec.consumes
     # 只检测：没有任何别的 Step 读它，也没有别的 Step 把它的模块列进 code_deps
     for sid, st in STEPS.items():
         if sid == "decide_gate":

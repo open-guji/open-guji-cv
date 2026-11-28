@@ -92,7 +92,7 @@ def _admit(tmp_path, monkeypatch, on, ctx_on):
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
     monkeypatch.setattr(lookup, "human_chars", lambda *a, **k: {})
     ctx = RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
-                     params={"seed_admit": SeedAdmitParams(consensus_fallback=on, patch_missing="skip")}, log=lambda s: None)
+                     params={"char_decide": SeedAdmitParams(consensus_fallback=on, patch_missing="skip")}, log=lambda s: None)
     chars = ["山", "簡", "水"]
     recs = [dict(slot=i + 1, verdict="same", cov=1.0, wmax=0.0, char=c, candidates=[(c, 1.0)])
             for i, c in enumerate(chars)]
@@ -108,7 +108,7 @@ def _admit(tmp_path, monkeypatch, on, ctx_on):
     ]))
     write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, align_char="山"), dict(slot=3, align_char="水")]))
-    page = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    page = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
     return {r.slot: r for cc in page.columns for r in cc.chars}
 
 

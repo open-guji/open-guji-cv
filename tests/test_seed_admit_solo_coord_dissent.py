@@ -27,8 +27,8 @@ def _run(tmp_path, monkeypatch, *, cands, coord, params=None):
     write_product(ctx, "align_ref", PAGE, align_ref=PageAlignRef(
         page=PAGE, anchored=False, chars=[],
         coord=[CoordRec(id=CID, col=COL, slot=SLOT, ref_char=coord)] if coord is not None else []))
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"shadow_veto": False, **(params or {})})
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    ctx.params["char_decide"] = SeedAdmitParams(**{"shadow_veto": False, **(params or {})})
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 

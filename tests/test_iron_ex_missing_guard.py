@@ -21,7 +21,7 @@ def _run(tmp_path, monkeypatch, params, n_missing):
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
     ctx = RunContext(make_book(BOOK, iron_gate=True), ProductStore(products), ImageCache(cache),
-                     params={"seed_admit": params.model_copy(update={"shadow_veto": False})},   # 影子闸要真字形库，这里没摆
+                     params={"char_decide": params.model_copy(update={"shadow_veto": False})},   # 影子闸要真字形库，这里没摆
                      log=lambda s: None)
     recs = [dict(slot=1, verdict="unsure", cov=0.5, wmax=0.0, char="山", candidates=[("山", 0.5)])]
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
@@ -39,7 +39,7 @@ def _run(tmp_path, monkeypatch, params, n_missing):
     patch_seed_admit(monkeypatch, "_iron_confusable_witness", lambda *a, **k: False)
     import open_guji_cv.clustering.seeding as seeding
     monkeypatch.setattr(seeding, "context_conflicts_ref", lambda *a, **k: False)
-    page = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    page = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
     return {r.slot: r for cc in page.columns for r in cc.chars}
 
 

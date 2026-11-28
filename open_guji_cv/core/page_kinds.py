@@ -35,6 +35,7 @@
 本模块在 core，只放数据与纯函数，不 import steps／books。不在任何 Step 的 `code_deps` 里。
 """
 from __future__ import annotations
+from .decide_names import ADMIT_STEP_ACTIVE
 
 #: 页型 → (Step id, 参数名)。顺序即文档与报表里的显示顺序。
 KIND_PARAM: dict[str, tuple[str, str]] = {
@@ -42,7 +43,7 @@ KIND_PARAM: dict[str, tuple[str, str]] = {
     "table": ("border_detect_gate", "table_pages"),
     "cover": ("border_detect_gate", "cover_pages"),
     "roster": ("row_segment", "roster_pages"),
-    "no_ref": ("seed_admit", "no_ref_pages"),
+    "no_ref": (ADMIT_STEP_ACTIVE, "no_ref_pages"),
 }
 PAGE_KINDS = tuple(KIND_PARAM)
 #: 页内按列标表（半文半表页）：键名与 (Step id, 参数名)

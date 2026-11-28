@@ -48,9 +48,9 @@ def test_names_and_helpers():
 
 def test_fold_params_identity_rename_and_conflict():
     only_old = {"seed_admit": {"x": 1}, "row_segment": {"y": 2}}
-    assert dn.fold_admit_params(only_old) is only_old                      # 没写新键：原对象，旧册配置零影响
-    got = dn.fold_admit_params({"char_decide": {"x": 1}, "row_segment": {"y": 2}})
-    assert got == {"seed_admit": {"x": 1}, "row_segment": {"y": 2}}        # 本版生效名仍是 seed_admit
+    assert dn.fold_admit_params(only_old) == {"char_decide": {"x": 1}, "row_segment": {"y": 2}}   # 旧键写的：并成生效名 char_decide（改名版）
+    only_new = {"char_decide": {"x": 1}, "row_segment": {"y": 2}}
+    assert dn.fold_admit_params(only_new) is only_new                      # 已是生效名：原对象零影响
     with pytest.raises(ValueError, match="同时写"):
         dn.fold_admit_params({"char_decide": {}, "seed_admit": {}})
     assert dn.admit_params_of({"char_decide": {"x": 1}}) == {"x": 1} and dn.admit_params_of({"seed_admit": {"x": 2}}) == {"x": 2}
@@ -64,18 +64,20 @@ def test_fold_params_follows_active_name(monkeypatch):
 
 
 def test_params_funnels_accept_both_keys():
-    assert rehome_params({"char_decide": {"use_context": False}}) == {"seed_admit": {"use_context": False}}
+    assert rehome_params({"seed_admit": {"use_context": False}}) == {"char_decide": {"use_context": False}}
+    assert rehome_params({"char_decide": {"use_context": False}}) == {"char_decide": {"use_context": False}}
     with pytest.raises(ValueError):
         rehome_params({"char_decide": {"a": 1}, "seed_admit": {"b": 2}})
     # 页型表（no_ref_pages）：新键写的也读得出
     assert kinds_from_params({"char_decide": {"no_ref_pages": [3, 4]}}) == {"no_ref": [3, 4]}
     out = merge_into_params({"char_decide": {"no_ref_pages": [3]}}, {"no_ref": [3]})
-    assert out["seed_admit"]["no_ref_pages"] == [3]
+    assert out["char_decide"]["no_ref_pages"] == [3]
 
 
 def test_book_params_loader_folds():
     from open_guji_cv.core.book import _load_book_params
-    assert _load_book_params({"char_decide": {"a": 1}}) == {"seed_admit": {"a": 1}}
+    assert _load_book_params({"char_decide": {"a": 1}}) == {"char_decide": {"a": 1}}
+    assert _load_book_params({"seed_admit": {"a": 1}}) == {"char_decide": {"a": 1}}
     with pytest.raises(ValueError):
         _load_book_params({"char_decide": {"a": 1}, "seed_admit": {"a": 1}})
 
@@ -215,12 +217,13 @@ def test_migrate_refuses_when_both_dirs_have_pages(tmp_path):
     assert (tmp_path / BOOK / "seed_admit" / "p0001.json").exists()
 
 
-def test_migrate_name_command_registered_and_dry_run_only_now():
+def test_migrate_name_command_registered_and_step_renamed():
     from open_guji_cv import cli_v2
     assert "migrate-name" in cli_v2.COMMANDS_V2 and "migrate-name" in cli_v2.STAGE_COMMANDS["decide"]
     from open_guji_cv.core.step import STEPS
     import open_guji_cv.steps  # noqa: F401
-    assert "char_decide" not in STEPS and "seed_admit" in STEPS             # 本版产物仍写 seed_admit
+    assert "char_decide" in STEPS and list(STEPS).count("seed_admit") == 0   # 改名版：Step 叫 char_decide
+    assert "seed_admit" in STEPS and STEPS["seed_admit"] is STEPS["char_decide"]   # 旧名按键仍查得到（过渡期）
 
 
 def test_step_import_shim_is_same_class():

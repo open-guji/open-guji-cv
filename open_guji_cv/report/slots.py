@@ -61,6 +61,7 @@ ctx/库/OCR 猜测）。同一页在「最终文本」里和「被比对的文�
 """
 from __future__ import annotations
 from ..products.alt_view import read_view as _read_view   # alt_cut：读挑中的那套切法
+from ..core.decide_names import ADMIT_STEP_ACTIVE
 
 from dataclasses import dataclass, field
 
@@ -74,8 +75,8 @@ from ..utils.jiazhu_order import sort_by_reading
 
 CELLS_STEP = "row_segment"          # 刻本链的产出者；现代链是 row_segment_runs，见 cells_step()
 CELLS_KIND = "cells"
-ADMIT_STEP = "seed_admit"
-ADMIT_KIND = "seed_admit"
+ADMIT_STEP = ADMIT_STEP_ACTIVE
+ADMIT_KIND = ADMIT_STEP_ACTIVE
 
 
 def cells_step(book: str) -> str:

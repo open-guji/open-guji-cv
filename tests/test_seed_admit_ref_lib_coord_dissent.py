@@ -28,8 +28,8 @@ def _run(tmp_path, monkeypatch, *, cands, align_char, align_op, coord=None, verd
         page=PAGE, anchored=True,
         chars=[AlignRec(id=CID, col=COL, slot=SLOT, align_char=align_char, align_op=align_op)],
         coord=[CoordRec(id=CID, col=COL, slot=SLOT, ref_char=coord)] if coord is not None else []))
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"shadow_veto": False, "group_flow": ("jys",), **(params or {})})
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    ctx.params["char_decide"] = SeedAdmitParams(**{"shadow_veto": False, "group_flow": ("jys",), **(params or {})})
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 

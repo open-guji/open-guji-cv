@@ -45,8 +45,8 @@ def _run(tmp_path, monkeypatch, *, cands, rare, params=None, guard=None, verdict
     if rare is not None:
         write_product(ctx, "rare_candidates", PAGE, rare_candidates=_rare(rare))
     # 无整理本的页会走 iron 量字块尺寸；测试不造字块图，按缺块跳过
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"patch_missing": "skip", **(params or {})})
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    ctx.params["char_decide"] = SeedAdmitParams(**{"patch_missing": "skip", **(params or {})})
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 
@@ -56,7 +56,7 @@ GOOD = dict(cands=(("百", 0.985), ("白", 0.95)), rare=["百", "白"])
 
 # ── 声明与指纹 ───────────────────────────────────────────────────────────
 def test_gated_optional_upstream():
-    spec = STEPS["seed_admit"].spec
+    spec = STEPS["char_decide"].spec
     assert ("rare_candidates", "solo_5b_cov") in spec.optional_consumes_when
     on = spec.params().model_copy(update={"solo_5b_cov": 0.98})
     assert "rare_candidates" in live_optional_consumes(spec, on)

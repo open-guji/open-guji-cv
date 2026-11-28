@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from .decide_names import ADMIT_STEP_ACTIVE
 
 PACK_DIR = "corpus-pack"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -494,7 +495,7 @@ PIN_FIELDS: tuple[str, ...] = (
 #: 补上没有内容指纹的输入：形近表、`NEVER_MATCH_FAMILIES`、异体表／异体图、`rare_candidates` 的字表与部件库。
 #: 登记在这里而不是各 Step 的 `StepSpec`：改 Step 模块源码会让 `code_hash` 变，没钉的册也跟着过期。
 CORPUS_STEPS: frozenset[str] = frozenset({
-    "glyph_match", "rare_candidates", "context_decide", "align_ref", "seed_admit",
+    "glyph_match", "rare_candidates", "context_decide", "align_ref", ADMIT_STEP_ACTIVE,
 })
 
 

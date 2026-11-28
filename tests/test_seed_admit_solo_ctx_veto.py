@@ -27,8 +27,8 @@ def _run(tmp_path, monkeypatch, *, ranked, cands=CANDS, params=None):
     write_product(ctx, "context_decide", PAGE, context_decision=page_decision(
         PAGE, BOOK, col=COL, recs=[dict(slot=SLOT, char=None, margin=0.41, source="prior",
                                         ranked=ranked)]))
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"shadow_veto": False, **(params or {})})   # 影子闸要真字形库与 sklearn，这里没摆
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    ctx.params["char_decide"] = SeedAdmitParams(**{"shadow_veto": False, **(params or {})})   # 影子闸要真字形库与 sklearn，这里没摆
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 
