@@ -60,3 +60,37 @@ def test_confusable_and_cc_metrics():
                                                          "harmed": 1, "harmful_flip_rate": 0.01, "glyph_layer_immutability": True, "n": 100}]}
     c = D.score_cc(rep)
     assert c["top1_gain"] == 0.05 and c["glyph_layer_immutable"] == 1 and c["harmed"] == 1
+
+
+def test_corpus_args_from_res_and_arg_override(tmp_path):
+    ctx = B.BenchCtx(book=D.BOOK, vols=[], work=tmp_path, res={"corpus": {"book_corpus": "/b.txt", "general_corpus": ["/g1", "/g2"]}})
+    assert D._corpus_args(ctx) == ["--book-corpus", "/b.txt", "--general-corpus", "/g1", "--general-corpus", "/g2"]
+    ctx.args = {"book_corpus": "/x"}
+    assert D._corpus_args(ctx)[:2] == ["--book-corpus", "/x"] and "/b.txt" not in D._corpus_args(ctx)
+
+
+def test_context_guard_registered_and_scored():
+    spec = B.get("context-guard")
+    assert spec.nogold and any(g.metric == "blocked_right" for g in spec.guards)
+    res = {"base": {"rate": 0.01, "context": 5}, "v": {"blocked": 3, "wrong": 2, "right": 1, "unlabeled": 0, "missed": 1, "rate": 0.012,
+                                                      "wrong_ids": ["a", "b"], "right_ids": ["c"], "missed_ids": ["d"]}}
+    m, items = D.score_guard(res)
+    assert m["blocked_right"] == 1 and m["review_rate_diff"] == 0.002 and len(items) == 4
+
+
+def test_wave_report_reads_bench_result(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("wr", __import__("pathlib").Path(__file__).resolve().parents[1] / "scripts/zhengli/wave_report.py")
+    wr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(wr)
+    d = tmp_path / "res"
+    d.mkdir()
+    (d / "result.json").write_text(json.dumps({"bench": "decide", "metrics": {"review_rate_body": 0.0145, "review_rate_diff": 0.0025,
+                                                                              "new_wrong_cells": ["v:1:1:1"]}}), encoding="utf-8")
+    v = wr.load_bench(str(d))["variants"]
+    names = list(v)
+    assert v[names[0]]["review_rate_body"] == 0.012 and v[names[1]]["new_wrong"] == ["v:1:1:1"] and v[names[1]]["fixed_wrong"] is None
+    old = {"variants": {"A": {"review_rate_body": 0.01}}}
+    p = tmp_path / "old.json"
+    p.write_text(json.dumps(old))
+    assert wr.load_bench(str(p)) == old               # 旧 eval_rough_bench json 原样

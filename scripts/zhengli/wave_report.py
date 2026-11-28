@@ -2,13 +2,14 @@
 """每波归因报告（M9 D6-6，GUJI-670）：一波各册待审格按主成因汇总，派给对口的人；和上一波比，看各家改动的实际收益。
 
     python scripts/zhengli/wave_report.py --products <产物根> [--books vol04,…,vol10] --wave 1 \\
-        [--prev <上一波 wave.json>] [--bench <eval_rough_bench --out 的 json> …] --out-dir <目录>
+        [--prev <上一波 wave.json>] [--bench <bench 结果目录或 result.json（`guji bench run decide --arg set=rough`），或旧 eval_rough_bench --out 的 json> …] --out-dir <目录>
 
 - 产物根＝这一波各册出口时的产物（如各册 main 包取回的根；`guji products pack fetch <册> --to <根>`）。
   每格的码由 `open_guji_cv/review/causes.py` 判（同 `guji audit reasons`），只读 seed_admit／align_ref。
 - `--prev`：上一波本脚本出的 `wave.json`。按码、按册报增减，另列「上一波待审、这一波不用审了」的格数（收益）
   和新冒出来的格数。格号随切分会漂，增减按码计数比，不逐格对。
-- `--bench`：这一波各家改动在粗校基准上的结果（`scripts/eval_rough_bench.py --var … --out`），列进「上一波改动的收益」。
+- `--bench`：这一波各家改动在粗校基准上的结果，列进「上一波改动的收益」。读 `guji bench run decide --arg set=rough` 的结果（目录或 result.json；2026-11-28 起的口径，CV4），
+  也认旧 `scripts/eval_rough_bench.py --out` 的 json。
 - 出 `wave.json`（下一波的 `--prev`）和 `wave.md`（贴 Jira 的正文：成因分布、派单、收益、下一波目标）。
 
 只读产物，只写 `--out-dir`。
@@ -89,6 +90,22 @@ def delta(prev: dict, cur: dict) -> dict:
             "n_prev": sum(s["n"] for s in prev.values()), "n_cur": sum(s["n"] for s in cur.values())}
 
 
+def load_bench(path: str) -> dict:
+    """粗校结果 → 旧 `variants` 形状。认 bench 结果（目录或 result.json，bench=decide、有 review_rate_body）与旧 eval_rough_bench json。
+    bench 结果里只有「现行 vs 冻结基线（或 A/B 的 B vs A）」的差，没有逐格改对清单，`fixed_wrong` 缺省 None（表里显示 —）。"""
+    p = Path(path)
+    p = p / "result.json" if p.is_dir() else p
+    d = json.loads(p.read_text(encoding="utf-8"))
+    if d.get("bench") != "decide" or "variants" in d:
+        return d
+    m = d["metrics"]
+    rb, diff = m.get("review_rate_body"), m.get("review_rate_diff")
+    base = None if rb is None or diff is None else rb - diff
+    return {"variants": {"基线": {"review_rate_body": base},
+                         d.get("env", {}).get("args", {}).get("label") or p.parent.name: {
+                             "review_rate_body": rb, "review_rate_diff": diff, "new_wrong": m.get("new_wrong_cells") or [], "fixed_wrong": None}}}
+
+
 def render_md(wave: str, stats: dict, prev: dict | None, benches: list[dict], products: str) -> str:
     books = list(stats)
     tot = totals(stats)
@@ -124,15 +141,17 @@ def render_md(wave: str, stats: dict, prev: dict | None, benches: list[dict], pr
     else:
         L.append("- 没有上一波的 `wave.json`，这是第一份，下一波起比。")
     if benches:
-        L += ["", "粗校基准上的结果（`scripts/eval_rough_bench.py`）：", "",
+        L += ["", "粗校基准上的结果（`guji bench run decide --arg set=rough`）：", "",
               "| 改动 | 正文送审率（基线 → 变体） | 差 | 新增错放 | 改对 |", "|---|---|---|---|---|"]
         for r in benches:
             vs = r.get("variants") or {}
             names = list(vs)
             for v in names[1:]:
                 a, b = vs[names[0]], vs[v]
-                L.append(f"| {v} | {a['review_rate_body']:.3%} → {b['review_rate_body']:.3%} | {b['review_rate_diff']:+.3%} | "
-                         f"{len(b['new_wrong'])} | {len(b['fixed_wrong'])} |")
+                fx = "—" if b.get("fixed_wrong") is None else len(b["fixed_wrong"])
+                ab, bb = a.get("review_rate_body"), b.get("review_rate_body")
+                L.append(f"| {v} | {'—' if ab is None else f'{ab:.3%}'} → {'—' if bb is None else f'{bb:.3%}'} | "
+                         f"{'—' if b.get('review_rate_diff') is None else f'{b['review_rate_diff']:+.3%}'} | {len(b['new_wrong'])} | {fx} |")
     L += ["", "## 四、下一波目标", ""]
     fixable = [(c, k) for c, k in tot.most_common() if CAUSES[c][1] not in NOT_FIXED]
     for code, k in fixable[:5]:
@@ -155,7 +174,7 @@ def main(argv=None) -> int:
     books = [b.strip() for b in a.books.split(",") if b.strip()]
     stats = wave_stats(Path(a.products), books)
     prev = json.loads(Path(a.prev).read_text(encoding="utf-8"))["stats"] if a.prev else None
-    benches = [json.loads(Path(f).read_text(encoding="utf-8")) for f in a.bench]
+    benches = [load_bench(f) for f in a.bench]
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     (out / "wave.json").write_text(json.dumps({"wave": a.wave, "products": a.products, "stats": stats},
