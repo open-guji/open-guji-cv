@@ -50,9 +50,16 @@ Step `group_decision`，产物 kind `group_decision`（`products/kinds/group_dec
 
 | 字段 | 内容 | 收尾读不读 |
 |---|---|---|
-| `cells[].lift` | 字组入口归属（待审口径）`[组 id, lift\|joint]` | 本版不读 |
+| `cells[].lift` | 字组入口归属（待审口径）`[组 id, lift\|joint]` | 读（`ran` 里有 `entry`；只给仍是待审口径＝没放行、非人裁、非字组通道的格用，已放行格的复核入口读最终放行字，仍现算） |
 | `near[<方法>]` | 3b `glyph_near` 看图判法原样结论快照（键形同 `_near_from_3b`／`_near_by_model_from_3b`） | 读（`ran` 里有 `near:<方法>` 才读） |
-| `wh`、`cells[].aspect` | 字框宽高、按组宽高比（现 ry）；只是证据，窄宽判与门槛在收尾 | `wh` 读（`fold_aspect`） |
+| `wh`、`cells[].aspect` | 字框宽高、按组宽高比（现 ry）；只是证据，窄宽判与门槛在收尾 | 读（`fold_aspect`：`aspect` 优先，没有按 `wh` 现算比值） |
 | `handling` | 按组处理方式定稿快照（登记表缺省＋书级 `params.group_decision.handling` 覆盖，`resolved` 进指纹） | 不读（本版只记） |
 
 不做：补放／改字／降审、字组文意各层、裁定缓存、`vis_ruling`（读邻格放行状态，窗口键随前面各遍变）。`vis_ruling` 及其后各遍次序、`ask`、`evidence.vis_ctx`、`evidence.group` 位置不动。开关关时收尾现算、产物逐字节不变。书级开：`params.group_decision.enabled: true`。
+
+### 收尾里保留的内联现算（2026-11-28 C2 查过，一行都不删）
+收尾读 4d 产物、没有就现算。现算不是「4d 缺席才用」的死代码，保留原因：
+- 入口归属：4d 只预算待审口径的格，已放行格的 review entry 在 `group_flow_pass` 里现算。
+- 看图判法：3b 没跑、备选切法列、模型指纹不一致都退回本地现算。
+- 宽高：`group_decision` 缺省关，配了 `fold_groups` 没开 4d 的书靠 `char_index` 现算；删了日曰宽高判断会悄悄失效（宽高判断按书决定，Sheldon 11-28）。
+要删这些内联，须先定「4d 缺省开」（与验收标准「新步骤缺省关」冲突，要 Sheldon 定）；格况 `cell_state_read` 同理，先翻缺省开再谈。

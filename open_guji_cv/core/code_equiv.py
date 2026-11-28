@@ -3042,6 +3042,30 @@ ENTRIES: tuple[Equiv, ...] = (
           new="1c91dba82860bf2d86269f145ceeb12855cd475fd24a0c2e9b84d66c7c3e16e2",
           old="ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77",
           evidence="seed_admit 在史記 03 small 231 页（--pages 1-231）上与基线产物逐字节相同：①关 group_decision——code_equiv check --base 2aae3bd --step seed_admit 对 #2029 头 3e9d74d，231 页逐字节相同（CV4 P3c 核对由「把格况判断拆成独立步骤」线程在其环境代跑，2026-11-28）；②开 group_decision（产物在、收尾读它）——231 页与基线逐页 JSON 0 页不同、翻转 0 格、wrong_admit=0。改动＝4d group_decision 原料独立成步：seed_admit_groups 抽出 _flow_config／_entry_config、seed_admit_shapes 两个 3b 读口加 use_gd 先读 4d 快照、seed_admit 的 fold 宽高先读 4d 产物，缺省关、关着逐字节不变。局限：史記 03 没配 glyph_near／3b，entry 与 near 读口没被走到；之后 rebase 到 dev b9c5a79／2fac591／6b427ca，改动内容同、哈希重算，stroke_veto 快照一路另有单元测试。"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="e17c625e507b0532a4d3c65a2ddc392dcbdd25932c3346acd68c0ddc04e54cf8",
+          old="b229b492cedfbc0c009dd7297002718f839ed9dda5d5ee4f37dd7a7c705a91cb",
+          evidence="A2（收尾读 4d group_decision 的入口归属 pre_entry 与 fold 宽高比 aspect；缺省关＝产物缺席时全部现算）。殿本 vol01 small 冻结快照（decide-bench/small，204 页、24,396 格，其中 3,158 格 4d 有入口归属、2,503 格带 group 证据）关人裁、册配置取工作区现行，从 align_ref 起重跑 char_decide，三种口径逐页 JSON 字节比较：①dev 0260486 内联现算；②本分支关 group_decision（产物缺席）；③本分支开 group_decision（4d 先出产物、收尾读它）——204 页两两 0 页不同、翻转 0 格。局限：该册 fold_groups 未配，aspect 读口只由单测覆盖；史記 03、殿本 large 未在本次跑。scripts/code_equiv.py 的 check 未用，改用上述同环境直跑比字节（CV4，2026-11-28）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_groups",
+          new="106d6e1c6530da79b483656f23cbd459b381013b98db8222462470b179278f38",
+          old="1b9b64cd665c26ae764e2d03cc2422681ac56aa4a4a7120b07e2181347555510",
+          evidence="A2（收尾读 4d group_decision 的入口归属 pre_entry 与 fold 宽高比 aspect；缺省关＝产物缺席时全部现算）。殿本 vol01 small 冻结快照（decide-bench/small，204 页、24,396 格，其中 3,158 格 4d 有入口归属、2,503 格带 group 证据）关人裁、册配置取工作区现行，从 align_ref 起重跑 char_decide，三种口径逐页 JSON 字节比较：①dev 0260486 内联现算；②本分支关 group_decision（产物缺席）；③本分支开 group_decision（4d 先出产物、收尾读它）——204 页两两 0 页不同、翻转 0 格。局限：该册 fold_groups 未配，aspect 读口只由单测覆盖；史記 03、殿本 large 未在本次跑。scripts/code_equiv.py 的 check 未用，改用上述同环境直跑比字节（CV4，2026-11-28）"),
+    Equiv(module="open_guji_cv.groups.flow",
+          new="f8fc50d9b10b78b46c44b22b70ed6de4f6e16f65d11591dd9d8585c7e517d6e8",
+          old="b6ae0679d9b0386810e0e2a144e6d8a3624023cb37c34fd13c706a7d82cc3c9e",
+          evidence="A2（收尾读 4d group_decision 的入口归属 pre_entry 与 fold 宽高比 aspect；缺省关＝产物缺席时全部现算）。殿本 vol01 small 冻结快照（decide-bench/small，204 页、24,396 格，其中 3,158 格 4d 有入口归属、2,503 格带 group 证据）关人裁、册配置取工作区现行，从 align_ref 起重跑 char_decide，三种口径逐页 JSON 字节比较：①dev 0260486 内联现算；②本分支关 group_decision（产物缺席）；③本分支开 group_decision（4d 先出产物、收尾读它）——204 页两两 0 页不同、翻转 0 格。局限：该册 fold_groups 未配，aspect 读口只由单测覆盖；史記 03、殿本 large 未在本次跑。scripts/code_equiv.py 的 check 未用，改用上述同环境直跑比字节（CV4，2026-11-28）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="007feb0ffb027e0a897459ba7dc6cad502cfca08a358a8f710cc4612c9eb2181",
+          old="86ebd9ff7f789e823ed96505e38fda1281cb377339c3db13398af8f708bcb2b2",
+          evidence="group_flow_near_from_3b 缺省由空改为 8 个看图方法全开（等于缺省不进参数 dump，没写它的书 params_hash 逐位不变，已核）。殿本 vol01 small 冻结快照（decide-bench/small，204 页、24,396 格，关人裁、册配置取工作区现行＝没挂 3b），从 align_ref 起重跑 char_decide：本分支与 dev 5dfc9e4 两次，char_decide／seed_admit 204 页 JSON 逐字节相同、放行与证据 0 翻转；另殿本 small vol01（204 页）、large vol04（201 页，17 页 StaleRender 两边同）从 glyph_near 起、8 个看图方法强配（rr／wu／hou／part／pair_shape、book_knn、near_knn、stroke_veto），变体 P 本地现算与变体 Q 读 3b：逐页字节相同、逐格 evidence 差异 0（5.6 万格）。局限：part_shape 没有真模型（夹具式随机权重）；殿本两册无备选切法列；wu／stroke_veto／pair_shape 触发格个位数。回放脚本与报告见 ai-team domain/CV/A24/decide-bench/substep-baseline-2026-11-28/开开关回放-8方法-殿本-2026-11-28.md（CV4 A3，2026-11-28）"),
+    Equiv(module="open_guji_cv.steps.group_decision",
+          new="597765c80f3dc7b11ff370aafe9145700e36a658f6c767d44821c6956de84e23",
+          old="a464dcf9f390834e92e65af26fb1795354f5d1a2b617b45558486168fe19bc37",
+          evidence="同 seed_admit_params：group_flow_near_from_3b 缺省 8 个全开后，group_decision.near_snapshot 对「这本书没配该方法 4d 模型」的方法不取 3b 快照；group_decision 缺省关（无 4d 产物的书不受影响），开着的书因旧缺省为空而按书写的子集取快照，行为不变，已由单测覆盖（CV4 A3，2026-11-28）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_shapes",
+          new="8b10359572cc1c7463dbaaa8735f06375807f8771115ff4669a3f0542c54acac",
+          old="1c91dba82860bf2d86269f145ceeb12855cd475fd24a0c2e9b84d66c7c3e16e2",
+          evidence="3b 与 4d 书级模型指纹不一致时，原 `_near_from_3b` 直接 raise ValueError；group_flow_near_from_3b 缺省全开后改成警告一次、该方法本页退回本地现算（返回空表）。指纹一致、没挂 3b 的路径一行未动：殿本 small vol01 从 align_ref 起（册配置现行、不挂 3b）本分支与 dev 5dfc9e4 char_decide 204 页逐字节相同，8 方法强配的 small／large 本地现算 vs 读 3b 回放 0 翻转（见 ai-team 开开关回放-8方法-殿本-2026-11-28.md）；不一致分支由单测覆盖（rr_shape、part_shape，警告并与关开关结果相同）。（CV4 A3，2026-11-28）"),
     # CV2 11-28：全唐文 053 75:3 夹注少一格，row_segment 加 jiazhu_edge_trim（缺省关）
     Equiv(module='open_guji_cv.steps.row_segment',
           new='f235472064121bdcc7a34e6d92d10ccef4c7fbe3d60d1c1b00babd10f2bd0498',
@@ -3138,6 +3162,38 @@ ENTRIES: tuple[Equiv, ...] = (
           new="a464dcf9f390834e92e65af26fb1795354f5d1a2b617b45558486168fe19bc37",
           old="3c9bc0ebfe44f461a07190f1e6abc352c7ea15917da3ead3972cedf3efc54585",
           evidence="group_decision 在殿本 vol01 3 页（--pages 1,2,3）上与 origin/dev 产物逐字节相同；只改 StepSpec.code_deps 元组（补列 seed_admit_vis3，使 SPLITS 的 params＋vis3 合回，cv #2042 补）；scripts/code_equiv.py check，2026-11-28（CV4）"),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='449c040a3fc51f63ea5ddfe4d32215d3e48b3a6b81f612459e3f34cd3bfb55bf',
+          old='b229b492cedfbc0c009dd7297002718f839ed9dda5d5ee4f37dd7a7c705a91cb',
+          evidence='char_decide 在 03 231 页（--pages 1-231）上与 7ba08115e2d9186f327b96f7d0256416686c7835 产物逐字节相同；史記 03 small 231 页'),
+    Equiv(module='open_guji_cv.steps.seed_admit_params',
+          new='e6e63a040d7c88b6042af3507424bf839866af49c84063211f1fd35dae6c7b5a',
+          old='d67115b2d285056d99853842d0eb6227760c2388854ff35dd281394a3b210350',
+          evidence='char_decide 在 03 231 页（--pages 1-231）上与 7ba08115e2d9186f327b96f7d0256416686c7835 产物逐字节相同；史記 03 small 231 页'),
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='1cf3df9d3d9147b9b4207a1480f9e3e8f2e698463a49df9ec6c36e737c5649c6',
+          old='1c4789b64ad098e05dafbe3e44573e5e0599b8aa240dbb24f9932a26f7614110',
+          evidence='align_ref 在 03 231 页（--pages 1-231）上与 7ba08115e2d9186f327b96f7d0256416686c7835 产物逐字节相同；史記 03 small 231 页'),
+    Equiv(module='open_guji_cv.steps.context_decide',
+          new='62d5c49ed93c77a4652d47103d9cff01fb985fc1dce0629dfdd16fcde43c9c7c',
+          old='442732ff599c28b52a7dca9064ce776441c2f9b4dadf867d9863d380e6a43a1a',
+          evidence='context_decide 在 03 231 页（--pages 1-231）上与 7ba08115e2d9186f327b96f7d0256416686c7835 产物逐字节相同；史記 03 small 231 页'),
+    Equiv(module='open_guji_cv.steps.context_rank',
+          new='37feb18a51360d01c3a812295bf37811b7d1f80fb219236ab3ac95e9574f7c0e',
+          old='1bc07d8f8c109e0ae4479299c81b561c4af4007197d6646f15fcd24665ba8158',
+          evidence='context_rank 在 03 231 页（--pages 1-231）上与 7ba08115e2d9186f327b96f7d0256416686c7835 产物逐字节相同；史記 03 small 231 页'),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="840d1a9a399595a3aacfbd6d8336058d4278a0d39c6bfb95af903ea78055dc57",
+          old="4aa0dee4383fe880e76ca1cb8f78fe77b2f288e9d0045d75ebffcbfa497333c2",
+          evidence="char_decide 在 03 231 页上与基线逐字节相同（A1 开关缺省关，证据见前行；rebase 到 dev 7f902e7b 后哈希重登，dev 合入的 vis3_shadow 非本改动）；史記 03 small"),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="86ebd9ff7f789e823ed96505e38fda1281cb377339c3db13398af8f708bcb2b2",
+          old="50f75f21c3eef6f208ab3f822f19e56cb4a54b45f2279c48158166a5b93edafa",
+          evidence="char_decide 在 03 231 页上与基线逐字节相同（A1 开关缺省关，证据见前行；rebase 到 dev 7f902e7b 后哈希重登，dev 合入的 vis3_shadow 非本改动）；史記 03 small"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="2aebf528f1547d752a5d0e7674a3b6d2a704ffe7ca329ab60c5d5bf0df1de045",
+          old="e17c625e507b0532a4d3c65a2ddc392dcbdd25932c3346acd68c0ddc04e54cf8",
+          evidence="char_decide 在 03 231 页与基线逐字节相同（A1 开关缺省关，证据见前行；合入 dev da40aed 后哈希重登，dev 合入的改动非本改动）；史記 03 small"),
 )
 
 
@@ -3345,6 +3401,15 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "guji_book.quantangwen.jiazhu_split": ("a0bdb376848116f288d3f912c64b98d6c834ded95b28d297e5fae5ca588f26a0", (
         ("open_guji_cv.impl.keben.jiazhu_split", "e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b"),
         ("open_guji_cv.feedback.seg_overrides", "81f5eb066e4d8fca8df69f95ef375ffb3196ccd30e850a35c099ee9648733fd0"))),
+}
+
+# 只用了 SPLITS 某条拆分里一块、本来就不该列全的 Step：(步骤 id, SPLITS 的旧模块名) → 理由。
+# tests/test_seg_move.py 的「几块要列全」守卫对这里登记的组合放行。只在这一步生来就没有旧模块、
+# 用不着合回旧哈希时登记（多列一块会白让各书过期）；要合回的照常把几块都列进 code_deps。
+SPLIT_PARTIAL_OK: dict[tuple[str, str], str] = {
+    ("cut_gate", "guji_book.quantangwen.jiazhu_split"):
+        "cut_gate（11-27 起）只调 impl.keben.jiazhu_split.column_frac 量夹注列比例，不读人定切分 seg_overrides；"
+        "全唐文 k8 起书仓已不 fork jiazhu_split，cut_gate 指纹从没含过旧的书仓 jiazhu_split，无可合回（2026-11-28，CV2）",
 }
 
 

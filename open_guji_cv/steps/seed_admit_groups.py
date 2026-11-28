@@ -389,7 +389,8 @@ _FOLD_ASPECT_PAIRS = {"ry": ("日", "曰")}
 
 
 def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, coord: dict | None = None,
-               wh: dict | None = None, dmap: dict | None = None, cells_sha: str | None = None, umap: dict | None = None) -> int:
+               wh: dict | None = None, dmap: dict | None = None, cells_sha: str | None = None, umap: dict | None = None,
+               aspect: dict | None = None) -> int:
     """折叠组（`SeedAdmitParams.fold_groups`）：待审格的字组在名单里、整理本字在组内 → 放整理本字。→ 放行数净增。
     护栏（缺省关）：`fold_ruling_first` 有本组裁定先用裁定字；`fold_lib_top_in_group` 库首位须在组内；
     扩展 `fold_coord_ref`（`coord` 由调用方给）：现役对位缺用坐标对位、未入组格按库首位入折叠组。
@@ -451,7 +452,9 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, c
             pair = pairs.get(gid)
             ar = None
             if th and pair and pair[0] in mem and pair[1] in mem:
-                if wh and r.id in wh:
+                if aspect is not None:                # 4d（A2）按组宽高比证据：同一个 w/h，4d 已算好
+                    ar = (aspect.get(r.id) or {}).get(gid)
+                elif wh and r.id in wh:
                     w, h = wh[r.id]
                     ar = w / h if (h and h > 0 and w) else None
             if ar is not None:
@@ -658,10 +661,14 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
     # 遮挡格先留底：字组流程放行的字不等于默认字（整理本字）时退回（印章底下字形类解法不可靠）
     occ_snap = ({r.id: (r, r.admit, r.channel, r.provenance, r.char, list(r.doubts or []), dict(r.evidence or {}))
                  for r in seq if (r.evidence or {}).get("occluded") and not r.admit})
+    # 保留内联回退（C2 查过，不删）：4d 只预算「待审口径」格的入口归属；已放行格的 review entry、4d 缺席时都在 group_flow_pass 里现算。
+    _gd = _opt(ctx, "group_decision", page) if ctx is not None else None      # 4d（A2）：入口归属存在产物里就读它，没有就现算
+    pre_entry = {c.id: c.lift for c in _gd.cells} if (_gd is not None and "entry" in _gd.ran) else None
     res = group_flow_pass(seq, amap, cands_of, blocked, cfg,
                           ctx_fn=lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH),
                           patch_fn=patch_fn, canon=canon,
-                          veto_refs=coord_refs(_opt(ctx, "align_ref", page)) if ctx is not None else None)
+                          veto_refs=coord_refs(_opt(ctx, "align_ref", page)) if ctx is not None else None,
+                          pre_entry=pre_entry)
     net = res.lifted - res.demoted
     for rid, (r, admit0, ch0, pv0, char0, doubts0, ev0) in occ_snap.items():
         if not r.admit:                       # 没放成：原样退回，免得字组的复核疑问（`_LANE_HARD`）拦掉后面的 R5

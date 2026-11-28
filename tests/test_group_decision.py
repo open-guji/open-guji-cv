@@ -172,6 +172,66 @@ def test_finale_fold_wh_same_with_and_without_group_decision(tmp_path, monkeypat
 
 
 @pytest.mark.usefixtures("seed_admit_switches_off")
+def test_finale_reads_entry_and_aspect_from_group_decision(tmp_path, monkeypatch):
+    """A2：4d 产物在时，收尾 group_flow 的待审格入口、fold 的宽高比都读产物；逐格结果与现算相同。"""
+    import open_guji_cv.groups.flow as flow
+    from open_guji_cv.steps import seed_admit as sa
+    p = SeedAdmitParams(group_flow=("ry",), fold_groups=("ry",), fold_aspect=(0.85, 1.0), patch_missing="skip")
+    calls = {"entry": 0, "pre": [], "aspect": []}
+    orig_entry, orig_gfp, orig_fold = flow.entry, flow.group_flow_pass, sa._fold_pass
+
+    def entry_spy(*a, **k):
+        calls["entry"] += 1
+        return orig_entry(*a, **k)
+
+    def gfp_spy(*a, **k):
+        calls["pre"].append(k.get("pre_entry"))
+        return orig_gfp(*a, **k)
+
+    def fold_spy(*a, **k):
+        calls["aspect"].append(k.get("aspect"))
+        return orig_fold(*a, **k)
+    monkeypatch.setattr(flow, "entry", entry_spy)
+    monkeypatch.setattr("open_guji_cv.groups.flow.group_flow_pass", gfp_spy)
+    patch_seed_admit(monkeypatch, "_fold_pass", fold_spy)
+
+    ctx = _ctx2(tmp_path / "a", monkeypatch, p)
+    _fill(ctx)
+    inline = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
+    n_inline, pre_inline, asp_inline = calls["entry"], list(calls["pre"]), list(calls["aspect"])
+    assert pre_inline and all(x is None for x in pre_inline) and all(a is None for a in asp_inline)
+
+    calls.update(entry=0, pre=[], aspect=[])
+    ctx2 = _ctx2(tmp_path / "b", monkeypatch, p, gd.GroupDecisionParams(enabled=True))
+    _fill(ctx2)
+    write_product(ctx2, "group_decision", PAGE, group_decision=STEPS["group_decision"].run_page(ctx2, PAGE)["group_decision"])
+    calls["entry"] = 0
+    via = STEPS["char_decide"].run_page(ctx2, PAGE)["char_decide"]
+    assert _cells(via) == _cells(inline) and (via.n_auto, via.n_review) == (inline.n_auto, inline.n_review)
+    assert calls["pre"] and all(isinstance(x, dict) and x for x in calls["pre"])
+    assert calls["aspect"] and all(isinstance(a, dict) and a for a in calls["aspect"])
+    assert calls["entry"] <= n_inline          # 待审格不再现算入口；放行格的复核入口仍现算
+
+
+def test_group_flow_pass_pre_entry_only_for_pending_cells():
+    """已放行格、人裁格、字组通道格不吃预算入口（它们读最终放行字）；待审格吃。"""
+    import open_guji_cv.groups.flow as flow
+    cfg = flow.FlowConfig(groups=("ry",), delta=0.1, min_cov=0.0, joint=True)
+    mk = lambda i, **k: SimpleNamespace(id=i, char="日", admit=False, channel=None, provenance="", doubts=[], evidence={}, **k)
+    pending, admitted = mk("a"), mk("b")
+    admitted.admit, admitted.channel = True, "ref"
+    seen = []
+    orig = flow.entry
+    try:
+        flow.entry = lambda r, *a, **k: (seen.append(r.id), None)[1]
+        flow.group_flow_pass([pending, admitted], {}, lambda i: [("日", 0.9)], lambda r: False, cfg,
+                             pre_entry={"a": None, "b": ["ry", "lift"]})
+    finally:
+        flow.entry = orig
+    assert seen == ["b"]                       # a 吃预算（None＝入不了组），b 已放行、现算
+
+
+@pytest.mark.usefixtures("seed_admit_switches_off")
 def test_entry_lift_group_and_switches(tmp_path, monkeypatch):
     p = SeedAdmitParams(group_flow=("ry",))
     ctx = _ctx2(tmp_path, monkeypatch, p, gd.GroupDecisionParams(enabled=True))
@@ -271,3 +331,11 @@ def test_group_decision_step_never_mutates_cells():
     src = inspect.getsource(gd)
     for bad in (".admit =", ".channel =", ".provenance =", "_demote("):
         assert bad not in src
+
+
+def test_near_snapshot_skips_methods_without_4d_model():
+    """缺省 `group_flow_near_from_3b` 8 个全开后，这本书没配 4d 模型的方法不取 3b 快照（也不会因指纹不符报错）。"""
+    from open_guji_cv.steps.group_decision import near_snapshot
+    from open_guji_cv.steps.seed_admit_params import SeedAdmitParams
+    p = SeedAdmitParams(db_path="x")
+    assert near_snapshot(_Ctx(), 1, p) == {}

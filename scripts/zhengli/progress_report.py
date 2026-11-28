@@ -121,7 +121,6 @@ def compute(book: str, sheet: dict | None, events, char_doc: dict | None, chapte
         note += f"；{manual_note}"
     fields = {
         "pending_review": len(pend),
-        "pending_rev": (sheet or {}).get("rev"),
         "pending_at": (sheet or {}).get("routed_as_of"),
         "human_judged": len(judged),
         "note": note,

@@ -14,6 +14,7 @@
   "yh": {"methods": ["pair_shape", "flow_shape", "pair_clf"], "note": "還遺：全唐文 pair_shape/2（cv #2015）；5a.2 字组看图判法 flow_shape（结构拆分 A4）"},
   "p:之矣": {"methods": ["pair_shape", "pair_clf"], "note": "之矣：史记 pair_shape/1（cv #2015）"},
   "men": {"methods": ["book_knn", "flow_shape", "pair_clf"], "note": "门族（閒間 等）：全唐文书级刻例近邻 _book_knn_pass 搬进 3b（cv #2019）；5a.2 字组看图判法 flow_shape（结构拆分 A4）"},
+  "chuo": {"methods": ["book_knn", "flow_shape", "pair_clf"], "note": "辶族：书级刻例近邻 book_knn（殿本、全唐文中心库有 config/groups/book_knn/chuo.json，4d 原本地现算；CV4 A3 回放 11-28 开 group_flow_near_from_3b 前补，CV3 定）；5a.2 字组看图判法 flow_shape（结构拆分 A4）"},
   "zy": {"methods": ["stroke_veto", "flow_shape", "pair_clf"], "note": "于千子干：stroke_veto 的 qg 组（千／干）挂在这里（3b 书配置 ref: zy、chars: [千, 干]），cv #2024；5a.2 字组看图判法 flow_shape（结构拆分 A4）"},
   "jys": {"methods": [], "context": true, "aspect": false, "action": "evidence",
           "note": "己已巳：Sheldon 11-27 定只做文意、不做任何字形区分；不配看图方法（cv #2024 给的 stroke_veto 对 jys 的证据去掉），目标值（CV4 11-28）"},
