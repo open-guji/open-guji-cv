@@ -6,11 +6,21 @@
 
 接口（以后的方法照这个写，第四步那些看图判字的方法迁过来也照这个）：
 
-    m = load_method(name, model_dir)          # name 如 "cnn_small"
-    outs = m.score(patches, book_id)          # patches: 灰度原图裁块（uint8，白底黑字，任意尺寸）
+    m = load_method(name, model_path)         # name 如 "cnn_small"；model_path 是模型目录或单个模型文件
+    outs = score(m, patches, book_id, ctx=ctx, cells=cells)
+                                              # 即 m.score(patches, book_id[, ctx=…, cells=…])
+                                              # patches: 字块图（uint8，白底黑字，任意尺寸），哪种图见 m.patch
                                               # → [{"sims": {字: 分}, "evidence": {...}}, …]，与 patches 一一对应
     p = m.calibrate(sims)                     # {字: 校准后的 p} 或 None（没有校准表）
-    m.fingerprint()                           # 模型目录里各文件的 sha256 拼起来的短哈希，进参数指纹
+    m.fingerprint()                           # 模型目录（或文件）的 sha256 短哈希，进参数指纹
+
+- `m.patch`（类属性，可缺）：方法吃哪种字块图。`"raw"`（缺省）＝原图灰度按 `bbox_page` 裁块；`"char_patch"`＝第二步
+  切字缓存里的字块图（`ctx.image("char_patch", patch_key)`，第四步 seed_admit 各判官读的就是这个）。
+  3b 按它给图，方法自己不读图。
+- **可选 ctx**（2026-11-28 加）：方法的 `score` 声明了 `ctx`／`cells` 参数（或 `**kwargs`）才传，老方法不认也照用（`score()` 用
+  `inspect` 判）。`ctx` 是 `RunContext`（要读本书库、3a 候选的方法用，如以后的 book_knn／near_knn）；`cells` 与 patches
+  一一对应，每格 `{id, page, col, slot, sub, patch_key, char, candidates}`（`char`／`candidates` 是 3a 的首位与候选）。
+  **方法不许改 ctx 里的东西**，只读。
 
 ## cnn_small（宫／宮／官 是第一个）
 
@@ -25,11 +35,29 @@
 `fold_by: vol_mod`：册 id 末尾的数字对折数取模，用**没见过这一册**的那个折模型打分（训练标签就是这些册的现行文本，
 用全量模型给训练册打分会把它背过的错字原样吐回来）；册 id 里读不出数字（别的书）就各折取平均。
 `merge`：异体不分的字（宮）和它归的字（宫）给同一个分（Sheldon 11-26：宫／宮 异体不分）。
+
+## rr_shape（入人八，第四步 group_flow 的书级刻形判法搬来的样板，2026-11-28）
+
+包的是 `groups.rr_shape.judge`（seed_admit `_rr_shape_pass` 用的同一个函数，同一张图同一个模型逐位同一结论同一分），
+吃 `char_patch` 字块图。模型就是第四步那份书级模型文件（数据目录 `config/groups/rr_shape.json`，`schema: rr_shape/1`，
+`research/char_groups/rr/qtw_shape_train.py` 导出），书配置直接指它：`methods: {rr_shape: config/groups/rr_shape.json}`；
+也可以给目录，目录里放 `model.json`。
+
+- `sims`：几何判成 八 → `{八: 1, 人: 0, 入: 0}`；走逻辑回归 → `{入: σ(s), 人: 1−σ(s), 八: 0}`（s＝`judge` 给的决策值，
+  已按 3 位小数取整，同第四步 `evidence.rr_shape.score`）；弃权里没算出 s 的（无墨、组外字护栏、几何不明、NaN）→ `{}`。
+  分差不够（`abstain:low_margin`）仍给 sims，弃权记在证据里。
+- `evidence`：`{char, why, nn, score, geo}`，与第四步 `evidence.rr_shape` 同键同值（`char` 是现役判法的结论，弃权为 None）。
+- 校准：模型文件旁边的 `<文件名去 .json>.calib.json`（给目录时是目录里的 `calib.json`），格式
+  `{"format": "near-calib/1", "knots": {"入": [[σ(s)…], [p…]]}, "rule": {"八": p}}`：逻辑回归那一路按 knots 映 `入` 的 p、`人`＝1−p；
+  几何判 八 的那一路 p 取 `rule.八`。**现在没有校准表**（`calibrate` 返回 None，收尾不出 p）；要标就拿训练脚本按册留出那一遍的
+  (s, 放行字) 做保序回归，或人裁样本。
 """
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
+import math
 import re
 from pathlib import Path
 
@@ -68,12 +96,42 @@ def vol_number(book_id: str) -> int | None:
 
 
 def _dir_fingerprint(d: Path) -> str:
+    """模型目录里全部文件（名＋内容）的短哈希；给的是单个模型文件时只算它和同名校准表（`<去 .json>.calib.json`）。"""
+    if d.is_file():
+        h = hashlib.sha256()
+        for f in (d, _sibling_calib(d)):
+            if f.is_file():
+                h.update(f.name.encode())
+                h.update(hashlib.sha256(f.read_bytes()).digest())
+        return h.hexdigest()[:16]
     h = hashlib.sha256()
     for f in sorted(d.iterdir()) if d.exists() else []:
         if f.is_file():
             h.update(f.name.encode())
             h.update(hashlib.sha256(f.read_bytes()).digest())
     return h.hexdigest()[:16] if d.exists() else "missing"
+
+
+def _sibling_calib(f: Path) -> Path:
+    return f.with_name(f.name[:-5] + ".calib.json" if f.name.endswith(".json") else f.name + ".calib.json")
+
+
+def _accepts(fn, name: str) -> bool:
+    try:
+        ps = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    return name in ps or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in ps.values())
+
+
+def score(m, patches: list, book_id: str, ctx=None, cells: list | None = None) -> list[dict]:
+    """调方法的 `score`：方法认 `ctx`／`cells` 才传（老方法只收 `patches, book_id`，照旧调）。"""
+    kw = {}
+    if _accepts(m.score, "ctx"):
+        kw["ctx"] = ctx
+    if _accepts(m.score, "cells"):
+        kw["cells"] = cells
+    return m.score(patches, book_id, **kw)
 
 
 def _small_net():
@@ -97,6 +155,8 @@ def _small_net():
 
 class CnnSmall:
     """四段卷积小 CNN，组内 N 分类（现役只有 宫／官 二分类）。"""
+
+    patch = "raw"
 
     def __init__(self, model_dir: Path):
         self.dir = Path(model_dir)
@@ -166,12 +226,67 @@ class CnnSmall:
         return _dir_fingerprint(self.dir)
 
 
-METHODS = {"cnn_small": CnnSmall}
+class RrShape:
+    """入人八 书级刻形判法（`groups.rr_shape`）包成 3b 方法，见模块头「rr_shape」。"""
+
+    patch = "char_patch"
+    CHARS = ("人", "入", "八")
+
+    def __init__(self, path: Path):
+        p = Path(path)
+        self.src = p
+        self.path = p / "model.json" if p.is_dir() else p
+        cal = p / "calib.json" if p.is_dir() else _sibling_calib(p)
+        from . import rr_shape
+        self.model = rr_shape.load(str(self.path))
+        self.calib = json.loads(cal.read_text(encoding="utf-8")) if cal.is_file() else None
+        if self.calib is not None and self.calib.get("format") != "near-calib/1":
+            raise ValueError(f"{cal} format 不是 near-calib/1：{self.calib.get('format')!r}")
+
+    @staticmethod
+    def sims_of(v: dict) -> dict[str, float]:
+        """`rr_shape.judge` 的结果 → 组内各字的分（只由 judge 的结论与决策值算，不另跑模型）。"""
+        if v.get("char") == "八" and "score" not in v:
+            return {"八": 1.0, "人": 0.0, "入": 0.0}
+        s = v.get("score")
+        if s is None:
+            return {}
+        q = round(1.0 / (1.0 + math.exp(-float(s))), 4)
+        return {"入": q, "人": round(1.0 - q, 4), "八": 0.0}
+
+    def score(self, patches: list[np.ndarray], book_id: str, ctx=None, cells: list | None = None) -> list[dict]:
+        from . import rr_shape
+        out = []
+        for g in patches:
+            v = rr_shape.judge(g, self.model)
+            trail = {k: v[k] for k in ("char", "why", "nn", "score", "geo") if k in v}
+            out.append({"sims": self.sims_of(v), "evidence": trail})
+        return out
+
+    def calibrate(self, sims: dict[str, float]) -> dict[str, float] | None:
+        if not self.calib or not sims:
+            return None
+        if sims.get("八") == 1.0:
+            pb = (self.calib.get("rule") or {}).get("八")
+            return None if pb is None else {"八": round(float(pb), 4)}
+        kn = (self.calib.get("knots") or {}).get("入")
+        if not kn or "入" not in sims:
+            return None
+        xs, ys = kn
+        p = float(np.interp(sims["入"], xs, ys))
+        return {"入": round(p, 4), "人": round(1.0 - p, 4)}
+
+    def fingerprint(self) -> str:
+        return _dir_fingerprint(self.src)
+
+
+METHODS = {"cnn_small": CnnSmall, "rr_shape": RrShape}
 
 _CACHE: dict[tuple[str, str], object] = {}
 
 
 def load_method(name: str, model_dir: str):
+    """方法名＋模型目录（或单个模型文件）→ 方法对象（按解析后的路径缓存）。"""
     cls = METHODS.get(name)
     if cls is None:
         raise ValueError(f"glyph_near：不认识的方法 {name!r}（已登记：{sorted(METHODS)}）")

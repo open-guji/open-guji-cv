@@ -19,10 +19,26 @@
 
 `groups` 空（缺省）＝这一步不跑（`StepSpec.enabled_by`），各书产物不受影响。
 
+### 引用形近字组登记表（`ref`，2026-11-28 接上）
+
+    params:
+      glyph_near:
+        groups:
+          rr: {ref: rr, trigger: member, methods: {rr_shape: config/groups/rr_shape.json}}
+
+`ref` 指 `config/near_groups/v2.json` 里的组 id，`chars`／`fold`（和登记表里这本书的 `books.<书>.glyph_near`）从表里来，
+同组里另写的键盖过表（`near_registry.expand_refs`，按本册 id 展开，在 `book_params` 里做，指纹与 run_page 同一份）。
+**一个 `ref` 都没写的书参数原样不动**，参数哈希逐位不变。
+
 ## 字块
 
-方法吃的是**原图灰度裁块**（`ctx.raw_page` ＋ `core.anchor.crop_patch(…, bbox_page)`），不是 `char_patch` 缓存里的
-二值图：宫官小 CNN 是在灰度裁块上训的（殿本 vol02 49 格复核：与训练时留出概率最大差 0.019，0.5 两侧一致 49/49）。
+方法吃哪种图由方法的 `patch` 定（`near_methods` 模块头）：
+- `raw`（缺省，cnn_small）：**原图灰度裁块**（`ctx.raw_page` ＋ `core.anchor.crop_patch(…, bbox_page)`），不是 `char_patch`
+  缓存里的二值图：宫官小 CNN 是在灰度裁块上训的（殿本 vol02 49 格复核：与训练时留出概率最大差 0.019，0.5 两侧一致 49/49）。
+- `char_patch`（rr_shape 等从第四步搬来的判法）：`ctx.image("char_patch", patch_key)`，与第四步 seed_admit 读的同一张。
+  读不到的格不抛错，这个方法给 `{sims: {}, evidence: {error: "patch_missing", detail}}`。
+
+方法的 `score` 认 `ctx`／`cells` 的就一起传（本书库、3a 候选要用的方法）；`cells` 每格带 3a 首位与候选。
 
 ## 指纹
 
@@ -35,6 +51,15 @@ from pydantic import BaseModel
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.read import ColumnNear, NearMethodOut, NearRec, PageNear
+
+
+def _expand(p: "GlyphNearParams", book: str | None) -> "GlyphNearParams":
+    """书配置里带 `ref` 的组按登记表展开、重算 `methods_sha`；一个 `ref` 都没有原样返回同一个对象。"""
+    from ..groups.near_registry import expand_refs
+    g = expand_refs(p.groups, book)
+    if g is p.groups:
+        return p
+    return type(p)(**{**{k: getattr(p, k) for k in type(p).model_fields}, "groups": g, "methods_sha": ""})
 
 
 class GlyphNearParams(BaseModel):
@@ -84,50 +109,93 @@ def trigger_group(cands: list, top_char: str | None, groups: dict) -> tuple[str,
 class GlyphNearStep(Step):
     spec = StepSpec(
         id="glyph_near", title="3b 形近字组分析", version="0.1", unit="cell",
-        consumes=("glyph_match", "char_index"), produces=("glyph_near",),
+        consumes=("glyph_match", "char_index", "char_patch"), produces=("glyph_near",),
         params=GlyphNearParams,
         needs=("model",),
-        code_deps=("open_guji_cv.groups.near_methods",),
+        code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_registry",
+                   "open_guji_cv.groups.rr_shape"),
         enabled_by="groups",
     )
+
+    def book_params(self, p: GlyphNearParams, ctx: RunContext) -> GlyphNearParams:
+        """按本册展开书配置里的 `ref`（见模块头）。"""
+        return _expand(p, ctx.book.id)
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: GlyphNearParams = ctx.params_for(self)  # type: ignore[assignment]
         if not p.groups:
             return {"glyph_near": PageNear(page=page, methods_sha=p.methods_sha)}
         from ..core.anchor import crop_patch
-        from ..groups.near_methods import load_method
+        from ..groups.near_methods import load_method, score
 
         match = ctx.product("glyph_match", page)
         chars = ctx.product("char_index", page)
-        bbox = {r.id: r.bbox_page for cc in chars.columns for r in cc.chars}
+        crec = {r.id: r for cc in chars.columns for r in cc.chars}
 
         hits: list[tuple[int, object, str, str]] = []          # (列, MatchRec, 组, 触发方式)
         for cm in match.columns:
             for r in cm.chars:
                 t = trigger_group(r.candidates, r.char, p.groups)
-                if t and bbox.get(r.id) is not None:
+                if t and crec.get(r.id) is not None and crec[r.id].bbox_page is not None:
                     hits.append((cm.col, r, *t))
 
         recs: dict[str, NearRec] = {}
         if hits:
-            raw = ctx.raw_page(page)
-            by_group: dict[str, list[tuple[object, object]]] = {}
+            methods = {gid: [(name, load_method(name, mdir))
+                             for name, mdir in sorted(((p.groups[gid] or {}).get("methods") or {}).items())]
+                       for gid in {h[2] for h in hits}}
+            need_raw = any(getattr(m, "patch", "raw") == "raw" for ms in methods.values() for _, m in ms)
+            raw = ctx.raw_page(page) if need_raw else None
+            by_group: dict[str, list[tuple[int, object, object]]] = {}    # 组 → [(列, MatchRec, 原图裁块|None)]
             for col, r, gid, how in hits:
-                patch = crop_patch(raw, bbox[r.id])
+                patch = crop_patch(raw, crec[r.id].bbox_page) if raw is not None else None
                 recs[r.id] = NearRec(id=r.id, slot=r.slot, sub=r.sub, group=gid, trigger=how)
-                if patch is not None and patch.size:
-                    by_group.setdefault(gid, []).append((r, patch))
+                by_group.setdefault(gid, []).append((col, r, patch if patch is not None and patch.size else None))
             for gid, items in by_group.items():
-                for name, mdir in sorted(((p.groups[gid] or {}).get("methods") or {}).items()):
-                    m = load_method(name, mdir)
-                    outs = m.score([pt for _, pt in items], ctx.book.id)
-                    for (r, _), o in zip(items, outs):
-                        recs[r.id].methods.append(NearMethodOut(method=f"{name}:{gid}", sims=o["sims"],
-                                                                evidence=o.get("evidence") or {}))
+                for name, m in methods[gid]:
+                    use, missing = self._patches(ctx, page, m, items, crec)
+                    if use:
+                        cells = [self._cell(page, it[0], it[1], crec[it[1].id]) for it, _ in use]
+                        outs = score(m, [pt for _, pt in use], ctx.book.id, ctx=ctx, cells=cells)
+                        for ((_, r, _), _), o in zip(use, outs):
+                            recs[r.id].methods.append(NearMethodOut(method=f"{name}:{gid}", sims=o["sims"],
+                                                                    evidence=o.get("evidence") or {}))
+                    for r, why in missing:
+                        recs[r.id].methods.append(NearMethodOut(method=f"{name}:{gid}",
+                                                                evidence={"error": "patch_missing", "detail": why}))
         cols = []
         for cm in match.columns:
             got = [recs[r.id] for r in cm.chars if r.id in recs]
             if got:
                 cols.append(ColumnNear(col=cm.col, chars=got))
         return {"glyph_near": PageNear(page=page, methods_sha=p.methods_sha, columns=cols)}
+
+    @staticmethod
+    def _patches(ctx: RunContext, page: int, m, items: list, crec: dict) -> tuple[list, list]:
+        """按方法要的图（`m.patch`）给字块 → ([(item, 图)], [(MatchRec, 读不到的原因)])。
+        `raw`：原图裁块，裁不出的格跳过（同 11-27 第一版）；`char_patch`：切字缓存字块图，读不到的记下来。"""
+        kind = getattr(m, "patch", "raw")
+        if kind == "raw":
+            return [(it, it[2]) for it in items if it[2] is not None], []
+        if kind != "char_patch":
+            raise ValueError(f"glyph_near：方法 {type(m).__name__} 要的字块图 {kind!r} 不认识（raw／char_patch）")
+        use, missing = [], []
+        for it in items:
+            col, r, _ = it
+            key = crec[r.id].patch_key or cell_patch_key(page, col, r.slot, r.sub)
+            try:
+                use.append((it, ctx.image("char_patch", key)))
+            except Exception as e:  # noqa: BLE001 —— 不吞：写进这一格的证据
+                missing.append((r, f"{key}: {type(e).__name__}: {e}"))
+        return use, missing
+
+    @staticmethod
+    def _cell(page: int, col: int, r, c) -> dict:
+        return {"id": r.id, "page": page, "col": col, "slot": r.slot, "sub": r.sub,
+                "patch_key": c.patch_key or cell_patch_key(page, col, r.slot, r.sub),
+                "char": r.char, "candidates": [(str(ch), float(v)) for ch, v in (r.candidates or [])]}
+
+
+def cell_patch_key(page: int, col: int, slot: int, sub: str | None) -> str:
+    """char_index 没给 `patch_key` 时的字块缓存键（同 seed_admit `_page_patch`）。"""
+    return f"p{page:04d}c{col:02d}s{slot}{sub or ''}"

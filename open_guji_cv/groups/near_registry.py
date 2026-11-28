@@ -19,7 +19,7 @@
 
 `expand_refs(groups, book)` 把带 `ref` 的组展开成 3b 认的 `{chars, fold, methods, trigger, delta, topk}`（`ref` 键本身不留，
 参数指纹只跟内容走）；**一个 `ref` 都没写时原样返回同一个对象**，接进 `GlyphNearParams` 后没写 `ref` 的书参数哈希逐位不变。
-接线（改 `steps/glyph_near.py`）留到第二期：那个文件是 3b 的 Step 模块，一改开着 3b 的书产物就判过期。
+3b 已接线（2026-11-28）：`GlyphNearStep.book_params` 按本册 id 调 `expand_refs`，展开后重算 `methods_sha`。
 """
 from __future__ import annotations
 
