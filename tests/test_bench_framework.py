@@ -105,3 +105,16 @@ def test_flip_guard_na_without_against_and_cmp_skip(tmp_path):
     out = B.write_result(tmp_path / "r0", r)
     now = B.execute(s, _ctx(tmp_path, [{"id": 1, "ok": False, "cmp_skip": True}]), against=out)
     assert now.against["worse"] == 0
+
+
+def test_registry_doc_lists_every_bench_id():
+    """doc/bench登记表.md 的「bench id」列要列全登记了、未 deprecated 的 bench（CV0 11-28）。"""
+    import re
+    from pathlib import Path
+    doc = (Path(__file__).resolve().parents[1] / "doc" / "bench登记表.md").read_text(encoding="utf-8")
+    rows = [ln.split("|") for ln in doc.splitlines() if ln.startswith("| ")]
+    col = rows[0].index(" bench id ")
+    listed = {x for r in rows[1:] for x in re.findall(r"`([^`]+)`", r[col])}
+    live = {s.id for s in B.all_specs() if not s.deprecated}
+    assert not live - listed, f"登记表「bench id」列漏了: {sorted(live - listed)}"
+    assert not listed - {s.id for s in B.all_specs()}, f"登记表写了没登记的 bench: {sorted(listed - {s.id for s in B.all_specs()})}"
