@@ -2970,6 +2970,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new='fab536ffa8ffa50bb39ea02edcffca32da3fbb59b162d86c422f9e0e6094ff79',
           old='cf88eafeacd8a4c224239bc9e7b0e2ec5332319e5022fff13809245cd3ea2f50',
           evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；全唐文开竖线跟踪后切字适配（CV2 11-28）：row_segment 加 frame_edge_near、layout_off_always，seg.profile.frame_only_edge_cells 加 near_frac，缺省同旧'),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="4233b461ffe35a95c22dff68725bfd34314e0e95bd7dcd2db314103c9a75c069",
+          old="26e0d0559cf43efe22b98974c931d3b6c1c84f36956b77b593eb97e2b3733e9f",
+          evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 c32c0ed 产物逐字节相同；#1999（4d 读 3b 看图判法，group_flow_near_from_3b 缺省空＝关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="35d1414f025d67d4f7d8bad4f761ab5d28eeb1e1669a186e84f509d80f59b764",
+          old="5f8dd48c565d4f7660a9d464c2aabcb59181767362c140e9c1823d74c6579a49",
+          evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 c32c0ed 产物逐字节相同；#1999（4d 读 3b 看图判法，group_flow_near_from_3b 缺省空＝关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_shapes",
+          new="842046b514531070e360e798f85a8fc534bfb84b6ab445a156029eefb64d58d0",
+          old="ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77",
+          evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 c32c0ed 产物逐字节相同；#1999（4d 读 3b 看图判法，group_flow_near_from_3b 缺省空＝关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
 )
 
 
