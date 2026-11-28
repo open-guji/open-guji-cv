@@ -5,9 +5,9 @@
 
 ## [未发版]
 
-## [0.9.16] - 测试中
+## [0.9.16] - 2026-11-28
 
-PATCH（CV4 2026-11-28，由第四步重构主线请求）＝v0.9.15＋dev 上此后 76 个提交整体切出（含 #2033 `seed_admit`→`char_decide` 改名与收尾写送审原因、4a–4d 拆模块与新步 `cell_state`／`group_decision`／`decide_gate`、CV3 `glyph_vis`／3b 方法、参校本四维、row_segment 新参数等）。新功能一律缺省关；改名靠 `decide migrate-name` 迁移、不用重跑。指纹变更与底库见 tag 说明。下列条目均属本版。
+PATCH（CV4 2026-11-28，由第四步重构主线请求）＝v0.9.15＋dev 上此后 76 个提交整体切出（含 #2033 `seed_admit`→`char_decide` 改名与收尾写送审原因、4a–4d 拆模块与新步 `cell_state`／`group_decision`／`decide_gate`、CV3 `glyph_vis`／3b 方法、参校本四维、row_segment 新参数等）。新功能一律缺省关；改名靠 `decide migrate-name` 迁移、不用重跑。指纹变更（对 v0.9.15）：align_ref（四维参数）、glyph_near、glyph_analyzer 改；seed_admit 改名 char_decide（旧册先 `guji-cv decide migrate-name`，不重跑）；新步 cell_state／group_decision／glyph_vis／decide_gate（缺省关）。底库 b35 不变。**配 manager ≥ v0.7.6**（含收尾新旧名并认），在此之前别给老册配 v0.9.16。`tests/test_seg_move.py::test_split_parts_listed_together_in_every_step` 在 v0.9.15 上即红（cut_gate 只列了 quantangwen.jiazhu_split 的一块），非本版引入，留待 CV2。下列条目均属本版。
 
 
 - 新命令（不进任何 Step 指纹：新模块 `feedback/vis_queue.py`、改的 `feedback/llm_queue.py` 都不在 code_deps，L0；CV3 2026-11-28）：第三步 `glyph_vis` 的离线 ask 导出／导入，挂在现役 `llm_queue` 同一命令组下。`python -m open_guji_cv.feedback.llm_queue vis-export <册…> -w <工作区> --out <目录> [--pages 1-30]`：扫 glyph_vis 产物里 `status=pending` 的 ask，按 `(img_sha, prompt_sha, 候选集合)` 跨册去重，跳过缓存里已有答案的（按本书当前 `model`＋`accept_models`，开了 `accept_legacy` 也认 legacy），按本书 `patch` 重读字块、重算 img_sha 核对（变了报 `img_changed`、读不到报 `patch_missing`、提示词／渲染口径改了报 `stale_prompt`，都不出题），落出 `img/<题号>.png`（`vis_img.render_png`，与在线送模型的同一张）、`manifest.jsonl`（题号、稳定键 key、img_sha、img_shape、prompt_sha、候选、`options` 行、本书认的 models、格号）、`prompt.md`（系统提示与用户模板原文＋答题格式）。`vis-import <答案.jsonl> --name <名> [--manifest …]`：答案按 key 对回 manifest，核 img_sha／prompt_sha／候选集合一致、提示词仍是现行代码的，用 `VisGlyphStore.put` 写 `<feedback>/vis_glyph/glyph-vis-session-<日期>.jsonl`，`model=session:<名>`；答案不在候选里又不是「其他」、conf 不认、与 manifest 不符的拒收并报告（退出码 1）；同答案重复导入不写（幂等），改了答案追加一条（后到覆盖）；`accept_models` 没列 `session:<名>` 时提示。只写本机、不推中心库、不调任何模型服务；导入后从 `glyph_vis` 起 `--force` 重跑才生效。新测 `tests/test_vis_queue.py`。
