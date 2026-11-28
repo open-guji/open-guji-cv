@@ -316,3 +316,34 @@ def test_set_book_edition_leaves_borrowed_alone(two, tmp_path):
     eds = {e for (e,) in db.conn.execute("SELECT DISTINCT edition_tag FROM glyphs")}
     assert eds == {"book-a", "book-b"}
     db.close()
+
+
+def _group(tmp_path, rows):
+    """共享刻例库样子的库：实例 id 带 ``<来源>:`` 前缀。"""
+    return _store(tmp_path, "glyphlib-wyg-v1", "glyphlib-wyg", rows)
+
+
+def test_group_lib_skips_own_prefixed_by_edition(two, tmp_path):
+    _siku, qtw = two
+    g = _group(tmp_path, [("book-b:v2:v006:5:1:1", "以"), ("lender:v2:01:1:1:1", "以"), ("lender:v2:01:1:1:2", "取")])
+    out = rebuild_from_store(qtw, tmp_path / "m.db", extra_stores=[g])
+    assert out["borrowed_instances"] == 2
+    db = GlyphDB(tmp_path / "m.db")
+    ids = {r[0] for r in db.conn.execute("SELECT instance_id FROM borrowed")}
+    assert ids == {"lender:v2:01:1:1:1", "lender:v2:01:1:1:2"}
+    assert not db.conn.execute("SELECT 1 FROM instances WHERE instance_id='book-b:v2:v006:5:1:1'").fetchone()
+    db.close()
+
+
+def test_group_lib_skips_own_prefixed_by_workspace_dir(tmp_path):
+    """组库前缀是工作区名，可以和 book_edition 不同（殿本 siku-zongmu／96mid1ogzk）。"""
+    own = _store(tmp_path, "own", "ed-x", [("v2:01:1:1:1", "以")])
+    st = tmp_path / "ws-x" / "output" / "glyph_store"
+    st.parent.mkdir(parents=True)
+    own.rename(st)
+    g = _group(tmp_path, [("ws-x:v2:01:1:1:1", "以"), ("lender:v2:01:1:1:1", "以")])
+    out = rebuild_from_store(st, tmp_path / "m.db", extra_stores=[g])
+    assert out["borrowed_instances"] == 1
+    # 显式给 self_ids 时只认给的
+    out = rebuild_from_store(st, tmp_path / "m2.db", extra_stores=[g], self_ids=["nobody"])
+    assert out["borrowed_instances"] == 2

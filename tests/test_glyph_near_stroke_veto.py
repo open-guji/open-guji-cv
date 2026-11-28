@@ -261,10 +261,8 @@ def _glyph_near_step():
     return STEPS["glyph_near"]
 
 
-def test_glyph_near_stroke_veto_end_to_end(tmp_path, models):
-    from open_guji_cv.steps.glyph_near import GlyphNearParams
-
-    mf = models["base"]
+def _e2e_setup(tmp_path, mf):
+    """jys（己已巳）、qg（千干）两组都挂 stroke_veto 的一页：返回 (ctx, 各格字块图)。"""
     groups = {"jys": {"ref": "jys", "trigger": "cands", "methods": {"stroke_veto": _spec(mf, "jys")}},
               "qg": {"ref": "zy", "chars": ["千", "干"], "trigger": "cands", "methods": {"stroke_veto": _spec(mf, "qg")}}}
     book = make_book("tbook", params={"glyph_near": {"groups": groups}, "glyph_analyzer": {"enabled": True}})
@@ -286,7 +284,18 @@ def test_glyph_near_stroke_veto_end_to_end(tmp_path, models):
     for s, g in imgs.items():
         if s != 4:
             ctx.cache.put("tbook", "char_patch", f"p0001c01s{s}", g)
+    return ctx, imgs
 
+
+def test_glyph_near_stroke_veto_end_to_end(tmp_path, models, monkeypatch):
+    """方法本身在 jys、qg 两组上的端到端（登记表 handling 守卫关掉：2026-11-28 起 jys 的 handling.methods 为 []，
+    书配置给 jys 挂 stroke_veto 会被 3b 跳过，见下一条）。"""
+    from open_guji_cv.groups import near_registry as NR
+    from open_guji_cv.steps.glyph_near import GlyphNearParams
+
+    monkeypatch.setattr(NR.NearRegistry, "check_methods", lambda self, groups, strict=None: [])
+    mf = models["base"]
+    ctx, imgs = _e2e_setup(tmp_path, mf)
     p = ctx.params_for(_glyph_near_step())
     assert p.groups["jys"]["chars"] == ["己", "已", "巳"] and p.groups["qg"]["chars"] == ["千", "干"]   # 按登记表展开
     fj, fq = (NM.method_fingerprint("stroke_veto", _spec(mf, g)) for g in ("jys", "qg"))
@@ -323,3 +332,25 @@ def test_glyph_near_stroke_veto_end_to_end(tmp_path, models):
         assert fin[f"tbook:1:1:{s}"].near[g] == {"trigger": "cands", "methods": {"stroke_veto": {**t, "model": sha}}}
     assert fin["tbook:1:1:4"].near["jys"]["methods"]["stroke_veto"]["error"] == "patch_missing"
     assert fin["tbook:1:1:5"].near == {} and fin["tbook:1:1:7"].near == {}
+
+
+def test_glyph_near_skips_stroke_veto_on_jys_per_handling(tmp_path, models, caplog):
+    """Sheldon 11-27：己已巳 只做文意、不做字形区分——登记表 jys 的 `handling.methods` 为 []。书配置照旧给 jys 挂 stroke_veto 时
+    3b 过渡期警告、跳过并计数（`PageNear.skipped_methods`），jys 整组不跑；qg（ref zy，handling 含 stroke_veto）照跑。"""
+    import logging
+
+    from open_guji_cv.groups import near_registry as NR
+
+    assert NR.handling_of("jys")["methods"] == [] and "stroke_veto" in NR.handling_of("zy")["methods"]
+    mf = models["base"]
+    ctx, _ = _e2e_setup(tmp_path, mf)
+    with caplog.at_level(logging.WARNING, logger="open_guji_cv.groups.near_registry"):
+        p = ctx.params_for(_glyph_near_step())
+    assert set(p.groups) == {"qg"}
+    assert p.methods_sha == f"qg:{NM.method_fingerprint('stroke_veto', _spec(mf, 'qg'))}"
+    assert any("jys:stroke_veto" in r.getMessage() for r in caplog.records)
+    pn = run_steps(ctx, 1, ["glyph_near"])["glyph_near"]
+    assert pn.skipped_methods == ["jys:stroke_veto"]
+    assert pn.model_dump()["skipped_methods"] == ["jys:stroke_veto"]
+    assert {r.group for v in pn.by_id_all().values() for r in v} == {"qg"}
+    assert set(pn.models) == {"stroke_veto:qg"}

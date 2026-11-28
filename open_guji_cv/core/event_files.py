@@ -23,7 +23,8 @@ from pathlib import Path
 from .volume_alias import alias_event_dict, alias_map
 
 #: 不按页寻址、不受页表 rev 判据管的事件种类。
-GATE_EXEMPT_KINDS = frozenset({"glyph_audit", "ctx_ruling"})   # 裁定按窗口内容键，不按页号锚，换图源不影响它（2026-10-31）
+GATE_EXEMPT_KINDS = frozenset({"glyph_audit", "ctx_ruling",   # 裁定按窗口内容键，不按页号锚，换图源不影响它（2026-10-31）
+                               "vis_glyph"})                   # 第三步看图缓存按字块图 sha 寻址（2026-11-28，GM4；manager source_rebase 同表）
 
 
 _REV_CACHE: dict[str, tuple[tuple[int, int], int | None]] = {}

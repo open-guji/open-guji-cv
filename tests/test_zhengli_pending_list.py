@@ -159,7 +159,7 @@ def test_recheck_puts_cells_back_with_note_and_prior(tmp_path):
 
 
 #: 自造产物没有 cell_shrink 目录：manager meta_fresh 看到的现行页集是空的，meta 记空才算新鲜
-_FRESH = {"seed_admit": {}, "cell_shrink": {}}
+_FRESH = {"seed_admit": {}, "char_decide": {}, "cell_shrink": {}}
 
 
 def _flags(tmp_path: Path, rows: list[tuple], meta: dict | None = None) -> Path:

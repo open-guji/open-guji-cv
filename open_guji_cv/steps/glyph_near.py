@@ -51,6 +51,14 @@ near_knn 判的不是某个字组，而是第四步的**形近护栏格**，所�
 同组里另写的键盖过表（`near_registry.expand_refs`，按本册 id 展开，在 `book_params` 里做，指纹与 run_page 同一份）。
 **一个 `ref` 都没写的书参数原样不动**，参数哈希逐位不变。
 
+### 守登记表的 `handling.methods`（2026-11-28，Sheldon 定「每组自定处理方式」）
+
+每组允许用哪些看图方法登记在表里（`handling.methods`，人定值在 `config/near_groups/handling.json`；日曰、己已巳为 []＝不做字形区分）。
+`book_params` 里按 `near_registry.resolve` 核：书配置给某组挂了不在它 `handling.methods` 里的方法——写了 `ref` 按 `ref` 的组，
+没写 `ref` 按 `chars` 对到包含这几个字的成员最少的组（哪组都不包含、或保留伪组 `_guard`，不核）。
+过渡期（`near_registry.STRICT_METHODS = False`）**警告、跳过该方法并计数**（一组挂的方法全被跳过就整组不跑）：跳过的记进产物 `PageNear.skipped_methods`（「组:方法」，
+空的不落盘）、日志 warning；`methods_sha` 按跳过后的方法重算。各书配置清干净后改成报错。没有要跳过的书参数原样不动。
+
 ## 一格多组（2026-11-28，CV3／CV4 定）
 
 一格可以同时触发几个组（如 `trigger: cands` 的组字有重叠、或前几名候选分属两个组），**每个组各出一条 `NearRec`**
@@ -95,7 +103,7 @@ near_knn 判的不是某个字组，而是第四步的**形近护栏格**，所�
 """
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
@@ -103,12 +111,15 @@ from ..products.kinds.read import ColumnNear, NearMethodOut, NearRec, PageNear
 
 
 def _expand(p: "GlyphNearParams", book: str | None) -> "GlyphNearParams":
-    """书配置里带 `ref` 的组按登记表展开、重算 `methods_sha`；一个 `ref` 都没有原样返回同一个对象。"""
-    from ..groups.near_registry import expand_refs
-    g = expand_refs(p.groups, book)
+    """书配置里带 `ref` 的组按登记表展开、去掉登记表 `handling.methods` 以外的方法（过渡期警告跳过，见模块头）、重算
+    `methods_sha`；一个 `ref` 都没有、也没有要跳过的方法时原样返回同一个对象。"""
+    from ..groups.near_registry import resolve
+    g, skipped = resolve(p.groups, book)
     if g is p.groups:
         return p
-    return type(p)(**{**{k: getattr(p, k) for k in type(p).model_fields}, "groups": g, "methods_sha": ""})
+    q = type(p)(**{**{k: getattr(p, k) for k in type(p).model_fields}, "groups": g, "methods_sha": ""})
+    q._skipped = tuple(f"{n}:{m}" for n, _, m in skipped)
+    return q
 
 
 class GlyphNearParams(BaseModel):
@@ -116,6 +127,8 @@ class GlyphNearParams(BaseModel):
     """{组 id: {chars, fold, methods, trigger, delta, topk}}，见模块头。空＝不跑。"""
     methods_sha: str = ""
     """自动填：各组各方法的模型目录指纹（`near_methods.method_fingerprint`），yaml 里不用写。"""
+    _skipped: tuple = PrivateAttr(default=())
+    """`book_params` 按登记表 `handling.methods` 跳过的「组:方法」（不进参数指纹；run_page 抄进 `PageNear.skipped_methods`）。"""
 
     def model_post_init(self, _ctx) -> None:
         for gid, spec in (self.groups or {}).items():
@@ -226,8 +239,9 @@ class GlyphNearStep(Step):
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: GlyphNearParams = ctx.params_for(self)  # type: ignore[assignment]
+        skipped = list(p._skipped)
         if not p.groups:
-            return {"glyph_near": PageNear(page=page, methods_sha=p.methods_sha)}
+            return {"glyph_near": PageNear(page=page, methods_sha=p.methods_sha, skipped_methods=skipped)}
         from ..core.anchor import crop_patch
         from ..groups.near_methods import load_method, score
 
@@ -277,7 +291,8 @@ class GlyphNearStep(Step):
             got = [recs[(r.id, g)] for r in cm.chars for g in sorted(p.groups) if (r.id, g) in recs]
             if got:
                 cols.append(ColumnNear(col=cm.col, chars=got))
-        return {"glyph_near": PageNear(page=page, methods_sha=p.methods_sha, columns=cols, models=models)}
+        return {"glyph_near": PageNear(page=page, methods_sha=p.methods_sha, columns=cols, models=models,
+                                       skipped_methods=skipped)}
 
     @staticmethod
     def _patches(ctx: RunContext, page: int, m, items: list, crec: dict) -> tuple[list, list]:

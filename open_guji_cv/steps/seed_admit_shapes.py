@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from . import seed_admit_common as _C
+from .decide import _opt
 from .seed_admit_common import (  # noqa: F401
     PatchUnavailable,
     _HOU,
@@ -83,13 +84,27 @@ def _log_tally(ctx, page: int, method: str, tally: dict) -> None:
             f"备选切法列 {tally['alt']}")
 
 
-def _near_from_3b(ctx, page: int, method: str, model_path: str, by_pair: bool = False) -> dict:
+def _gd_near(ctx, page: int, method: str):
+    """4d `group_decision` 产物里存的 3b 看图判法快照（`near_map`，与下面两个读口返回同形状）；没开 4d、这页没算这个方法 → None。
+    快照是 4d 步用同两个读口（`use_gd=False`）读 3b 存下来的，模型不一致已在那一步报错。"""
+    if ctx is None:
+        return None
+    gd = _opt(ctx, "group_decision", page)
+    if gd is None or f"near:{method}" not in gd.ran:
+        return None
+    return gd.near_map(method)
+
+
+def _near_from_3b(ctx, page: int, method: str, model_path: str, by_pair: bool = False, use_gd: bool = True) -> dict:
     """3b `glyph_near` 里某个看图方法的原样判法结果：{格 id: 证据（去掉 `method` 键）}（CV4 11-28，第四步重构 4d 接 3b）。
 
     只收主切法格（3b 只算主切法；备选切法列调用方退回本地现算）、证据里没有 `error` 的格。
     3b 用的模型必须与本步书级参数指的是同一份（比 `near_methods.method_fingerprint`），不一致报错，不混用。
     读不到 3b 产物（没跑、没开组）→ 空表，全部本地现算。
-    `by_pair`（part_shape：一个模型挂多对，每组一对）：键是 (格 id, 对里两字)，指纹按 {path, pair} 逐对比。"""
+    `by_pair`（part_shape：一个模型挂多对，每组一对）：键是 (格 id, 对里两字)，指纹按 {path, pair} 逐对比。
+    `use_gd`：先读 4d `group_decision` 产物里的快照（P3c）；4d 步自己取快照时传 False。"""
+    if use_gd and (hit := _gd_near(ctx, page, method)) is not None:
+        return hit
     try:
         pn = ctx.product("glyph_near", page)
     except Exception:                      # noqa: BLE001 —— 可选上游：没有就全部本地现算
@@ -117,11 +132,14 @@ def _near_from_3b(ctx, page: int, method: str, model_path: str, by_pair: bool = 
     return got
 
 
-def _near_by_model_from_3b(ctx, page: int, method: str) -> dict:
+def _near_by_model_from_3b(ctx, page: int, method: str, use_gd: bool = True) -> dict:
     """3b `glyph_near` 里某方法按「格 id＋该组模型指纹」取的原样结论：{(格 id, method_fingerprint): 证据（去 method）}。
 
     给一个模型只管一对、证据里不带是哪一对的方法用（pair_shape：每对一个组，`methods_sha` 段 `<组>:pair_shape=<指纹>`）。
-    调用方拿自己的模型算指纹去查，查不到就本地现算（模型不是同一份时也查不到，不会混用）。"""
+    调用方拿自己的模型算指纹去查，查不到就本地现算（模型不是同一份时也查不到，不会混用）。
+    `use_gd`：同 `_near_from_3b`。"""
+    if use_gd and (hit := _gd_near(ctx, page, method)) is not None:
+        return hit
     try:
         pn = ctx.product("glyph_near", page)
     except Exception:                      # noqa: BLE001 —— 可选上游：没有就全部本地现算

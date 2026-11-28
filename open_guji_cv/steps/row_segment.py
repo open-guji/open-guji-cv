@@ -1108,6 +1108,10 @@ class RowSegmentParams(BaseModel):
     #: 缺省 0.75 是殿本标定（正文字跨度中位 0.59）；脉经字宽，正文字跨度中位 0.79、73% 过 0.75，左右结构的字（肺、脉、謂、師）
     #: 中缝一宽就被劈成 a/b，取 0.82。只影响切分（`segment_column`），交接闸的 `column_frac` 不变。书级参数；0.75＝缺省（不进参数哈希）。
     jiazhu_span_t: float = 0.75
+    #: **雙行小注单格判据去边重量**（2026-11-28，CV2；全唐文开 `border_detect.vline_track` 后）：单格判据落空时上下各去掉这么多
+    #: ×格高再量一次。格线相位偏几像素、上一字的字脚伸进本格顶上，整宽的字脚把中缝填死，这一格量不出缝（053 75:3「學」脚压住
+    #: 「字闕」，整段小注少一格）。书级；0＝关（缺省，不进参数哈希）。
+    jiazhu_edge_trim: float = 0.0
     #: **切点修整串一键开**（2026-11-18 A22 统一优化 U2）：史記 r76–r80 定下、脉经照抄的五个切点开关一组开，
     #: 没单写的项取 `CUT_REPAIR` 里的值（单写了的照单写的）。书配置只写 `cut_repair: true` 一行。缺省关（不进参数哈希）。
     cut_repair: bool = False
@@ -1291,6 +1295,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_cc_min", None)
             if self.jiazhu_span_t == 0.75:
                 d.pop("jiazhu_span_t", None)
+            if not self.jiazhu_edge_trim:
+                d.pop("jiazhu_edge_trim", None)
             d.pop("cut_repair", None)          # 展开后的各项照常进 dump，开关本身不进（同值的老写法指纹一致）
             if self.page_map == "off":
                 d.pop("page_map", None)
@@ -1433,6 +1439,8 @@ class RowSegmentStep(Step):
             raise ValueError(f"row_segment.jiazhu_cc_min：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         if p.jiazhu_span_t != 0.75 and "jiazhu_span_t" not in inspect.signature(segment_column).parameters:
             raise ValueError(f"row_segment.jiazhu_span_t：本册套书的 {RB.__name__}.segment_column 没有这个参数")
+        if p.jiazhu_edge_trim and "jiazhu_edge_trim" not in inspect.signature(segment_column).parameters:
+            raise ValueError(f"row_segment.jiazhu_edge_trim：本册套书的 {RB.__name__}.segment_column 没有这个参数")
         for k_ in ("cut_gap_keep_glyph", "cut_white_row", "straight_seam_ink", "cut_glyph_line", "adopt_rel"):
             if getattr(p, k_) and k_ not in inspect.signature(segment_column).parameters:
                 raise ValueError(f"row_segment.{k_}：本册套书的 {RB.__name__}.segment_column 没有这个参数")
@@ -1617,6 +1625,7 @@ class RowSegmentStep(Step):
                        if getattr(p, k_) and final},
                     **({"jiazhu_cc_min": p.jiazhu_cc_min} if p.jiazhu_cc_min != 500 else {}),
                     **({"jiazhu_span_t": p.jiazhu_span_t} if p.jiazhu_span_t != 0.75 else {}),
+                    **({"jiazhu_edge_trim": p.jiazhu_edge_trim} if p.jiazhu_edge_trim else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:

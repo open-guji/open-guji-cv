@@ -2970,6 +2970,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='fab536ffa8ffa50bb39ea02edcffca32da3fbb59b162d86c422f9e0e6094ff79',
           old='cf88eafeacd8a4c224239bc9e7b0e2ec5332319e5022fff13809245cd3ea2f50',
           evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；全唐文开竖线跟踪后切字适配（CV2 11-28）：row_segment 加 frame_edge_near、layout_off_always，seg.profile.frame_only_edge_cells 加 near_frac，缺省同旧'),
+    # 第三步 3e glyph_vis（看图大模型，缺省关；CV3 11-28）：收尾 glyph_analyzer 可选读 glyph_vis，merge_cell 加 vis_rec 参数（缺省 None），
+    # FinalRec.vis 空不落盘、evidence.v 只在 3e 答出字时写——没开 3e 的书收尾产物逐字节不变
+    Equiv(module='open_guji_cv.steps.glyph_analyzer',
+          new='cc8e25d0ff6f542f8a668ffb7e39ae3ed2fe482883746c33ed345f20c456a608',
+          old='8203244471cd01071011fb7721b62a74d9f6ca23b25e9fb07e5497e8fef3bca1',
+          evidence='glyph_analyzer 在 vtest 3 页（--pages 1,2,3）上与 origin/dev 5910584e 产物逐字节相同；自造册 vtest（3 页×8 列×21 格含夹注半格，'
+                   '3a same/unsure/diff、3b 两组随机触发、3c、3d 都有，没有真书收尾产物可比），glyph_vis 没开；另 tests/test_glyph_vis.py '
+                   '冻结了 origin/dev 的 merge_cell 输出逐字节对照；scripts/code_equiv.py check，2026-11-28（CV3）'),
     Equiv(module="open_guji_cv.steps.seed_admit",
           new="4233b461ffe35a95c22dff68725bfd34314e0e95bd7dcd2db314103c9a75c069",
           old="26e0d0559cf43efe22b98974c931d3b6c1c84f36956b77b593eb97e2b3733e9f",
@@ -2986,6 +2994,27 @@ ENTRIES: tuple[Equiv, ...] = (
           new="88b64132ad232206b5c940aad8ee9f86c0b6402ed63d2cbb01084360e10e4ec2",
           old="ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77",
           evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 2aae3bd 产物逐字节相同；#2027（4d 接 3b：stroke_veto 读口，缺省关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="79ec58530ac544cca0de43750dba5235a5854562a9050a5d3a232156a894349d",
+          old="9c18b9ebec3a2d0bc8ac0ebb5fa9a354bf5767b7d79d34285966ab402698ed5d",
+          evidence="seed_admit 在史記 03 small 231 页（--pages 1-231）上与基线产物逐字节相同：①关 group_decision——code_equiv check --base 2aae3bd --step seed_admit 对 #2029 头 3e9d74d，231 页逐字节相同（CV4 P3c 核对由「把格况判断拆成独立步骤」线程在其环境代跑，2026-11-28）；②开 group_decision（产物在、收尾读它）——231 页与基线逐页 JSON 0 页不同、翻转 0 格、wrong_admit=0。改动＝4d group_decision 原料独立成步：seed_admit_groups 抽出 _flow_config／_entry_config、seed_admit_shapes 两个 3b 读口加 use_gd 先读 4d 快照、seed_admit 的 fold 宽高先读 4d 产物，缺省关、关着逐字节不变。局限：史記 03 没配 glyph_near／3b，entry 与 near 读口没被走到；之后 rebase 到 dev b9c5a79／2fac591／6b427ca，改动内容同、哈希重算，stroke_veto 快照一路另有单元测试。"),
+    Equiv(module="open_guji_cv.steps.seed_admit_groups",
+          new="8e8e52ecde880d733e395b62aa3dc59b56c67ed749ae2d296dac69a8f10fa546",
+          old="1b9b64cd665c26ae764e2d03cc2422681ac56aa4a4a7120b07e2181347555510",
+          evidence="seed_admit 在史記 03 small 231 页（--pages 1-231）上与基线产物逐字节相同：①关 group_decision——code_equiv check --base 2aae3bd --step seed_admit 对 #2029 头 3e9d74d，231 页逐字节相同（CV4 P3c 核对由「把格况判断拆成独立步骤」线程在其环境代跑，2026-11-28）；②开 group_decision（产物在、收尾读它）——231 页与基线逐页 JSON 0 页不同、翻转 0 格、wrong_admit=0。改动＝4d group_decision 原料独立成步：seed_admit_groups 抽出 _flow_config／_entry_config、seed_admit_shapes 两个 3b 读口加 use_gd 先读 4d 快照、seed_admit 的 fold 宽高先读 4d 产物，缺省关、关着逐字节不变。局限：史記 03 没配 glyph_near／3b，entry 与 near 读口没被走到；之后 rebase 到 dev b9c5a79／2fac591／6b427ca，改动内容同、哈希重算，stroke_veto 快照一路另有单元测试。"),
+    Equiv(module="open_guji_cv.steps.seed_admit_shapes",
+          new="1c91dba82860bf2d86269f145ceeb12855cd475fd24a0c2e9b84d66c7c3e16e2",
+          old="ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77",
+          evidence="seed_admit 在史記 03 small 231 页（--pages 1-231）上与基线产物逐字节相同：①关 group_decision——code_equiv check --base 2aae3bd --step seed_admit 对 #2029 头 3e9d74d，231 页逐字节相同（CV4 P3c 核对由「把格况判断拆成独立步骤」线程在其环境代跑，2026-11-28）；②开 group_decision（产物在、收尾读它）——231 页与基线逐页 JSON 0 页不同、翻转 0 格、wrong_admit=0。改动＝4d group_decision 原料独立成步：seed_admit_groups 抽出 _flow_config／_entry_config、seed_admit_shapes 两个 3b 读口加 use_gd 先读 4d 快照、seed_admit 的 fold 宽高先读 4d 产物，缺省关、关着逐字节不变。局限：史記 03 没配 glyph_near／3b，entry 与 near 读口没被走到；之后 rebase 到 dev b9c5a79／2fac591／6b427ca，改动内容同、哈希重算，stroke_veto 快照一路另有单元测试。"),
+    # CV2 11-28：全唐文 053 75:3 夹注少一格，row_segment 加 jiazhu_edge_trim（缺省关）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='f235472064121bdcc7a34e6d92d10ccef4c7fbe3d60d1c1b00babd10f2bd0498',
+          old='27c7ae037f096c7f2216fa858feb000d680f3b6717eed22981c07c3034325bee',
+          evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；053 75:3 开竖线后夹注少一格（CV2 11-28）：row_segment 加书级参数 jiazhu_edge_trim（单格夹注判据落空时去上下边再量），缺省 0＝同旧'),
+    Equiv(module='open_guji_cv.impl.keben.row_boundaries',
+          new='10ea5301bf4ab201bdf1d855e7146443c0752b32bdfbe59b61c793aa027b8d9b',
+          old='ff1538485290289410fc7a706eb3d8b861b7fb21b9d1d172703d63650505e8e6',
+          evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；053 75:3 开竖线后夹注少一格（CV2 11-28）：row_segment 加书级参数 jiazhu_edge_trim（单格夹注判据落空时去上下边再量），缺省 0＝同旧'),
 )
 
 
