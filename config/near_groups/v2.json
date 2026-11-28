@@ -508,13 +508,15 @@
    "combine": "first",
    "handling": {
     "methods": [
+     "book_knn",
      "flow_shape",
      "pair_clf"
     ],
     "context": true,
     "aspect": false,
     "action": "admit",
-    "threshold": null
+    "threshold": null,
+    "note": "辶族：书级刻例近邻 book_knn（殿本、全唐文中心库有 config/groups/book_knn/chuo.json，4d 原本地现算；CV4 A3 回放 11-28 开 group_flow_near_from_3b 前补，CV3 定）；5a.2 字组看图判法 flow_shape（结构拆分 A4）"
    },
    "methods": [
     "ids",
