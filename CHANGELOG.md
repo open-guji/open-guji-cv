@@ -153,6 +153,8 @@
 
 ## [未发版]
 
+- PATCH（CV3 2026-11-28，Sheldon 11-27 定形近字组方案）：形近字组登记表 `config/near_groups/v2.json` 类型只分 `variant`（异体，同义异码）与 `near`（形近异义）两类，原另记一类的 6 组（guan、hou、kgc、tsh、xz、zh）归 near，组内异体归并照旧在 `fold` 字段；旧版书级表的 `fold` 类型读成 near。每组加处理方式 `handling`（`methods` 允许的 3b 看图方法、`context` 文意、`aspect` 4d 宽高比、`action` admit／evidence、`threshold`），人定值在新输入文件 `config/near_groups/handling.json`，其余按现役行为的缺省规则生成；日曰（ry）、己已巳（jys）`methods: []`（不做字形区分，去掉 stroke_veto 对 jys）、context=true；aspect 日曰 true（按现役）、己已巳 false。读口 `near_registry.handling_of(组, over=书级覆盖)`（书配置优先、handling 缺省；methods 不许书级放宽）、`resolve(groups, book)`。3b `glyph_near` 守 `handling.methods`：书配置挂了以外的方法过渡期警告、跳过并计数（产物新字段 `PageNear.skipped_methods`，空的不落盘；`near_registry.STRICT_METHODS` 改 True 后载入即报错）。现役读口（NEVER_MATCH_FAMILIES、partners、_PARTNER、NEAR_FORM_CHARS、manager N01、glyph_near_spec、groups_of）取值逐项不变。**指纹变更：glyph_near 起过期**（glyph_near.py、near_registry.py 改了；登记表数据不进指纹，其余 Step 的 code_hash 不变）。
+
 - PATCH（产物逐字节不变，code_equiv 登记；CV0 2026-11-28，脉经第 2 册缺文小注）：`reference_profile` 的 `kind: none` 段可写 `cols`（列级无参照，可与页段重叠）；align_ref 在这些列不出对位字、坐标对位与提示，产物写 `none_cols`；`page_token` 只在声明页加 `|nc:…`。manager 待审原因据此按格认「参照缺是设计」。
 ## [0.9.15] - 2026-11-28
 

@@ -203,7 +203,9 @@
     qg:  {ref: zy, chars: [千, 干], trigger: cands, methods: {stroke_veto: {path: config/groups/stroke_veto.json, group: qg}}}
 
 登记表：`jys`（己已巳，注册组，near）原样对上；千干 在注册组 `zy`（于千子干）里，`ref: zy` 再用 `chars: [千, 干]` 盖掉成员
-（于、子 是极常见字，不盖的话凡候选里有 于／子 的格都要配准一次，4d 一格不读）。登记表不用改。文件里只有一组时可以只写路径字符串。
+（于、子 是极常见字，不盖的话凡候选里有 于／子 的格都要配准一次，4d 一格不读）。文件里只有一组时可以只写路径字符串。
+**2026-11-28 起登记表 jys 的 `handling.methods` 为 []**（Sheldon 11-27：己已巳只做文意、不做字形区分），书配置照上面写 jys 那行会被
+3b 警告、跳过（`near_registry.resolve`，计入 `PageNear.skipped_methods`）；方法本身仍认模型里的 jys 组，只是 3b 不再给它跑。
 
 - 判法：现役 `judge(图, 组)` → `{x, cls, why, llr}`：`cls` 是**类名**（`classes` 把字映到类，jys 的 已／巳 本书刻法相同并成一类 `已巳`）；
   似然比领先量 `llr`（2 位）≥ `t` 才给类，`why: llr`；不够 → `abstain`（有 `llr`）；离两类都远（`max_z`）→ `out`（无 `llr`）；
