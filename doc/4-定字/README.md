@@ -30,7 +30,7 @@
 |---|---|---|
 | `decide.py` | `ref_of(ctx, page)` 合并读口（`{格: {ref, via: text\|coord\|pin, op}}`）、`text_refs`／`coord_refs`（`seed_admit._align`／`_coord_refs` 只是它的包装）、`_opt` | 4a 读口 |
 | `seed_admit_cell_state.py` | 遮挡、印章空白、墨点、字框几何（`seg_box_check`）、夹注不齐、符号、表头公式 | 4c 格况 |
-| `seed_admit_groups.py` | group_flow、看图判裁定、折叠组、近形 p、人裁字形表；`_flow_config`（字组流程配置，收尾与 4d 共用）、`_entry_config`（4d 出入口归属用） | 4d 字组 |
+| `seed_admit_groups.py` | group_flow、看图判裁定、日曰己已巳按文意定字（旧称折叠组）、近形 p、人裁字形表；`_flow_config`（字组流程配置，收尾与 4d 共用）、`_entry_config`（4d 出入口归属用） | 4d 字组 |
 | `seed_admit_pick.py` | 选刻形、铁证、独证、文意异议、码位表、书级钩子取数 | 收尾·定字 |
 | `seed_admit_lanes.py` | 整理本／无参照放行通道与降审护栏各遍 | 收尾·放行 |
 | `seed_admit_veto.py` | `shadow_veto`、follow_ref 否决、witness3 近邻否决 | 收尾·否决 |
