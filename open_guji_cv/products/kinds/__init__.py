@@ -12,3 +12,4 @@ from . import inverted  # noqa: F401  —— 反色带候选（2026-10-22）
 from . import free_layout  # noqa: F401  —— 自由版式管线 keben_free 的三种产物（2026-10-27）
 from . import read  # noqa: F401  —— 第三步识字重构：3b glyph_near、收尾 glyph_analyzer（2026-11-27）
 from . import decide  # noqa: F401  —— 第四步定字的新产物：4b context_rank（2026-11-27）
+from . import decide_gate  # noqa: F401  —— 第四步出口 gate 检测结果（只检测，2026-11-28）

@@ -9,7 +9,7 @@
     python scripts/build_near_groups_v2.py --pair-clf <书>=<数据目录>/config/groups/pair_clf.json \\
         --glyph-near <书>=<册配置.yaml 或 groups 的 json> --out <数据目录>/config/near_groups/v2.json
 
-仓内六处来源里五处在仓里（手工表、字体表、人裁表、`near_groups.json`、注册字组表），第六处 pair_clf 的对是书级文件，
+仓内六处来源里五处在仓里（手工表 `config/near_groups/hand.json`、字体表、人裁表、`near_groups.json`、注册字组表），第六处 pair_clf 的对是书级文件，
 只在带 `--pair-clf` 时并进来；提交的 v2.json 不带任何书级输入，所以 `books` 全空。
 
 合并规则：
@@ -18,7 +18,8 @@
   两个字同在某个注册组里的对挂到那个组（同在几个组就挂几个）的 `pairs` 下，其余每对单立一组，id 为 `p:<两字按码位序>`；
 - 剔除名单 `config/near_groups_drop.tsv` 里的对，没有手工／人裁来源的不收（同 `build_near_groups.py merge`）。
 
-本脚本只生成表，不改任何现役读口；第二期把 3b／第四步／出单分类改读本表时要另做 code_equiv 证明。
+本脚本只生成表。第二期（2026-11-28）起 `confusable.NEVER_MATCH_FAMILIES`／`partners()` 从本表派生，所以手工表不能再从
+`confusable` 读（会读回自己），改读真源 `config/near_groups/hand.json`；改了任何来源都要重跑本脚本，否则现役护栏跟不上。
 """
 from __future__ import annotations
 
@@ -37,7 +38,7 @@ TYPES = {"near": "异字形近（组内是不同的字）", "variant": "同字�
 PAIR_PREFIX = "p:"
 DOC = ("形近字组登记表（scripts/build_near_groups_v2.py 生成，勿手改；读口 open_guji_cv/groups/near_registry.py，"
        "schema 与来源见 doc/3-识字/形近字组登记表.md）。groups 的键是组 id：注册字组表的组 id 照旧，其余字对单立 p:<两字>。"
-       "src：registry＝注册字组表、hand＝confusable.NEVER_MATCH_FAMILIES、human＝config/confusable_human.json、"
+       "src：registry＝注册字组表、hand＝config/near_groups/hand.json（手工核过的形近否决对）、human＝config/confusable_human.json、"
        "font＝字体形近表 τ≥font_tau、near_groups＝config/near_groups.json、pair_clf:<书>＝该书的按对分类器文件。"
        "methods＝第四步 group_flow 的方法数组（按顺序）；books＝按书覆盖（哪本书开哪些方法、用哪个模型文件）。")
 
@@ -63,7 +64,7 @@ def read_drop(path: Path) -> set[str]:
 
 def repo_pair_sources(root: Path = ROOT) -> dict[str, dict]:
     """仓内四处字对来源 → {对: {"src": {标签…}, …附带字段}}。"""
-    from open_guji_cv.clustering.confusable import FONT_TAU, NEVER_MATCH_FAMILIES
+    from open_guji_cv.clustering.confusable import FONT_TAU, hand_pairs
     cfg = root / "config"
     acc: dict[str, dict] = {}
 
@@ -74,7 +75,7 @@ def repo_pair_sources(root: Path = ROOT) -> dict[str, dict]:
         e["src"].add(tag)
         e.update(extra)
 
-    for a, b in NEVER_MATCH_FAMILIES:
+    for a, b in hand_pairs(cfg / "near_groups" / "hand.json"):   # 手工表真源；confusable.NEVER_MATCH_FAMILIES 反过来从本表派生
         add(a, b, "hand")
     human = json.loads((cfg / "confusable_human.json").read_text(encoding="utf-8")).get("pairs", {})
     for k in human:

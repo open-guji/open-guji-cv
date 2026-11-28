@@ -1,0 +1,14 @@
+{
+ "format": "near_groups_hand/1",
+ "_doc": "手工核过的形近否决对（形近字组登记表的来源 1，src=hand）。每一对都是实审案底，别凭感觉往里加。2026-11-28 从 open_guji_cv/clustering/confusable.py 的 NEVER_MATCH_FAMILIES 字面量原样搬来（顺序、方向、注释不变）；现役读口一律经登记表 config/near_groups/v2.json（confusable.NEVER_MATCH_FAMILIES、partners() 由它派生），本文件只给 scripts/build_near_groups_v2.py 与 scripts/build_near_groups.py merge 读。改了要重跑 build_near_groups_v2.py。",
+ "pairs": [
+  {"a": "諭", "b": "論"}, {"a": "遺", "b": "還"}, {"a": "圓", "b": "圖"}, {"a": "大", "b": "太"}, {"a": "廣", "b": "贋"},
+  {"a": "候", "b": "侯"}, {"a": "間", "b": "問"}, {"a": "已", "b": "巳"}, {"a": "曾", "b": "會"}, {"a": "選", "b": "過"},
+  {"a": "人", "b": "入"}, {"a": "未", "b": "末"}, {"a": "面", "b": "而"}, {"a": "夬", "b": "夫"}, {"a": "彖", "b": "象"},
+  {"a": "匕", "b": "七", "note": "margin 标定唯一阈上错例（vol02:37:6:12，diff 分支 OCR 认错）。本表只防库匹配侧；OCR-only 路径（diff 档）管不到，属残余风险，出路是 char-ocr 集给 OCR 分支单独立门。"},
+  {"a": "日", "b": "曰", "note": "vol01:10:9:10 实审发现（裘曰修之「曰」，库内「日」对它 cov 0.96 已进 unsure 带；OCR 也认成日）。同形程度全表最高。"},
+  {"a": "揀", "b": "棟", "note": "vol01:9:4:12 实锤（match_solo 通道首个错例——揀选之「揀」对库内「棟」cov 0.9802，偏旁 扌/木 之差全落一个残差窗，wmax 13）。"},
+  {"a": "己", "b": "已", "note": "己/已、己/巳：vol01:21:3:19 实锤（因己身→人裁误判巳，align/图块目视核对后改判己）——形状判据自己会认错，这条护栏仍然要拦。用户 2026-09-11 定：己已巳在这套刻本里其实是混用（进了 glyph_db.py 的 CONFUSABLE_GROUPS，上下文通道现在也豁免它），但那是文意层的结论，跟这里形状层「像到不能瞎猜」的护栏是两件事——两层各司其职，不因为文意判定放开了就跟着摘表（见 seeding.py 模块头 SEMANTIC_MERGED_CHARS 附近的说明）。"},
+  {"a": "己", "b": "巳", "note": "同上一条（vol01:21:3:19）。"}
+ ]
+}

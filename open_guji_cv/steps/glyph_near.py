@@ -13,9 +13,10 @@
             chars: [宫, 宮, 官]
             fold: {宮: 宫}                         # 异体不分：触发判断时当同一个字（可缺）
             methods: {cnn_small: models/glyph_near_gong}   # 方法名 → 模型目录（相对路径先找数据目录、再找仓根）
-            trigger: member                       # member：3a 首位在组里就跑；close（缺省）：首位在组里且组内另一字分差 ≤ delta
+            trigger: member                       # member：3a 首位在组里就跑；close（缺省）：首位在组里且组内另一字分差 ≤ delta；
+                                                  # cands：3a 首位或候选前 topk 名里有组内任一字就跑（从第四步搬来的判法用它罩住 4d 的触发格）
             delta: 0.03
-            topk: 3                               # close 看 3a 前几名
+            topk: 3                               # close 看 3a 前几名（缺省 3）；cands 看前几名（缺省 5，＝glyph_match.max_candidates 缺省）
 
 `groups` 空（缺省）＝这一步不跑（`StepSpec.enabled_by`），各书产物不受影响。
 
@@ -24,7 +25,7 @@
     params:
       glyph_near:
         groups:
-          rr: {ref: rr, trigger: member, methods: {rr_shape: config/groups/rr_shape.json}}
+          rr: {ref: rr, trigger: cands, methods: {rr_shape: config/groups/rr_shape.json}}
 
 `ref` 指 `config/near_groups/v2.json` 里的组 id，`chars`／`fold`（和登记表里这本书的 `books.<书>.glyph_near`）从表里来，
 同组里另写的键盖过表（`near_registry.expand_refs`，按本册 id 展开，在 `book_params` 里做，指纹与 run_page 同一份）。
@@ -39,6 +40,15 @@
   读不到的格不抛错，这个方法给 `{sims: {}, evidence: {error: "patch_missing", detail}}`。
 
 方法的 `score` 认 `ctx`／`cells` 的就一起传（本书库、3a 候选要用的方法）；`cells` 每格带 3a 首位与候选。
+
+**只管主切法格**：3b 按 `glyph_match.columns`／`char_index` 走，备选切法列（`glyph_match.alt_columns`）不跑；
+4d 读备选列时本地现算（CV3／CV4 11-28 定）。
+
+## 给 4d 的（2026-11-28，CV4《4d 接 3b 看图方法-接口要求》）
+
+- 方法证据原样落进 `NearMethodOut.evidence`（rr_shape：`{char, why, nn, score, geo}`，与 `rr_shape.judge()` 同键同值、同舍入），
+  收尾把它抄进每格 `near.methods[方法名]`；
+- 本页跑过的方法用的模型版本记在 `PageNear.models`（`{"方法:组": 方法.model_sha}`），收尾也抄进 `near.methods[方法名].model`。
 
 ## 指纹
 
@@ -92,9 +102,16 @@ def trigger_group(cands: list, top_char: str | None, groups: dict) -> tuple[str,
         g = groups[gid] or {}
         fold = dict(g.get("fold") or {})
         members = {_canon(c, fold) for c in (g.get("chars") or [])}
+        mode = str(g.get("trigger") or "close")
+        if mode == "cands":
+            pool = {_canon(c, fold) for c, _ in ranked[:int(g.get("topk", 5))]}
+            pool |= {_canon(c, fold) for c in (top, top_char) if c}
+            if pool & members:
+                return gid, "cands"
+            continue
         if _canon(top, fold) not in members:
             continue
-        if str(g.get("trigger") or "close") == "member":
+        if mode == "member":
             return gid, "member"
         delta = float(g.get("delta", 0.03))
         topk = int(g.get("topk", 3))
@@ -113,7 +130,7 @@ class GlyphNearStep(Step):
         params=GlyphNearParams,
         needs=("model",),
         code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_registry",
-                   "open_guji_cv.groups.rr_shape"),
+                   "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.rr_shape"),
         enabled_by="groups",
     )
 
@@ -140,6 +157,7 @@ class GlyphNearStep(Step):
                     hits.append((cm.col, r, *t))
 
         recs: dict[str, NearRec] = {}
+        models: dict[str, str] = {}
         if hits:
             methods = {gid: [(name, load_method(name, mdir))
                              for name, mdir in sorted(((p.groups[gid] or {}).get("methods") or {}).items())]
@@ -154,6 +172,7 @@ class GlyphNearStep(Step):
             for gid, items in by_group.items():
                 for name, m in methods[gid]:
                     use, missing = self._patches(ctx, page, m, items, crec)
+                    models[f"{name}:{gid}"] = str(getattr(m, "model_sha", "") or m.fingerprint())
                     if use:
                         cells = [self._cell(page, it[0], it[1], crec[it[1].id]) for it, _ in use]
                         outs = score(m, [pt for _, pt in use], ctx.book.id, ctx=ctx, cells=cells)
@@ -168,7 +187,7 @@ class GlyphNearStep(Step):
             got = [recs[r.id] for r in cm.chars if r.id in recs]
             if got:
                 cols.append(ColumnNear(col=cm.col, chars=got))
-        return {"glyph_near": PageNear(page=page, methods_sha=p.methods_sha, columns=cols)}
+        return {"glyph_near": PageNear(page=page, methods_sha=p.methods_sha, columns=cols, models=models)}
 
     @staticmethod
     def _patches(ctx: RunContext, page: int, m, items: list, crec: dict) -> tuple[list, list]:

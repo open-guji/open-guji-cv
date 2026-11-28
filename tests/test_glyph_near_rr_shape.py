@@ -119,7 +119,8 @@ def test_same_input_same_score_as_seed_admit_pass(model_file):
     _rr_shape_pass(p, [NS(col=1, chars=recs)], {}, ctx, 1)
     outs = NM.load_method("rr_shape", str(model_file)).score(imgs, "b")
     for r, o, g in zip(recs, outs, imgs):
-        assert r.evidence["rr_shape"] == o["evidence"]
+        assert o["evidence"]["method"] == "rr_shape"
+        assert r.evidence["rr_shape"] == {k: v for k, v in o["evidence"].items() if k != "method"}
         v = rr_shape.judge(g, rr_shape.load(str(model_file)))
         assert o["evidence"]["char"] == v["char"] and o["evidence"].get("score") == v.get("score")
         if r.admit:                                                     # 现役放行了：3b 方法给同一个字最高分
@@ -175,22 +176,32 @@ def test_book_params_without_ref_is_same_object(tmp_path):
     assert GlyphNearStep().book_params(p, make_ctx(tmp_path)) is p
 
 
+def test_trigger_cands_covers_topk():
+    from open_guji_cv.steps.glyph_near import trigger_group
+    g = {"rr": {"chars": ["人", "入", "八"], "trigger": "cands"}}
+    assert trigger_group([("言", 0.9), ("文", 0.8), ("之", 0.7), ("而", 0.6), ("入", 0.5)], "言", g) == ("rr", "cands")
+    assert trigger_group([("言", 0.9), ("文", 0.8), ("之", 0.7), ("而", 0.6), ("也", 0.5), ("入", 0.4)], "言", g) is None
+    assert trigger_group([], "八", g) == ("rr", "cands")                              # same 档没有候选，看 char
+    assert trigger_group([("言", 0.9), ("入", 0.5)], "言", {"rr": {**g["rr"], "topk": 1}}) is None
+
+
 def test_glyph_near_rr_shape_end_to_end(tmp_path, model_file):
     from open_guji_cv.steps.glyph_near import GlyphNearParams
 
-    groups = {"rr": {"ref": "rr", "trigger": "member", "methods": {"rr_shape": str(model_file)}}}
+    groups = {"rr": {"ref": "rr", "trigger": "cands", "methods": {"rr_shape": str(model_file)}}}
     book = make_book("tbook", params={"glyph_near": {"groups": groups}, "glyph_analyzer": {"enabled": True}})
     ctx = make_ctx(tmp_path, book, raw={1: np.full((400, 300), 255, np.uint8)})
-    imgs = {1: ba(), 2: ren(), 3: ru()}
+    imgs = {1: ba(), 2: ren(), 3: ru(), 6: _blank()}
     write_product(ctx, "glyph_match", 1, glyph_match=page_match(recs=[
         {"slot": 1, "verdict": "unsure", "candidates": [("人", 0.90), ("八", 0.89)]},
         {"slot": 2, "verdict": "same", "char": "人", "cov": 0.95},
-        {"slot": 3, "verdict": "unsure", "candidates": [("入", 0.90), ("人", 0.70)]},
+        {"slot": 3, "verdict": "unsure", "candidates": [("言", 0.90), ("文", 0.8), ("之", 0.7), ("入", 0.6)]},  # 首位不在组里
         {"slot": 4, "verdict": "unsure", "candidates": [("八", 0.90)]},             # 字块图读不到
-        {"slot": 5, "verdict": "same", "char": "言", "cov": 0.95}]))
+        {"slot": 5, "verdict": "same", "char": "言", "cov": 0.95},
+        {"slot": 6, "verdict": "unsure", "candidates": [("人", 0.90)]}]))           # 空白：弃权、无分
     write_product(ctx, "cell_shrink", 1, char_index=page_chars(recs=[
         {"slot": s, "bbox_page": (30.0, 10.0 + 50 * s, 70.0, 50.0 + 50 * s), "patch_key": f"p0001c01s{s}"}
-        for s in range(1, 6)]))
+        for s in range(1, 7)]))
     for s, g in imgs.items():
         ctx.cache.put("tbook", "char_patch", f"p0001c01s{s}", g)
 
@@ -200,15 +211,22 @@ def test_glyph_near_rr_shape_end_to_end(tmp_path, model_file):
     assert p.methods_sha == GlyphNearParams(groups=p.groups).methods_sha
 
     out = run_steps(ctx, 1, ["glyph_near", "glyph_analyzer"])
-    near = out["glyph_near"].by_id()
-    assert list(near) == [f"tbook:1:1:{s}" for s in (1, 2, 3, 4)]
+    pn = out["glyph_near"]
+    sha = rr_shape.fingerprint(str(model_file))                             # 与第四步参数指纹 rs 段同算法
+    assert pn.models == {"rr_shape:rr": sha}
+    # 4d（cv #1999 `_rr_shape_from_3b`）比的是 methods_sha 里的 `rr_shape=<指纹>`，与它按 group_flow_rr_shape 算的同一份
+    assert NM.method_fingerprint("rr_shape", str(model_file)) in {x.split(":", 1)[1] for x in pn.methods_sha.split(";")}
+    near = pn.by_id()
+    assert list(near) == [f"tbook:1:1:{s}" for s in (1, 2, 3, 4, 6)]
     model = rr_shape.load(str(model_file))
-    for s in (1, 2, 3):
+    trail = {}
+    for s in (1, 2, 3, 6):
         mo = near[f"tbook:1:1:{s}"].methods[0]
-        assert mo.method == "rr_shape:rr" and near[f"tbook:1:1:{s}"].trigger == "member"
+        assert mo.method == "rr_shape:rr" and near[f"tbook:1:1:{s}"].trigger == "cands"
         v = rr_shape.judge(imgs[s], model)
-        assert mo.evidence == {k: v[k] for k in ("char", "why", "nn", "score", "geo") if k in v}
-    assert [near[f"tbook:1:1:{s}"].methods[0].evidence["char"] for s in (1, 2, 3)] == ["八", "人", "入"]
+        trail[s] = {"method": "rr_shape", **{k: v[k] for k in ("char", "why", "nn", "score", "geo") if k in v}}
+        assert mo.evidence == trail[s]
+    assert [trail[s]["char"] for s in (1, 2, 3, 6)] == ["八", "人", "入", None]
     miss = near["tbook:1:1:4"].methods[0]
     assert miss.sims == {} and miss.evidence["error"] == "patch_missing"
 
@@ -216,6 +234,11 @@ def test_glyph_near_rr_shape_end_to_end(tmp_path, model_file):
     a = fin["tbook:1:1:1"]
     assert a.p_src == "" and all(c.p is None for c in a.cands)              # 没有校准表：只当证据
     assert {c.char: c.evidence["b"]["rr_shape:rr"] for c in a.cands if "b" in c.evidence} == {"八": 1.0, "人": 0.0, "入": 0.0}
+    for s in (1, 2, 3, 6):                                                  # 4d 取数处：每格 near.methods[方法名]
+        assert fin[f"tbook:1:1:{s}"].near == {"group": "rr", "trigger": "cands",
+                                              "methods": {"rr_shape": {**trail[s], "model": sha}}}
+    assert fin["tbook:1:1:4"].near["methods"]["rr_shape"]["error"] == "patch_missing"
+    assert fin["tbook:1:1:5"].near == {} and "near" not in fin["tbook:1:1:5"].model_dump(mode="json")   # 没触发的格不落盘
 
 
 def _glyph_near_step():
