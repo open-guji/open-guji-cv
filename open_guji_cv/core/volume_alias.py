@@ -81,6 +81,11 @@ def alias_map(books_dir: Path | None) -> dict[str, str]:
     return out
 
 
+def names_for(book: str, books_dir: Path | None = None) -> frozenset[str]:
+    """本册名＋本册 yaml `aliases` 里的旧名。读按册过滤的表（格位表、钉位表、改格表）时用，表不改写。"""
+    return frozenset({book, *(a for a, n in alias_map(books_dir).items() if n == book)})
+
+
 def rename_key(key: str | None, amap: dict[str, str]) -> str | None:
     """键里册名那一段换成新名：`vol01:22:5:4`、`vol01/50:7:21`、`cols:vol02:171`；`v2:vol01:…` 是字形库实例 id，不换。"""
     if not key or not amap:

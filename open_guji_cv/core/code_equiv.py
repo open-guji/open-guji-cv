@@ -385,6 +385,13 @@ _HR_FIT_0106 = ("border_detect head_raise_fit（CV1 #1868，缺省关、关时�
 _LAYOUT_ALIAS_0716 = ("row_segment.load_layout 认册 yaml 的 aliases（CV0 2026-11-28，cv #1980 搬到殿本 patch 线 v0.7.116）："
                       "没写 aliases 的册 names＝{本册名}，与原 `== book` 逐行同真，产物逐字节不变。哈希按 v0.7.110 重算。")
 
+_PAGEMAP_ALIAS_1128 = ("row_segment_pagemap／utils.daizhige 认册 yaml 的 aliases（CV0 2026-11-28，殿本改名演练：corpus 钉位表、改格表、daizhige 表仍写 vol01）："
+                       "_book_lines／_pin_lines／_corpus_lines 过滤由 `== book` 改为 `in names_for(book)`，没写 aliases 时 names＝{本册名}，逐行同真；"
+                       "apply_overrides 新增 as_vol，调用处传本册名——没 aliases 时覆盖行已按本册过滤、o['vol'] 恒等于本册名，键与补行逐字段相同；"
+                       "指纹里哈希的 _book_lines 行仍是表里原样的行，不变。产物逐字节不变；目前只有改了名的册写 aliases。"
+                       "单测 tests/test_volume_alias.py::test_names_for、test_pagemap_overrides_old_name_land_on_current_book。哈希按合入时 origin/dev 重算。")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1850,6 +1857,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="41bc44d590c37cd29d490700f13f60cc53038d04a235f188638f90efbadff431",
           old="78b75d2c2d6573a284e137e7f87e6f9848449aa563fd20f78cd1b4f1c88b5980",
           evidence=_LAYOUT_ALIAS_0716),
+    # 钉位表／改格表／daizhige 表认册旧名 aliases（CV0 11-28，册号位数统一）
+    Equiv(module="open_guji_cv.steps.row_segment_pagemap",
+          new="c6b35d48094df0e01a4eb6c6e99523c39823591a36a987909f1952e8c573645a",
+          old="a71017d111945b477cb9f65b464ea8e277b998a552688559ed7c96a182ef228a",
+          evidence=_PAGEMAP_ALIAS_1128),
+    Equiv(module="open_guji_cv.utils.daizhige",
+          new="2071cbefb24aa5fdc3cedeee17f8bc77b8d3f036150ca1aa35af6cf84614a483",
+          old="1c41134dcc1add33b4e65c712fd75226b2cf2c7ffc33ff64a817006f4b8320d1",
+          evidence=_PAGEMAP_ALIAS_1128),
 )
 
 

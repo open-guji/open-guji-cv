@@ -255,3 +255,13 @@ def test_seal_rename_keys_filter(world):
     eng = _eng(book, pl, store, cache, params={"t_sr_down": {"corpus_fingerprint": "x"}})
     assert eng.seal_rename(pages=[1, 2], keys={"exclusions_fingerprint"}) == {}
     assert eng.status()["steps"]["t_sr_down"]["counts"][STALE] == 2
+
+
+def test_stale_reason_omits_sealed_fields(world):
+    """封存过的字段不再出现在「参数变了」的原因里，只列真变了的（MJ 11-28）。"""
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    _fake_rename(store)
+    _eng(book, pl, store, cache, params={"t_sr_down": {"corpus_fingerprint": "r"}}).seal_rename(pages=[1, 2])
+    st = _eng(book, pl, store, cache, params={"t_sr_down": {"corpus_fingerprint": "r", "gain": 5.0}}).status()
+    assert st["steps"]["t_sr_down"]["stale_reasons"] == {"参数变了：gain": 2}
