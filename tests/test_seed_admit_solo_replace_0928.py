@@ -32,8 +32,8 @@ def _run(tmp_path, monkeypatch, *, cands, verdict="unsure", align=None, params=N
     if align is not None:
         write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
             PAGE, BOOK, col=COL, recs=[dict(slot=SLOT, **align)]))
-    ctx.params["seed_admit"] = SeedAdmitParams(**(params or {}))
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    ctx.params["char_decide"] = SeedAdmitParams(**(params or {}))
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 

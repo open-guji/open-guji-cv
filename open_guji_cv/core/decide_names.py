@@ -25,8 +25,8 @@ LEGACY_ADMIT_STEP = "seed_admit"
 ADMIT_STEPS: tuple[str, ...] = (NEW_ADMIT_STEP, LEGACY_ADMIT_STEP)
 
 #: **现在代码写的名字**（Step id、产物目录、产物种类、页顶层键、参数里生效的键、新事件的 `target.step`）。
-#: 本版仍是旧名；改名那一版只改这一行（与 Step 的 `spec.id` 同步）。
-ADMIT_STEP_ACTIVE = LEGACY_ADMIT_STEP
+#: 改名版（P3a-3，2026-11-28）起是 `char_decide`；Step 的 `spec.id`、产物种类、`consumes` 都引用本常量。
+ADMIT_STEP_ACTIVE = NEW_ADMIT_STEP
 
 
 def is_admit_step(name: str | None) -> bool:
@@ -44,12 +44,13 @@ def canonical_step(name: str) -> str:
     return NEW_ADMIT_STEP if name == LEGACY_ADMIT_STEP else name
 
 
-#: 收尾步将来**直接写**的送审原因（manager `pending_reasons.yaml` 里 owner＝第四步〈原 A24，现 CV4〉的 15 个值）。
-#: 切分类（S）、遮挡类（D，P3b 4c 独立后改由 4c 状态给）、字形库刻例类（L02–L04）、复审类（X）仍由 manager 判，cv 不写（留 None）。
-#: 说明见 `doc/4-定字/pending_reason.md`；cv 存的 enum 副本与 manager 导出对账的测试，随「收尾真写 pending_reason」那一版加。
+#: 收尾步**直接写**的送审原因（manager `pending_reasons.yaml` 里 owner＝CV4 的值，按 yaml 现状 2026-11-28 共 18 个，含已停用的 group_weak）。
+#: 切分类（S）、遮挡类（D，P3b 4c 独立后改由 4c 状态给）、字形库 L02／L04、复审 X02–X04 仍由 manager 判，cv 不写（留 None）。
+#: 说明见 `doc/4-定字/pending_reason.md`；判法在 `steps/char_decide_reasons.py`；与 manager 导出的对账测试：`tests/test_pending_reason_enum.py`。
 FINAL_PENDING_REASONS: tuple[str, ...] = (
-    "hard_pair", "group_abstain", "group_conflict", "group_demoted", "group_ref_dissent", "group_weak", "group_form_open",
-    "near_form_guard", "variant_pair", "lib_missing", "garble_gate", "ref_lacuna", "ref_gap", "ref_replaced", "ref_mismatch",
+    "hard_pair", "group_abstain", "group_conflict", "group_demoted", "group_ref_dissent", "group_weak", "group_unconfirmed",
+    "near_form_guard", "variant_pair", "variant_form_open", "lib_missing", "garble_gate", "glyph_pending", "ref_lacuna",
+    "ref_gap", "ref_ocr_diff", "ref_final_diff", "ruling_conflict",
 )
 
 

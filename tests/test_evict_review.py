@@ -46,13 +46,13 @@ def _run(tmp_path, monkeypatch, params, cells):
     monkeypatch.setattr(lookup, "evict_review_cells", lambda book, log=None: dict(cells))
     monkeypatch.setattr(lookup, "human_chars", lambda book, log=None, stale=None, bind=None, lost=None: {})
     ctx = RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
-                     params={"seed_admit": params}, log=lambda s: None)
+                     params={"char_decide": params}, log=lambda s: None)
     recs = [dict(slot=i + 1, verdict="same", cov=1.0, wmax=0.0, char=c, candidates=[(c, 1.0)])
             for i, c in enumerate(CHARS)]
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
     write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
         PAGE, BOOK, recs=[dict(slot=i + 1, align_char=c) for i, c in enumerate(CHARS)], col=COL))
-    page = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    page = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
     return {r.slot: r for cc in page.columns for r in cc.chars}, page
 
 

@@ -266,8 +266,8 @@ def _seed_admit_page(tmp_path, monkeypatch, *, patch_missing, logs=None):
         page=_SA_PAGE, anchored=True,
         chars=[AlignRec(id=f"{_SA_BOOK}:{_SA_PAGE}:{_SA_COL}:18", col=_SA_COL, slot=18,
                         align_char="𠮓", align_op="replace")]))
-    ctx.params["seed_admit"] = SeedAdmitParams(patch_missing=patch_missing)
-    return STEPS["seed_admit"].run_page(ctx, _SA_PAGE)["seed_admit"]
+    ctx.params["char_decide"] = SeedAdmitParams(patch_missing=patch_missing)
+    return STEPS["char_decide"].run_page(ctx, _SA_PAGE)["char_decide"]
 
 
 def test_seed_admit_patch_missing_error_is_default_and_stops_page(tmp_path, monkeypatch):

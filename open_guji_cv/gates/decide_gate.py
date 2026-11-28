@@ -37,6 +37,7 @@ from typing import Iterable
 
 from pydantic import BaseModel
 
+from ..core.decide_names import ADMIT_STEP_ACTIVE
 from ..core.spec import GateLevel, GateSpec, StepSpec
 from ..core.step import STEPS, RunContext, Step, attach_gate, register_step
 from ..products.kinds.decide_gate import GateCheck, PageDecideGate
@@ -326,7 +327,7 @@ def detect_page(page: int, admit, *, align=None, match=None, ctxdec=None, chars=
 class DecideGateStep(Step):
     spec = StepSpec(
         id="decide_gate", title="4 定字出口 gate（只检测，不判断）", version="1.0", unit="page",
-        consumes=("seed_admit",),
+        consumes=(ADMIT_STEP_ACTIVE,),
         optional_consumes=("align_ref", "glyph_match", "context_decision", "char_index"),
         produces=("decide_gate",),
         params=DecideGateParams,
@@ -341,9 +342,9 @@ class DecideGateStep(Step):
         gset: frozenset[str] = frozenset()
         if p.check_group:
             from ..groups.registry import FLOW_GROUPS, flow_names
-            names = flow_names(getattr(ctx.params_for(STEPS["seed_admit"]), "group_flow", ()) or ())
+            names = flow_names(getattr(ctx.params_for(STEPS[ADMIT_STEP_ACTIVE]), "group_flow", ()) or ())
             gset = frozenset(c for g in names if g in FLOW_GROUPS for c in FLOW_GROUPS[g].members)
-        res = detect_page(page, ctx.product("seed_admit", page), align=opt["align_ref"], match=opt["glyph_match"],
+        res = detect_page(page, ctx.product(ADMIT_STEP_ACTIVE, page), align=opt["align_ref"], match=opt["glyph_match"],
                           ctxdec=opt["context_decision"], chars=opt["char_index"], group_chars=gset, params=p)
         return {"decide_gate": res}
 
@@ -362,4 +363,4 @@ DECIDE_GATE_SPEC = GateSpec(
         GateLevel(id="G9", unit="cell", name="group_without_4d", desc="放行字在启用的字组里却没经字组流程——flag"),
     ),
 )
-attach_gate("seed_admit", DECIDE_GATE_SPEC)
+attach_gate(ADMIT_STEP_ACTIVE, DECIDE_GATE_SPEC)

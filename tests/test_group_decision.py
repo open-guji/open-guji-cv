@@ -27,10 +27,10 @@ def test_default_off_and_registered():
     spec = STEPS["group_decision"].spec
     assert spec.enabled_by == "enabled" and gd.GroupDecisionParams().enabled is False
     assert spec.produces == ("group_decision",)
-    assert "group_decision" in STEPS["seed_admit"].spec.optional_consumes
+    assert "group_decision" in STEPS["char_decide"].spec.optional_consumes
     from open_guji_cv.core.pipeline import load_pipeline
     steps = load_pipeline("keben_body_v2").steps
-    assert steps.index("group_decision") < steps.index("seed_admit")
+    assert steps.index("group_decision") < steps.index("char_decide")
 
 
 def test_seed_fields_exist_and_cover_group_flow():
@@ -108,7 +108,7 @@ def _ctx2(tmp_path, monkeypatch, sa_params, gd_params=None):
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
     monkeypatch.setattr(lookup, "human_chars", lambda book, log=None, stale=None, bind=None, lost=None: {})
-    params = {"seed_admit": sa_params}
+    params = {"char_decide": sa_params}
     if gd_params is not None:
         params["group_decision"] = gd_params
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache), params=params, log=lambda s: None)
@@ -150,7 +150,7 @@ def test_finale_fold_wh_same_with_and_without_group_decision(tmp_path, monkeypat
     _fill(ctx)
     inline_seen: dict = {}
     patch_seed_admit(monkeypatch, "_fold_pass", spy_factory(inline_seen))
-    inline = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    inline = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
 
     ctx2 = _ctx2(tmp_path / "b", monkeypatch, p, gd.GroupDecisionParams(enabled=True))
     _fill(ctx2)
@@ -159,7 +159,7 @@ def test_finale_fold_wh_same_with_and_without_group_decision(tmp_path, monkeypat
     write_product(ctx2, "group_decision", PAGE, group_decision=st)
     via_seen: dict = {}
     patch_seed_admit(monkeypatch, "_fold_pass", spy_factory(via_seen))
-    via = STEPS["seed_admit"].run_page(ctx2, PAGE)["seed_admit"]
+    via = STEPS["char_decide"].run_page(ctx2, PAGE)["char_decide"]
     assert _cells(via) == _cells(inline)
     assert (via.n_auto, via.n_review) == (inline.n_auto, inline.n_review)
     assert inline_seen, "夹具要走到 fold 遍"

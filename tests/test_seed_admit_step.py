@@ -35,7 +35,7 @@ def _run(tmp_path, monkeypatch, *, match_recs, decision_recs=None):
         write_product(ctx, "context_decide", PAGE,
                       context_decision=page_decision(PAGE, BOOK, recs=decision_recs,
                                                      col=COL))
-    return STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    return STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
 
 
 def _all(sa):
@@ -43,8 +43,8 @@ def _all(sa):
 
 
 def test_registered():
-    assert "seed_admit" in STEPS and "seed_admit" in KINDS
-    assert "db" in STEPS["seed_admit"].spec.needs
+    assert "char_decide" in STEPS and "char_decide" in KINDS
+    assert "db" in STEPS["char_decide"].spec.needs
 
 
 def test_auto_admissions_always_carry_a_channel_and_a_char(tmp_path, monkeypatch):
@@ -133,7 +133,7 @@ def test_failed_column_is_passed_through_not_dropped(tmp_path, monkeypatch):
     ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
     write_product(ctx, "glyph_match", PAGE, glyph_match=PageMatch(
         page=PAGE, columns=[ColumnMatch(col=7, ok=False, error="弹性 DP 无解")]))
-    sa = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    sa = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
     assert [ (c.col, c.ok, c.error) for c in sa.columns ] == [(7, False, "弹性 DP 无解")]
 
 

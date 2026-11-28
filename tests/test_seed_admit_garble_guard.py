@@ -24,7 +24,7 @@ def _ctx(tmp_path, monkeypatch, **params):
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
     params.setdefault("context_page_end_review", False)  # 单列自造格即页末格
-    kwargs = {"seed_admit": SeedAdmitParams(**params)}
+    kwargs = {"char_decide": SeedAdmitParams(**params)}
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
                       params=kwargs, log=lambda s: None)
 
@@ -43,7 +43,7 @@ def _run(ctx, cells, refs=None):
              for s, ch in (refs or {}).items()]
     write_product(ctx, "align_ref", PAGE,
                   align_ref=PageAlignRef(page=PAGE, anchored=False, coord=coord, coord_cols=[COL]))
-    sa = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    sa = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"]
     return [r for cc in sa.columns for r in cc.chars]
 
 

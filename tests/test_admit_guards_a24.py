@@ -132,8 +132,8 @@ def _run_ctx(tmp_path, monkeypatch, cands, dec, params=None):
         dict(slot=1, verdict="unsure", cov=cands[0][1], wmax=10.0, candidates=list(cands))]))
     write_product(ctx, "context_decide", 1, context_decision=page_decision(
         1, "tbook", col=1, recs=[dict(slot=1, source="context", **dec)]))
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"patch_missing": "skip", "context_page_end_review": False, **(params or {})})
-    return STEPS["seed_admit"].run_page(ctx, 1)["seed_admit"].columns[0].chars[0]
+    ctx.params["char_decide"] = SeedAdmitParams(**{"patch_missing": "skip", "context_page_end_review": False, **(params or {})})
+    return STEPS["char_decide"].run_page(ctx, 1)["char_decide"].columns[0].chars[0]
 
 
 def test_seed_admit_context_variant_form(tmp_path, monkeypatch):

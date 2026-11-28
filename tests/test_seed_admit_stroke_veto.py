@@ -75,8 +75,8 @@ def _run(tmp_path, monkeypatch, *, cands, judged, params=None, keep_load=False):
     if not keep_load:
         monkeypatch.setattr(sv, "load", lambda path: {"groups": {"jys": {"classes": {"陪": "陪", "培": "培"}}}})
     monkeypatch.setattr(sv, "judge", lambda img, gm: judged)
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"shadow_veto": False, **SKIP, **(params or {})})
-    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    ctx.params["char_decide"] = SeedAdmitParams(**{"shadow_veto": False, **SKIP, **(params or {})})
+    (col,) = STEPS["char_decide"].run_page(ctx, PAGE)["char_decide"].columns
     (r,) = col.chars
     return r
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from .core.decide_names import ADMIT_STEP_ACTIVE
 
 INSTALL_HINT = 'uv pip install -e ".[torch,dev,datastore,shadow,pdf]"（要控制台另装 guji-console）'
 
@@ -36,12 +37,12 @@ def check(eng, steps: list[str]) -> list[str]:
             out.append("没装 torch：Step5-b rare_candidates 没有 embedding 候选")
         elif not Path(CNN.DEFAULT_CKPT).is_file():
             out.append(f"缺识别权重 {CNN.DEFAULT_CKPT}：Step5-b 没有 embedding 候选")
-    if "seed_admit" in steps and _params(eng, "seed_admit", "shadow_veto"):
+    if ADMIT_STEP_ACTIVE in steps and _params(eng, ADMIT_STEP_ACTIVE, "shadow_veto"):
         gone = [m for m in ("joblib", "sklearn") if not _have(m)]
         if gone:
             out.append(f"册配置开了 shadow_veto，但没装 {'、'.join(gone)}：Step7 seed_admit 会整页失败（装 `.[shadow]`）")
-    if "seed_admit" in steps and _params(eng, "seed_admit", "use_human_verdicts"):
-        msg = _human_events_missing(_params(eng, "seed_admit", "db_path"))
+    if ADMIT_STEP_ACTIVE in steps and _params(eng, ADMIT_STEP_ACTIVE, "use_human_verdicts"):
+        msg = _human_events_missing(_params(eng, ADMIT_STEP_ACTIVE, "db_path"))
         if msg:
             out.append(msg)
     return out
