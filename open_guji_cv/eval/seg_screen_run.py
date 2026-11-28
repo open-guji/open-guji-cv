@@ -53,6 +53,7 @@ def _engine(book: str):
 
 def _pins(book: str) -> dict[tuple[int, int], list]:
     from ..feedback.lookup import resolved_manual_cells
+    from ..products.final_read import read_final_store
     try:
         return {(int(p), int(c)): v for (p, c), v in resolved_manual_cells(book).items()}
     except Exception as e:  # noqa: BLE001
@@ -169,7 +170,7 @@ def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[
         pitch = ss.page_pitch(cells)
         glyph_p, aref_p = store.read(book, "glyph_match", key, "glyph_match"), store.read(book, "align_ref", key, "align_ref")
         conf = ss.ref_confirmed(glyph_p, aref_p) if ref_check else {}
-        adm_p = store.read(book, "seed_admit", key, "seed_admit")
+        adm_p = read_final_store(store, book, key)      # char_decide／seed_admit 新旧目录都认
         adm_by_col = {} if adm_p is None or aref_p is None else {a.col: a for a in adm_p.columns}
         ref_p, glyph_top = ss.page_ref_glyph(aref_p, glyph_p) if adm_by_col else ({}, {})
 

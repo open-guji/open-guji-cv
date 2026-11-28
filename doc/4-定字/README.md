@@ -41,3 +41,4 @@
 
 - 指纹：新模块都在 `seed_admit` 的 `code_deps` 里，`code_equiv.SPLITS` 把它们合回原来的 `seed_admit`／`seed_admit_lanes` 两项，各书各步指纹不变。
 - 测试里换函数：各遍搬走后，调用方在哪个模块就查哪个模块的全局名，用 `tests/helpers.py` 的 `patch_seed_admit(monkeypatch, "名字", 值)` 在各模块里一起换。
+- **收尾步改名 `seed_admit`→`char_decide`（2026-11-28）**：分两版发，本版只是兼容读口，产物仍写 `seed_admit`；新旧名读法、迁移命令、`pending_reason` 字段与 cv 将来直写的原因集合见 [pending_reason.md](pending_reason.md)。
