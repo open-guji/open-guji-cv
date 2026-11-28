@@ -3023,6 +3023,10 @@ ENTRIES: tuple[Equiv, ...] = (
           old='fbced2adde554dc77ac3bbbf4b481b7a79356a0d2f5a9b1eaa4a8fcdaabf2746',
           evidence="glyph_stages._code_sha 加 canonical(composite_key) 换算、模块表提成常量 STAGES_CODE_MODS／PAIR_CODE_MODS（次序不变），"
                    "只改 stages_sha 的算法、不碰任何判定路径，产物逐字节不变按构造成立；对 origin/dev 1afa3a39，2026-11-28（CV3，结构拆分 A4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="4aa0dee4383fe880e76ca1cb8f78fe77b2f288e9d0045d75ebffcbfa497333c2",
+          old="b229b492cedfbc0c009dd7297002718f839ed9dda5d5ee4f37dd7a7c705a91cb",
+          evidence="char_decide 在殿本 vol01 3 页（--pages 1,2,3；冻结快照第三步产物＋本机重跑 3b／3e，glyph_vis 25 格 pending）上与 origin/dev daf144f 产物逐字节相同；vis3 影子读口缺省关（seed_admit.vis3_shadow）；scripts/code_equiv.py check，2026-11-28（CV4）"),
 )
 
 
@@ -3090,6 +3094,12 @@ FORKED: dict[str, tuple[str, str]] = {
 #: 也用来登 Step 新加的 code_dep（不是拆分）：旧模块名就是 Step 模块自己，块表＝它自己＋新加的那个模块；
 #: 两块都还是登记时那一版就合回原来一项，指纹不变（row_segment＋jiazhu_step 空实现，cv#1011）。这种项不是错登，别删。
 SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
+    # 2026-11-28 vis3 影子（CV4，cv #2042）：seed_admit 新加 code_dep seed_admit_vis3（缺省关的影子读口，只写 evidence.vis3_shadow），
+    # 同时 seed_admit_params 加缺省 false 的 vis3_shadow（不进参数 dump）。两块都还是这一版时合回 seed_admit_params 一项，指纹不变；
+    # 证据同上面 seed_admit 那条 Equiv（char_decide 殿本 vol01 3 页与 origin/dev 逐字节相同）。
+    "open_guji_cv.steps.seed_admit_params": ("d67115b2d285056d99853842d0eb6227760c2388854ff35dd281394a3b210350", (
+        ("open_guji_cv.steps.seed_admit_params", "50f75f21c3eef6f208ab3f822f19e56cb4a54b45f2279c48158166a5b93edafa"),
+        ("open_guji_cv.steps.seed_admit_vis3", "f391a34184aee5d4f35e728cd475aca52910ab2ec0af0b158b29b703a27f37f3"),)),
     # 全唐文书仓 k13 覆盖了 impl.keben.admit_lanes（四条无参照补放通道，只在册配置写了 seed_admit.book_lanes 时调）。
     # 没写 book_lanes 的册（004 起）钩子根本不 import，产物同 k11；写了的（001–003）参数指纹本就跟着 book_lanes 变。
     # 所以书仓这一版 admit_lanes 按 cv 缺省模块记（单块「拆分」＝改名），下面 seed_admit 那条照样合回，k11→k13 不过期。
