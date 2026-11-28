@@ -135,6 +135,7 @@
 
 ## [未发版]
 
+- PATCH（缺省关，产物逐字节不变，code_equiv 登记；CV0 2026-11-27，Sheldon「四维＋准确度分档」）：册配置 `references[]` 新键 `form`／`punct`／`script`／`accuracy`／`accuracy_evidence`（写错值就报，`form` 与 `line_is_column` 矛盾也报），`reference_profile` 段可写 `accuracy`（只许压低）；`seed_admit` 新开关 `trust_from_accuracy`：开时按本页参照的 accuracy 推信任档（very_high/high → `reference_trust`，mid → `ref_lib_coord`，只往上推），`script: trad|simp` 的页关照录异体、`edge_pair_to: ref` 退回 freq；本册摘要进 `ref_accuracy` 指纹。门槛与实测见 `doc/design/参校本四维与准确度分档.md`。
 - PATCH（各书产物不过期，第四步逐字节不变；CV2 2026-11-27，Sheldon 定「折线只存拐点」，已通知 CV0/CV3/CV4/A30）：`products/kinds/cells.py` 折线落盘改游程——格的 `seam_top`／`seam_bottom`、切点候选的 `y` 在产物 JSON 里存 `{"n": 长度, "runs": [[x, y], …]}`（无损，只存变化点），载入时展开回逐 x 表，旧产物照读；直接读 JSON 的脚本用 `cells.seam_ys()`。史記 42 册 40 页 row_segment 产物 13.9MB→6.1MB。本模块不在 code_deps 里，指纹不变；新跑的 row_segment 字节会变，跨此改动做 `code_equiv check` 比 row_segment 要以本版为基线。
 - PATCH（缺省关，产物逐字节不变，code_equiv 登记；CV2 2026-11-27）：cell_shrink 新开关 `end_dash_row`，列首／列尾格端区里成排的虚线短划整排抹白（`extractor.strip_dash_row`）。写本内框细线印成短划、整页拟不出内线的页，紧框不再横着拉宽去圈短划（cut-frame 史記 42:43:5「宗」、42:27:5「事」）。
 - PATCH（11-27，CV0，参校本 bug）：`seed_admit.no_ref_params` 也叠在册配置 `reference_profile` 声明 `kind: none` 的页上（原先只认 `no_ref_pages`／`page_kinds.no_ref`），两种写法同一口径。现行各书没有同时配 no_ref_params 与 none 页的，产物不变，登 code_equiv。

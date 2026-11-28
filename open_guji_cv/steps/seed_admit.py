@@ -229,6 +229,13 @@ class SeedAdmitStep(Step):
                      "stroke_veto", "pair_form", "lane_shape_first"),
     )
 
+    def book_params(self, p: "SeedAdmitParams", ctx: RunContext) -> "SeedAdmitParams":
+        """`trust_from_accuracy` 开时把本册参校本准确度摘要填进 `ref_accuracy`（进指纹）；关时原样返回。"""
+        if not p.trust_from_accuracy or p.ref_accuracy:
+            return p
+        return type(p).model_validate({**{k: getattr(p, k) for k in type(p).model_fields},
+                                       "ref_accuracy": ref_accuracy_summary(ctx.book)})
+
     def parallel_warm(self, ctx: RunContext) -> None:
         """页级并行 fork 前在主进程预建两份大缓存（`core/parallel.warm`）：三份证人的 8-gram 索引
         （复核通道才用，懒加载，第一页常碰不到）与铁证人裁匹配器。键与 run_page 里一致。只管提速。"""
@@ -297,6 +304,7 @@ class SeedAdmitStep(Step):
         from ..variant_ledger import BookLedger
         p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
         p = no_ref_page_params(p, page, ctx.book)
+        p = accuracy_page_params(p, page, ctx.book)
         vmap = VariantMap.load(p.variants or None)
         if p.semantic_extra:
             vmap = _ExtraSemanticMap(vmap, _parse_semantic_extra(p.semantic_extra))
@@ -1257,6 +1265,45 @@ def no_ref_page_params(p: "SeedAdmitParams", page: int, book=None) -> "SeedAdmit
         raise ValueError(f"seed_admit.no_ref_params: 不认的参数 {bad}（须是 seed_admit 的参数名，且不能是 no_ref_*）")
     return type(p).model_validate({**{k: getattr(p, k) for k in type(p).model_fields}, **p.no_ref_params})
 
+
+
+#: 准确度档 → 信任档（`trust_from_accuracy`）
+_ACC_TRUST = {"very_high": "very_high", "high": "high"}
+_TRUST_RANK = {"none": 0, "high": 1, "very_high": 2}
+
+
+def ref_accuracy_summary(book) -> str:
+    """本册参校本 accuracy/script 与段上压低的摘要（`ref_accuracy` 指纹用）。没标的项写空，全没标也给一串（开关开着就要进指纹）。"""
+    refs = list(getattr(book, "references", None) or [])
+    parts = [f"{r.get('accuracy') or ''}/{r.get('script') or ''}" for r in refs]
+    prof = getattr(book, "reference_profile", None)
+    segs = [f"{','.join(map(str, s.expr))}:{s.accuracy}" for s in (getattr(prof, "segments", ()) or ()) if s.accuracy]
+    return "refs=" + ";".join(parts) + ("|segs=" + ";".join(segs) if segs else "")
+
+
+def accuracy_page_params(p: "SeedAdmitParams", page: int, book=None) -> "SeedAdmitParams":
+    """`trust_from_accuracy` 开时按本页参照的准确度档推信任档（只往上推）、按 `script` 关照录异体；关或无变化时原样返回同一个对象。"""
+    if not p.trust_from_accuracy or book is None:
+        return p
+    from ..core.ref_profile import UNDECLARED
+    refs = list(getattr(book, "references", None) or [])
+    prof = getattr(book, "reference_profile", None) or UNDECLARED
+    if prof.kind_of(page) == "none" or _no_ref_page(book, p, page):
+        return p
+    acc = prof.accuracy_of(page, refs)
+    upd: dict = {}
+    trust = _ACC_TRUST.get(acc)
+    if trust and _TRUST_RANK[trust] > _TRUST_RANK[p.reference_trust]:
+        upd["reference_trust"] = trust
+    if acc == "mid" and not p.ref_lib_coord and p.reference_trust == "none":
+        upd["ref_lib_coord"] = True
+    if prof.script_of(page, refs) in ("trad", "simp"):
+        upd["ref_variants_off"] = True
+        if p.edge_pair_to == "ref":
+            upd["edge_pair_to"] = "freq"
+    if not upd:
+        return p
+    return type(p).model_validate({**{k: getattr(p, k) for k in type(p).model_fields}, **upd})
 
 
 _SHADOW_GATES: dict = {}
