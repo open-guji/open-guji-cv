@@ -1,0 +1,194 @@
+"""形近字组登记表 `near_groups/2`（W1 第一期，2026-11-28）：生成脚本的合表规则、读口、`ref` 展开，以及
+「提交的 config/near_groups/v2.json 与生成脚本输出一致」的守卫。
+
+合表规则与读口都用自造数据测；只有守卫读仓里的来源（`config/` 下的表和 `groups/registry.py`，不读活数据）。
+"""
+from __future__ import annotations
+
+import importlib.util
+import json
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[1]
+
+
+def _script():
+    spec = importlib.util.spec_from_file_location("build_near_groups_v2", REPO / "scripts" / "build_near_groups_v2.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+B = _script()
+
+
+def _reg(gid, chars, typ="near", **kw):
+    return {"id": gid, "chars": sorted(chars), "type": typ, "name": "".join(chars), "methods": kw.pop("methods", []), **kw}
+
+
+def _p(*src, **extra):
+    return {"src": set(src), **extra}
+
+
+REG = [
+    _reg("guan", "官宫宮", "fold", fold={"宮": "宫"}, families=["官", "宫宮"], methods=["near_p", "ctx"]),
+    _reg("wm", "未末", methods=["ctx", "bars"]),
+    _reg("sz", "宋朱未", methods=["ids"]),
+    _reg("ce", "冊册", "variant", canon="冊", methods=["freq", "ids"]),
+]
+
+
+# ── 合表 ──────────────────────────────────────────────────────────────
+
+
+def test_build_dedups_pairs_and_merges_src():
+    t = B.build(REG, {"未末": _p("hand", "near_groups", core=True), "天夭": _p("near_groups", ng_src=["lib:qtw"]),
+                      "侯𠋫": _p("near_groups", ng_src=["variant"])})
+    g = t["groups"]
+    assert t["format"] == "near_groups/2"
+    assert g["wm"]["pairs"]["未末"]["src"] == ["hand", "near_groups"]
+    assert g["wm"]["src"] == ["hand", "near_groups", "registry"]
+    assert g["p:天夭"]["type"] == "near" and g["p:天夭"]["chars"] == ["天", "夭"] and g["p:天夭"]["methods"] == []
+    assert g["p:侯𠋫"]["type"] == "variant"
+    assert list(g)[-2:] == ["p:侯𠋫", "p:天夭"]               # 注册组在前，单立字对在后
+    assert t["n_pairs"] == 3 and t["n_registry"] == 4 and t["n_pair_groups"] == 2
+
+
+def test_pair_attaches_to_every_group_holding_both_chars():
+    t = B.build(REG, {"宋未": _p("font", font=0.99)})
+    assert "宋未" in t["groups"]["sz"]["pairs"] and "p:宋未" not in t["groups"]
+    assert "宋未" not in (t["groups"]["wm"].get("pairs") or {})          # wm 只有「未」，不挂
+    t = B.build([*REG, _reg("wz", "未末朱")], {"未末": _p("hand")})
+    assert "未末" in t["groups"]["wm"]["pairs"] and "未末" in t["groups"]["wz"]["pairs"]
+
+
+def test_build_is_deterministic_regardless_of_input_order():
+    pairs = {"未末": _p("hand"), "天夭": _p("near_groups"), "冊册": _p("near_groups", ng_src=["variant"])}
+    a = B.dumps(B.build(REG, pairs))
+    b = B.dumps(B.build(list(reversed(REG)), dict(reversed(list(pairs.items())))))
+    assert a == b
+
+
+def test_book_pair_clf_and_glyph_near(tmp_path):
+    pc = tmp_path / "pair_clf.json"
+    pc.write_text(json.dumps({"pairs": {"官宫": {"a": "官", "b": "宫", "tier": 3}, "天夭": {"a": "天", "b": "夭", "tier": 2}},
+                              "context": ["己已"]}, ensure_ascii=False), encoding="utf-8")
+    gn = tmp_path / "book.yaml"
+    gn.write_text("params:\n  glyph_near:\n    groups:\n      gong:\n        chars: [宫, 宮, 官]\n"
+                  "        methods: {cnn_small: models/glyph_near_gong}\n        trigger: member\n", encoding="utf-8")
+    t = B.build(REG, {}, {"bk": B.book_pair_clf("bk", pc)}, {"bk": B.book_glyph_near(gn)})
+    g = t["groups"]
+    assert g["guan"]["books"]["bk"]["pair_clf"]["pairs"] == {"官宫": 3}
+    assert g["guan"]["books"]["bk"]["glyph_near"] == {"id": "gong", "methods": {"cnn_small": "models/glyph_near_gong"},
+                                                     "trigger": "member"}
+    assert g["p:天夭"]["src"] == ["pair_clf:bk"] and g["p:天夭"]["books"]["bk"]["pair_clf"]["pairs"] == {"天夭": 2}
+    jy = B.pair_key("己", "已")
+    assert g["p:" + jy]["books"]["bk"]["pair_clf"]["pairs"] == {jy: "context"}
+    assert t["books"] == ["bk"]
+
+
+def test_repo_pair_sources_drop_list_spares_hand_and_human(tmp_path):
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    (cfg / "confusable_human.json").write_text(json.dumps({"pairs": {"甲乙": 1.0}}, ensure_ascii=False), encoding="utf-8")
+    (cfg / "confusable_font_degraded.json").write_text(json.dumps({"pairs": {"丙丁": 0.99, "戊己": 0.5}}, ensure_ascii=False),
+                                                       encoding="utf-8")
+    (cfg / "near_groups.json").write_text(json.dumps({"pairs": {"甲乙": {"src": ["human"], "core": True},
+                                                                "庚辛": {"src": ["lib:x"], "near": {"x": 0.98}}}},
+                                                     ensure_ascii=False), encoding="utf-8")
+    (cfg / "near_groups_drop.tsv").write_text("# 注释\n甲乙\t人裁过的不受管\n丙丁\t假对\n", encoding="utf-8")
+    got = B.repo_pair_sources(tmp_path)
+    k = B.pair_key
+    assert got[k("甲", "乙")]["src"] == {"human", "near_groups"}
+    assert k("丙", "丁") not in got and k("戊", "己") not in got  # 剔除名单／低于 τ
+    assert got[k("庚", "辛")]["near"] == {"x": 0.98} and got[k("庚", "辛")]["ng_src"] == ["lib:x"]
+    assert k("曰", "日") in got  # 手工表来自 confusable.NEVER_MATCH_FAMILIES
+
+
+# ── 读口 ──────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def reg_path(tmp_path):
+    t = B.build(REG, {"未末": _p("hand"), "天夭": _p("near_groups"), "宋未": _p("font")},
+                book_gn={"bk": {"gong": {"chars": ["宫", "宮", "官"], "methods": {"cnn_small": "m/g"}, "delta": 0.05}}})
+    p = tmp_path / "v2.json"
+    p.write_text(B.dumps(t), encoding="utf-8")
+    return p
+
+
+def test_load_lookup_and_filter(reg_path):
+    from open_guji_cv.groups import near_registry as NR
+    reg = NR.load(reg_path)
+    assert len(reg) == 5 and "guan" in reg
+    assert reg.get("guan").chars == ("官", "宫", "宮") and reg.get("guan").canon("宮") == "宫"
+    assert [g.id for g in reg.groups_of("未")] == ["sz", "wm"]
+    assert [g.id for g in reg.groups_of("天")] == ["p:天夭"] and not reg.get("p:天夭").registered
+    assert [g.id for g in reg.groups_of("宮", "fold")] == ["guan"] and reg.groups_of("宮", "near") == []
+    assert {g.id for g in reg.by_type("variant")} == {"ce"}
+    with pytest.raises(ValueError):
+        reg.by_type("形近")
+    with pytest.raises(KeyError):
+        reg.get("nope")
+
+
+def test_rejects_unknown_format_and_type(tmp_path):
+    from open_guji_cv.groups.near_registry import NearRegistry
+    with pytest.raises(ValueError):
+        NearRegistry({"format": "near_groups/1", "groups": {}})
+    with pytest.raises(ValueError):
+        NearRegistry({"format": "near_groups/2", "groups": {"x": {"chars": ["甲", "乙"], "type": "形近"}}})
+
+
+def test_glyph_near_spec(reg_path):
+    from open_guji_cv.groups import near_registry as NR
+    reg = NR.load(reg_path)
+    assert reg.glyph_near_spec("guan") == {"chars": ["官", "宫", "宮"], "fold": {"宮": "宫"}, "methods": {}}
+    assert reg.glyph_near_spec("guan", book="bk") == {"chars": ["官", "宫", "宮"], "fold": {"宮": "宫"},
+                                                      "methods": {"cnn_small": "m/g"}, "delta": 0.05}
+    assert reg.glyph_near_spec("wm", trigger="member") == {"chars": ["未", "末"], "methods": {}, "trigger": "member"}
+    with pytest.raises(ValueError):
+        reg.glyph_near_spec("wm", colour="red")
+
+
+def test_expand_refs_without_ref_is_identity_and_hash_unchanged(reg_path):
+    from open_guji_cv.core.engine import params_hash
+    from open_guji_cv.groups import near_registry as NR
+    from open_guji_cv.steps.glyph_near import GlyphNearParams
+    plain = {"gong": {"chars": ["宫", "宮", "官"], "fold": {"宮": "宫"}, "trigger": "close", "delta": 0.03}}
+    assert NR.expand_refs(plain, path=reg_path) is plain
+    assert NR.expand_refs({}, path=reg_path) == {}
+    assert params_hash(GlyphNearParams(groups=NR.expand_refs(plain, path=reg_path))) == params_hash(GlyphNearParams(groups=plain))
+
+
+def test_expand_refs_feeds_3b_trigger(reg_path):
+    from open_guji_cv.groups import near_registry as NR
+    from open_guji_cv.steps.glyph_near import trigger_group
+    got = NR.expand_refs({"gong": {"ref": "guan", "trigger": "member"}, "x": {"chars": ["天", "夭"]}}, book="bk",
+                         path=reg_path)
+    assert got["gong"] == {"chars": ["官", "宫", "宮"], "fold": {"宮": "宫"}, "methods": {"cnn_small": "m/g"},
+                           "delta": 0.05, "trigger": "member"}
+    assert got["x"] == {"chars": ["天", "夭"]}
+    assert trigger_group([("宮", 0.9)], "宮", {"gong": got["gong"]}) == ("gong", "member")
+
+
+# ── 守卫：提交的表与生成脚本一致 ─────────────────────────────────────
+
+
+def test_committed_v2_matches_generator():
+    committed = REPO / "config" / "near_groups" / "v2.json"
+    assert committed.read_text(encoding="utf-8") == B.dumps(B.build_from_repo()), (
+        "config/near_groups/v2.json 与来源（注册字组表、confusable、near_groups.json…）不同步："
+        "跑 python scripts/build_near_groups_v2.py 再提交")
+
+
+def test_committed_v2_loads_and_covers_registry():
+    from open_guji_cv.groups import near_registry as NR
+    from open_guji_cv.groups.registry import FLOW_GROUPS
+    reg = NR.load()
+    assert set(FLOW_GROUPS) <= set(reg.groups)
+    assert reg.meta["books"] == []                       # 仓里的版本不带书级输入
+    for gid, g in FLOW_GROUPS.items():
+        assert set(reg.get(gid).chars) == set(g.members)

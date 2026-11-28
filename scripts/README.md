@@ -70,6 +70,7 @@
 - `build_confusable_pairs.py`：从 IDS 拆分生成「形近对表」（overview#128，2026-09-28）。
 - `build_confusable_set.py`：形近对上下文消歧测试集：从已积累的裁决里抽出形近家族字位。
 - `build_near_groups.py`：形近字组表 `config/near_groups.json`：从各书字形库挖极近字对（`mine`），并上手工、人裁、字体表与库内异体对（`merge`）；读表与分流规则在 `clustering/near_route.py`。
+- `build_near_groups_v2.py`：形近字组登记表 `config/near_groups/v2.json`（`near_groups/2`）：注册字组表＋手工／人裁／字体表＋`near_groups.json` 合成，`--check` 比对；书级版本加 `--pair-clf`、`--glyph-near`。见 doc/3-识字/形近字组登记表.md。
 - `build_context_correction_dataset.py`：构建 context-correction 测试集：冻结候选 + 逐槽位金标，按页存、按列组织。
 - `build_context_correction_v2.py`：context-correction v2：在 v1 冻结候选上重标「金标可达性」，剔掉构造痕迹口径。
 - `build_exclusion_recheck_review.py`：排除名单复核页：名单上每个格，用**现在**的图块问人「还切坏吗」。
