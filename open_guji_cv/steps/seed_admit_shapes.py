@@ -26,6 +26,10 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
     from ..groups import rr_shape
     model = rr_shape.load(p.group_flow_rr_shape)
     miss = patch_missing if patch_missing is not None else {}
+    near_on = bool(getattr(p, "group_flow_rr_shape_3b", False)) and ctx is not None
+    near = _rr_shape_from_3b(p, ctx, page) if near_on else {}
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -42,14 +46,20 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
                     continue
             elif not (gid == "rr" or r.char in _RR or ref in _RR):
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("rr_shape")
-                continue
-            v = rr_shape.judge(img, model)
+            v = near.get(r.id) if c.col not in alt else None
+            if v is not None:
+                tally["3b"] += 1
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("rr_shape")
+                    continue
+                v = rr_shape.judge(img, model)
             trail = {k: v[k] for k in ("char", "why", "nn", "score", "geo") if k in v}
             if v["char"] is None:
                 if not r.admit:
@@ -63,7 +73,40 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
             r.evidence = {**ev, "rr_shape": trail, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "rr_shape", "match", []
             delta += 1
+    if near_on and hasattr(ctx, "log"):
+        ctx.log(f"seed_admit p{page}: rr_shape 判法结果 读 3b {tally['3b']}｜本地现算：3b 没触发 {tally['local']}、"
+                f"备选切法列 {tally['alt']}")
     return delta
+
+
+def _rr_shape_from_3b(p, ctx, page: int) -> dict:
+    """3b `glyph_near` 里 `rr_shape` 方法的原样判法结果：{格 id: {char, why, nn, score, geo}}（CV4 11-28，第四步重构 4d 接 3b）。
+
+    只收主切法格（3b 只算主切法；备选切法列调用方退回本地现算）、证据里没有 `error` 的格。
+    3b 用的模型必须与本步 `group_flow_rr_shape` 是同一份（比 `near_methods.method_fingerprint`），不一致报错，不混用。
+    读不到 3b 产物（没跑、没开组）→ 空表，全部本地现算。"""
+    try:
+        pn = ctx.product("glyph_near", page)
+    except Exception:                      # noqa: BLE001 —— 可选上游：没有就全部本地现算
+        return {}
+    got: dict = {}
+    for cn in getattr(pn, "columns", None) or []:
+        for nr in cn.chars or []:
+            for mo in nr.methods or []:
+                if mo.method.split(":", 1)[0] != "rr_shape":
+                    continue
+                ev = mo.evidence or {}
+                if "error" in ev or "why" not in ev:
+                    continue
+                got[nr.id] = dict(ev)
+    if got:
+        from ..groups.near_methods import method_fingerprint
+        want = method_fingerprint("rr_shape", p.group_flow_rr_shape)
+        have = {x.split(":", 1)[1] for x in (pn.methods_sha or "").split(";") if ":" in x}
+        if want not in have:
+            raise ValueError(f"seed_admit p{page}：3b glyph_near 的 rr_shape 模型与 group_flow_rr_shape 不是同一份"
+                             f"（本步 {want}；3b {pn.methods_sha or '空'}），先让两边指同一个模型再跑")
+    return got
 
 
 def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
