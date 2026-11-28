@@ -23,7 +23,7 @@ from ..bench import BenchCtx, BenchResult, BenchSpec, Guard, register
 #: dataset 里 cut-bench 的子目录名（短名）→ 书 id
 GOLD = {"988g3f0wsu": "char-segmentation/cut-bench/shiji",
         "995ejelvk0": "char-segmentation/cut-bench/qtw",
-        "siku-zongmu": "char-segmentation/cut-bench/dianben",
+        "96mid1ogzk": "char-segmentation/cut-bench/dianben",
         "99k3i35yww": "char-segmentation/cut-bench/maijing"}
 
 
@@ -34,6 +34,14 @@ def plan(gold: Path, book: str, vols: list) -> dict:
 
 def _vols(ctx: BenchCtx) -> dict:
     return {v: {"pages": p} for v, p in plan(Path(ctx.res["gold"]), ctx.book, ctx.vols).items()}
+
+
+def run_env(pred: Path) -> dict:
+    """在冻结出的工作区里跑 cv 的环境（切字大步、事后读产物的体检都用）：不在线问大模型，代码漂移只警告。"""
+    env = {k: v for k, v in os.environ.items() if k not in ("GUJI_ANTHROPIC_API_KEY", "GUJI_LLM_ONLINE")}
+    env.update(GUJI_WORKSPACE=str(pred / "ws"), GUJI_PRODUCTS_DIR=str(pred / "ws" / "products"),
+               GUJI_CODE_DRIFT="warn", GUJI_DATA_HOME=str(pred / "datahome"), PYTHONIOENCODING="utf-8")
+    return env
 
 
 def run(ctx: BenchCtx) -> Path:
@@ -52,9 +60,7 @@ def run(ctx: BenchCtx) -> Path:
     dh = pred / "datahome"
     if ctx.res.get("data_home") and (Path(ctx.res["data_home"]) / "main" / ".borrowed").exists():
         shutil.copytree(Path(ctx.res["data_home"]) / "main" / ".borrowed", dh / "main" / ".borrowed")
-    env = {k: v for k, v in os.environ.items() if k not in ("GUJI_ANTHROPIC_API_KEY", "GUJI_LLM_ONLINE")}
-    env.update(GUJI_WORKSPACE=str(pred / "ws"), GUJI_PRODUCTS_DIR=str(pred / "ws" / "products"),
-               GUJI_CODE_DRIFT="warn", GUJI_DATA_HOME=str(dh), PYTHONIOENCODING="utf-8")
+    env = run_env(pred)
     for vol, v in _vols(ctx).items():
         pages = (ctx.pages or {}).get(vol) or v["pages"]
         cmd = [sys.executable, "-m", "open_guji_cv", "pipeline", ctx.args.get("pipeline", "guji_default"), vol,

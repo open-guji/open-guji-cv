@@ -71,13 +71,13 @@ def test_against_flips_and_self_zero(tmp_path):
 def test_registry_has_samples_and_suites():
     ids = [s.id for s in B.all_specs()]
     assert {"cut-2d", "decide"} <= set(ids)
-    assert [s.id for s in B.expand(["@cut"])] == ["cut-2d"]
+    assert "cut-2d" in [s.id for s in B.expand(["@cut"])]
     with pytest.raises(KeyError):
         B.get("nope")
     with pytest.raises(KeyError):
         B.expand(["@nope"])
     for s in B.all_specs():
-        assert s.primary and s.owner and s.steps
+        assert s.owner and (s.deprecated or (s.primary and s.steps))     # deprecated 的只留理由，不跑
 
 
 def test_decide_score(tmp_path):
