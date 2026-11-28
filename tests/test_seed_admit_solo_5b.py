@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+from helpers import patch_seed_admit
+
 import pytest
 
 import open_guji_cv.steps  # noqa: F401
@@ -31,9 +33,9 @@ def _rare(cs: list[str]) -> PageRare:
 
 def _run(tmp_path, monkeypatch, *, cands, rare, params=None, guard=None, verdict="unsure", via=None,
          book_kw=None, coord=None):
-    monkeypatch.setattr(sa, "_trusted_keben_counts", lambda _db, borrow=None: KEBEN)
+    patch_seed_admit(monkeypatch, "_trusted_keben_counts", lambda _db, borrow=None: KEBEN)
     if coord is not None:
-        monkeypatch.setattr(sa, "_coord_refs", lambda _ctx, _page, _cache: {f"{BOOK}:{PAGE}:{COL}:1": coord})
+        patch_seed_admit(monkeypatch, "_coord_refs", lambda _ctx, _page, _cache: {f"{BOOK}:{PAGE}:{COL}:1": coord})
     ctx = make_ctx(tmp_path, make_book(BOOK, **(book_kw or {})), monkeypatch=monkeypatch)
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, verdict=verdict, char=cands[0][0] if verdict == "same" else None, cov=cands[0][1], wmax=16.0,

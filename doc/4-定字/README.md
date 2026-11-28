@@ -21,3 +21,23 @@
 - 相关设计：[14-准确率优先-Step6与Step7重设计](../design/14-准确率优先-Step6与Step7重设计.md)、[降人审漏斗-管线侧对照](../design/降人审漏斗-管线侧对照.md)、[15-人裁锚定与重切后重绑定](../design/15-人裁锚定与重切后重绑定.md)。
 
 原第 8 步（裁定事件回流、入库）和第 9 步（排版输出）已移到 guji-manager：入库归它的第二步 `pipeline`，排版输出归第五步 `output`（`guji output export md|format|wikisource|reflow`、`guji output collation-report`）。第 9 步的代码（导出、对勘、体检表）在 cv v0.9.0 整个搬进 manager `guji_manager/output/`；cv 只留字位流 `report/slots.py` 和整理本 `report/witness.py`，`feedback/` 留作库函数给 manager 调。
+
+## `seed_admit` 的代码分块（2026-11-28 起，P1a，纯搬家、指纹不变）
+
+设计见 ai-team `domain/CV/A24/第四步定字-子步重构设计-2026-11-28.md`。步骤 id、产物、参数都没动；原先一个 7,500 行的 `seed_admit` 按位置拆成下面这些文件，`seed_admit.py` 只剩 `SeedAdmitStep`（主循环与后处理遍的次序，**改次序＝改产物**）并 re-export 全部旧名字。
+
+| 文件 | 内容 | 对应设计里的位置 |
+|---|---|---|
+| `decide.py` | `ref_of(ctx, page)` 合并读口（`{格: {ref, via: text\|coord\|pin, op}}`）、`text_refs`／`coord_refs`（`seed_admit._align`／`_coord_refs` 只是它的包装）、`_opt` | 4a 读口 |
+| `seed_admit_cell_state.py` | 遮挡、印章空白、墨点、字框几何（`seg_box_check`）、夹注不齐、符号、表头公式 | 4c 格况 |
+| `seed_admit_groups.py` | group_flow、看图判裁定、折叠组、近形 p、人裁字形表 | 4d 字组 |
+| `seed_admit_pick.py` | 选刻形、铁证、独证、文意异议、码位表、书级钩子取数 | 收尾·定字 |
+| `seed_admit_lanes.py` | 整理本／无参照放行通道与降审护栏各遍 | 收尾·放行 |
+| `seed_admit_veto.py` | `shadow_veto`、follow_ref 否决、witness3 近邻否决 | 收尾·否决 |
+| `seed_admit_reasons.py` | 疑问码 `doubts`、上下文／乱码护栏 | 收尾·原因 |
+| `seed_admit_altcut.py` | 备选切法挑列（`alt_select=admit`） | 挑切法 |
+| `seed_admit_page_params.py` | 无参照页换参数、参校本准确度分档 | 按页参数 |
+| `seed_admit_shapes.py`、`seed_admit_common.py`、`seed_admit_params.py` | 字形判官各遍、共用小工具、参数类（此前已拆） | 4d／共用 |
+
+- 指纹：新模块都在 `seed_admit` 的 `code_deps` 里，`code_equiv.SPLITS` 把它们合回原来的 `seed_admit`／`seed_admit_lanes` 两项，各书各步指纹不变。
+- 测试里换函数：各遍搬走后，调用方在哪个模块就查哪个模块的全局名，用 `tests/helpers.py` 的 `patch_seed_admit(monkeypatch, "名字", 值)` 在各模块里一起换。
