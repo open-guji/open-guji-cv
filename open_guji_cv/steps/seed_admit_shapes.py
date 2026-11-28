@@ -83,12 +83,13 @@ def _log_tally(ctx, page: int, method: str, tally: dict) -> None:
             f"备选切法列 {tally['alt']}")
 
 
-def _near_from_3b(ctx, page: int, method: str, model_path: str) -> dict:
+def _near_from_3b(ctx, page: int, method: str, model_path: str, by_pair: bool = False) -> dict:
     """3b `glyph_near` 里某个看图方法的原样判法结果：{格 id: 证据（去掉 `method` 键）}（CV4 11-28，第四步重构 4d 接 3b）。
 
     只收主切法格（3b 只算主切法；备选切法列调用方退回本地现算）、证据里没有 `error` 的格。
     3b 用的模型必须与本步书级参数指的是同一份（比 `near_methods.method_fingerprint`），不一致报错，不混用。
-    读不到 3b 产物（没跑、没开组）→ 空表，全部本地现算。"""
+    读不到 3b 产物（没跑、没开组）→ 空表，全部本地现算。
+    `by_pair`（part_shape：一个模型挂多对，每组一对）：键是 (格 id, 对里两字)，指纹按 {path, pair} 逐对比。"""
     try:
         pn = ctx.product("glyph_near", page)
     except Exception:                      # noqa: BLE001 —— 可选上游：没有就全部本地现算
@@ -102,12 +103,15 @@ def _near_from_3b(ctx, page: int, method: str, model_path: str) -> dict:
                 ev = mo.evidence or {}
                 if "error" in ev or "why" not in ev:
                     continue
-                got[nr.id] = {k: v for k, v in ev.items() if k != "method"}
+                key = (nr.id, tuple(ev.get("pair") or ())) if by_pair else nr.id
+                got[key] = {k: v for k, v in ev.items() if k != "method"}
     if got:
         from ..groups.near_methods import method_fingerprint
-        want = method_fingerprint(method, model_path)
         have = {x.split(":", 1)[1] for x in (pn.methods_sha or "").split(";") if ":" in x}
-        if want not in have:
+        wants = ({method_fingerprint(method, {"path": model_path, "pair": list(k[1])}) for k in got} if by_pair
+                 else {method_fingerprint(method, model_path)})
+        want = ", ".join(sorted(wants - have))
+        if want:
             raise ValueError(f"seed_admit p{page}：3b glyph_near 的 {method} 模型与书级参数指的不是同一份"
                              f"（本步 {want}；3b {pn.methods_sha or '空'}），先让两边指同一个模型再跑")
     return got
@@ -227,6 +231,10 @@ def _part_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
     from ..groups import part_shape
     model = part_shape.load(p.group_flow_part_shape)
     miss = patch_missing if patch_missing is not None else {}
+    near_on = "part_shape" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    near = _near_from_3b(ctx, page, "part_shape", p.group_flow_part_shape, by_pair=True) if near_on else {}
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -239,14 +247,20 @@ def _part_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             if r.char not in model["_chars"]:
                 continue
             pair = part_shape.pair_of(model, r.char)
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("part_shape")
-                continue
-            v = part_shape.judge(img, pair)
+            v = near.get((r.id, tuple(pair["chars"]))) if c.col not in alt else None
+            if v is not None:
+                tally["3b"] += 1
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("part_shape")
+                    continue
+                v = part_shape.judge(img, pair)
             if v["char"] is None:
                 if not r.admit:
                     r.evidence = {**ev, "part_shape": v}
@@ -259,6 +273,8 @@ def _part_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             r.evidence = {**ev, "part_shape": v, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "part_shape", "match", []
             delta += 1
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, "part_shape", tally)
     return delta
 
 

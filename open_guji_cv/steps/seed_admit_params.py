@@ -494,7 +494,7 @@ class SeedAdmitParams(BaseModel):
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
     group_flow_book_knn: dict[str, str] = Field(default_factory=dict)   # 组 id → 书级刻形近邻库（`groups.book_knn`，缺省找 config/groups/book_knn/<组>.json；没有＝不跑，行为不变）
     group_flow_rr_shape: str = ""            # 入人八 书级刻形判法模型（`groups.rr_shape`，缺省找 config/groups/rr_shape.json；没有＝不跑，行为不变）。
-    group_flow_near_from_3b: list[str] = Field(default_factory=list)  # 这些看图方法（rr_shape、wu_shape、hou_shape）的判法结果先读 3b `glyph_near` 的原样结论，3b 没有的格（没触发、备选切法列、读不到字块）本地现算；模型须与书级参数同一份，不同报错。缺省空、空时不进参数 dump（CV4 11-28，第四步 4d 接 3b）。
+    group_flow_near_from_3b: list[str] = Field(default_factory=list)  # 这些看图方法（rr_shape、wu_shape、hou_shape、part_shape）的判法结果先读 3b `glyph_near` 的原样结论，3b 没有的格（没触发、备选切法列、读不到字块）本地现算；模型须与书级参数同一份，不同报错。缺省空、空时不进参数 dump（CV4 11-28，第四步 4d 接 3b）。
     group_flow_wu_shape: str = ""            # 嗚鳴 书级刻形判法模型（`groups.wu_shape`，缺省找 config/groups/wu_shape.json；没有＝不跑，行为不变；全唐文 11-14）。
     group_flow_hou_shape: str = ""           # 候𠋫 书级刻形判法（`groups.hou_shape`，几何量判 亻 右边第二竖长短；缺省找 config/groups/hou_shape.json；没有＝不跑，行为不变；全唐文 11-20）。
     group_flow_part_shape: str = ""          # 书级部件刻形判法模型（`groups.part_shape`，剌刺／疎踈 等差在一块部件的字对，一份文件挂多对；缺省空＝不跑，不自动找文件；全唐文 11-15）。

@@ -16,6 +16,7 @@ from open_guji_cv.steps.seed_admit_shapes import _rr_shape_pass
 
 from test_glyph_near_rr_shape import _probe_imgs, _write_model, model_file  # noqa: F401
 from test_glyph_near_hou_shape import models  # noqa: F401
+from test_glyph_near_part_shape import model as part_model  # noqa: F401
 
 
 def _recs(n):
@@ -179,3 +180,45 @@ def test_hou_shape_read_3b_same_as_local(models, k, late):
     ctx = _Ctx(imgs, near, set(range(n)) - covered)
     assert run(ctx, True) == base
     assert f"hou_shape 判法结果 读 3b {len(covered)}" in ctx.logs[0]
+
+
+# ── part_shape（一个模型挂多对，CV3 #2011）：按 (格 id, 对) 取，指纹按 {path, pair} 逐对比 ──────────
+
+@pytest.mark.parametrize("k", ["ci", "shu", "zan", "rnd"])
+@pytest.mark.parametrize("admitted", [False, True])
+def test_part_shape_read_3b_same_as_local(part_model, k, admitted):  # noqa: F811
+    from open_guji_cv.steps.seed_admit_shapes import _part_shape_pass
+    from test_glyph_near_part_shape import PAIRS, _imgs as _part_imgs
+
+    a, b = PAIRS[k]
+    imgs = _part_imgs()
+    n = len(imgs)
+
+    def recs():
+        return [NS(id=f"b:1:1:{i + 1}", slot=i + 1, sub=None, char=a, admit=admitted, evidence={},
+                   provenance="match", channel="match_ref" if admitted else "", doubts=[]) for i in range(n)]
+
+    def run(ctx, on):
+        rs = recs()
+        p = NS(group_flow_part_shape=str(part_model), patch_missing="error",
+               group_flow_near_from_3b=["part_shape"] if on else [])
+        d = _part_shape_pass(p, [NS(col=1, chars=rs)], {}, ctx, 1)
+        return d, [(r.char, r.admit, r.channel, copy.deepcopy(r.evidence)) for r in rs]
+
+    base = run(_Ctx(imgs, None, set(range(n))), False)
+    spec = {"path": str(part_model), "pair": [a, b]}
+    outs = NM.load_method("part_shape", spec).score(imgs, "b")
+    covered = {0, 2}
+    chars = [NearRec(id=r.id, slot=r.slot, group=k, trigger="cands",
+                     methods=[NearMethodOut(method=f"part_shape:{k}", sims=o["sims"], evidence=o["evidence"])])
+             for i, (r, o) in enumerate(zip(recs(), outs)) if i in covered]
+    near = PageNear(page=1, methods_sha=f"{k}:" + NM.method_fingerprint("part_shape", spec),
+                    columns=[ColumnNear(col=1, chars=chars)])
+    ctx = _Ctx(imgs, near, set(range(n)) - covered)
+    assert run(ctx, True) == base
+    assert "part_shape 判法结果 读 3b 2" in ctx.logs[0]
+    # 换一对的指纹（模型文件同、对不同）→ 报错
+    bad = PageNear(page=1, methods_sha=f"{k}:" + NM.method_fingerprint("part_shape", str(part_model)),
+                   columns=[ColumnNear(col=1, chars=chars)])
+    with pytest.raises(ValueError, match="不是同一份"):
+        run(_Ctx(imgs, bad, set(range(n))), True)
