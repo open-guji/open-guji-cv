@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from types import SimpleNamespace as NS
 
 import pytest
@@ -19,6 +20,7 @@ from test_glyph_near_hou_shape import models  # noqa: F401
 from test_glyph_near_part_shape import model as part_model  # noqa: F401
 from test_glyph_near_pair_shape import models as pair_models  # noqa: F401
 from test_glyph_near_book_knn import models as bk_models  # noqa: F401
+from test_glyph_near_near_knn import models as nk_models  # noqa: F401
 
 
 def _recs(n):
@@ -306,3 +308,46 @@ def test_book_knn_read_3b_same_as_local(bk_models, k):  # noqa: F811
     ctx2 = _Ctx(imgs, PageNear(page=1, methods_sha="t:book_knn=0000000000000000",
                                columns=[ColumnNear(col=1, chars=chars)]), set(range(n)))
     assert run(ctx2, True) == base and "读 3b 0" in ctx2.logs[0]
+
+
+# ── near_knn（伪组 _guard，CV3 #2022）：3b 出距离，4d 用 near_knn_settle 按候选定档；settle 给 None 的格本地现算 ──────
+
+@pytest.mark.parametrize("k", ["base", "loose", "guard", "tie"])
+def test_near_knn_read_3b_same_as_local(nk_models, k):  # noqa: F811
+    from open_guji_cv.steps.glyph_near import trigger_groups
+    from open_guji_cv.steps.seed_admit_shapes import _near_knn_pass
+    from test_glyph_near_near_knn import _cells, bar, box, cross
+
+    imgs = [box(1), cross(-1), box(-2), bar(0), cross(2), box(2), box(-1), cross(1), box(0), cross(0)]
+    n = len(imgs)
+
+    class Ctx(_Ctx):
+        book = NS(codepoints=None)
+
+    def run(ctx, on):
+        cells, mmap, amap = _cells(imgs)
+        p = NS(group_flow_near_knn=str(nk_models[k]), patch_missing="error", near_knn_gap=True,
+               group_flow_near_from_3b=["near_knn"] if on else [])
+        for stage in ("near", "gap"):
+            _near_knn_pass(p, [NS(col=1, chars=cells)], amap, mmap, ctx, 1, stage=stage)
+        return [(c.char, c.admit, c.channel, c.provenance, c.doubts, json.dumps(c.evidence, ensure_ascii=False))
+                for c in cells]
+
+    base = run(Ctx(imgs, None, set(range(n))), False)
+    cells, mmap, _ = _cells(imgs)
+    m = NM.load_method("near_knn", str(nk_models[k]))
+    groups = {"_guard": {"trigger": "guard", "gap": True, "methods": {"near_knn": str(nk_models[k])}}}
+    recs = []
+    for i, (c, g) in enumerate(zip(cells, imgs)):
+        r = mmap[c.id]
+        t = trigger_groups(r.candidates, r.char, groups, r)
+        if t and i != 4:                                         # 第 5 格当 3b 没触发
+            ev = m.score([g], "b", cells=[{"char": r.char, "candidates": r.candidates}])[0]["evidence"]
+            recs.append(NearRec(id=c.id, slot=c.slot, group="_guard", trigger=t[0][1],
+                                methods=[NearMethodOut(method="near_knn:_guard", evidence=ev)]))
+    sha = "_guard:near_knn=" + NM.lib_fingerprint(str(nk_models[k]))
+    ctx = Ctx(imgs, PageNear(page=1, methods_sha=sha, columns=[ColumnNear(col=1, chars=recs)]), set(range(n)))
+    assert run(ctx, True) == base
+    got = " ".join(ctx.logs)
+    assert "near_knn(near) 判法结果" in got and "near_knn(gap) 判法结果" in got
+    assert sum(int(x.split("读 3b ")[1].split("｜")[0]) for x in ctx.logs) >= 3

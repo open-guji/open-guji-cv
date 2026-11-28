@@ -138,7 +138,7 @@ def _near_by_model_from_3b(ctx, page: int, method: str) -> dict:
                 continue
             for mo in nr.methods or []:
                 ev = mo.evidence or {}
-                if mo.method.split(":", 1)[0] != method or "error" in ev or "why" not in ev:
+                if mo.method.split(":", 1)[0] != method or "error" in ev or not ev:
                     continue
                 got[(nr.id, fp[nr.group])] = {k: v for k, v in ev.items() if k != "method"}
     return got
@@ -513,6 +513,14 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
     miss = patch_missing if patch_missing is not None else {}
     canon = ctx.book.canonical_char if (p.near_knn_gap and ctx is not None and ctx.book.codepoints) else None
     top3: list = []
+    near_on = "near_knn" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    n3b: dict = {}
+    if near_on:
+        from ..groups.near_methods import lib_fingerprint, near_knn_settle
+        n3b = _near_by_model_from_3b(ctx, page, "near_knn")
+        want = "near_knn=" + lib_fingerprint(p.group_flow_near_knn)
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -544,14 +552,23 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
             if not gap and any(_direct_variant_edge(a, b) and frozenset((a, b)) not in _edge_exclude()
                                for i, a in enumerate(cands) for b in cands[i + 1:]):   # 只认真异体边：只当形近／通假的边（NEVER_SOURCES，如 寵/龍）不挡字形判
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("near_knn")
-                continue
-            v = near_knn.judge(img, model, cands)
+            v = None
+            if near_on and c.col not in alt:
+                got = n3b.get((r.id, want))
+                v = near_knn_settle(got, model, cands) if got is not None else None
+            if v is not None:
+                tally["3b"] += 1
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("near_knn")
+                    continue
+                v = near_knn.judge(img, model, cands)
             trail = {k: v[k] for k in ("char", "why", "pick", "votes", "ratio", "full", "full_votes", "nn") if k in v}
             if gap:
                 trail["via"] = "near_gap"
@@ -566,4 +583,6 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
             r.evidence = {**ev, "near_knn": trail, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "near_knn", "match", []
             delta += 1
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, f"near_knn({stage})", tally)
     return delta
