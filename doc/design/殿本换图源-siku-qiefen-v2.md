@@ -1,5 +1,7 @@
 # 殿本《四庫全書總目》换图源：siku-qiefen-v2（设计稿 v4，A31，2026-10-26，GUJI-748）
 
+> **口径提示（2026-11-28）**：本文写于「待审单按 rev／批号整张出、整张换单（`republish.py`／`proof_cycle.py`／`auto_cycle.py`）」的年代，这些做法已退役。现行：待审条目无 rev／批次，每格独立，身份（书,册,u）；出单走 `guji land`；来源由 `level`／`by`／`channel` 三字段说明（裁定事件，见 [裁定事件规范](../formats/裁定事件规范.md)）；口径真源见 guji-manager `doc/数据库/待审条目与裁定事件.md`。下文涉及 rev／整张换单／换单门的段落仅作历史记录。
+
 > 用户 10-26 定：99 册整套换成 open-guji-core/file_archive release `siku-qiefen-v2` 的图，**按新包重编页号**，每册给下游一张「旧页号→新页号」对照表。网站不做旧 `#页:列:格` 深链跳转（用户定，A41 转述）。
 > 研究结论（页对应、变换精度、试跑数据）见 Claude 文档 https://claude.ai/artifact/5eEUAkUN72C7uWrMa9KZ1m ；
 > 脚本、全套页对应、99 册页级对照表在 ai-team `domain/CV/图源迁移/siku-qiefen-v2/`。
@@ -61,7 +63,7 @@
 | 版式先验 `page_map`／`layout_slots`／`layout_overrides` | 本册各行按新页号重写；新增页按 daizhige 页号补。出新书库版本；**每批切过去的册在 `config/corpus-pack/pins/<册>.json` 记新总号，没切的册继续钉旧号。** |
 | 产物包 | 新图整册从 Step1 重跑，工作量按整册从零估。新图包 `--change` 写明页表 rev 和书库号，如 `qiefen-r<N>-c<书库号>`。只有正式 tag 跑出的那一次标 main。**不再为混合版本问题在旧图上重跑**（vol04、06–20 的 0.5.12／0.5.17 混合，由换源重跑一并消掉）；在途的旧图重跑（如 vol07 纯 0.5.17）到切换点前撤掉，或明确只作旧图对照、不标 main。 |
 | 产物的页表来历（v4 新增） | `guji source pull` 在 `raw_dir` 写 `_source.json`（`{book, vol, rev}`），流水线把它带进产物的 `_raw_index.json`。旧包没有这一项，即视为旧坐标系。§六 的锚 rev 从这里取。 |
-| 人裁事件 | 另写一批新事件，旧事件不删。工具用 A32 的 `guji cellvotes migrate`（#636，只读，输入格级表与旧事件，可带网站票，出 `events.jsonl`、`votes.jsonl`、`id_map.tsv`、`pending.tsv`），取代试算脚本 `migrate_events2.py`（它只换页号、列格照抄，`改号` 格会落错）：<br>• `target.key` 按**格级表**改；锚框按页变换；去掉 `evidence` 指纹。<br>• 格级表里 `删` 的格：事件照迁、只带锚不带格键，靠新切分重绑定，绑不回的进待审单。<br>• 没锚的老裁决，按旧 main 的现行绑定补锚（补锚用的包要核是不是出单那一版）。<br>• 新事件 id 加 `~q`；`anchor.migrated_from` 记旧册页；`anchor.source_rev` 记新页表 rev。 |
+| 裁定事件 | 另写一批新事件，旧事件不删。工具用 A32 的 `guji cellvotes migrate`（#636，只读，输入格级表与旧事件，可带网站票，出 `events.jsonl`、`votes.jsonl`、`id_map.tsv`、`pending.tsv`），取代试算脚本 `migrate_events2.py`（它只换页号、列格照抄，`改号` 格会落错）：<br>• `target.key` 按**格级表**改；锚框按页变换；去掉 `evidence` 指纹。<br>• 格级表里 `删` 的格：事件照迁、只带锚不带格键，靠新切分重绑定，绑不回的进待审单。<br>• 没锚的老裁决，按旧 main 的现行绑定补锚（补锚用的包要核是不是出单那一版）。<br>• 新事件 id 加 `~q`；`anchor.migrated_from` 记旧册页；`anchor.source_rev` 记新页表 rev。 |
 | 待审单的票（vol04–10） | 见 §七。 |
 | 裁决表 `feedback/verdicts`、`crop_exclusions` | 裁决表由新事件经路由重新生成；`crop_exclusions` 的本册行按格级表改键（对不上的按页变换框）。 |
 | 字形库（v4 改：要迁） | 实例 id 是 `v2:` 加格键，`seed_admit._human_shapes` 按它当「这一格的人裁字形」一票定案。页号重编后旧 id 会和新页同号的另一格撞上（A24 评审第 1 条，已核 `feedback/consumers.py`）。所以：<br>• 按格级表改键：对上的改成新格键，`instances`、`exemplars`、`pairs`、`admissions`、`approx_labels` 一并改，并写 `evictions`，让 `glyph_store_sync` 的删除护栏放行。<br>• 对不上的移到不按格寻址的命名空间，**全用 `~` 不用冒号**：`v2~r<旧页表rev>~vol04~3~6~10`（带冒号的尾巴会被 `freq._cell_key`、`glyphlib.cell_key` 读回格键）。本册 v1 刻例对不上格级表，也停放成 `v1~r<旧rev>~…`。<br>• 改键在推迁移事件**之前**，出新字形库版本，切过的批次改 `glyph_pin`。<br>• 迁移事件仍**跳过 glyph 进库**（PR #633），因为改键后的实例就是它们的进库结果，再进一次就重了。<br>• 验收：本册 `_human_shapes` 的键全部落在新包格集合里，且和迁移事件的定字逐格一致。<br>• 执行：A24（工具与改键），A31 给格级表。 |
@@ -92,7 +94,7 @@
 
 ## 七、迁票（vol04–10，A32 定流程）
 
-1. **盘点**（只读）：线上待审单 rev 与格数、该 rev 的票数、已有人裁事件数、冻结状态；**每张在途单的出单版旧格表（`--old-cord`）在这一步就出好**，免得窗口里才发现对不上。盘点表贴 GUJI-748，作计数核对的左端。
+1. **盘点**（只读）：线上待审单 rev 与格数、该 rev 的票数、已有裁定事件数、冻结状态；**每张在途单的出单版旧格表（`--old-cord`）在这一步就出好**，免得窗口里才发现对不上。盘点表贴 GUJI-748，作计数核对的左端。
 2. **停写→落票**：旧单只读（`/api/cellreview` 对旧 rev 返回只读）。每张在途单按**出单那一版**的 cord 或产物包跑 `cellvotes draft`；ready 的落成人裁，held 的（无字、分歧、推翻、格位对不上）单独存清单。
 3. **迁**：用该单出单版的格级表（§三 `--old-cord`）迁。IoU 低或落在没对上／可疑页上的票，和 held 清单一起进新待审单（带旧新格截图），不丢、不自动裁。
 4. **核对**：人裁数＝迁入＋退役页＋补不出锚，差额逐条列。新图重跑后变了的字一律进待审，人裁优先，不写回文本。

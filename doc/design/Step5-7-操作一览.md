@@ -53,7 +53,7 @@ Step5 三路（原四路，5-c 已删）互相独立、并行收集证据；Step
 遮挡/印章（`occluded_gate`，缺省开）、context 乱码/空白/窄格/单笔画等护栏、`ref_lib_variant_guard`、`variant_indirect_guard`、铁证的整理本互证与形近闸、`shadow_veto`、`approx_gate`、`always_review`（己已巳不采信字形/OCR 通道）。
 
 ### 产物与回流
-落成 numeric 产物，供审查页与 `glyphdb_admit` 消费；人裁事件（Step8）回流后会让 Step7 对应格判过期重算。
+落成 numeric 产物，供审查页与 `glyphdb_admit` 消费；裁定事件（Step8）回流后会让 Step7 对应格判过期重算。
 
 ## 与 M7 的位置关系
 - 上下文路、量横、`variant_tie` 都在 Step7，且都排在「正常通道未放行」之后。
