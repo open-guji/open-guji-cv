@@ -53,7 +53,6 @@ def _engine(book: str):
 
 def _pins(book: str) -> dict[tuple[int, int], list]:
     from ..feedback.lookup import resolved_manual_cells
-    from ..products.final_read import read_final_store
     try:
         return {(int(p), int(c)): v for (p, c), v in resolved_manual_cells(book).items()}
     except Exception as e:  # noqa: BLE001
@@ -94,6 +93,7 @@ def _img(ctx, book: str, kind: str, key: str):
 def screen_book(book: str, pages: set[int] | None, seal_blank: bool, rows: dict[str, list], counts: dict,
                 skip: set[int] | None = None, cell_checks: bool = True, ref_check: bool = True) -> None:
     import open_guji_cv.products.kinds  # noqa: F401
+    from ..products.final_read import read_final_store
     from ..core.spec import column_key, page_key
     from ..steps.row_segment import RowSegmentStep, load_layout
     from . import colgeom, seg_screen as ss

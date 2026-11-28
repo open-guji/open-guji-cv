@@ -494,7 +494,7 @@ def cmd_migrate_name(args) -> None:
         rep = plan(root, args.book)
         rep.pop("sha_before", None)
     elif NEW_ADMIT_STEP not in STEPS:
-        raise SystemExit(f"本版 cv 的收尾 Step 还叫 seed_admit（产物仍写 seed_admit/），改名那一版发出后才能迁；现在只能 --dry-run 看计划")
+        raise SystemExit("本版 cv 的收尾 Step 还叫 seed_admit（产物仍写 seed_admit/），改名那一版发出后才能迁；现在只能 --dry-run 看计划")
     else:
         rep = migrate(root, args.book, convert=_migrate_convert(eng))
         rep = {k: v for k, v in rep.items() if k not in ("sha_before", "sha_after")}
