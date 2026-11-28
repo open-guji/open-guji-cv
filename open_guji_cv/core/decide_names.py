@@ -44,12 +44,13 @@ def canonical_step(name: str) -> str:
     return NEW_ADMIT_STEP if name == LEGACY_ADMIT_STEP else name
 
 
-#: 收尾步将来**直接写**的送审原因（manager `pending_reasons.yaml` 里 owner＝第四步〈原 A24，现 CV4〉的 15 个值）。
-#: 切分类（S）、遮挡类（D，P3b 4c 独立后改由 4c 状态给）、字形库刻例类（L02–L04）、复审类（X）仍由 manager 判，cv 不写（留 None）。
-#: 说明见 `doc/4-定字/pending_reason.md`；cv 存的 enum 副本与 manager 导出对账的测试，随「收尾真写 pending_reason」那一版加。
+#: 收尾步**直接写**的送审原因（manager `pending_reasons.yaml` 里 owner＝CV4 的值，按 yaml 现状 2026-11-28 共 18 个，含已停用的 group_weak）。
+#: 切分类（S）、遮挡类（D，P3b 4c 独立后改由 4c 状态给）、字形库 L02／L04、复审 X02–X04 仍由 manager 判，cv 不写（留 None）。
+#: 说明见 `doc/4-定字/pending_reason.md`；判法在 `steps/char_decide_reasons.py`；与 manager 导出的对账测试：`tests/test_pending_reason_enum.py`。
 FINAL_PENDING_REASONS: tuple[str, ...] = (
-    "hard_pair", "group_abstain", "group_conflict", "group_demoted", "group_ref_dissent", "group_weak", "group_form_open",
-    "near_form_guard", "variant_pair", "lib_missing", "garble_gate", "ref_lacuna", "ref_gap", "ref_replaced", "ref_mismatch",
+    "hard_pair", "group_abstain", "group_conflict", "group_demoted", "group_ref_dissent", "group_weak", "group_unconfirmed",
+    "near_form_guard", "variant_pair", "variant_form_open", "lib_missing", "garble_gate", "glyph_pending", "ref_lacuna",
+    "ref_gap", "ref_ocr_diff", "ref_final_diff", "ruling_conflict",
 )
 
 

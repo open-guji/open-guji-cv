@@ -352,6 +352,7 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.steps.seed_admit_altcut",       # 备选切法挑列
                    "open_guji_cv.steps.seed_admit_reasons",      # 疑问码与护栏
                    "open_guji_cv.steps.seed_admit_page_params",  # 按页换参数
+                   "open_guji_cv.steps.char_decide_reasons",     # 收尾直接写送审原因（P3a-2，判法搬自 manager reasons.py）
                    "open_guji_cv.steps.decide",                  # 第四步公共读口（ref_of、_opt）
                    "open_guji_cv.clustering.seeding",
                    "open_guji_cv.clustering.variants",
@@ -422,6 +423,16 @@ class SeedAdmitStep(Step):
             _iron_context(p.db_path, getattr(ctx.book, "norm_stroke", None))
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
+        out = self._run_page_alt(ctx, page)
+        # P3a-2（2026-11-28）收尾直接写送审原因与选形来源：只读本页产物、不改放行（见 char_decide_reasons 模块头）
+        from .char_decide_reasons import stamp_page
+        try:
+            stamp_page(ctx, page, out["seed_admit"], glyph_db=str(ctx.params_for(self).db_path))   # 与放行用同一个字形库
+        except Exception as e:      # noqa: BLE001 —— 写不出原因不拦放行；留 None，manager 回退反推
+            ctx.log(f"seed_admit p{page}: pending_reason 没写出（{type(e).__name__}: {e}）")
+        return out
+
+    def _run_page_alt(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         # row_segment `alt_cut`：align_ref 挑中备选切法的列，这一页读 Step3/4/5a 一律读备选那份、
         # 字块换备选键，5b/6 丢掉这些列（见 `products.alt_view`）。没换列就原样，产物逐字节不变。
         from ..products.alt_view import AltView, alt_override

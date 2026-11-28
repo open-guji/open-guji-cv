@@ -312,7 +312,20 @@ class AdmitRec(BaseModel):
     provenance: str = ""                # match | align | context —— 设计 §3.2 分级
     doubts: list[str] = Field(default_factory=list)
     evidence: dict = Field(default_factory=dict)
+    # P3a-2（2026-11-28）收尾直接写的送审原因：只写第四步名下的值（manager pending_reasons.yaml owner=CV4），别的 None（manager 判）；
+    # form_src＝选形来源 lib|ref|group|code_table|human。三项 None 不落盘，旧产物与不写的格逐字节不变。
+    pending_reason: str | None = None
+    pending_reason_detail: str | None = None
+    form_src: str | None = None
 
+    @model_serializer(mode="wrap")
+    def _drop_none_final(self, handler):
+        d = handler(self)
+        if isinstance(d, dict):
+            for k in ("pending_reason", "pending_reason_detail", "form_src"):
+                if d.get(k) is None:
+                    d.pop(k, None)
+        return d
 
     _fold_char = field_validator("char", mode="after")(_fold_char)
 
