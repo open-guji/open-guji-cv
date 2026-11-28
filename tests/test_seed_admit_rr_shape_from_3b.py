@@ -18,6 +18,7 @@ from test_glyph_near_rr_shape import _probe_imgs, _write_model, model_file  # no
 from test_glyph_near_hou_shape import models  # noqa: F401
 from test_glyph_near_part_shape import model as part_model  # noqa: F401
 from test_glyph_near_pair_shape import models as pair_models  # noqa: F401
+from test_glyph_near_book_knn import models as bk_models  # noqa: F401
 
 
 def _recs(n):
@@ -265,4 +266,43 @@ def test_pair_shape_read_3b_same_as_local(pair_models, k, which):  # noqa: F811
     # 3b 的模型不是这一份：一条也取不到，全部本地现算，结果照旧
     other = PageNear(page=1, methods_sha="g:pair_shape=0000000000000000", columns=[ColumnNear(col=1, chars=chars)])
     ctx2 = _Ctx(imgs, other, set(range(n)))
+    assert run(ctx2, True) == base and "读 3b 0" in ctx2.logs[0]
+
+
+# ── book_knn（库钉版，CV3 #2019）：3b 出前段，4d 用 book_knn_settle 定档；按 (格 id, 库指纹) 取 ─────────────
+
+@pytest.mark.parametrize("k", ["base", "b_only", "b_tight", "bg", "mix"])
+def test_book_knn_read_3b_same_as_local(bk_models, k):  # noqa: F811
+    from open_guji_cv.steps.seed_admit_shapes import _book_knn_pass
+    from test_glyph_near_book_knn import REFS, _imgs as _bk_imgs
+
+    imgs = _bk_imgs()
+    n = len(imgs)
+    refs = {f"b:1:1:{i + 1}": REFS[i % len(REFS)] for i in range(n)}
+
+    def cells():
+        return [NS(id=f"b:1:1:{i + 1}", slot=i + 1, sub=None, char="口", admit=False, provenance="match", channel="",
+                   doubts=["near_form"], evidence={"group": {"id": "t"}}) for i in range(n)]
+
+    def run(ctx, on):
+        cs = cells()
+        p = NS(group_flow_book_knn={"t": str(bk_models[k])}, patch_missing="error",
+               group_flow_near_from_3b=["book_knn"] if on else [])
+        amap = {cid: (ref,) for cid, ref in refs.items() if ref is not None}
+        d = _book_knn_pass(p, [NS(col=1, chars=cs)], amap, ctx, 1)
+        return d, [(c.char, c.admit, c.channel, copy.deepcopy(c.evidence)) for c in cs]
+
+    base = run(_Ctx(imgs, None, set(range(n))), False)
+    outs = NM.load_method("book_knn", str(bk_models[k])).score(imgs, "b")
+    covered = set(range(0, n, 2))
+    chars = [NearRec(id=c.id, slot=c.slot, group="t", trigger="cands",
+                     methods=[NearMethodOut(method="book_knn:t", sims=o["sims"], evidence=o["evidence"])])
+             for i, (c, o) in enumerate(zip(cells(), outs)) if i in covered]
+    sha = "t:book_knn=" + NM.lib_fingerprint(str(bk_models[k]))
+    ctx = _Ctx(imgs, PageNear(page=1, methods_sha=sha, columns=[ColumnNear(col=1, chars=chars)]), set(range(n)) - covered)
+    assert run(ctx, True) == base
+    assert f"book_knn 判法结果 读 3b {len(covered)}" in ctx.logs[0]
+    # 库版本不同：取不到，全部本地现算
+    ctx2 = _Ctx(imgs, PageNear(page=1, methods_sha="t:book_knn=0000000000000000",
+                               columns=[ColumnNear(col=1, chars=chars)]), set(range(n)))
     assert run(ctx2, True) == base and "读 3b 0" in ctx2.logs[0]

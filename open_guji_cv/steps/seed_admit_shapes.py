@@ -446,6 +446,13 @@ def _book_knn_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
     已放行格不动；人裁格、硬护栏格不碰（同 `_rr_shape_pass`）。通道 `book_knn`，`evidence.book_knn` 留票数、距离比与档。"""
     from ..groups import book_knn
     miss = patch_missing if patch_missing is not None else {}
+    near_on = "book_knn" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    near, want = {}, {}
+    if near_on:
+        from ..groups.near_methods import book_knn_settle, lib_fingerprint
+        near = _near_by_model_from_3b(ctx, page, "book_knn")
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -458,15 +465,26 @@ def _book_knn_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
             ds = list(r.doubts or [])
             if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") for d in ds) or ev.get("guard") in ("never_match", "conflict", "timeout"):
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("book_knn")
-                continue
             ref = (amap.get(r.id) or (None,))[0]
-            v = book_knn.judge(img, book_knn.load(p.group_flow_book_knn[gid]), ref)
+            got = None
+            if near_on and c.col not in alt:
+                if gid not in want:
+                    want[gid] = "book_knn=" + lib_fingerprint(p.group_flow_book_knn[gid])
+                got = near.get((r.id, want[gid]))
+            if got is not None:
+                tally["3b"] += 1
+                v = book_knn_settle(got, ref)
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("book_knn")
+                    continue
+                v = book_knn.judge(img, book_knn.load(p.group_flow_book_knn[gid]), ref)
             trail = {k: v[k] for k in ("char", "why", "tier", "pick", "votes", "ratio", "nn") if k in v}
             if v["char"] is None:
                 r.evidence = {**ev, "book_knn": trail}
@@ -474,6 +492,8 @@ def _book_knn_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
             r.evidence = {**ev, "book_knn": trail, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "book_knn", "match", []
             delta += 1
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, "book_knn", tally)
     return delta
 
 
