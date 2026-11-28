@@ -64,7 +64,7 @@ near_knn 判的不是某个字组，而是第四步的**形近护栏格**，所�
 一格可以同时触发几个组（如 `trigger: cands` 的组字有重叠、或前几名候选分属两个组），**每个组各出一条 `NearRec`**
 （同格 id、`group` 不同，列里按格序再按组 id 排）。之前一格只进按组 id 排第一个触发的组。读口（`products/kinds/read.py`）：
 
-- `PageNear.by_id()`：`{格 id: NearRec}`，一格一条，取按组 id 排第一个的（＝之前的行为，老读者不改也照旧）；
+- （一格一条的 `PageNear.by_id()` 已于 2026-11-28 去掉，结构拆分 B5；读者全改用下面两个）
 - `PageNear.by_id_all()`：`{格 id: [NearRec…]}`，每个组一条、按组 id 排；
 - `PageNear.get(格 id, 组)`：某格某组那条，没触发 → None。
 

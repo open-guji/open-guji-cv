@@ -63,15 +63,6 @@ class PageNear(BaseModel):
                     d.pop(k, None)
         return d
 
-    def by_id(self) -> dict[str, NearRec]:
-        """{格 id: NearRec}，一格一条：触发了几个组的格取**按组 id 排第一个**的那条（＝2026-11-28 一格多组之前 3b 只出的那条，
-        老读口照旧能用）。要全部组用 `by_id_all`／`get`。"""
-        out: dict[str, NearRec] = {}
-        for c in self.columns:
-            for r in c.chars:
-                out.setdefault(r.id, r)
-        return out
-
     def by_id_all(self) -> dict[str, list[NearRec]]:
         """{格 id: [NearRec…]}，一格触发的每个组一条，按组 id 排序。"""
         out: dict[str, list[NearRec]] = {}

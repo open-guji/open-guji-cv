@@ -265,7 +265,7 @@ def test_glyph_near_near_knn_end_to_end(tmp_path, models):
     out = run_steps(ctx, 1, ["glyph_near", "glyph_analyzer"])
     pn = out["glyph_near"]
     assert pn.models == {"near_knn:_guard": fp}
-    trig = {cid: r.trigger for cid, r in pn.by_id().items()}
+    trig = {cid: r.trigger for cid, r in {k: v[0] for k, v in pn.by_id_all().items()}.items()}
     assert trig == {"tbook:1:1:1": "guard", "tbook:1:1:2": "near_form", "tbook:1:1:3": "gap",
                     "tbook:1:1:4": "near_form", "tbook:1:1:6": "near_form"}
     model = near_knn.load(str(mf))
