@@ -1,7 +1,11 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [0.7.110] - 2026-11-25
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [0.7.116] - 2026-11-28
+
+殿本 patch 线（ZM 11-28 要的改名版）：基于 v0.7.110（不含史記线 0.7.111–0.7.115）＋ 册号位数统一的改名工具 #1970 #1976 #1977 #1980 #1987 #1990。事件读时按册 yaml `aliases` 换新名、字形库实例 id 不动；`status` 认「只因改名」的过期（rename_only）；新命令 `guji-cv rename-seal <册> --keys exclusions_fingerprint` 封存只因改名而变的参数；row_segment 格位表、自动配页 corpus／钉位表／daizhige 表认册旧名。新增代码均 code_equiv 登记，23 步指纹与 v0.7.110 全同（check_fp_change：0 步变），钉 v0.7.110 的册不用改钉。改名用 guji-manager ≥ 0.7.2 的 `rename_volume`。（CV0 册号位数统一）
+
+## [0.7.110] - 2026-11-25
 
 殿本 patch 线：v0.7.108 ＋ `scripts/zhengli/proof_cycle.py`、`scripts/zhengli/zl.py` 的 char 导出也改走 guji-manager 导出器（v0.7.108 只改了 republish；auto_cycle／proof_cycle 出的导出不带 u，book-text local_check 报「旧版已有 u，新版把 u 全丢了」，`guji swap book-text` 用同一份导出推标点也报 u 对不上——殿本 vol04，11-25）。只改脚本，23 步指纹与 v0.7.108 全同，钉旧版的册不用改钉。要 guji-manager ≥ 0.6.21。（CV0 u T1）
 
