@@ -26,6 +26,10 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
     from ..groups import rr_shape
     model = rr_shape.load(p.group_flow_rr_shape)
     miss = patch_missing if patch_missing is not None else {}
+    near_on = "rr_shape" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    near = _near_from_3b(ctx, page, "rr_shape", p.group_flow_rr_shape) if near_on else {}
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -42,14 +46,20 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
                     continue
             elif not (gid == "rr" or r.char in _RR or ref in _RR):
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("rr_shape")
-                continue
-            v = rr_shape.judge(img, model)
+            v = near.get(r.id) if c.col not in alt else None
+            if v is not None:
+                tally["3b"] += 1
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("rr_shape")
+                    continue
+                v = rr_shape.judge(img, model)
             trail = {k: v[k] for k in ("char", "why", "nn", "score", "geo") if k in v}
             if v["char"] is None:
                 if not r.admit:
@@ -63,7 +73,75 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
             r.evidence = {**ev, "rr_shape": trail, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "rr_shape", "match", []
             delta += 1
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, "rr_shape", tally)
     return delta
+
+
+def _log_tally(ctx, page: int, method: str, tally: dict) -> None:
+    ctx.log(f"seed_admit p{page}: {method} 判法结果 读 3b {tally['3b']}｜本地现算：3b 没触发 {tally['local']}、"
+            f"备选切法列 {tally['alt']}")
+
+
+def _near_from_3b(ctx, page: int, method: str, model_path: str, by_pair: bool = False) -> dict:
+    """3b `glyph_near` 里某个看图方法的原样判法结果：{格 id: 证据（去掉 `method` 键）}（CV4 11-28，第四步重构 4d 接 3b）。
+
+    只收主切法格（3b 只算主切法；备选切法列调用方退回本地现算）、证据里没有 `error` 的格。
+    3b 用的模型必须与本步书级参数指的是同一份（比 `near_methods.method_fingerprint`），不一致报错，不混用。
+    读不到 3b 产物（没跑、没开组）→ 空表，全部本地现算。
+    `by_pair`（part_shape：一个模型挂多对，每组一对）：键是 (格 id, 对里两字)，指纹按 {path, pair} 逐对比。"""
+    try:
+        pn = ctx.product("glyph_near", page)
+    except Exception:                      # noqa: BLE001 —— 可选上游：没有就全部本地现算
+        return {}
+    got: dict = {}
+    for cn in getattr(pn, "columns", None) or []:
+        for nr in cn.chars or []:
+            for mo in nr.methods or []:
+                if mo.method.split(":", 1)[0] != method:
+                    continue
+                ev = mo.evidence or {}
+                if "error" in ev or "why" not in ev:
+                    continue
+                key = (nr.id, tuple(ev.get("pair") or ())) if by_pair else nr.id
+                got[key] = {k: v for k, v in ev.items() if k != "method"}
+    if got:
+        from ..groups.near_methods import method_fingerprint
+        have = {x.split(":", 1)[1] for x in (pn.methods_sha or "").split(";") if ":" in x}
+        wants = ({method_fingerprint(method, {"path": model_path, "pair": list(k[1])}) for k in got} if by_pair
+                 else {method_fingerprint(method, model_path)})
+        want = ", ".join(sorted(wants - have))
+        if want:
+            raise ValueError(f"seed_admit p{page}：3b glyph_near 的 {method} 模型与书级参数指的不是同一份"
+                             f"（本步 {want}；3b {pn.methods_sha or '空'}），先让两边指同一个模型再跑")
+    return got
+
+
+def _near_by_model_from_3b(ctx, page: int, method: str) -> dict:
+    """3b `glyph_near` 里某方法按「格 id＋该组模型指纹」取的原样结论：{(格 id, method_fingerprint): 证据（去 method）}。
+
+    给一个模型只管一对、证据里不带是哪一对的方法用（pair_shape：每对一个组，`methods_sha` 段 `<组>:pair_shape=<指纹>`）。
+    调用方拿自己的模型算指纹去查，查不到就本地现算（模型不是同一份时也查不到，不会混用）。"""
+    try:
+        pn = ctx.product("glyph_near", page)
+    except Exception:                      # noqa: BLE001 —— 可选上游：没有就全部本地现算
+        return {}
+    fp = {}
+    for x in (pn.methods_sha or "").split(";"):
+        g, _, rest = x.partition(":")
+        if rest.startswith(method + "="):
+            fp[g] = rest
+    got: dict = {}
+    for cn in getattr(pn, "columns", None) or []:
+        for nr in cn.chars or []:
+            if nr.group not in fp:
+                continue
+            for mo in nr.methods or []:
+                ev = mo.evidence or {}
+                if mo.method.split(":", 1)[0] != method or "error" in ev or not ev:
+                    continue
+                got[(nr.id, fp[nr.group])] = {k: v for k, v in ev.items() if k != "method"}
+    return got
 
 
 def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
@@ -77,6 +155,10 @@ def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
     from ..groups import wu_shape
     model = wu_shape.load(p.group_flow_wu_shape)
     miss = patch_missing if patch_missing is not None else {}
+    near_on = "wu_shape" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    near = _near_from_3b(ctx, page, "wu_shape", p.group_flow_wu_shape) if near_on else {}
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -88,14 +170,20 @@ def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
                 continue
             if r.char not in _WU:
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("wu_shape")
-                continue
-            v = wu_shape.judge(img, model)
+            v = near.get(r.id) if c.col not in alt else None
+            if v is not None:
+                tally["3b"] += 1
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("wu_shape")
+                    continue
+                v = wu_shape.judge(img, model)
             if v["char"] is None:
                 if not r.admit:
                     r.evidence = {**ev, "wu_shape": v}
@@ -108,6 +196,8 @@ def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
             r.evidence = {**ev, "wu_shape": v, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "wu_shape", "match", []
             delta += 1
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, "wu_shape", tally)
     return delta
 
 
@@ -122,20 +212,30 @@ def _hou_shape_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict |
     from ..groups import hou_shape
     model = hou_shape.load(p.group_flow_hou_shape)
     miss = patch_missing if patch_missing is not None else {}
+    near_on = "hou_shape" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    near = _near_from_3b(ctx, page, "hou_shape", p.group_flow_hou_shape) if near_on else {}
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     for c in out:
         for r in c.chars or []:
             if not r.admit or r.char not in _HOU or r.provenance == "human" or r.channel == "human":
                 continue
             if only_unjudged and "hou_shape" in (r.evidence or {}):
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("hou_shape")
-                continue
-            v = hou_shape.judge(img, model)
+            v = near.get(r.id) if c.col not in alt else None
+            if v is not None:
+                tally["3b"] += 1
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("hou_shape")
+                    continue
+                v = hou_shape.judge(img, model)
             ev = r.evidence or {}
             if v["char"] is None:
                 r.evidence = {**ev, "hou_shape": v}
@@ -144,6 +244,8 @@ def _hou_shape_pass(p, out: list, ctx=None, page: int = 0, patch_missing: dict |
                 ev = {**ev, "fixed_from": {"channel": r.channel, "char": r.char}}
                 r.char = v["char"]
             r.evidence = {**ev, "hou_shape": v}
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, "hou_shape", tally)
     return 0
 
 
@@ -156,6 +258,10 @@ def _part_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
     from ..groups import part_shape
     model = part_shape.load(p.group_flow_part_shape)
     miss = patch_missing if patch_missing is not None else {}
+    near_on = "part_shape" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    near = _near_from_3b(ctx, page, "part_shape", p.group_flow_part_shape, by_pair=True) if near_on else {}
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -168,14 +274,20 @@ def _part_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             if r.char not in model["_chars"]:
                 continue
             pair = part_shape.pair_of(model, r.char)
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("part_shape")
-                continue
-            v = part_shape.judge(img, pair)
+            v = near.get((r.id, tuple(pair["chars"]))) if c.col not in alt else None
+            if v is not None:
+                tally["3b"] += 1
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("part_shape")
+                    continue
+                v = part_shape.judge(img, pair)
             if v["char"] is None:
                 if not r.admit:
                     r.evidence = {**ev, "part_shape": v}
@@ -188,6 +300,8 @@ def _part_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             r.evidence = {**ev, "part_shape": v, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "part_shape", "match", []
             delta += 1
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, "part_shape", tally)
     return delta
 
 
@@ -211,6 +325,32 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
     pair = frozenset(model["chars"])
     miss = patch_missing if patch_missing is not None else {}
     veto_thr = model.get("veto_thr") if veto else None
+    near_on = "pair_shape" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    near, want = {}, None
+    if near_on:
+        from ..groups.near_methods import method_fingerprint
+        near = _near_by_model_from_3b(ctx, page, "pair_shape")
+        want = method_fingerprint("pair_shape", {"path": model_path or p.group_flow_pair_shape, "pair": list(model["chars"])})
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
+
+    def _judge(c, r):
+        """3b 有这一格这一对的结论就用，没有本地现算；字块读不到且 patch_missing=skip → None。"""
+        v = near.get((r.id, want)) if c.col not in alt else None
+        if v is not None:
+            tally["3b"] += 1
+            return v
+        if near_on:
+            tally["alt" if c.col in alt else "local"] += 1
+        try:
+            img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+        except PatchUnavailable:
+            if p.patch_missing != "skip":
+                raise
+            miss.setdefault(r.id, []).append("pair_shape")
+            return None
+        return pair_shape.judge(img, model)
+
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -219,14 +359,9 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             if r.admit:
                 if not veto_thr or r.char not in pair:
                     continue
-                try:
-                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-                except PatchUnavailable:
-                    if p.patch_missing != "skip":
-                        raise
-                    miss.setdefault(r.id, []).append("pair_shape")
+                v = _judge(c, r)
+                if v is None:
                     continue
-                v = pair_shape.judge(img, model)
                 if v["char"] and v["char"] != r.char and abs(v.get("score") or 0.0) >= veto_thr:
                     _demote(r, "pair_shape_veto")
                     r.evidence = {**(r.evidence or {}), "pair_shape": {k: v[k] for k in ("char", "why", "score", "other", "margin", "top") if k in v}}
@@ -253,14 +388,9 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             gp = (ev.get("group") or {}).get("pick")                  # 字组流程已给了别的字（解算有分歧）：不越过
             if gp and gp in pair:
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("pair_shape")
+            v = _judge(c, r)
+            if v is None:
                 continue
-            v = pair_shape.judge(img, model)
             trail = {k: v[k] for k in ("char", "why", "nn", "score", "other", "margin", "top") if k in v}
             if nm:
                 trail["nm_5b"] = nm_5b.get(r.id)
@@ -270,6 +400,8 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             r.evidence = {**ev, "pair_shape": trail, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "pair_shape", "match", []
             delta += 1
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, "pair_shape", tally)
     return delta
 
 
@@ -314,6 +446,13 @@ def _book_knn_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
     已放行格不动；人裁格、硬护栏格不碰（同 `_rr_shape_pass`）。通道 `book_knn`，`evidence.book_knn` 留票数、距离比与档。"""
     from ..groups import book_knn
     miss = patch_missing if patch_missing is not None else {}
+    near_on = "book_knn" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    near, want = {}, {}
+    if near_on:
+        from ..groups.near_methods import book_knn_settle, lib_fingerprint
+        near = _near_by_model_from_3b(ctx, page, "book_knn")
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -326,15 +465,26 @@ def _book_knn_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
             ds = list(r.doubts or [])
             if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") for d in ds) or ev.get("guard") in ("never_match", "conflict", "timeout"):
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("book_knn")
-                continue
             ref = (amap.get(r.id) or (None,))[0]
-            v = book_knn.judge(img, book_knn.load(p.group_flow_book_knn[gid]), ref)
+            got = None
+            if near_on and c.col not in alt:
+                if gid not in want:
+                    want[gid] = "book_knn=" + lib_fingerprint(p.group_flow_book_knn[gid])
+                got = near.get((r.id, want[gid]))
+            if got is not None:
+                tally["3b"] += 1
+                v = book_knn_settle(got, ref)
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("book_knn")
+                    continue
+                v = book_knn.judge(img, book_knn.load(p.group_flow_book_knn[gid]), ref)
             trail = {k: v[k] for k in ("char", "why", "tier", "pick", "votes", "ratio", "nn") if k in v}
             if v["char"] is None:
                 r.evidence = {**ev, "book_knn": trail}
@@ -342,6 +492,8 @@ def _book_knn_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
             r.evidence = {**ev, "book_knn": trail, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "book_knn", "match", []
             delta += 1
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, "book_knn", tally)
     return delta
 
 
@@ -361,6 +513,14 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
     miss = patch_missing if patch_missing is not None else {}
     canon = ctx.book.canonical_char if (p.near_knn_gap and ctx is not None and ctx.book.codepoints) else None
     top3: list = []
+    near_on = "near_knn" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    n3b: dict = {}
+    if near_on:
+        from ..groups.near_methods import lib_fingerprint, near_knn_settle
+        n3b = _near_by_model_from_3b(ctx, page, "near_knn")
+        want = "near_knn=" + lib_fingerprint(p.group_flow_near_knn)
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -392,14 +552,23 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
             if not gap and any(_direct_variant_edge(a, b) and frozenset((a, b)) not in _edge_exclude()
                                for i, a in enumerate(cands) for b in cands[i + 1:]):   # 只认真异体边：只当形近／通假的边（NEVER_SOURCES，如 寵/龍）不挡字形判
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("near_knn")
-                continue
-            v = near_knn.judge(img, model, cands)
+            v = None
+            if near_on and c.col not in alt:
+                got = n3b.get((r.id, want))
+                v = near_knn_settle(got, model, cands) if got is not None else None
+            if v is not None:
+                tally["3b"] += 1
+            else:
+                if near_on:
+                    tally["alt" if c.col in alt else "local"] += 1
+                try:
+                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+                except PatchUnavailable:
+                    if p.patch_missing != "skip":
+                        raise
+                    miss.setdefault(r.id, []).append("near_knn")
+                    continue
+                v = near_knn.judge(img, model, cands)
             trail = {k: v[k] for k in ("char", "why", "pick", "votes", "ratio", "full", "full_votes", "nn") if k in v}
             if gap:
                 trail["via"] = "near_gap"
@@ -414,4 +583,6 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
             r.evidence = {**ev, "near_knn": trail, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "near_knn", "match", []
             delta += 1
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, f"near_knn({stage})", tally)
     return delta

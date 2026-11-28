@@ -2978,6 +2978,18 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence='glyph_analyzer 在 vtest 3 页（--pages 1,2,3）上与 origin/dev 5910584e 产物逐字节相同；自造册 vtest（3 页×8 列×21 格含夹注半格，'
                    '3a same/unsure/diff、3b 两组随机触发、3c、3d 都有，没有真书收尾产物可比），glyph_vis 没开；另 tests/test_glyph_vis.py '
                    '冻结了 origin/dev 的 merge_cell 输出逐字节对照；scripts/code_equiv.py check，2026-11-28（CV3）'),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="4233b461ffe35a95c22dff68725bfd34314e0e95bd7dcd2db314103c9a75c069",
+          old="26e0d0559cf43efe22b98974c931d3b6c1c84f36956b77b593eb97e2b3733e9f",
+          evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 c32c0ed 产物逐字节相同；#1999（4d 读 3b 看图判法，group_flow_near_from_3b 缺省空＝关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_params",
+          new="35d1414f025d67d4f7d8bad4f761ab5d28eeb1e1669a186e84f509d80f59b764",
+          old="5f8dd48c565d4f7660a9d464c2aabcb59181767362c140e9c1823d74c6579a49",
+          evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 c32c0ed 产物逐字节相同；#1999（4d 读 3b 看图判法，group_flow_near_from_3b 缺省空＝关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.seed_admit_shapes",
+          new="842046b514531070e360e798f85a8fc534bfb84b6ab445a156029eefb64d58d0",
+          old="ebca6a128b8eaebcad13421171fd80bf701f815a642a4e5e315183766e407d77",
+          evidence="seed_admit 在 03 231 页（--pages 1-231，decide-bench small 史記 03 冻结快照）上与 c32c0ed 产物逐字节相同；#1999（4d 读 3b 看图判法，group_flow_near_from_3b 缺省空＝关）；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-28（CV4）"),
 )
 
 
