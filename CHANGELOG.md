@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- PATCH（11-28，CV0，bench 框架，CV3 提议）：dataset `guards/*.yaml` 的按书护栏挪进 `eval/bench.py`（`dataset_guards`、`apply_dataset_guards`），`execute` 跑完自动判、只判一次，`benches/read.py` 留名字兼容；`BenchSpec.cost` 可按书写 `{书id: "heavy", "default": "light"}`，取用走 `cost_of(书)`（read-3a-advset 只全唐文算 heavy）。manager `guji bench list／guard` 需配合改用 `cost_of`。
 - PATCH（11-28，CV3，bench 统一接口 P1 第二批）：`eval/benches/read.py` 加 `read-3a-pairs`（匹配判据操作点，三书 pairs-*）、`read-normalize`（归一化回归门）；老评测器 match_triplets、match_pairs、guard_ceiling、db_match、db_match_books 与 5b 研究集 rare_char、zero_shot、zero_shot_fusion、oov、degradation、struct_rerank、struct_heads 逐个试跑后登 deprecated（理由见 `guji bench list`）。`eval_match_pairs.py` 加 `--rows`。指纹不变。L0。
 
 - PATCH（11-28，CV3，bench 统一接口 P1）：第三步识字 bench 接统一接口 `eval/benches/read.py`：`read-3a-advset`、`read-3a-damaged`、`read-3b-near`、`read-rare`、`read-rare-firstseen`（包现成 `scripts/eval_*.py`，护栏按 `bench`＋`ws` 读 dataset `guards/read.yaml`）；`eval_near.py`、`eval_oov.py` 加 `--rows`。不动 Step 代码，指纹不变。L0。

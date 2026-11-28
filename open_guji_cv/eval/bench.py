@@ -54,7 +54,9 @@ class BenchSpec:
     score: Callable[["BenchCtx", Path], "BenchResult"]
     mode: str = "run"                       # read：只读现成产物；run：从冻结输入跑
     guards: tuple[Guard, ...] = ()
-    cost: str = "light"                     # light：一本书 10 分钟内；heavy：要 GPU、大库或更久
+    #: light：一本书 10 分钟内；heavy：要 GPU、大库或更久。可按书写 `{书id: "heavy", "default": "light"}`
+    #: （CV3 11-28：全唐文跑 CNN 20 分钟、殿本 30 秒）；取用一律走 `cost_of(书)`
+    cost: str | dict = "light"
     nogold: bool = False                    # 没金标的书能不能只跑体检
     #: 结果里逐样本的键与「对不对」字段（翻转清单用）
     item_key: str = "id"
@@ -71,8 +73,16 @@ class BenchSpec:
         bad = set(self.needs) - set(NEEDS)
         if bad:
             raise ValueError(f"bench {self.id}：未知资源 {sorted(bad)}，只认 {NEEDS}")
-        if self.mode not in ("run", "read") or self.cost not in ("light", "heavy"):
+        costs = set(self.cost.values()) if isinstance(self.cost, dict) else {self.cost}
+        if self.mode not in ("run", "read") or not costs or not costs <= {"light", "heavy"}:
             raise ValueError(f"bench {self.id}：mode／cost 写错")
+
+    def cost_of(self, book: str | None = None) -> str:
+        """这本书跑一次算 light 还是 heavy；`cost` 按书写时没列的书取 `default`（缺省 light）。"""
+        if isinstance(self.cost, dict):
+            return self.cost.get(book, self.cost.get("default", "light")) if book else (
+                "heavy" if "heavy" in self.cost.values() else "light")
+        return self.cost
 
     def gold_rel(self, book: str, vol: str | None = None) -> str | None:
         """这本书（或这册）的金标相对路径；没有返回 None。"""
@@ -160,6 +170,40 @@ def compare(spec: BenchSpec, now: list[dict], before: list[dict]) -> dict:
             "worse_items": worse, "better_items": better, "other_items": other}
 
 
+def dataset_guards(bench_id: str, book: str, dataset: str | Path | None) -> list[dict]:
+    """dataset `guards/*.yaml` 里 `bench: <id>` 且 `ws: <书id>` 的护栏（`metric`、`dir`、`limit`、`baseline`…）。
+    框架统一读（CV3 提议，11-28 从 `benches/read.py` 挪来）：`execute` 跑完自动判，bench 不用自己调。"""
+    if not dataset:
+        return []
+    d = Path(dataset) / "guards"
+    if not d.is_dir():
+        return []
+    import yaml
+    out = []
+    for f in sorted(d.glob("*.yaml")):
+        for g in (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("guards") or []:
+            if g.get("bench") == bench_id and str(g.get("ws")) == book:
+                out.append(g)
+    return out
+
+
+def apply_dataset_guards(r: "BenchResult", ctx: "BenchCtx") -> "BenchResult":
+    """按 dataset 护栏表逐条判（同 `apply_guards` 的口径）；越线 → regressed，指标缺了记 unverified（不算过）。
+    已判过（`src: dataset guards`）的不再判，可重复调。"""
+    if r.status not in ("ok", "regressed") or any(g.get("src") == "dataset guards" for g in r.guards):
+        return r
+    for g in dataset_guards(r.bench, ctx.book, ctx.res.get("dataset")):
+        gd = Guard(str(g["metric"]), g["dir"], float(g["limit"]))
+        v = r.metrics.get(gd.metric)
+        st = gd.check(v)
+        r.guards.append({"metric": gd.metric, "dir": gd.dir, "limit": gd.limit, "value": v, "status": st,
+                         "baseline": g.get("baseline"), "src": "dataset guards"})
+        if st in ("regressed", "unverified") and r.status == "ok":
+            r.status = "regressed"
+            r.reason = r.reason or f"护栏 {gd.metric}：{v}（{'≤' if gd.dir == 'max' else '≥'} {gd.limit}）"
+    return r
+
+
 def execute(spec: BenchSpec, ctx: BenchCtx, against: Path | None = None) -> BenchResult:
     """跑一次：run → score → 对照 → 护栏。缺资源由调用方先判（manager），这里只兜异常不兜假通过。"""
     t0 = time.time()
@@ -174,6 +218,7 @@ def execute(spec: BenchSpec, ctx: BenchCtx, against: Path | None = None) -> Benc
         r.metrics.setdefault("flip_better", cmp["better"])
         r._flips = cmp                                   # report.md 用
     apply_guards(spec, r)                                # 对照算完再判，flip_worse 护栏才有值
+    apply_dataset_guards(r, ctx)                         # dataset guards/*.yaml 里登记的按书护栏
     r.seconds = time.time() - t0
     return r
 
