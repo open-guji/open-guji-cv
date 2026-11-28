@@ -180,7 +180,7 @@ def test_glyph_near_wu_shape_end_to_end(tmp_path, models):
     assert {c.char: c.evidence["b"]["wu_shape:wu"] for c in a.cands if "b" in c.evidence} == {
         "鳴": trail[1]["p"], "嗚": round(1 - trail[1]["p"], 4)}
     for s in (1, 2, 3, 6):                                                  # 4d 取数处：每格 near.methods[方法名]
-        assert fin[f"tbook:1:1:{s}"].near == {"group": "wu", "trigger": "cands",
-                                              "methods": {"wu_shape": {**trail[s], "model": sha}}}
-    assert fin["tbook:1:1:4"].near["methods"]["wu_shape"]["error"] == "patch_missing"
+        assert fin[f"tbook:1:1:{s}"].near == {"wu": {"trigger": "cands",
+                                                      "methods": {"wu_shape": {**trail[s], "model": sha}}}}
+    assert fin["tbook:1:1:4"].near["wu"]["methods"]["wu_shape"]["error"] == "patch_missing"
     assert fin["tbook:1:1:5"].near == {} and "near" not in fin["tbook:1:1:5"].model_dump(mode="json")

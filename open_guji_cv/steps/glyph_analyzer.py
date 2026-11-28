@@ -6,8 +6,10 @@
     p_map: {cut: …, border: …, residue: …, …}                 其他特征的概率；只放有校准来源的键
     p_src: "near:cnn_small:gong"                               p 从哪来
     traits: {cut: 0.12, border: 0.8, …}                        3d 原始分（未校准；3d 没跑不落盘）
-    near: {group, trigger, methods: {方法名: {method, …, model}}} 3b 各方法这一格的证据原样＋模型版本（3b 没触发不落盘；
-                                                               rr_shape 是 {char, why, nn, score, geo}，同第四步 rr_shape.judge）
+    near: {组: {trigger, methods: {方法名: {method, …, model}}, [p, p_src]}}
+                                                               3b 各组各方法这一格的证据原样＋模型版本（3b 没触发不落盘；
+                                                               rr_shape 是 {char, why, nn, score, geo}，同第四步 rr_shape.judge）；
+                                                               这组出了校准 p 才有 p／p_src。读旧文件用 `FinalRec.near_groups()`
 
 **第三步不判断放不放行**，第四步只读这里的 p 定放行（Sheldon 11-26）。
 
@@ -19,6 +21,15 @@
   字形库留一法标定）是设计里的第 5 期，还没做。
 - `p_map` 暂空：3d `cell_traits`（2026-11-28）只出原始分，没有校准来源；3d 跑了时原始分原样放进每格 `traits`
   （{cut, border, residue, stain, merged, blank: 分}，不是概率），等人裁标注标定成 p 再写进 `p_map`。
+
+## 一格多组（2026-11-28，3b 一格可触发几个组）
+
+- `cands[].evidence.b`：各组各方法的分照旧按「方法:组」记（键本身带组，不撞）；`b.group` 是第一个给这个字分的组（按组 id 排），
+  这个字几个组都给了分时另有 `b.groups: [组…]`。只有一个组时与之前逐键一致。
+- **p 的合并规则（保守）**：每组取第一个出校准 p 的方法（同之前）。**只有一个组出了 p** → 照旧落到候选上，`p_src`＝`near:方法:组`；
+  **两个以上组都出了 p** → 候选 p 全为 None、`p_src` 空（各组的 p 各自在组内归一，拼不成这一格的一个分布；谁也不挑，
+  第四步按「没有 p」走，既不按 p 放行也不按 p 降审），各组的 p 只留在 `near[组].p`／`near[组].p_src` 里当证据。
+- `near`：按组 `{组: {trigger, methods, [p, p_src]}}`（之前是一格一组的 `{group, trigger, methods}`）。
 
 `enabled: false`（缺省）＝不跑（`StepSpec.enabled_by`）。
 """
@@ -51,11 +62,21 @@ def match_algo(gp) -> str:
     return f"cnn:{c.path}" + (f"+cov/{c.fuse}" if c.fuse else "") + (f"@{sha}" if sha else "")
 
 
+def _near_list(near_rec) -> list:
+    """`merge_cell` 的 3b 输入：None、一条 NearRec、或这格各组的 [NearRec…] → 按组 id 排的列表。"""
+    if near_rec is None:
+        return []
+    if isinstance(near_rec, (list, tuple)):
+        return sorted(near_rec, key=lambda r: r.group)
+    return [near_rec]
+
+
 def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, cand_rec=None, cand_k: int = 10,
                traits_rec=None, near_models: dict | None = None) -> FinalRec:
     """一格：3a 记录 ＋（可选）3b、3c、3d 记录 → FinalRec。`calibrators`：{方法全名: 方法对象}（有 `calibrate`）。
-    3d `traits_rec` 的原始分原样放进 `traits`（未校准，不进 `p_map`）。3b 各方法的证据原样放进 `near.methods[方法名]`，
-    `near_models`（3b 产物的 `PageNear.models`）给了就带上 `model`。"""
+    `near_rec`：这格 3b 各组的 [NearRec…]（`PageNear.by_id_all()` 的一项；单条 NearRec 也认）。
+    3d `traits_rec` 的原始分原样放进 `traits`（未校准，不进 `p_map`）。3b 各方法的证据原样放进 `near[组].methods[方法名]`，
+    `near_models`（3b 产物的 `PageNear.models`）给了就带上 `model`。多组时 p 怎么合见模块头「一格多组」。"""
     cands: dict[str, FinalCand] = {}
     order: list[str] = []
     for c, s in (match_rec.candidates or [])[:topk]:
@@ -79,25 +100,39 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
             if c in (cand_rec.fam_of or {}):
                 ev["fam_of"] = cand_rec.fam_of[c]
             fc.evidence["c"] = ev
-    if near_rec is not None:
-        for mo in near_rec.methods:
+    nrs = _near_list(near_rec)
+    group_p: list[tuple[str, str, object, dict]] = []      # 出了校准 p 的组：(组, 方法全名, 方法对象, {字: p})
+    for nr in nrs:
+        got = None
+        for mo in nr.methods:
             for c, s in mo.sims.items():
                 fc = cands.get(c)
                 if fc is None:
                     fc = cands[c] = FinalCand(char=c)
                     order.append(c)
-                fc.evidence.setdefault("b", {"group": near_rec.group})[mo.method] = s
-            m = calibrators.get(mo.method)
-            ps = m.calibrate(mo.sims) if m is not None else None
-            if ps and not p_src:
-                p_src = f"near:{mo.method}"
-                for c, pv in ps.items():
-                    if c in cands:
-                        cands[c].p = pv
-                # 异体不分（方法的 merge）：异体跟它归的字同 p，但只当证据看，不另算概率
-                for a, b in (getattr(m, "merge", None) or {}).items():
-                    if a in cands and b in ps:
-                        cands[a].evidence.setdefault("b", {})["same_as"] = b
+                b = fc.evidence.setdefault("b", {"group": nr.group})
+                if b["group"] != nr.group and nr.group not in b.get("groups", ()):
+                    b.setdefault("groups", [b["group"]]).append(nr.group)    # 这个字几个组都给了分
+                b[mo.method] = s
+            if got is None:
+                m = calibrators.get(mo.method)
+                ps = m.calibrate(mo.sims) if m is not None else None
+                if ps:
+                    got = (nr.group, mo.method, m, ps)          # 一组内取第一个出 p 的方法（同之前一格一组时）
+        if got is not None:
+            group_p.append(got)
+    # 多组时 p 的合并（保守）：只有一个组出了校准 p 才把 p 落到候选上；两个以上组都出 p（各组 p 各自归一，拼不成一格的分布）
+    # → 候选 p 全不给、`p_src` 空，各组的 p 只留在 `near[组].p` 里当证据，第四步按「没有 p」走（不按 p 放行也不按 p 降审）
+    if len(group_p) == 1:
+        _gid, meth, m, ps = group_p[0]
+        p_src = f"near:{meth}"
+        for c, pv in ps.items():
+            if c in cands:
+                cands[c].p = pv
+        # 异体不分（方法的 merge）：异体跟它归的字同 p，但只当证据看，不另算概率
+        for a, b in (getattr(m, "merge", None) or {}).items():
+            if a in cands and b in ps:
+                cands[a].evidence.setdefault("b", {})["same_as"] = b
     rank = {c: i for i, c in enumerate(order)}
     # 异体不分的字（same_as）p 记 None：概率只算在它归的字上一次，各候选 p 之和不超过 1
     for fc in cands.values():
@@ -106,15 +141,19 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
     out = sorted(cands.values(), key=lambda fc: (-(fc.p if fc.p is not None else -1.0), rank[fc.char]))
     traits = dict(traits_rec.scores) if traits_rec is not None else {}
     near: dict = {}
-    if near_rec is not None:
+    gp = {g: (meth, ps) for g, meth, _m, ps in group_p}
+    for nr in nrs:
         meth = {}
-        for mo in near_rec.methods:
+        for mo in nr.methods:
             name = mo.method.split(":", 1)[0]
             rec = {"method": name, **mo.evidence}
             if near_models and mo.method in near_models:
                 rec["model"] = near_models[mo.method]
             meth[name] = rec
-        near = {"group": near_rec.group, "trigger": near_rec.trigger, "methods": meth}
+        near[nr.group] = {"trigger": nr.trigger, "methods": meth}
+        if nr.group in gp:
+            near[nr.group]["p"] = dict(gp[nr.group][1])
+            near[nr.group]["p_src"] = f"near:{gp[nr.group][0]}"
     return FinalRec(id=match_rec.id, slot=match_rec.slot, sub=match_rec.sub, cands=out, p_src=p_src, traits=traits,
                     near=near)
 
@@ -122,7 +161,7 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
 @register_step
 class GlyphAnalyzerStep(Step):
     spec = StepSpec(
-        id="glyph_analyzer", title="3 识字收尾（汇总）", version="0.1", unit="cell",
+        id="glyph_analyzer", title="3 识字收尾（汇总）", version="0.2", unit="cell",
         consumes=("glyph_match",), produces=("glyph_analyzer",),
         optional_consumes=("glyph_near", "glyph_candidate", "cell_traits"),
         params=GlyphAnalyzerParams,
@@ -137,7 +176,7 @@ class GlyphAnalyzerStep(Step):
             near = ctx.product("glyph_near", page)
         except Exception:  # noqa: BLE001 —— 可选上游：3b 没开或没跑就当没有这一路
             near = None
-        near_by = near.by_id() if near is not None else {}
+        near_by = near.by_id_all() if near is not None else {}
         try:
             cand = ctx.product("glyph_candidate", page)
         except Exception:  # noqa: BLE001 —— 可选上游：3c 没开或没跑就当没有这一路

@@ -235,9 +235,9 @@ def test_glyph_near_rr_shape_end_to_end(tmp_path, model_file):
     assert a.p_src == "" and all(c.p is None for c in a.cands)              # 没有校准表：只当证据
     assert {c.char: c.evidence["b"]["rr_shape:rr"] for c in a.cands if "b" in c.evidence} == {"八": 1.0, "人": 0.0, "入": 0.0}
     for s in (1, 2, 3, 6):                                                  # 4d 取数处：每格 near.methods[方法名]
-        assert fin[f"tbook:1:1:{s}"].near == {"group": "rr", "trigger": "cands",
-                                              "methods": {"rr_shape": {**trail[s], "model": sha}}}
-    assert fin["tbook:1:1:4"].near["methods"]["rr_shape"]["error"] == "patch_missing"
+        assert fin[f"tbook:1:1:{s}"].near == {"rr": {"trigger": "cands",
+                                                      "methods": {"rr_shape": {**trail[s], "model": sha}}}}
+    assert fin["tbook:1:1:4"].near["rr"]["methods"]["rr_shape"]["error"] == "patch_missing"
     assert fin["tbook:1:1:5"].near == {} and "near" not in fin["tbook:1:1:5"].model_dump(mode="json")   # 没触发的格不落盘
 
 
