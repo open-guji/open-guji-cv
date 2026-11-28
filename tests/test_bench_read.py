@@ -52,13 +52,13 @@ def test_advset_items_and_dataset_guard(tmp_path):
          {"bench": "read-3a-advset", "ws": "988g3f0wsu", "metric": "形近误认", "dir": "max", "limit": 9},
          {"bench": "read-3a-damaged", "ws": R.SIKU, "metric": "误放", "dir": "max", "limit": 0}]
     ctx = _ctx(tmp_path, gold=gold, guards=g)
-    r = R.advset_score(ctx, pred)
+    r = R.apply_dataset_guards(R.advset_score(ctx, pred), ctx)        # 框架 execute 里这一步自动做
     assert r.metrics["形近误认"] == 1 and r.n == 3
     assert [(x["id"], x["ok"], x["variant_same"]) for x in r.items] == [("q1", False, False), ("q2", True, False),
                                                                         ("q3", True, True)]
     assert r.status == "regressed" and [x["metric"] for x in r.guards] == ["形近误认"]   # 只取本 bench、本书那条
     ctx.book = "988g3f0wsu"
-    assert R.advset_score(ctx, pred).status == "ok"
+    assert R.apply_dataset_guards(R.advset_score(ctx, pred), ctx).status == "ok"
 
 
 def test_missing_metric_is_not_a_pass(tmp_path):
@@ -68,7 +68,7 @@ def test_missing_metric_is_not_a_pass(tmp_path):
     pred.write_text(json.dumps(_advset_out(), ensure_ascii=False), encoding="utf-8")
     ctx = _ctx(tmp_path, gold=gold, guards=[{"bench": "read-3a-advset", "ws": R.SIKU, "metric": "没这个",
                                              "dir": "max", "limit": 5}])
-    r = R.advset_score(ctx, pred)
+    r = R.apply_dataset_guards(R.advset_score(ctx, pred), ctx)
     assert r.status == "regressed" and r.guards[0]["status"] == "unverified"
 
 

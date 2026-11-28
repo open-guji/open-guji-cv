@@ -20,7 +20,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..bench import BenchCtx, BenchResult, BenchSpec, Guard, register, skipped
+# dataset 护栏 11-28 挪进框架（`execute` 自动判）；这两个名字留着兼容旧调用
+from ..bench import (  # noqa: F401
+    BenchCtx,
+    BenchResult,
+    BenchSpec,
+    Guard,
+    apply_dataset_guards,
+    dataset_guards,
+    register,
+    skipped,
+)
 
 REPO = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO / "scripts"
@@ -76,36 +86,6 @@ def _need_models(ctx: BenchCtx, rel: str) -> Path | None:
     return _skip(ctx, f"缺模型 {rel}：设好 R2 读令牌后 `guji model fetch`（或跑一次 guji pipeline 自动取回）")
 
 
-def dataset_guards(bench_id: str, book: str, dataset: str | Path | None) -> list[dict]:
-    """dataset `guards/*.yaml` 里 `bench: <id>` 且 `ws: <书id>` 的护栏（`metric`、`dir`、`limit`、`baseline`…）。"""
-    if not dataset:
-        return []
-    d = Path(dataset) / "guards"
-    if not d.is_dir():
-        return []
-    import yaml
-    out = []
-    for f in sorted(d.glob("*.yaml")):
-        for g in (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("guards") or []:
-            if g.get("bench") == bench_id and str(g.get("ws")) == book:
-                out.append(g)
-    return out
-
-
-def apply_dataset_guards(r: BenchResult, ctx: BenchCtx) -> BenchResult:
-    """按护栏表逐条判（同 `bench.apply_guards` 的口径）；越线 → regressed，指标缺了记 unverified（不算过）。"""
-    for g in dataset_guards(r.bench, ctx.book, ctx.res.get("dataset")):
-        gd = Guard(str(g["metric"]), g["dir"], float(g["limit"]))
-        v = r.metrics.get(gd.metric)
-        st = gd.check(v)
-        r.guards.append({"metric": gd.metric, "dir": gd.dir, "limit": gd.limit, "value": v, "status": st,
-                         "baseline": g.get("baseline"), "src": "dataset guards"})
-        if st in ("regressed", "unverified") and r.status == "ok":
-            r.status = "regressed"
-            r.reason = r.reason or f"护栏 {gd.metric}：{v}（{'≤' if gd.dir == 'max' else '≥'} {gd.limit}）"
-    return r
-
-
 def _pct(x):
     return None if x is None else round(100.0 * x, 2)
 
@@ -157,12 +137,12 @@ def advset_score(ctx: BenchCtx, pred: Path) -> BenchResult:
     items = [{"id": q, "ok": q not in bad_near, "variant_same": q in bad_var} for q in qids]
     r = BenchResult("read-3a-advset", ctx.book, ctx.vols, m, "形近误认", items=items, n=len(qids),
                     env={"sim_model": d.get("sim_model")})
-    return apply_dataset_guards(r, ctx)
+    return r
 
 
 register(BenchSpec(
     id="read-3a-advset", title="3a 库外拒识（库里没有的字被判 same，形近层题数）", steps=("glyph_match",), owner="CV3",
-    gold=ADVSET, needs=("gold",), primary="形近误认", run=advset_run, score=advset_score, mode="run", cost="heavy",
+    gold=ADVSET, needs=("gold",), primary="形近误认", run=advset_run, score=advset_score, mode="run", cost={QTW: "heavy", "default": "light"},
     guards=(Guard("flip_worse", "max", 0),), suites=("read", "read-3a"), item_key="id", item_ok="ok",
     args={"sim_model": "相似度模型（缺省按书：全唐文 models/glyph_sim_qtw/model.pt，殿本、史記覆盖分；cov＝只覆盖分）",
           "workers": "进程数（缺省 4）"}))
@@ -205,7 +185,7 @@ def damaged_score(ctx: BenchCtx, pred: Path) -> BenchResult:
               "false_same": bad.get(it["query_id"], False)} for it in its]
     r = BenchResult("read-3a-damaged", ctx.book, ctx.vols, m, "误放", items=items, n=len(items),
                     env={"sim_model": d.get("sim_model")})
-    return apply_dataset_guards(r, ctx)
+    return r
 
 
 register(BenchSpec(
@@ -271,7 +251,7 @@ def near_score(ctx: BenchCtx, pred: Path) -> BenchResult:
     items = _read_jsonl(Path(ctx.work) / "near-rows.jsonl")
     r = BenchResult("read-3b-near", ctx.book, ctx.vols, m, "组内误判", items=items, n=len(items),
                     env={"methods_sha": d.get("methods_sha", {}).get(bk)})
-    return apply_dataset_guards(r, ctx)
+    return r
 
 
 register(BenchSpec(
@@ -331,7 +311,7 @@ def _rare_score(bench_id: str, primary: str, ctx: BenchCtx, pred: Path) -> Bench
     items = _read_jsonl(Path(ctx.work) / "oov-rows.jsonl")
     r = BenchResult(bench_id, ctx.book, ctx.vols, m, primary, items=items, n=len(items),
                     env={"ckpt": d.get("ckpt"), "charset": d.get("charset")})
-    return apply_dataset_guards(r, ctx)
+    return r
 
 
 def rare_score(ctx: BenchCtx, pred: Path) -> BenchResult:
@@ -380,7 +360,7 @@ def pairs_score(ctx: BenchCtx, pred: Path) -> BenchResult:
             m[f"{og} 误放"] = d[og].get("fp")
     items = _read_jsonl(Path(ctx.work) / "pairs-rows.jsonl")
     r = BenchResult("read-3a-pairs", ctx.book, ctx.vols, m, "knn 精度", items=items, n=len(items))
-    return apply_dataset_guards(r, ctx)
+    return r
 
 
 register(BenchSpec(
@@ -413,7 +393,7 @@ def normalize_score(ctx: BenchCtx, pred: Path) -> BenchResult:
     items = [{"id": s["sample"], "ok": bool(s.get("passed", True)), "status": s.get("status"), "tier": s.get("tier")}
              for s in d.get("samples") or []]
     r = BenchResult("read-normalize", ctx.book, ctx.vols, m, "回归门失败", items=items, n=len(items))
-    return apply_dataset_guards(r, ctx)
+    return r
 
 
 register(BenchSpec(
