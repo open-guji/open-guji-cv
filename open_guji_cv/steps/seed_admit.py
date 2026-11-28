@@ -336,7 +336,7 @@ class SeedAdmitStep(Step):
         optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review"), ("rare_candidates", "rare_ref_sparse"),
                                 ("rare_candidates", "solo_5b_cov"), ("rare_candidates", "book_lanes"),
                                 ("rare_candidates", "ref_lib_5b_veto"), ("glyph_analyzer", "group_flow_near_p"),
-                                ("glyph_near", "group_flow_rr_shape_3b")),
+                                ("glyph_near", "group_flow_near_from_3b")),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),

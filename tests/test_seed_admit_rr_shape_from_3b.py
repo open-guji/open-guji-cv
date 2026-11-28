@@ -1,4 +1,4 @@
-"""第四步 4d 接 3b：`_rr_shape_pass` 开 `group_flow_rr_shape_3b` 时先读 3b `glyph_near` 的 `rr_shape` 原样结论（CV4 2026-11-28）。
+"""第四步 4d 接 3b：`_rr_shape_pass` 开 `group_flow_near_from_3b` 时先读 3b `glyph_near` 的 `rr_shape` 原样结论（CV4 2026-11-28）。
 
 数据全在测试里造（字块图、模型同 `test_glyph_near_rr_shape.py`）。要点：读 3b 与本地现算逐格同一结论；
 3b 没有的格、备选切法列本地现算；模型不是同一份报错；开关关着不碰 3b 产物。
@@ -57,7 +57,7 @@ class _Ctx:
 
 def _run(model, ctx, on):
     recs = _recs(len(ctx.imgs))
-    p = NS(group_flow_rr_shape=str(model), patch_missing="error", group_flow_rr_shape_3b=on)
+    p = NS(group_flow_rr_shape=str(model), patch_missing="error", group_flow_near_from_3b=["rr_shape"] if on else [])
     d = _rr_shape_pass(p, [NS(col=1, chars=recs)], {}, ctx, 1)
     return d, [(r.char, r.admit, r.channel, copy.deepcopy(r.evidence)) for r in recs]
 
@@ -104,5 +104,41 @@ def test_flag_off_does_not_read_3b(model_file):  # noqa: F811
 
 def test_flag_off_not_in_param_dump():
     from open_guji_cv.steps.seed_admit_params import SeedAdmitParams
-    assert "group_flow_rr_shape_3b" not in SeedAdmitParams(db_path="x").model_dump()
-    assert SeedAdmitParams(db_path="x", group_flow_rr_shape_3b=True).model_dump()["group_flow_rr_shape_3b"] is True
+    assert "group_flow_near_from_3b" not in SeedAdmitParams(db_path="x").model_dump()
+    assert SeedAdmitParams(db_path="x", group_flow_near_from_3b=["rr_shape"]).model_dump()["group_flow_near_from_3b"] == ["rr_shape"]
+
+
+# ── wu_shape（嗚鳴，CV3 #2006）：证据是 judge() 整个 dict（3b 多一个 method 键，4d 去掉）──────────
+
+def test_wu_shape_read_3b_same_as_local(tmp_path):
+    from open_guji_cv.steps.seed_admit_shapes import _wu_shape_pass
+    from test_glyph_near_wu_shape import _imgs as _wu_imgs
+    from test_wu_shape import _model_file
+
+    model = _model_file(tmp_path, bias=8.0, name="wu_shape.json")[0]
+    imgs = _wu_imgs()
+    n = len(imgs)
+
+    def recs():
+        return [NS(id=f"b:1:1:{i + 1}", slot=i + 1, sub=None, char="嗚", admit=False, evidence={},
+                   provenance="match", channel="", doubts=[]) for i in range(n)]
+
+    def run(ctx, on):
+        rs = recs()
+        p = NS(group_flow_wu_shape=str(model), patch_missing="error",
+               group_flow_near_from_3b=["wu_shape"] if on else [])
+        d = _wu_shape_pass(p, [NS(col=1, chars=rs)], {}, ctx, 1)
+        return d, [(r.char, r.admit, r.channel, copy.deepcopy(r.evidence)) for r in rs]
+
+    base = run(_Ctx(imgs, None, set(range(n))), False)
+    outs = NM.load_method("wu_shape", str(model)).score(imgs, "b")
+    covered = {0, 2}
+    chars = [NearRec(id=r.id, slot=r.slot, group="wu", trigger="cands",
+                     methods=[NearMethodOut(method="wu_shape:wu", sims=o["sims"], evidence=o["evidence"])])
+             for i, (r, o) in enumerate(zip(recs(), outs)) if i in covered]
+    near = PageNear(page=1, methods_sha="wu:" + NM.method_fingerprint("wu_shape", str(model)),
+                    columns=[ColumnNear(col=1, chars=chars)])
+    assert all("method" in c.methods[0].evidence for c in chars)
+    ctx = _Ctx(imgs, near, set(range(n)) - covered)
+    assert run(ctx, True) == base
+    assert "wu_shape 判法结果 读 3b 2" in ctx.logs[0] and "3b 没触发 1" in ctx.logs[0]
