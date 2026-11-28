@@ -25,7 +25,7 @@ from open_guji_cv.steps.align_ref import AlignRefParams
 BOOK, PAGE, COL = "tbook", 1, 1
 REF_TEXT = "文華殿大學士臣紀昀等奉敕撰欽定四庫全書總目卷一經部易類一"
 COLUMN_CHARS = "文華殿大學士臣紀昀等奉敕撰"
-REFS = [{"file": "ref.txt", "label": "ref", "quality": "best"}]
+REFS = [{"file": "ref.txt", "label": "ref", "accuracy": "high"}]
 
 
 def _prof(raw, refs=REFS):

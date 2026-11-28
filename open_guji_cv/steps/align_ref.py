@@ -395,7 +395,7 @@ class AlignRefParams(BaseModel):
       「爲/為」这类系统性版本差不再被判成 `replace`，取字仍是证人原文的字形
       （归一只影响判等/判异，不影响最终写进 `align_char` 的字）。
     - ``"majority_vote"``：`references` 每家证人各自跑一次锚定 + `difflib`
-      （原始字形比较，不歸一），逐字位在锚定成功的证人里按 `quality` 加权
+      （原始字形比较，不歸一），逐字位在锚定成功的证人里按 `accuracy` 加权
       多数表决；只有一家覆盖的字位直接用它，别的证人在这一位缺席不算票。
     """
     witness_fingerprint: str = ""
@@ -457,7 +457,7 @@ class AlignRefParams(BaseModel):
     """按坐标对位（2026-09-28，D 道 overview#195；见 `steps/align_ref_coord` 模块头）。
 
     - ``"auto"``（缺省）：整理本是**逐列分行**的才做——书 yaml `references[0]` 标了
-      `line_is_column: true`，或语料本身 ≥95% 的非空行字位数不超过每列格数
+      `form: column`，或语料本身 ≥95% 的非空行字位数不超过每列格数
       （`chars_per_line`，+1 容抬头）。四庫光盘版满足（一行 = 刻本一列），北行日錄
       校對本、全唐文这类整段录入的整理本不满足，自动不做。
     - ``"on"`` / ``"off"``：强制。
@@ -1134,7 +1134,7 @@ def _witnesses_for_book_cached(refs_key: tuple) -> tuple:
 
 
 def _witnesses_for_book(book) -> list:
-    """`book.references` → 按 `quality` 排序的证人列表（复用 `report.witness.load_witnesses`，
+    """`book.references` → 按 `accuracy` 排序的证人列表（复用 `report.witness.load_witnesses`，
     最高质量在前）。空 `references` 时退回单一默认证人（光盘版），与 legacy 的
     `DEFAULT_CORPUS` 是同一份文件。结果按 `references` 内容缓存，见 `_refs_key`。"""
     return list(_witnesses_for_book_cached(_refs_key(book.references)))
@@ -1218,7 +1218,7 @@ def _labels_from_ops(book: str, page: int, norm: list[tuple], ops: list[tuple],
 def _majority_vote_labels(book: str, page: int, norm: list[tuple], query: str,
                           witnesses: list) -> list | None:
     """`references` 每家证人各自锚定 + 过闸（原始字形比较，`normalize=False`），
-    逐字位在锚定成功的证人里按 `quality` 加权多数表决；只有一家覆盖的字位
+    逐字位在锚定成功的证人里按 `accuracy` 加权多数表决；只有一家覆盖的字位
     直接用它，别的证人在这一位缺席不算票。返回 `None` 表示没有任何一家证人
     锚上这一页——`_run_multi_witness` 据此报「未锚定」。
     """
@@ -1467,8 +1467,9 @@ def _coord_enabled(p: "AlignRefParams", book) -> bool:
         return False
     if p.coord == "on":
         return True
+    from ..core.ref_profile import ref_is_column
     refs = getattr(book, "references", None) or []
-    if refs and refs[0].get("line_is_column"):
+    if refs and ref_is_column(refs[0]):
         return True
     return _corpus_line_is_column(p.corpus, int(getattr(book, "chars_per_line", None) or 0))
 

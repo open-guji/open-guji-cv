@@ -258,9 +258,7 @@ _DUMP_DROP: tuple = (
     (lambda p: p.solo_5b_cov is None, ("solo_5b_cov", "solo_5b_gap", "solo_5b_min_n")),
     (lambda p: not p.no_ref_pages, ("no_ref_pages",)),
     (lambda p: not p.no_ref_params, ("no_ref_params",)),
-    (lambda p: not p.trust_from_accuracy, ("trust_from_accuracy",)),
     (lambda p: not p.ref_accuracy, ("ref_accuracy",)),
-    (lambda p: not p.ref_variants_off, ("ref_variants_off",)),
     (lambda p: p.consensus_lib_cov is None, ("consensus_lib_cov",)),
     (lambda p: p.ref_lib_5b_veto is None, ("ref_lib_5b_veto", "ref_lib_5b_veto_lead")),
     (lambda p: p.solo_5b_same_cov is None, ("solo_5b_same_cov",)),
@@ -1154,20 +1152,9 @@ class SeedAdmitParams(BaseModel):
     """无参照页上换用的 seed_admit 参数（书级），如 `{solo_5b_cov: 0.95, solo_5b_min_n: 1}`：只在这些页
     叠在本步参数上，别的页不变。无参照页＝`no_ref_pages`（`page_kinds.no_ref`）或册配置 `reference_profile` 声明
     `kind: none` 的页（11-27 起两种写法同一口径）。键须是本步参数名（不许再嵌 `no_ref_*`）。空＝不换（不进 dump）。"""
-    trust_from_accuracy: bool = False
-    """按参校本准确度分档推信任档（书级，2026-11-27 CV0，Sheldon「四维＋准确度分档」；缺省关、关时不进 dump，行为逐字节不变）。
-    开了以后每页看这页参照的 `accuracy`（册配置 `references[].accuracy`，`reference_profile` 段上可压低）：
-
-    - `very_high` → `reference_trust: very_high`；`high` → `reference_trust: high`；`mid` → `ref_lib_coord: true`；
-      `low`／未标／无参照页 → 不动（照册里写的）。
-    - 只往上推不往下拉：册里已写了更高的 `reference_trust`／`ref_lib_coord` 就照旧（要压低就把 `accuracy` 标低）。
-    - 参校本 `script: trad|simp`（异体已归一、码位不跟刻本）的页：关 `follow_ref_variants`（含 `reference_trust` 带的那一项）、
-      `edge_pair_to: ref` 退回 `freq`——这种参校本的码位不能照录。
-    门槛（very_high ≥ 99.9%、high ≥ 99.5%、mid ≥ 98%，与最终定字一致率）与实测见 `doc/design/参校本四维与准确度分档.md`。"""
     ref_accuracy: str = ""
-    """自动填（`trust_from_accuracy` 开时）：本册 `references[]` 的 accuracy/script 与段上压低的摘要，进指纹——标改了本步过期。"""
-    ref_variants_off: bool = False
-    """逐页派生（`trust_from_accuracy` 开、本页参校本 `script: trad|simp`）：关掉照录参校本异体。册里别直接写（不进 dump 时等于关）。"""
+    """自动填：`reference_profile` 段上压低的准确度摘要（如 `18-19:low`），进指纹；没有压低段为空、不进 dump。
+    整册的档由 `references[].accuracy` 推出的 `reference_trust` 等字段本身进指纹（见 `seed_admit_page_params.derive_trust`）。"""
     book_lanes: dict = {}
     """书级无参照补放通道的取值（2026-11-24 CV4，Sheldon 定）：交给书仓 `code/` 覆盖的钩子 `impl/keben/admit_lanes.noref_lanes`，
     cv 不解释其中的键，原样进参数指纹；`data`（路径表，相对数据目录）是通道要读的数据文件，内容哈希进 `book_lanes_fingerprint`。
@@ -1437,14 +1424,18 @@ class SeedAdmitParams(BaseModel):
       → 放行整理本形。带 `ctx_guard_ref` 的格只在上下文字也是这一对时放。
     不同义的形近对不进这张表。表是一套书的数据，写在册 yaml；空 = 关（不进 dump）。"""
     follow_ref_variants: bool = False
-    """书级：`follow_ref` 不限表——整理本字（坐标对位字，没有时看现役对位字）与库首位／已放行字**同义异体**
+    """**派生，不从册配置读**（2026-11-28 Sheldon 定：参校本四维是唯一入口）：由本页参照的 `references[].accuracy`／`script`／`form`
+    推出（`seed_admit_page_params.derive_trust`），册里写了也不采用（迁移期并存，起跑时提示）。下面是这一档的行为说明。
+    书级：`follow_ref` 不限表——整理本字（坐标对位字，没有时看现役对位字）与库首位／已放行字**同义异体**
     （本步异体关系 `vmap.semantic` 相同、字面不同）的对子都照录整理本形，判据同 `follow_ref`（待审格放行、已放行格改回）。
     Sheldon 2026-11-01（史記文淵閣本）：「四库全书有一个置信度非常高的参校本，与其暂归一，不如按参校本取字；
     万一参校本有错，我们还可以回过头来再次整理」——字组拆不开的写法、码位异体（隠𨼆隱、傳𫝊）落整理本码位，
     暂归一放行的格也改回整理本形；证据 `follow_ref.via=variants`／`lane.via=variants` 留痕，方便按参校本错误回查。
     没有参校本的书别开。False＝只认 `follow_ref` 表（不进 dump）。"""
     reference_trust: Literal["none", "high", "very_high"] = "none"
-    """书级「参校本可信度」（缺省 `none`＝不额外信任，不进参数 dump；史記文淵閣本 2026-11-02，用户定：把「按参校本走」收成一个有语义的参数）。
+    """**派生，不从册配置读**（2026-11-28 Sheldon 定：参校本四维是唯一入口）：由本页参照的 `references[].accuracy`／`script`／`form`
+    推出（`seed_admit_page_params.derive_trust`），册里写了也不采用（迁移期并存，起跑时提示）。下面是这一档的行为说明。
+    书级「参校本可信度」（缺省 `none`＝不额外信任，不进参数 dump；史記文淵閣本 2026-11-02，用户定：把「按参校本走」收成一个有语义的参数）。
 
     四库系书有一个置信度很高的参校本（同一底本的整理文本）。机器认的字与参校本一致、又没有强反证时，就按参校本走，
     不再因为某个弱解法弃权或反对而送人审。档位逐级叠加：
@@ -1455,14 +1446,17 @@ class SeedAdmitParams(BaseModel):
         日曰目／己已巳／入人八／一二 有专门解法，不碰；
       ② 字组复核：解法全弃权的己已巳、曾會㑹（`abstain_ref_ok`）、字组补放只有字形路给参校字的日曰（`lift_shape_ref`）、
         只有字形路 ids 反对而字＝参校字的廣賔 還遺 衞衛 等（`REFERENCE_TRUST_SHAPE_GROUPS`）→ 不降审、不退人审；
-      ③ 异体拆不开的写法取参校本码位并留痕（`follow_ref_variants`）。
+      ③ 异体拆不开的写法取参校本码位并留痕（`follow_ref_variants`，2026-11-28 起由准确度另推，`script: faithful` 且库不压时才开，
+        不再由本档隐含）。
     - `very_high`：另加「库认不出」的格——库首位不是参校字、但格带 `ctx_guard_ref`（文意与参校本不同）、库首位 cov < 0.975、
       且本列对位健康（列内已放行格字＝参校字占比 ≥ 0.8、至少 3 格）→ 也按参校本放，evidence `lane.blind=true` 留痕。
 
     这几项原先是 `group_flow_abstain_ref_ok`／`group_flow_lift_shape_ref`／`follow_ref_variants` 等分散开关，现在由本参数一并导出；
     旧开关仍可单独写（取并集），按书微调用它们。史記 01–10 册 F／G 类看图核对：廣 23、還 12、G 类 89 格几乎全是参校本对。"""
     ref_lib_coord: bool = False
-    """只开 `reference_trust: high` 的第 ① 项（整理本字＝库首位＝本格字 → 放行，通道 `ref_lib_coord`），不带 ②③ 与书级其他放宽
+    """**派生，不从册配置读**（2026-11-28 Sheldon 定：参校本四维是唯一入口）：由本页参照的 `references[].accuracy`／`script`／`form`
+    推出（`seed_admit_page_params.derive_trust`），册里写了也不采用（迁移期并存，起跑时提示）。下面是这一档的行为说明。
+    只开 `reference_trust: high` 的第 ① 项（整理本字＝库首位＝本格字 → 放行，通道 `ref_lib_coord`），不带 ②③ 与书级其他放宽
     （A24 2026-11-03，第 3 轮 N 类）。殿本整理本不是整本可信（不能开 `reference_trust`），但「整理本坐标对位字、库首位、
     本格字三方一致」只被 `near_form`／上下文 margin 不足挡下的格，看图 28/28 读对（页错位的 vol56 p75 除外，那页带 never_match 护栏）。
     判据同 `ref_lib_coord_decide`，门槛用 `ref_lib_coord_cov`／`ref_lib_coord_gap`（比 reference_trust 的 0.90／0.005 严）。
@@ -1479,7 +1473,9 @@ class SeedAdmitParams(BaseModel):
     # ── `ref_lib_coord_gap` = 0.01（门槛，2026-11-24 CV4 起收成常量 `_CONSTANTS`、不再是参数）
     #    只在 `ref_lib_coord` 开着、`reference_trust` 关着时用：库首位 cov 下限，与语义不同的最好对手的领先下限。
     ref_topk_follow: bool = False
-    """库前 5 名候选里有整理本字、且与首位 cov 差 ≤ `REFERENCE_TRUST_TOPK_GAP` 时按整理本放（史記文淵閣本 2026-11-03，
+    """**派生，不从册配置读**（2026-11-28 Sheldon 定：参校本四维是唯一入口）：由本页参照的 `references[].accuracy`／`script`／`form`
+    推出（`seed_admit_page_params.derive_trust`），册里写了也不采用（迁移期并存，起跑时提示）。下面是这一档的行为说明。
+    库前 5 名候选里有整理本字、且与首位 cov 差 ≤ `REFERENCE_TRUST_TOPK_GAP` 时按整理本放（史記文淵閣本 2026-11-03，
     第 2 轮 P 类「机器字≠整理本」90 + 「整理本改字层」71 格看图：161 格里整理本字对的 ≥ 95%，库首位是形近字抢先；
     整理本字在库前 5 名的 59 格逐格看图全是整理本对，整理本字不在前 5 的 102 格里才出现机器对、整理本错的几例）。
     要 `reference_trust: very_high`、本列对位健康（列内已放行格字＝整理本字占比 ≥ 0.8、至少 3 格）、
@@ -1569,9 +1565,8 @@ class SeedAdmitParams(BaseModel):
         return frozenset(self.group_flow_lift_shape_ref) | (frozenset(REFERENCE_TRUST_LIFT_SHAPE_GROUPS) if self._rt_on("lift_shape_ref") else frozenset())
 
     def _follow_variants(self) -> bool:
-        if self.ref_variants_off:
-            return False
-        return self.follow_ref_variants or self._rt_on("follow_ref_variants")
+        """照录参校本异体：只看派生的 `follow_ref_variants`（very_high/high＋script faithful＋不按刻形录字，见 `derive_trust`）。"""
+        return self.follow_ref_variants
 
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler, info):
@@ -1603,6 +1598,8 @@ class SeedAdmitParams(BaseModel):
         """退役参数（`_RETIRED`）：写的是退役前的缺省值就丢掉；写了别的值报错，免得那本书的开关悄悄失效。"""
         if not isinstance(data, dict):
             return data
+        # 11-27 的过渡开关（#1979），11-28 起准确度分档恒开：写了也丢掉
+        data = {k: v for k, v in data.items() if k not in ("trust_from_accuracy", "ref_variants_off")}
         bad = []
         for k in [k for k in data if k in _RETIRED]:
             v = data[k]

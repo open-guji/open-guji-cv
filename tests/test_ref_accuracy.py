@@ -1,16 +1,18 @@
-"""参校本四维＋准确度分档（CV0 2026-11-27）：册配置键校验、段上压低、seed_admit `trust_from_accuracy` 逐页推信任档。
-缺省关时参数 dump 不变、逐页原样返回同一对象。"""
+"""参校本四维是唯一入口（CV0 2026-11-27／28，Sheldon 定）：册配置键校验、段上压低、seed_admit 信任字段由准确度推出，
+册里写的旧开关不采用；证人排序看 accuracy。"""
 import types
+import warnings
 
 import pytest
 
 from open_guji_cv.core.ref_profile import check_reference_dims, load_reference_profile
-from open_guji_cv.steps.seed_admit import (SeedAdmitParams, accuracy_page_params,
-                                           ref_accuracy_summary)
+from open_guji_cv.report.witness import ACCURACY_ORDER
+from open_guji_cv.steps.seed_admit import (SeedAdmitParams, accuracy_page_params, book_trust_params,
+                                           derive_trust, ref_accuracy_summary)
 
 
-def _book(refs, profile=None):
-    return types.SimpleNamespace(references=refs, reference_profile=load_reference_profile(profile, refs))
+def _book(refs, profile=None, id="b"):
+    return types.SimpleNamespace(id=id, references=refs, reference_profile=load_reference_profile(profile, refs))
 
 
 def test_dims_validate():
@@ -20,8 +22,7 @@ def test_dims_validate():
         check_reference_dims([{"file": "a", "accuracy": "best"}])
     with pytest.raises(ValueError, match="script"):
         check_reference_dims([{"file": "a", "script": "繁体"}])
-    with pytest.raises(ValueError, match="自相矛盾"):
-        check_reference_dims([{"file": "a", "form": "column", "line_is_column": False}])
+    check_reference_dims([{"file": "a", "quality": "best", "line_is_column": True}])   # 旧键迁移期并存不报
 
 
 def test_segment_accuracy_only_lowers():
@@ -30,56 +31,76 @@ def test_segment_accuracy_only_lowers():
     assert prof.accuracy_of(2, refs) == "mid" and prof.accuracy_of(9, refs) == "high"
     with pytest.raises(ValueError, match="只许压低"):
         load_reference_profile({"segments": [{"pages": [1], "kind": "text", "accuracy": "very_high"}]}, refs)
-    with pytest.raises(ValueError, match="none"):
-        load_reference_profile({"segments": [{"pages": [1], "kind": "none", "accuracy": "low"}]}, refs)
+    with pytest.raises(ValueError, match="只许压低"):     # 未标按 low
+        load_reference_profile({"segments": [{"pages": [1], "kind": "text", "accuracy": "mid"}]}, [{"file": "a"}])
 
 
-def test_switch_off_unchanged():
-    p = SeedAdmitParams()
-    book = _book([{"file": "a", "accuracy": "very_high", "script": "trad"}])
-    assert accuracy_page_params(p, 1, book) is p
-    d = p.model_dump()
+def test_derive_trust_tiers():
+    assert derive_trust("very_high", "faithful", "column") == {
+        "reference_trust": "very_high", "ref_lib_coord": False, "follow_ref_variants": True, "ref_topk_follow": True}
+    assert derive_trust("high", "trad", "column") == {
+        "reference_trust": "high", "ref_lib_coord": False, "follow_ref_variants": False, "ref_topk_follow": False}
+    assert derive_trust("high", "faithful", "column", by_carving=True)["follow_ref_variants"] is False   # 殿本按刻形
+    assert derive_trust("mid", "", "column")["ref_lib_coord"] is True
+    assert derive_trust("mid", "", "text")["ref_lib_coord"] is False   # 不分行用不上坐标对位
+    assert derive_trust("low") == derive_trust("") == {
+        "reference_trust": "none", "ref_lib_coord": False, "follow_ref_variants": False, "ref_topk_follow": False}
+
+
+def test_book_params_override_legacy_keys_and_keep_shiji_dump():
+    """史記：册里旧写 reference_trust very_high＋follow_ref_variants＋ref_topk_follow，标 very_high＋faithful 后推出同样的值 →
+    参数 dump 逐位相同（指纹不变），也不提示。"""
+    old = SeedAdmitParams(reference_trust="very_high", follow_ref_variants=True, ref_topk_follow=True)
+    book = _book([{"file": "a", "form": "column", "script": "faithful", "accuracy": "very_high"}])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        new = book_trust_params(old, book)
+    assert new.model_dump(context={"hash": True}) == old.model_dump(context={"hash": True})
+
+
+def test_book_params_replace_ref_lib_coord_and_warn():
+    old = SeedAdmitParams(ref_lib_coord=True)
+    book = _book([{"file": "a", "form": "column", "script": "trad", "accuracy": "high"}])
+    with pytest.warns(FutureWarning, match="ref_lib_coord"):
+        new = book_trust_params(old, book)
+    assert (new.reference_trust, new.ref_lib_coord, new._follow_variants()) == ("high", False, False)
+    # 没标准确度＝low：旧开关一律不采用
+    with pytest.warns(FutureWarning):
+        assert book_trust_params(SeedAdmitParams(reference_trust="high"), _book([{"file": "a"}])).reference_trust == "none"
+    # 没配参校本：全关
+    assert book_trust_params(SeedAdmitParams(), _book([])).reference_trust == "none"
+
+
+def test_page_lowered_and_none_pages():
+    refs = [{"file": "a", "form": "column", "script": "faithful", "accuracy": "very_high"}]
+    book = _book(refs, {"segments": [{"pages": [3], "kind": "column", "accuracy": "mid"},
+                                     {"pages": [5], "kind": "none"}]})
+    p = book_trust_params(SeedAdmitParams(), book)
+    assert p.reference_trust == "very_high" and p.ref_accuracy == "3:mid"
+    q = accuracy_page_params(p, 3, book)
+    assert (q.reference_trust, q.ref_lib_coord, q.ref_topk_follow) == ("none", True, False)
+    assert accuracy_page_params(p, 4, book) is p and accuracy_page_params(p, 5, book) is p
+
+
+def test_script_trad_edge_pair_ref_back_to_freq():
+    p = SeedAdmitParams(edge_pair_to="ref")
+    q = book_trust_params(p, _book([{"file": "a", "script": "trad", "accuracy": "high"}]))
+    assert q.edge_pair_to == "freq" and not q._follow_variants()
+
+
+def test_summary_and_dump():
+    b = _book([{"file": "a", "accuracy": "high"}], {"segments": [{"pages": ["1-3"], "kind": "text", "accuracy": "mid"}]})
+    assert ref_accuracy_summary(b) == "1-3:mid"
+    d = SeedAdmitParams().model_dump()
     assert not {"trust_from_accuracy", "ref_accuracy", "ref_variants_off"} & set(d)
+    assert SeedAdmitParams.model_validate({"trust_from_accuracy": True}).model_dump() == d   # 过渡开关写了也丢
 
 
-def test_switch_on_maps_tiers():
-    on = SeedAdmitParams(trust_from_accuracy=True)
-    for acc, trust, coord in (("very_high", "very_high", False), ("high", "high", False),
-                              ("mid", "none", True), ("low", "none", False), (None, "none", False)):
-        q = accuracy_page_params(on, 1, _book([{"file": "a", "accuracy": acc}]))
-        assert (q.reference_trust, q.ref_lib_coord) == (trust, coord), acc
-    # 只往上推：册里已写 very_high，参校本标 high 也不降
-    hi = SeedAdmitParams(trust_from_accuracy=True, reference_trust="very_high")
-    assert accuracy_page_params(hi, 1, _book([{"file": "a", "accuracy": "high"}])) is hi
-    # 无参照页不动
-    b = _book([{"file": "a", "accuracy": "high"}], {"segments": [{"pages": [3], "kind": "none"}]})
-    assert accuracy_page_params(on, 3, b) is on
-    assert accuracy_page_params(on, 4, b).reference_trust == "high"
+def test_witness_order_by_accuracy():
+    assert ACCURACY_ORDER["very_high"] > ACCURACY_ORDER["high"] > ACCURACY_ORDER["mid"] > ACCURACY_ORDER["low"]
 
 
-def test_script_normalized_turns_off_variants():
-    on = SeedAdmitParams(trust_from_accuracy=True, edge_pair_to="ref")
-    q = accuracy_page_params(on, 1, _book([{"file": "a", "accuracy": "high", "script": "trad"}]))
-    assert q.reference_trust == "high" and q.ref_variants_off and not q._follow_variants() and q.edge_pair_to == "freq"
-    f = accuracy_page_params(on, 1, _book([{"file": "a", "accuracy": "high", "script": "faithful"}]))
-    assert f._follow_variants() and f.edge_pair_to == "ref"
-
-
-def test_summary_into_fingerprint():
-    b = _book([{"file": "a", "accuracy": "high", "script": "faithful"}, {"file": "b"}],
-              {"segments": [{"pages": ["1-3"], "kind": "text", "accuracy": "mid"}]})
-    s = ref_accuracy_summary(b)
-    assert s == "refs=high/faithful;/|segs=1-3:mid"
-    p = SeedAdmitParams(trust_from_accuracy=True, ref_accuracy=s)
-    d = p.model_dump()
-    assert d["trust_from_accuracy"] is True and d["ref_accuracy"] == s
-
-
-def test_book_params_hook_fills_summary_only_when_on():
+def test_book_params_hook():
     from open_guji_cv.steps.seed_admit import SeedAdmitStep
-    refs = [{"file": "a", "accuracy": "high"}]
-    ctx = types.SimpleNamespace(book=_book(refs))
-    step = SeedAdmitStep()
-    assert step.book_params(SeedAdmitParams(trust_from_accuracy=True), ctx).ref_accuracy == "refs=high/"
-    p = SeedAdmitParams()
-    assert step.book_params(p, ctx) is p
+    ctx = types.SimpleNamespace(book=_book([{"file": "a", "accuracy": "high"}]))
+    assert SeedAdmitStep().book_params(SeedAdmitParams(), ctx).reference_trust == "high"
