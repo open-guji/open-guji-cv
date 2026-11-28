@@ -1,7 +1,8 @@
 # Wiki 截图清单。改了这里重跑 make_shots.py；id 就是 wiki/images/<id>.png 的文件名。
 # ws：书 ID（出图时用 --ws 书ID=工作区 指到本机工作区）；crop：按页宽高的比例裁 [x0, y0, x1, y1]。
 # kind：page（一页叠若干图层）、panels（并排几幅）、column（一列拉直前后）、cells（几格的 Step3 格与 Step4 紧框）、
-#       glyphs（字形库里某字的刻例，要 --data）。图层：border columns cells shrink seal admit。
+#       glyphs（字形库里某字的刻例，要 --data）、column_steps（一列走过 2a/2b/2c）、cands（识字收尾候选）。
+#       图层：border columns cells shrink seal admit cell_state gate。
 # 首版基线：v0.6.0 前后的 main 产物包（殿本 vol04 是 cv0.5.26 那包，vol16/21/40/46/84 是 0.6.1.dev 实验包）。
 width: 1000
 shots:
@@ -36,6 +37,8 @@ shots:
   - {id: seal-v21p225, ws: 96mid1ogzk, book: vol21, page: 225, layers: [seal, admit], crop: [0.0, 0.0, 1.0, 0.5], width: 640}
   # ---- Step2
   - {id: step2-column-c3, kind: column, ws: 96mid1ogzk, book: vol04, page: 9, col: 3, width: 420}
+  # 2a→2b→2c 一列：原条 | 2a 拉直 column_raw | 2b 去左右界行 column_banded | 2c 剥列端 column_image（v0.9.16 dev 起）
+  - {id: step2-substeps-c3, kind: column_steps, ws: 96mid1ogzk, book: vol04, page: 9, col: 3, width: 560}
   # ---- Step3
   - {id: step3-cells, ws: 96mid1ogzk, book: vol04, page: 9, layers: [cells], width: 640}
   - {id: step3-jiazhu-v16p6, ws: 96mid1ogzk, book: vol16, page: 6, layers: [cells], crop: [0.0, 0.1, 0.62, 0.6], width: 800}
@@ -54,8 +57,12 @@ shots:
     horizontal: true
     h: 170
     ids: ["vol04:9:1:1", "vol04:9:3:2", "vol04:9:6:4", "vol04:2:4:21", "vol04:33:4:6"]
+  # 4c 格况：左 1c 印章，右 cell_state 非 char 的格（要开 cell_state 跑出产物）
+  - {id: decide-cellstate-v04p1, kind: panels, ws: 96mid1ogzk, book: vol04, page: 1, panels: [{layers: [seal]}, {layers: [cell_state]}], width: 900}
   # ---- Step5
   - {id: step5-glyphs, kind: glyphs, ws: 96mid1ogzk, chars: [書, 經, 傳, 爲], n: 10}
+  # 识字收尾 glyph_analyzer 的前几名候选（要开 glyph_candidate 等新小步跑出产物）
+  - {id: read-cands-v04, kind: cands, ws: 96mid1ogzk, book: vol04, ids: ["vol04:9:3:4", "vol04:9:1:6", "vol04:60:1:11"], k: 4, width: 760}
   # ---- Step6–7
   - {id: step7-admit-v04p60, ws: 96mid1ogzk, book: vol04, page: 60, layers: [admit], width: 640}
   - id: step7-review-cells

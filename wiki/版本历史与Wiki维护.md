@@ -30,7 +30,7 @@
 - **4 定字** 分四个子步、一个收尾、一道 gate（11-28，CV4）：4a 参照对位、4b 上下文（加 `context_rank`）、4c 格况 `cell_state`、4d 字组 `group_decision`、收尾 `seed_admit` 改名 `char_decide`、gate `decide_gate`；三条纪律「子步只出证据、收尾做全部判断、gate 只检测」。
 - 参校本四维（`form`／`punct`／`script`／`accuracy`）成唯一入口（4 定字页新一节）；册号位数按全书册数（产物与数据）；验收标准、bench 登记表、dataset STEP_MAP（实验与评测）。
 - 维护规矩加一条：新增小步、改大步划分，即使发 PATCH 也要改 Wiki。
-- **截图**：沿用 v0.8 的，图注里的小步编号改成新编号；新小步（2b、2c、3b–3e、4c、4d、gate）还没有专门的截图，等下一个 MINOR 按 `wiki/tools/make_shots.py` 补。
+- **截图**：沿用 v0.8 的，图注里的小步编号改成新编号。新小步补了三张（dev 版在殿本 vol04 第 1、9、60 页打开新小步跑出，产物不推）：2a→2b→2c 一列对照 `step2-substeps-c3`、识字收尾候选 `read-cands-v04`、4c 格况 `decide-cellstate-v04p1`。出图脚本加了 `column_steps`、`cands` 两种图和 `cell_state`、`gate` 两个图层。3b、3d、3e、4d、gate 在这几页上没有可看的例子，还没专图。
 
 ### v0.9（2026-11-23，v0.9.0）：按四大步重排
 
