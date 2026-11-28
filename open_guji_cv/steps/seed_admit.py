@@ -591,9 +591,9 @@ class SeedAdmitStep(Step):
                       if iron_ctx else None)
         # 印章／污损遮挡（`occluded_gate`，overview#195）：{字位 id: (密度, 默认字, 来源)}
         # 4c 格况（P3b）：`cell_state` 步开了就读它存的探测原值（同一批探测器、同一份参数，逐格不变），没开就在这里现算
-        cs = _opt(ctx, "cell_state", page)
-        _cs_ran = frozenset(cs.ran) if cs is not None else frozenset()
-        occ = ((cs.occluded_map() if "occluded" in _cs_ran else _occluded(ctx, page, match, p, amap))
+        cstate = _opt(ctx, "cell_state", page)
+        _cs_ran = frozenset(cstate.ran) if cstate is not None else frozenset()
+        occ = ((cstate.occluded_map() if "occluded" in _cs_ran else _occluded(ctx, page, match, p, amap))
                if p.occluded_gate else {})
         # 近似字闸（overview#276）：{近似例 id}、{刻例全是近似例的 (字)}；表空时两个都是空集
         apx_ids, apx_only = (_approx_index(p.db_path) if p.approx_fingerprint
@@ -1160,7 +1160,7 @@ class SeedAdmitStep(Step):
             n_review += d_veto
         if p.seal_blank_page and p.lane_seal:
             from .occlusion import page_seal_blank
-            d_seal = _seal_blank_flip(out, cs.seal_blank_map() if "seal_blank" in _cs_ran else page_seal_blank(ctx, page, p),
+            d_seal = _seal_blank_flip(out, cstate.seal_blank_map() if "seal_blank" in _cs_ran else page_seal_blank(ctx, page, p),
                                       _coord_refs(ctx, page, coord_cache))
             n_auto -= d_seal
             n_review += d_seal
@@ -1184,7 +1184,7 @@ class SeedAdmitStep(Step):
             n_auto += d_bi
             n_review -= d_bi
         if p.lane_header_formula:
-            d_hf = _header_formula_pass(ctx, page, p, out, cs.header_line_map() if "header_formula" in _cs_ran else None)
+            d_hf = _header_formula_pass(ctx, page, p, out, cstate.header_line_map() if "header_formula" in _cs_ran else None)
             n_auto += d_hf
             n_review -= d_hf
         if p.pua_rules:
@@ -1306,17 +1306,17 @@ class SeedAdmitStep(Step):
             n_auto -= d_ev
             n_review += d_ev
         d_ju = _jiazhu_uneven_pass(ctx, page, out, mmap, amap, _coord_refs(ctx, page, coord_cache),
-                                   cs.uneven_spans() if "jiazhu_uneven" in _cs_ran else None)
+                                   cstate.uneven_spans() if "jiazhu_uneven" in _cs_ran else None)
         n_auto -= d_ju
         n_review += d_ju
         if p.seg_box_check:
             # 字框几何闸（降，CV2 11-27，缺省关、按书开）：碎格／框线扁条／墨点／一字劈两框／过高框送审，归 seg_defect
-            d_sb = _seg_box_pass(ctx, page, out, p.seg_box_check, cs.seg_box if "seg_box" in _cs_ran else None)
+            d_sb = _seg_box_pass(ctx, page, out, p.seg_box_check, cstate.seg_box if "seg_box" in _cs_ran else None)
             n_auto -= d_sb
             n_review += d_sb
         if p.ink_marks:
             # 格级墨迹记号（升降都有，CV2 11-28，缺省关、按书开）：印、墨点对位无字判非字放行，对位有字送审
-            d_im = _ink_mark_pass(ctx, page, out, amap, cs.ink_facts() if "ink" in _cs_ran else None)
+            d_im = _ink_mark_pass(ctx, page, out, amap, cstate.ink_facts() if "ink" in _cs_ran else None)
             n_auto += d_im
             n_review -= d_im
         if ctx.book.codepoints:

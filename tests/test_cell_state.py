@@ -174,3 +174,12 @@ def test_book_params_fills_seed_digest(tmp_path, monkeypatch):
     assert set(p.seed) <= set(cs.SEED_FIELDS)
     off = STEPS["cell_state"].book_params(cs.CellStateParams(), ctx)
     assert off.seed == {}
+
+
+def test_run_page_does_not_shadow_cstate():
+    """bench 抓到过：run_page 里夹注分支用 `cs` 当临时集合，曾把读 cell_state 产物的变量盖掉（史記 03 夹注页整页失败）。"""
+    import textwrap
+    from open_guji_cv.steps.seed_admit import SeedAdmitStep
+    tree = ast.parse(textwrap.dedent(inspect.getsource(SeedAdmitStep._run_page)))
+    stores = [n for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id == "cstate" and isinstance(n.ctx, ast.Store)]
+    assert len(stores) == 1
