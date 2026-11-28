@@ -602,8 +602,15 @@ class SeedAdmitStep(Step):
                       if iron_ctx else None)
         # 印章／污损遮挡（`occluded_gate`，overview#195）：{字位 id: (密度, 默认字, 来源)}
         # 4c 格况（P3b）：`cell_state` 步开了就读它存的探测原值（同一批探测器、同一份参数，逐格不变），没开就在这里现算
-        cstate = _opt(ctx, "cell_state", page)
+        # `cell_state_read` 关（缺省）：一律现算，不看产物在不在；开：读产物，产物里没有的探测器现算并计数（A1）
+        cstate = _opt(ctx, "cell_state", page) if p.cell_state_read else None
         _cs_ran = frozenset(cstate.ran) if cstate is not None else frozenset()
+        if p.cell_state_read:
+            _cs_need = {n for n, on in (("occluded", p.occluded_gate), ("seal_blank", p.seal_blank_page and p.lane_seal),
+                                        ("seg_box", bool(p.seg_box_check)), ("ink", p.ink_marks), ("jiazhu_uneven", True),
+                                        ("header_formula", p.lane_header_formula)) if on}
+            ctx.log(f"char_decide p{page}: cell_state 读产物 {len(_cs_need & _cs_ran)} 个探测器"
+                    f"、本地现算 {len(_cs_need - _cs_ran)} 个{sorted(_cs_need - _cs_ran) or ''}")
         occ = ((cstate.occluded_map() if "occluded" in _cs_ran else _occluded(ctx, page, match, p, amap))
                if p.occluded_gate else {})
         # 近似字闸（overview#276）：{近似例 id}、{刻例全是近似例的 (字)}；表空时两个都是空集
