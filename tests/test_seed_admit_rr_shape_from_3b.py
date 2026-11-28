@@ -110,9 +110,16 @@ def test_flag_off_does_not_read_3b(model_file):  # noqa: F811
 
 
 def test_flag_off_not_in_param_dump():
-    from open_guji_cv.steps.seed_admit_params import SeedAdmitParams
+    """缺省＝8 个看图方法全读 3b（CV4 11-28 转缺省开）；等于缺省时不进参数 dump（没写它的书参数哈希不变），
+    写子集或写 `[]`（关）要进 dump。"""
+    from open_guji_cv.steps.seed_admit_params import NEAR_FROM_3B_DEFAULT, SeedAdmitParams
+    assert tuple(SeedAdmitParams(db_path="x").group_flow_near_from_3b) == NEAR_FROM_3B_DEFAULT
+    assert set(NEAR_FROM_3B_DEFAULT) == {"rr_shape", "wu_shape", "hou_shape", "part_shape", "pair_shape",
+                                         "book_knn", "near_knn", "stroke_veto"}
     assert "group_flow_near_from_3b" not in SeedAdmitParams(db_path="x").model_dump()
+    assert "group_flow_near_from_3b" not in SeedAdmitParams(db_path="x", group_flow_near_from_3b=list(NEAR_FROM_3B_DEFAULT)).model_dump()
     assert SeedAdmitParams(db_path="x", group_flow_near_from_3b=["rr_shape"]).model_dump()["group_flow_near_from_3b"] == ["rr_shape"]
+    assert SeedAdmitParams(db_path="x", group_flow_near_from_3b=[]).model_dump()["group_flow_near_from_3b"] == []
 
 
 # ── wu_shape（嗚鳴，CV3 #2006）：证据是 judge() 整个 dict（3b 多一个 method 键，4d 去掉）──────────

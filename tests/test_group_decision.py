@@ -331,3 +331,11 @@ def test_group_decision_step_never_mutates_cells():
     src = inspect.getsource(gd)
     for bad in (".admit =", ".channel =", ".provenance =", "_demote("):
         assert bad not in src
+
+
+def test_near_snapshot_skips_methods_without_4d_model():
+    """缺省 `group_flow_near_from_3b` 8 个全开后，这本书没配 4d 模型的方法不取 3b 快照（也不会因指纹不符报错）。"""
+    from open_guji_cv.steps.group_decision import near_snapshot
+    from open_guji_cv.steps.seed_admit_params import SeedAdmitParams
+    p = SeedAdmitParams(db_path="x")
+    assert near_snapshot(_Ctx(), 1, p) == {}
