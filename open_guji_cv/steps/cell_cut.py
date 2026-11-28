@@ -72,7 +72,7 @@ def _col_lines(ocr: FreeOcrLines, col: ColumnRec, off: np.ndarray, xa: int, y0: 
 @register_step
 class CellCutStep(Step):
     spec = StepSpec(
-        id="cell_cut", title="Step3 列内切字（自由版式）", version="1.5", unit="page",
+        id="cell_cut", title="2d 列内切字（自由版式）", version="1.5", unit="page",
         consumes=("raw_page", "layout_blocks", "free_columns"), produces=("free_cells",), params=CellCutParams,
         optional_consumes=("free_ocr_lines",), optional_consumes_when=(("free_ocr_lines", "use_ocr"),),
         code_deps=("open_guji_cv.impl.free.free_cells", "open_guji_cv.impl.free.free_columns",

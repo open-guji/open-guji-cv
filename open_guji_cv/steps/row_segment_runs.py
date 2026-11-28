@@ -42,7 +42,7 @@ class RowSegmentRunsParams(BaseModel):
 @register_step
 class RowSegmentRunsStep(Step):
     spec = StepSpec(
-        id="row_segment_runs", title="Step3 单列切分（墨段盒模型，现代印刷）", version="1.1",
+        id="row_segment_runs", title="2d 单列切分（墨段盒模型，现代印刷）", version="1.1",
         unit="column",
         consumes=("gate_manifest", "column_windows", "column_image", "line_index"), produces=("cells",),
         params=RowSegmentRunsParams,

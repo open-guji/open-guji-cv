@@ -28,7 +28,7 @@ _READERS: dict[str, free_ocr.LineReader] = {}
 @register_step
 class LineOcrStep(Step):
     spec = StepSpec(
-        id="line_ocr", title="Step2-b 列内识别行（自由版式，可选）", version="1.0", unit="page",
+        id="line_ocr", title="2a 列内识别行（自由版式，可选）", version="1.0", unit="page",
         consumes=("raw_page", "layout_blocks", "free_columns"), produces=("free_ocr_lines",), params=LineOcrParams,
         code_deps=("open_guji_cv.impl.free.free_ocr", "open_guji_cv.impl.free.free_cells", "open_guji_cv.impl.free.free_rectify"),
     )

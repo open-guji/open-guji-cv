@@ -65,7 +65,7 @@ class ColumnTraceParams(BaseModel):
 @register_step
 class ColumnTraceStep(Step):
     spec = StepSpec(
-        id="column_trace", title="Step2 块内找列（自由版式）", version="1.8", unit="page",
+        id="column_trace", title="2a 块内找列（自由版式）", version="1.8", unit="page",
         consumes=("raw_page", "layout_blocks"), produces=("free_columns",), params=ColumnTraceParams,
         code_deps=("open_guji_cv.impl.free.free_columns", "open_guji_cv.impl.free.free_blocks",
                    "open_guji_cv.impl.free.free_rectify"),

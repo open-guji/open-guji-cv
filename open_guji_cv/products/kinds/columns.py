@@ -88,7 +88,7 @@ class PageWindows(BaseModel):
 
 
 COLUMN_WINDOWS = register_kind(ProductKindSpec(
-    id="column_windows", title="Step2 逐列窗口 / warp 参数 / 文字带", storage="numeric",
+    id="column_windows", title="2a 逐列窗口 / warp 参数 / 文字带", storage="numeric",
     unit="column", schema=PageWindows, coord_space=RAW_TR))
 
 COLUMN_RAW = register_kind(ProductKindSpec(
