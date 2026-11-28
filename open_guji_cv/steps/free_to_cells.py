@@ -140,7 +140,7 @@ class FreeToCellsStep(Step):
         produces=("cells", "column_windows", "column_image"), params=FreeToCellsParams,
         code_deps=("open_guji_cv.impl.free.free_map", "open_guji_cv.impl.free.free_cells",
                    "open_guji_cv.impl.free.free_blocks", "open_guji_cv.impl.free.free_rectify",
-                   "open_guji_cv.steps._warpmap"),
+                   "open_guji_cv.steps._warpmap", "open_guji_cv.seg.frame_types"),
         parallel_safe=True,
     )
 
