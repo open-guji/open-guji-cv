@@ -13,7 +13,8 @@
             chars: [宫, 宮, 官]
             fold: {宮: 宫}                         # 异体不分：触发判断时当同一个字（可缺）
             methods: {cnn_small: models/glyph_near_gong}   # 方法名 → 模型目录（相对路径先找数据目录、再找仓根）；
-                                                  # 一份文件挂多对的方法写 {path, pair}，如 {part_shape: {path: config/groups/part_shape.json, pair: [剌, 刺]}}
+                                                  # 一份文件挂多对的方法写 {path, pair}，如 {part_shape: {path: config/groups/part_shape.json, pair: [剌, 刺]}}；
+                                                  # 一份文件挂几组的写 {path, group}，如 {stroke_veto: {path: config/groups/stroke_veto.json, group: jys}}
             trigger: member                       # member：3a 首位在组里就跑；close（缺省）：首位在组里且组内另一字分差 ≤ delta；
                                                   # cands：3a 首位或候选前 topk 名里有组内任一字就跑（从第四步搬来的判法用它罩住 4d 的触发格）
             delta: 0.03
@@ -78,6 +79,8 @@ near_knn 判的不是某个字组，而是第四步的**形近护栏格**，所�
 
 - 方法证据原样落进 `NearMethodOut.evidence`（rr_shape：`{char, why, nn, score, geo}`，与 `rr_shape.judge()` 同键同值、同舍入；
   wu_shape／hou_shape：`{char, why, p|v}`＝`judge()` 整个返回值），外加 `method`，收尾把它抄进每格 `near.methods[方法名]`；
+- stroke_veto：`{group, **judge()}`（`cls` 是类名，jys 的 已／巳 一类 `已巳`）；4d 降审时写的 `{group, cls, llr, x}` 用
+  `near_methods.stroke_veto_trail` 从证据得出，降不降、`channels` 过滤留在 4d；
 - book_knn 只出前段（A 档结论与原始量，外加 `b_ok`），B 档（要整理本对位字）由 4d 调 `near_methods.book_knn_settle` 定；
   库钉版指纹 `near_methods.lib_fingerprint` 进 `methods_sha`，4d 调同一个函数比；
 - near_knn 出与候选无关的全库量（`full`／`full_votes`／`nn`／`out_of_book`）和 3a 首位＋候选每个字各自的前 k 个近邻距离（`dists`），
@@ -87,7 +90,8 @@ near_knn 判的不是某个字组，而是第四步的**形近护栏格**，所�
 ## 指纹
 
 `methods_sha`（自动填）＝各组各方法模型目录里全部文件的 sha256，进参数指纹：换模型、换校准表，本步与收尾过期。
-`{path, pair}` 写法的方法另把 pair 并进指纹（`near_methods.method_fingerprint`；字符串写法的指纹逐位不变）。
+`{path, pair}` 写法的方法另把 pair 并进指纹、`{path, group}` 写法另把组名并进指纹（`near_methods.method_fingerprint`；
+字符串写法的指纹逐位不变）。
 """
 from __future__ import annotations
 
@@ -212,7 +216,7 @@ class GlyphNearStep(Step):
         code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_registry",
                    "open_guji_cv.groups.book_knn", "open_guji_cv.groups.near_knn", "open_guji_cv.clustering.match",
                    "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.part_shape",
-                   "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.wu_shape"),
+                   "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.stroke_veto", "open_guji_cv.groups.wu_shape"),
         enabled_by="groups",
     )
 
