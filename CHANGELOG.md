@@ -122,6 +122,16 @@
 
 ## [未发版]
 
+## [0.9.11] - 2026-11-28
+
+补发（PATCH，L0）＝v0.9.10＋册号位数统一五件（#1970 #1976 #1977 #1980 #1987），给改名迁移中的各书（脉经、朱楓林集、北行、幼學、殿本）正式钉。对 v0.9.10 各步 code_hash 全同（row_segment 登 code_equiv `_LAYOUT_ALIAS_1128`）；底库不变；配 manager ≥0.7.0（`ops.rename_volume`／`ops.renumber`），待审路径按数值认要 ≥0.7.1；没写 `aliases` 的册行为逐位不变。
+
+- 事件读口（#1970）：`core/volume_id` 按全书册数定位数；`core/volume_alias` 按册 yaml `aliases` 读事件时把旧册名换新名，旧记录不改写。
+- 实例 id 不换（#1976）：`v1:`／`v2:` 前缀键与 `payload.instance_id` 保持原样，glyph_audit 撤库事件对得上库。
+- `status` 认改名过期（#1977）：`<产物根>/<册>/_renamed.json` 对照表把上游 sha 换回改写前，指纹对得上就算新鲜，记 `rename_only`；`run` 照旧。
+- 格位表／备选格表认旧册名（#1980）：`row_segment.load_layout` 表行 `vol` 是本册 `aliases` 里的旧名也归本册（脉经第 1 册继续用原 alt_cells 表）。
+- 新命令 `guji-cv rename-seal <册> [--keys …]`（#1987）：改名后封存只因改名改写了来源文件而变的参数指纹（如 `exclusions_fingerprint`），`status` 的 rename_only 据此认作改名；封存后再变照常过期。
+
 ## [0.9.10] - 2026-11-27
 
 补发（PATCH，L0）＝v0.9.9＋#1961（汉书 WYG #18261）。对 v0.9.9 各步 code_hash 全同（border 登 code_equiv `_TRK_CLIP_1127`）；底库 b35 不变；不需 manager 配套；各书不过期。

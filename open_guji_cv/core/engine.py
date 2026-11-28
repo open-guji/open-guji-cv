@@ -614,6 +614,114 @@ class Engine:
             return STALE, entry        # 显式失效（人裁落定等），见 ManifestEntry.invalidated
         return (FRESH if entry.fingerprint == fp else STALE), entry
 
+    #: 册改名标记（guji-manager `ops/rename_volume`，11-27 用户定老书 cv 册名「只改、不重跑」）：
+    #: `<产物根>/<册>/_renamed.json` 记着改写前后的产物 sha 对照表。
+    RENAME_MARKER = "_renamed.json"
+
+    def _rename_marker_path(self) -> Path:
+        return Path(self.store.root) / self.book.id / self.RENAME_MARKER
+
+    def _rename_marker(self) -> dict:
+        """改名标记 `<产物根>/<册>/_renamed.json`（manager `ops.rename_volume` 写）。没有或读不了 → 空。"""
+        mk = getattr(self, "_rename_mk", None)
+        if mk is None:
+            mk = {}
+            p = self._rename_marker_path()
+            if p.exists():
+                try:
+                    mk = json.loads(p.read_text(encoding="utf-8")) or {}
+                except (OSError, ValueError):
+                    mk = {}
+            self._rename_mk = mk
+        return mk
+
+    def _rename_inverse(self) -> dict[str, str]:
+        """改名标记里的对照表反过来：改写后 sha → 改写前 sha。没改过名 → 空表。"""
+        inv = getattr(self, "_rename_inv", None)
+        if inv is None:
+            inv = {v: k for k, v in (self._rename_marker().get("shamap") or {}).items()}
+            self._rename_inv = inv
+        return inv
+
+    def _rename_params_ok(self, step: Step, entry: ManifestEntry) -> bool:
+        """参数对不上，但变了的每个字段都是改名时封存过的「旧值→新值」（`seal_rename`）：
+        改名改写了参数指纹读的文件（如 `crop_exclusions.jsonl` 里的格号），内容只差册名。
+        封存之后这些文件再变（新人裁），新值对不上封存值，照常过期。"""
+        sealed = (self._rename_marker().get("sealed") or {}).get(step.spec.id) or {}
+        if not sealed or entry.param_parts is None:
+            return False
+        now = param_parts(self._params(step), step.spec.soft_params, step.spec.path_params)
+        diff = [k for k in {*now, *entry.param_parts} if now.get(k) != entry.param_parts.get(k)]
+        return bool(diff) and all(list(sealed.get(k) or ()) == [entry.param_parts.get(k), now.get(k)]
+                                  for k in diff)
+
+    #: 封存只认这几类参数：都是「按文件内容自动填的指纹」，改名改写那些文件就会变；手写的参数不封。
+    SEAL_SUFFIX = "_fingerprint"
+
+    def seal_rename(self, pages: list[int] | None = None,
+                    keys: set[str] | None = None) -> dict[str, dict[str, list]]:
+        """改名刚做完时调一次：各步现算参数与产物条目比，只因 `*_fingerprint` 字段变了的，
+        把「条目记的旧值→现在的新值」记进改名标记的 `sealed`，`status` 据此认作改名带来的变化。
+        同一字段各页旧值不一致（本来就新旧混杂）的不封。`keys` 给了就只封这几个字段——**只封确实被改名改写了
+        来源文件的指纹**（如 `exclusions_fingerprint`：`crop_exclusions.jsonl` 里有格号）；`human_fingerprint`
+        读的是字形库 `v2:` 实例 id，改名不碰，它变了是改名前后真有新人裁，不该封。返回 {步: {字段: [旧, 新]}}，写回标记。"""
+        mk = self._rename_marker()
+        if not mk:
+            raise FileNotFoundError(f"{self._rename_marker_path()} 不存在：这册没改过名，不用封存")
+        pages = pages if pages is not None else self.book.resolve_pages("all")
+        steps, _ = self._default_steps(None)
+        out: dict[str, dict[str, list]] = {}
+        self._pcache = {}
+        try:
+            for sid in steps:
+                step = self.pipeline.step(sid)
+                now = param_parts(self._params(step), step.spec.soft_params, step.spec.path_params)
+                olds: dict[str, set] = {}
+                for pg in pages:
+                    _, entry = self.page_status(step, pg)
+                    if entry is None or entry.param_parts is None:
+                        continue
+                    for k in {*now, *entry.param_parts}:
+                        if now.get(k) != entry.param_parts.get(k):
+                            olds.setdefault(k, set()).add(entry.param_parts.get(k))
+                sealed = {k: [next(iter(v)), now.get(k)] for k, v in sorted(olds.items())
+                          if k.endswith(self.SEAL_SUFFIX) and len(v) == 1 and (keys is None or k in keys)}
+                if sealed:
+                    out[sid] = sealed
+        finally:
+            self._pcache = None
+        mk = {**mk, "sealed": out, "sealed_ts": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        self._rename_marker_path().write_text(json.dumps(mk, ensure_ascii=False, indent=1), encoding="utf-8")
+        self._rename_mk = mk
+        return out
+
+    def rename_only(self, step: Step, page: int, entry: ManifestEntry | None, code_ok: bool = False) -> bool:
+        """这一页过期只因册改名改写了上游产物：把现在的上游 sha 按改名对照表换回改写前的，指纹与条目逐位相同。
+        代码、参数、册配置有任何一样变了都对不上，照常过期。只给 `status` 用（`run` 照旧按指纹重跑）。
+        `code_ok`（同 `_page_status_row`）：换回后上游与条目记的相同、参数没变、产物记着正式版 cv_version，
+        代码或版本另外变了也算（就是「改名」＋「在跑它的那个版本下新鲜」两条叠加）。"""
+        inv = self._rename_inverse()
+        if not inv or entry is None or entry.invalidated:
+            return False
+        _, ups, ph = self.fingerprint(step, page)
+        if not ups:
+            return False
+        old = {k: inv.get(v, v) for k, v in ups.items()}
+        if entry.params_hash != ph and self._rename_params_ok(step, entry):
+            ph = entry.params_hash            # 参数只差封存过的改名变化：按条目记的参数比
+        elif old == ups:
+            return False
+        payload = {**_self_payload(step, self.book, ph), "upstream": old}
+        tok = ref_profile_token(step, self.book, page)
+        if tok:
+            payload["ref_profile"] = tok
+        if hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24] == entry.fingerprint:
+            return True
+        now = book_dep_values(step, self.book)
+        return (code_ok and (entry.upstream or {}) == old and entry.params_hash == ph
+                and (now is None or entry.book is None or entry.book == now)
+                and bool(_FORMAL_CV.match(entry.cv_version or "")))
+
     def stale_reason(self, step: Step, page: int, entry: ManifestEntry | None) -> str | None:
         """指纹对不上时说清是哪一样变了（#174）。按能分辨的粒度报：显式失效 > 册配置
         （`book_deps` 值，只有记过 `entry.book` 的条目才分得出）> 参数 > 上游产物 > 代码/版本。
@@ -711,9 +819,13 @@ class Engine:
         n_drift = 0
         reasons: dict[str, int] = {}
         code_only = 0
+        renamed = 0
         cv_versions: dict[str, int] = {}
         for pg in pages:
             st, entry = self.page_status(step, pg)
+            if st == STALE and self.rename_only(step, pg, entry, code_ok):
+                st = FRESH
+                renamed += 1
             if (code_ok and st == STALE and entry is not None and not entry.invalidated
                     and _FORMAL_CV.match(entry.cv_version or "")
                     and self.stale_reason(step, pg, entry) == "代码或版本变了"):
@@ -739,6 +851,8 @@ class Engine:
                             "elapsed": entry.elapsed if entry else None,
                             "error": entry.error if entry else None}
         row = {"counts": counts, "pages": per_page, "drift": n_drift, "stale_reasons": reasons}
+        if renamed:
+            row["rename_only"] = renamed          # 只因册改名改写了上游产物而过期、按新鲜算的页数
         if code_only:
             row["code_only"] = code_only
             row["cv_versions"] = cv_versions

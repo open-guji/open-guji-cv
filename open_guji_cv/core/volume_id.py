@@ -9,10 +9,15 @@
 ## 规定
 
 - 册序是整数，写在册 yaml 的 `volume:`；书 id 写在 `book_id:`（可写在工作区基础配置 `config/book_defaults.yaml`）。
-- **位数按全书册数定，全书统一，最少 2 位**（`volume_width:`，写在基础配置）：99 册以内 2 位，100–999 册 3 位。
-  R2 页表、IIIF、新书的 cv 册名都用这个位数（`vol_label`）。
-- book-text 章号（`chapter_of`）缺省同册号位数；已上线的书（殿本、北行）章号是 3 位，基础配置写
-  `chapter_width: 3`，不改——网站链接、精校票、待审单 rev 都挂在章号上。
+- **位数按全书总册数定，全书统一**（2026-11-27 用户定，取代 11-02 的「最少 2 位」）：1–9 册 1 位，10–99 册 2 位，
+  100–999 册 3 位（`width_for`）。写在基础配置 `volume_width:`；可另写 `volume_total:`（全书册数）供核对。
+- 一部书只有这一个位数：R2 页表、IIIF、新书 cv 册名、book-text 章号、待审单与 rev、进度表、网站地址都用它。
+  `chapter_width` 作废：没写就等于 `volume_width`；迁移期间还没改号的书（殿本、史記、脉经、北行、朱楓林集）
+  照旧写着，照旧生效，`chapter_mismatch` 为真。
+- **册的身份是整数册序，补零只是写法**：比对册号一律按数值（`same_volume`），1、01、001 是同一册。
+- 册名也按这个位数（新书 `1`、`01`、`001`；老书 11-27 起逐部改名：殿本 `vol01`→`01`、脉经 `01`→`1`、北行 `bxgb`→`1`…）。
+  改了名的册在 yaml 写 `aliases: [旧名]`，读事件时旧名换新名（`core/volume_alias`），旧记录不改写。
+- 没写 `volume_width` 的老书：册名纯数字的按册名长度，否则 2 位（不静默改号）。
 - 册 yaml 没写 `volume` 的老册：册名是 `volNN` 的按 NN 算（章号 3 位，与以前一样）；册名是纯数字的按数字算；
   都不是就认不出（返回 None），调用方要显式给 `--chapter`，**不再推成 `000`**。
 
@@ -27,7 +32,8 @@ from pathlib import Path
 _VOL = re.compile(r"vol(\d+)")
 _NUM = re.compile(r"\d+")
 LEGACY_CHAPTER_WIDTH = 3
-MIN_WIDTH = 2
+LEGACY_DEFAULT_WIDTH = 2    # 没写 volume_width、册名又不是纯数字的老书
+MIN_WIDTH = 1
 
 
 @dataclass(frozen=True)
@@ -46,14 +52,27 @@ class VolumeId:
     def chapter(self) -> str | None:
         return None if self.volume is None else vol_label(self.volume, self.chapter_width)
 
+    @property
+    def chapter_mismatch(self) -> bool:
+        """章号位数与册号位数不同（还没按 11-27 规矩迁移的书）。"""
+        return self.chapter_width != self.width
+
 
 def width_for(total: int) -> int:
-    """全书册数 → 册号位数（最少 2 位）。"""
-    return max(MIN_WIDTH, len(str(max(1, int(total)))))
+    """全书册数 → 册号位数：1–9 册 1 位，10–99 册 2 位，100–999 册 3 位（用户 11-27）。"""
+    return len(str(max(1, int(total))))
 
 
-def vol_label(n: int, width: int = MIN_WIDTH) -> str:
+def vol_label(n: int, width: int = LEGACY_DEFAULT_WIDTH) -> str:
     return str(int(n)).zfill(max(MIN_WIDTH, int(width)))
+
+
+def same_volume(a: str | int | None, b: str | int | None) -> bool:
+    """两个册号是否同一册：字面相同，或都是纯数字、数值相同（1、01、001 同一册）。"""
+    if a is None or b is None:
+        return False
+    a, b = str(a), str(b)
+    return a == b or (_NUM.fullmatch(a) is not None and _NUM.fullmatch(b) is not None and int(a) == int(b))
 
 
 def from_dict(book: str, d: dict | None) -> VolumeId:
@@ -68,7 +87,7 @@ def from_dict(book: str, d: dict | None) -> VolumeId:
         elif _NUM.fullmatch(book or ""):
             vol = int(book)
     vol = None if vol is None else int(vol)
-    width = int(d.get("volume_width") or (len(book) if _NUM.fullmatch(book or "") else MIN_WIDTH))
+    width = int(d.get("volume_width") or (len(book) if _NUM.fullmatch(book or "") else LEGACY_DEFAULT_WIDTH))
     cw = d.get("chapter_width")
     cw = int(cw) if cw else (LEGACY_CHAPTER_WIDTH if legacy else width)
     bid = d.get("book_id")
