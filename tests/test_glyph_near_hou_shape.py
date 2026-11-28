@@ -222,7 +222,7 @@ def test_glyph_near_hou_shape_end_to_end(tmp_path, models):
     sims1 = near["tbook:1:1:1"].methods[0].sims
     assert {c.char: c.evidence["b"]["hou_shape:hou"] for c in a.cands if "b" in c.evidence} == sims1
     for s in (1, 2, 3, 6):                                                  # 4d 取数处：每格 near.methods[方法名]
-        assert fin[f"tbook:1:1:{s}"].near == {"group": "hou", "trigger": "cands",
-                                              "methods": {"hou_shape": {**trail[s], "model": sha}}}
-    assert fin["tbook:1:1:4"].near["methods"]["hou_shape"]["error"] == "patch_missing"
+        assert fin[f"tbook:1:1:{s}"].near == {"hou": {"trigger": "cands",
+                                                      "methods": {"hou_shape": {**trail[s], "model": sha}}}}
+    assert fin["tbook:1:1:4"].near["hou"]["methods"]["hou_shape"]["error"] == "patch_missing"
     assert fin["tbook:1:1:5"].near == {}
