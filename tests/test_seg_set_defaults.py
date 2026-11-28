@@ -115,7 +115,8 @@ _COMMON_TAIL = ["cell_shrink", "glyph_match", "glyph_near", "rare_candidates", "
 _EXPECT = {
     "keben_body_v2": ["page_survey", "invert_detect", "border_detect", "seal_detect", "column_warp", "column_band", "column_end", "column_geometry", "row_segment", *_COMMON_TAIL],
     "modern_body": ["page_survey", "invert_detect", "line_detect", "column_crop", "row_segment_runs", *_COMMON_TAIL],
-    "keben_free": ["page_survey", "invert_detect", "block_detect", "column_trace", "line_ocr", "cell_cut"],
+    # 自由版式 2026-11-28 起接上 2e 以后（默认链第二期，free_to_cells）；1b–2d 各步与以前相同
+    "keben_free": ["page_survey", "invert_detect", "block_detect", "column_trace", "line_ocr", "cell_cut", "free_to_cells", *_COMMON_TAIL],
 }
 
 

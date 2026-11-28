@@ -1,0 +1,8 @@
+# 套书 zengguang_youxue（自由版式 layout: free 的缺省实现）的缺省参数（2026-11-28，默认链第二期接上 2e 以后时立）。
+# 参数层（低 → 高）：Step 默认 < 管线 yaml params: < 本文件 < 册配置 params: < 运行覆盖。
+# 只写 2e 以后骨架缺省步骤在自由版式下该换的值；1b–2d 的自由版式步骤一个没写（指纹不变）。
+params:
+  cell_shrink:
+    frame_guard: false        # 列图来自 free_to_cells，列端分栏线、框线已在转列图时抹掉；开着会把列末字的底横当框线剥
+    inner_frame_cut: false    # 整页拟双边版框内框细线是格网版式的做法；自由版式列图不是射影列，逆映射也不同
+    inner_frame_profile: false
