@@ -117,6 +117,33 @@ def _near_from_3b(ctx, page: int, method: str, model_path: str, by_pair: bool = 
     return got
 
 
+def _near_by_model_from_3b(ctx, page: int, method: str) -> dict:
+    """3b `glyph_near` 里某方法按「格 id＋该组模型指纹」取的原样结论：{(格 id, method_fingerprint): 证据（去 method）}。
+
+    给一个模型只管一对、证据里不带是哪一对的方法用（pair_shape：每对一个组，`methods_sha` 段 `<组>:pair_shape=<指纹>`）。
+    调用方拿自己的模型算指纹去查，查不到就本地现算（模型不是同一份时也查不到，不会混用）。"""
+    try:
+        pn = ctx.product("glyph_near", page)
+    except Exception:                      # noqa: BLE001 —— 可选上游：没有就全部本地现算
+        return {}
+    fp = {}
+    for x in (pn.methods_sha or "").split(";"):
+        g, _, rest = x.partition(":")
+        if rest.startswith(method + "="):
+            fp[g] = rest
+    got: dict = {}
+    for cn in getattr(pn, "columns", None) or []:
+        for nr in cn.chars or []:
+            if nr.group not in fp:
+                continue
+            for mo in nr.methods or []:
+                ev = mo.evidence or {}
+                if mo.method.split(":", 1)[0] != method or "error" in ev or "why" not in ev:
+                    continue
+                got[(nr.id, fp[nr.group])] = {k: v for k, v in ev.items() if k != "method"}
+    return got
+
+
 def _wu_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
     """嗚鳴 书级刻形判法（`groups.wu_shape`，`SeedAdmitParams.group_flow_wu_shape`）。紧接 rr_shape。→ 放行数净增。
 
@@ -298,6 +325,32 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
     pair = frozenset(model["chars"])
     miss = patch_missing if patch_missing is not None else {}
     veto_thr = model.get("veto_thr") if veto else None
+    near_on = "pair_shape" in (getattr(p, "group_flow_near_from_3b", None) or ()) and ctx is not None
+    near, want = {}, None
+    if near_on:
+        from ..groups.near_methods import method_fingerprint
+        near = _near_by_model_from_3b(ctx, page, "pair_shape")
+        want = method_fingerprint("pair_shape", {"path": model_path or p.group_flow_pair_shape, "pair": list(model["chars"])})
+    alt = ctx.alt_cols(page) if near_on and hasattr(ctx, "alt_cols") else frozenset()
+    tally = {"3b": 0, "local": 0, "alt": 0}
+
+    def _judge(c, r):
+        """3b 有这一格这一对的结论就用，没有本地现算；字块读不到且 patch_missing=skip → None。"""
+        v = near.get((r.id, want)) if c.col not in alt else None
+        if v is not None:
+            tally["3b"] += 1
+            return v
+        if near_on:
+            tally["alt" if c.col in alt else "local"] += 1
+        try:
+            img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
+        except PatchUnavailable:
+            if p.patch_missing != "skip":
+                raise
+            miss.setdefault(r.id, []).append("pair_shape")
+            return None
+        return pair_shape.judge(img, model)
+
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -306,14 +359,9 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             if r.admit:
                 if not veto_thr or r.char not in pair:
                     continue
-                try:
-                    img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-                except PatchUnavailable:
-                    if p.patch_missing != "skip":
-                        raise
-                    miss.setdefault(r.id, []).append("pair_shape")
+                v = _judge(c, r)
+                if v is None:
                     continue
-                v = pair_shape.judge(img, model)
                 if v["char"] and v["char"] != r.char and abs(v.get("score") or 0.0) >= veto_thr:
                     _demote(r, "pair_shape_veto")
                     r.evidence = {**(r.evidence or {}), "pair_shape": {k: v[k] for k in ("char", "why", "score", "other", "margin", "top") if k in v}}
@@ -340,14 +388,9 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             gp = (ev.get("group") or {}).get("pick")                  # 字组流程已给了别的字（解算有分歧）：不越过
             if gp and gp in pair:
                 continue
-            try:
-                img = _C._page_patch(ctx, page, c.col, r.slot, r.sub)
-            except PatchUnavailable:
-                if p.patch_missing != "skip":
-                    raise
-                miss.setdefault(r.id, []).append("pair_shape")
+            v = _judge(c, r)
+            if v is None:
                 continue
-            v = pair_shape.judge(img, model)
             trail = {k: v[k] for k in ("char", "why", "nn", "score", "other", "margin", "top") if k in v}
             if nm:
                 trail["nm_5b"] = nm_5b.get(r.id)
@@ -357,6 +400,8 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             r.evidence = {**ev, "pair_shape": trail, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "pair_shape", "match", []
             delta += 1
+    if near_on and hasattr(ctx, "log"):
+        _log_tally(ctx, page, "pair_shape", tally)
     return delta
 
 

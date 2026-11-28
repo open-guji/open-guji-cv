@@ -17,6 +17,7 @@ from open_guji_cv.steps.seed_admit_shapes import _rr_shape_pass
 from test_glyph_near_rr_shape import _probe_imgs, _write_model, model_file  # noqa: F401
 from test_glyph_near_hou_shape import models  # noqa: F401
 from test_glyph_near_part_shape import model as part_model  # noqa: F401
+from test_glyph_near_pair_shape import models as pair_models  # noqa: F401
 
 
 def _recs(n):
@@ -222,3 +223,46 @@ def test_part_shape_read_3b_same_as_local(part_model, k, admitted):  # noqa: F81
                    columns=[ColumnNear(col=1, chars=chars)])
     with pytest.raises(ValueError, match="不是同一份"):
         run(_Ctx(imgs, bad, set(range(n))), True)
+
+
+# ── pair_shape（每对一个组、证据不带对，CV3 #2015）：按 (格 id, 本组模型指纹) 取；待审补放与 veto 两处都读 ──────
+
+@pytest.mark.parametrize("k", ["zy", "zy_guard", "dt", "dt_multi"])
+@pytest.mark.parametrize("which", [0, 1])
+def test_pair_shape_read_3b_same_as_local(pair_models, k, which):  # noqa: F811
+    from open_guji_cv.steps.seed_admit_shapes import _pair_shape_pass
+    from test_glyph_near_pair_shape import CHARS, IMGS
+
+    a, b = CHARS[k]
+    ch = (a, b)[which]
+    imgs = IMGS[k]()
+    n = len(imgs)
+
+    def recs():
+        return [NS(id=f"b:1:1:{i + 1}", slot=i + 1, sub=None, char=ch, admit=False, evidence={}, provenance="match",
+                   channel="", doubts=[]) for i in range(n)]
+
+    def run(ctx, on):
+        rs = recs()
+        p = NS(group_flow_pair_shape=str(pair_models[k]), patch_missing="error",
+               group_flow_near_from_3b=["pair_shape"] if on else [])
+        d = _pair_shape_pass(p, [NS(col=1, chars=rs)], {r.id: (ch,) for r in rs}, ctx, 1)
+        return d, [(r.char, r.admit, r.channel, copy.deepcopy(r.evidence)) for r in rs]
+
+    base = run(_Ctx(imgs, None, set(range(n))), False)
+    spec = {"path": str(pair_models[k]), "pair": [a, b]}
+    outs = NM.load_method("pair_shape", spec).score(imgs, "b")
+    covered = {0, n - 1}
+    chars = [NearRec(id=r.id, slot=r.slot, group="g", trigger="cands",
+                     methods=[NearMethodOut(method="pair_shape:g", sims=o["sims"], evidence=o["evidence"])])
+             for i, (r, o) in enumerate(zip(recs(), outs)) if i in covered]
+    # 同页另有一组别的模型（指纹不同）：不该被取到
+    sha = "g:" + NM.method_fingerprint("pair_shape", spec) + ";h:pair_shape=0000000000000000"
+    near = PageNear(page=1, methods_sha=sha, columns=[ColumnNear(col=1, chars=chars)])
+    ctx = _Ctx(imgs, near, set(range(n)) - covered)
+    assert run(ctx, True) == base
+    assert "pair_shape 判法结果 读 3b 2" in ctx.logs[0]
+    # 3b 的模型不是这一份：一条也取不到，全部本地现算，结果照旧
+    other = PageNear(page=1, methods_sha="g:pair_shape=0000000000000000", columns=[ColumnNear(col=1, chars=chars)])
+    ctx2 = _Ctx(imgs, other, set(range(n)))
+    assert run(ctx2, True) == base and "读 3b 0" in ctx2.logs[0]
