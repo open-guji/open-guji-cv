@@ -457,6 +457,55 @@ def cmd_rename_seal(args) -> None:
         print(f"  {sid:16s} 封存 " + "、".join(f"{k} {a}→{b}" for k, (a, b) in kv.items()))
 
 
+def _migrate_convert(eng):
+    """`decide migrate-name` 的指纹换算：对改名后的新名 Step 重算指纹，**只有上游（除收尾自己的 sha）与参数都没变的页才换**，
+    别的页保持原样、照常过期。"""
+    from .core.decide_names import LEGACY_ADMIT_STEP, NEW_ADMIT_STEP
+    from .core.spec import page_key  # noqa: F401
+    from .core.step import STEPS
+
+    def convert(step_id, key, entry):
+        step = STEPS.get(step_id)
+        if step is None or not key.startswith("p"):
+            return {}
+        eng.store._manifests.clear()                       # 收尾 manifest 刚改过，别读旧缓存
+        try:
+            page = int(key[1:])
+            fp, ups, ph = eng.fingerprint(step, page)
+        except Exception:                                  # noqa: BLE001 —— 算不出就不换，照常过期
+            return {}
+        if fp is None or ph != entry.params_hash:
+            return {}
+        old_up = {(NEW_ADMIT_STEP if k == LEGACY_ADMIT_STEP else k): v for k, v in (entry.upstream or {}).items()}
+        if {k: v for k, v in (ups or {}).items() if k != NEW_ADMIT_STEP} != {k: v for k, v in old_up.items() if k != NEW_ADMIT_STEP}:
+            return {}
+        return {"fingerprint": fp, "self_hash": eng.self_hash(step), "upstream": ups}
+    return convert
+
+
+def cmd_migrate_name(args) -> None:
+    """收尾步 `seed_admit/` → `char_decide/` 原地改名迁移（只改名不删、指纹按新名换算、留 sha 清单；见 products/migrate_final.py）。"""
+    from .core.decide_names import NEW_ADMIT_STEP
+    from .core.step import STEPS
+    from .products.migrate_final import migrate, plan
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    root = eng.store.root
+    if args.dry_run:
+        rep = plan(root, args.book)
+        rep.pop("sha_before", None)
+    elif NEW_ADMIT_STEP not in STEPS:
+        raise SystemExit("本版 cv 的收尾 Step 还叫 seed_admit（产物仍写 seed_admit/），改名那一版发出后才能迁；现在只能 --dry-run 看计划")
+    else:
+        rep = migrate(root, args.book, convert=_migrate_convert(eng))
+        rep = {k: v for k, v in rep.items() if k not in ("sha_before", "sha_after")}
+    if args.json:
+        print(json.dumps(rep, ensure_ascii=False))
+        return
+    print(f"{args.book}：{rep['state']}，{rep.get('pages', 0)} 页" + (f"；下游 {', '.join(rep['downstream'])}" if rep.get("downstream") else ""))
+    if rep["state"] == "migrated":
+        print(f"  改键 {rep['pages_changed']} 页，换算指纹 {rep['fingerprint_converted']} 条；sha 清单见 {root / args.book / '_migrate_char_decide.json'}")
+
+
 def cmd_status(args) -> None:
     eng = _engine(args.book, args.pipeline, quiet=True)
     _guard_cv_version(eng.book, warn_only=True)
@@ -470,6 +519,10 @@ def cmd_status(args) -> None:
         print(json.dumps(st, ensure_ascii=False))
         return
     print(f"{st['book']} · {st['pipeline']} · {len(pages)} 页")
+    from .core.decide_names import ADMIT_STEPS, both_dirs_exist
+    if both_dirs_exist(eng.store.root, eng.book.id):
+        print(f"  ⚠ 收尾步新旧目录并存（{' 与 '.join(s + '/' for s in ADMIT_STEPS)}）：读产物以 {ADMIT_STEPS[0]}/ 为准，"
+              f"{ADMIT_STEPS[1]}/ 只在没有新目录时读；查清后删掉多余那份（或 `guji-cv decide migrate-name`）")
     if getattr(eng.book, "glyph_pin", None):
         from .core.glyph_pin import pin_state
         ps = pin_state(eng.book) or {}
@@ -907,6 +960,7 @@ COMMANDS_V2 = {
     "step": cmd_step,
     "status": cmd_status,
     "rename-seal": cmd_rename_seal,
+    "migrate-name": cmd_migrate_name,
     "book": cmd_book,
     "rare": cmd_rare,
     "variants": cmd_variants,
@@ -1368,6 +1422,12 @@ def register_subcommands(sub: argparse._SubParsersAction, plugins: bool = True) 
     p.add_argument("--json", action="store_true")
     _add_override(p)
 
+    p = sub.add_parser("migrate-name", help="收尾步产物原地改名 seed_admit/→char_decide/（只改名不删，换算指纹，留 sha 清单）")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--dry-run", action="store_true", help="只看计划（本版只能 dry-run：收尾 Step 改名那一版才能真迁）")
+    p.add_argument("--json", action="store_true")
+
     p = sub.add_parser("book", help="册配置：show 看合并后的生效配置与来源层；split 把一组册相同的部分抽成基础配置")
     p.add_argument("action", choices=["show", "split"])
     p.add_argument("book", nargs="?", default=None, help="show：册号")
@@ -1408,7 +1468,7 @@ STAGE_COMMANDS: dict[str, tuple[str, ...]] = {
     "layout": ("survey", "preclean", "split", "locate-gutter", "calibrate", "binarize"),
     "cut": (),
     "read": ("rare", "calibrate-font", "witness-align", "witness-align-stream", "seed-witness"),
-    "decide": ("variants",),
+    "decide": ("variants", "migrate-name"),
 }
 
 

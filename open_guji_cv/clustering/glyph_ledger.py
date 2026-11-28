@@ -36,6 +36,8 @@ import sqlite3
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from ..core.decide_names import final_dir, final_page_dict
+
 #: CJK 部首补充区起点。semantic/reading 低于它的单字（拉丁字母、数字）都是
 #: 输入法没转出汉字的脏值（2026-09-04 前的事件里有「l」「m」这类）。
 _CJK_MIN = 0x2E80
@@ -670,11 +672,11 @@ def _latest_confirms(root: Path) -> dict[str, dict]:
 def _pipeline_decisions(book_dirs: list[Path]) -> dict[str, dict]:
     out = {}
     for d in book_dirs:
-        f_dir = d / "seed_admit"
-        if not f_dir.is_dir():
+        f_dir = final_dir(d.parent, d.name)               # char_decide/ 优先，其次 seed_admit/
+        if f_dir is None:
             continue
         for f in sorted(f_dir.glob("p*.json")):
-            doc = json.load(open(f, encoding="utf-8"))["seed_admit"]
+            doc = final_page_dict(json.load(open(f, encoding="utf-8")))
             for c in doc.get("columns", []):
                 for ch in c.get("chars", []):
                     out[ch["id"]] = {"admit": ch.get("admit"), "char": ch.get("char"),
