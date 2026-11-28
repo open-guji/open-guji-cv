@@ -248,18 +248,19 @@ FRAME_EDGE_ROW = 0.5
 
 def frame_only_edge_cells(gray: np.ndarray, spans: list[tuple[float, float]], content_x: tuple[float, float] | None,
                           border_top: float | None, border_bottom: float | None, period: float,
-                          ink_threshold: int = 128) -> list[int]:
+                          ink_threshold: int = 128, near_frac: float = FRAME_EDGE_NEAR) -> list[int]:
     """列图上物理首、末格（`spans`：一列全部格按 y 排好的 (y0, y1)）里的墨只是上／下版框线 → 返回下标（0 或末位）。
     已经是空格的由调用方跳过。
 
-    首格对 `border_top`、末格对 `border_bottom`（列图坐标）；那条框线没给（None）就不查那一端。"""
+    首格对 `border_top`、末格对 `border_bottom`（列图坐标）；那条框线没给（None）就不查那一端。
+    `near_frac`：墨离框线最远多少格高（缺省 FRAME_EDGE_NEAR；row_segment 书级参数 `frame_edge_near`）。"""
     if not spans:
         return []
     h, w = gray.shape[:2]
     x0, x1 = (int(content_x[0]), int(content_x[1])) if content_x else (0, w)
     x0, x1 = max(0, x0), min(w, max(x1, x0 + 1))
     row = (gray[:, x0:x1] < ink_threshold).sum(axis=1) / float(x1 - x0)
-    near = FRAME_EDGE_NEAR * (period or 1.0)
+    near = near_frac * (period or 1.0)
     out: list[int] = []
     for i, border in ((0, border_top), (len(spans) - 1, border_bottom)):
         if border is None or i in out:
