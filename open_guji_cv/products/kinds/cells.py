@@ -168,5 +168,5 @@ class PageCells(BaseModel):
 
 
 CELLS = register_kind(ProductKindSpec(
-    id="cells", title="Step3 字格", storage="numeric", unit="column",
+    id="cells", title="2d 字格", storage="numeric", unit="column",
     schema=PageCells, coord_space=COLUMN_PX))

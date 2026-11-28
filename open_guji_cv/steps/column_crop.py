@@ -34,7 +34,7 @@ class ColumnCropParams(BaseModel):
 @register_step
 class ColumnCropStep(Step):
     spec = StepSpec(
-        id="column_crop", title="Step2 单列裁剪 + 去噪（现代印刷）", version="1.1", unit="column",
+        id="column_crop", title="2a 单列裁剪 + 去噪（现代印刷）", version="1.1", unit="column",
         consumes=("raw_page", "borders", "border_detect_gate_manifest", "line_index"),
         produces=("column_windows", "column_raw", "column_image"),
         params=ColumnCropParams,
