@@ -6,6 +6,8 @@
     p_map: {cut: …, border: …, residue: …, …}                 其他特征的概率；只放有校准来源的键
     p_src: "near:cnn_small:gong"                               p 从哪来
     traits: {cut: 0.12, border: 0.8, …}                        3d 原始分（未校准；3d 没跑不落盘）
+    near: {group, trigger, methods: {方法名: {method, …, model}}} 3b 各方法这一格的证据原样＋模型版本（3b 没触发不落盘；
+                                                               rr_shape 是 {char, why, nn, score, geo}，同第四步 rr_shape.judge）
 
 **第三步不判断放不放行**，第四步只读这里的 p 定放行（Sheldon 11-26）。
 
@@ -50,9 +52,10 @@ def match_algo(gp) -> str:
 
 
 def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, cand_rec=None, cand_k: int = 10,
-               traits_rec=None) -> FinalRec:
+               traits_rec=None, near_models: dict | None = None) -> FinalRec:
     """一格：3a 记录 ＋（可选）3b、3c、3d 记录 → FinalRec。`calibrators`：{方法全名: 方法对象}（有 `calibrate`）。
-    3d `traits_rec` 的原始分原样放进 `traits`（未校准，不进 `p_map`）。"""
+    3d `traits_rec` 的原始分原样放进 `traits`（未校准，不进 `p_map`）。3b 各方法的证据原样放进 `near.methods[方法名]`，
+    `near_models`（3b 产物的 `PageNear.models`）给了就带上 `model`。"""
     cands: dict[str, FinalCand] = {}
     order: list[str] = []
     for c, s in (match_rec.candidates or [])[:topk]:
@@ -102,7 +105,18 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
             fc.p = None
     out = sorted(cands.values(), key=lambda fc: (-(fc.p if fc.p is not None else -1.0), rank[fc.char]))
     traits = dict(traits_rec.scores) if traits_rec is not None else {}
-    return FinalRec(id=match_rec.id, slot=match_rec.slot, sub=match_rec.sub, cands=out, p_src=p_src, traits=traits)
+    near: dict = {}
+    if near_rec is not None:
+        meth = {}
+        for mo in near_rec.methods:
+            name = mo.method.split(":", 1)[0]
+            rec = {"method": name, **mo.evidence}
+            if near_models and mo.method in near_models:
+                rec["model"] = near_models[mo.method]
+            meth[name] = rec
+        near = {"group": near_rec.group, "trigger": near_rec.trigger, "methods": meth}
+    return FinalRec(id=match_rec.id, slot=match_rec.slot, sub=match_rec.sub, cands=out, p_src=p_src, traits=traits,
+                    near=near)
 
 
 @register_step
@@ -145,7 +159,8 @@ class GlyphAnalyzerStep(Step):
         algo = match_algo(ctx.params_for(STEPS["glyph_match"]))
 
         cols = [ColumnFinal(col=cm.col, chars=[merge_cell(r, near_by.get(r.id), calibrators, p.topk, algo, cand_by.get(r.id),
-                                                          traits_rec=traits_by.get(r.id))
+                                                          traits_rec=traits_by.get(r.id),
+                                                          near_models=near.models if near is not None else None)
                                                for r in cm.chars])
                 for cm in match.columns]
         return {"glyph_analyzer": PageFinal(page=page, model=MODEL, columns=cols)}

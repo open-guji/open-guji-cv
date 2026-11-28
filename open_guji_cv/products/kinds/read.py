@@ -45,6 +45,16 @@ class PageNear(BaseModel):
     #: 收尾 `glyph_analyzer` 跟着过期
     methods_sha: str = ""
     columns: list[ColumnNear] = Field(default_factory=list)
+    #: 本页跑过的方法用的模型版本 {"方法:组": 模型 sha}（方法的 `model_sha`；rr_shape 等从第四步搬来的判法与第四步
+    #: 参数指纹里那一段同算法，如 rr_shape＝模型文件 sha256 前 16 位，4d 拿它对书配置 `group_flow_rr_shape`）。空的不落盘
+    models: dict[str, str] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_models(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not d.get("models"):
+            d.pop("models", None)
+        return d
 
     def by_id(self) -> dict[str, NearRec]:
         return {r.id: r for c in self.columns for r in c.chars}
@@ -95,12 +105,18 @@ class FinalRec(BaseModel):
     #: 3d `cell_traits` 的原始分 {键: 分}（cut、border、residue、stain、merged、blank…；未校准、**不是概率**，
     #: 标定以后才进 `p_map`）。3d 没跑为空，空的不落盘（没开 3d 的书收尾产物逐字节不变）。
     traits: dict[str, float] = Field(default_factory=dict)
+    #: 3b 触发了的格：`{group, trigger, methods: {方法名: {method, …方法证据原样, model}}}`（2026-11-28，给 4d 取看图判法结果；
+    #: rr_shape 的证据是 `{char, why, nn, score, geo}`，与第四步 `rr_shape.judge()` 同键同值）。没触发为空，空的不落盘
+    near: dict = Field(default_factory=dict)
 
     @model_serializer(mode="wrap")
     def _drop_empty_traits(self, handler):
         d = handler(self)
-        if isinstance(d, dict) and not d.get("traits"):
-            d.pop("traits", None)
+        if isinstance(d, dict):
+            if not d.get("traits"):
+                d.pop("traits", None)
+            if not d.get("near"):
+                d.pop("near", None)
         return d
 
 
