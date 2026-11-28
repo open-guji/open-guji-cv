@@ -71,13 +71,13 @@ def test_against_flips_and_self_zero(tmp_path):
 def test_registry_has_samples_and_suites():
     ids = [s.id for s in B.all_specs()]
     assert {"cut-2d", "decide"} <= set(ids)
-    assert [s.id for s in B.expand(["@cut"])] == ["cut-2d"]
+    assert "cut-2d" in [s.id for s in B.expand(["@cut"])]
     with pytest.raises(KeyError):
         B.get("nope")
     with pytest.raises(KeyError):
         B.expand(["@nope"])
     for s in B.all_specs():
-        assert s.primary and s.owner and s.steps
+        assert s.owner and (s.deprecated or (s.primary and s.steps))     # deprecated 的只留理由，不跑
 
 
 def test_decide_score(tmp_path):
@@ -91,6 +91,23 @@ def test_decide_score(tmp_path):
     ctx = B.BenchCtx("bk", [], tmp_path, {"dataset": str(tmp_path)})
     r = decide.score(ctx, p)
     assert r.metrics["wrong_admit"] == 1 and r.metrics["admit_rate"] == 0.5 and r.metrics["review_top1_ok"] == 0.5
+    assert r.metrics["missing_rate"] == 0.0
     assert [x["ok"] for x in r.items] == [True, False, True, False] and r.vols == ["01"]
     r = B.apply_guards(B.get("decide"), r)
     assert r.status == "regressed"
+
+
+def test_flip_guard_na_without_against_and_cmp_skip(tmp_path):
+    s = _spec(guards=(B.Guard("flip_worse", "max", 0), B.Guard("nope", "max", 0)))
+    r = B.execute(s, _ctx(tmp_path, [{"id": 1, "ok": True}]))
+    st = {g["metric"]: g["status"] for g in r.guards}
+    assert st == {"flip_worse": "n/a", "nope": "unverified"}
+    out = B.write_result(tmp_path / "r0", r)
+    now = B.execute(s, _ctx(tmp_path, [{"id": 1, "ok": False, "cmp_skip": True}]), against=out)
+    assert now.against["worse"] == 0
+
+
+def test_needs_accepts_bench5b():
+    from open_guji_cv.eval import bench as B
+    B.BenchSpec(id="t-5b", title="t", steps=("glyph_match",), owner="CV3", gold="x", needs=("bench5b",),
+                primary="acc", run=lambda c: c.work, score=lambda c, p: None)

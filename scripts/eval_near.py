@@ -528,6 +528,7 @@ def main() -> None:
     ap.add_argument("--fit-calib", help="拟合临时校准表写到这里（按 <工作区 id>/<模型相对路径> 放）")
     ap.add_argument("--books")
     ap.add_argument("--repeat", type=int, default=50, help="每个方法再打一遍分比逐位相同的格数（0 不比）")
+    ap.add_argument("--rows", help="test 册逐格结果（标签落在方法能分的字里的格）写到这个 jsonl（`guji bench` 翻转清单用）")
     a = ap.parse_args()
 
     shard = Path(a.shard)
@@ -538,6 +539,7 @@ def main() -> None:
     report = {"bench": "near-bench/1", "bench_version": bench.get("version"), "cv": cv_version(),
               "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "books": {}}
     calibs = {}
+    rows_out: list[dict] = []
     for bk, spec in bench["books"].items():
         if want and bk not in want:
             continue
@@ -552,6 +554,7 @@ def main() -> None:
         rep, st = run_book(shard, bk, spec, data, circular, Path(a.calib_dir) if a.calib_dir else None, a.repeat)
         rep["seconds"] = round(time.time() - t0, 1)
         report["books"][bk] = rep
+        rows_out += test_rows(bk, st["test"])
         if a.fit_calib:
             calibs[bk] = fit_calibs(bk, spec, st, Path(a.fit_calib))
         print(f"{bk}: {rep['seconds']}s", flush=True)
@@ -560,10 +563,27 @@ def main() -> None:
     report["headline"] = headline(report)
     if calibs:
         report["temp_calib"] = {"version": CALIB_VERSION, "dir": a.fit_calib, "books": calibs}
+    if a.rows:
+        Path(a.rows).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows_out), encoding="utf-8")
     s = json.dumps(report, ensure_ascii=False, indent=1)
     if a.out:
         Path(a.out).write_text(s + "\n", encoding="utf-8")
     summary(report)
+
+
+def test_rows(bk: str, rows_by: dict) -> list[dict]:
+    """test 册逐格（只要标签落在方法能分的字里的格）：`id`＝`书:组:方法:格`，`ok`＝判出字且判对（弃权、判错都算不对）。"""
+    out = []
+    for (gid, name), rows in sorted(rows_by.items()):
+        for r in rows:
+            if not r["in_scope"]:
+                continue
+            mf = r["mf"]
+            ok = (not r["abstain"]) and r["pick"] is not None and canon(r["pick"], mf) == canon(r["truth"], mf)
+            out.append({"id": f"{bk}:{gid}:{name}:{r['id']}", "ok": ok, "group": gid, "method": name,
+                        "truth": r["truth"], "pick": r["pick"], "abstain": bool(r["abstain"]),
+                        "wrong": (not r["abstain"]) and r["pick"] is not None and not ok})
+    return out
 
 
 def headline(rep: dict) -> list[dict]:

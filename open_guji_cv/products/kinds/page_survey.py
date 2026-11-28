@@ -22,14 +22,14 @@ from ...core.step import register_kind
 
 
 class PageSurvey(BaseModel):
-    page: int
-    width: int
-    height: int
-    median_width: float
-    median_height: float
+    page: int   # 页号
+    width: int   # 原图宽 px
+    height: int   # 原图高 px
+    median_width: float   # 本册页宽中位数 px
+    median_height: float   # 本册页高中位数 px
     ratio_w: float
     """`width / median_width`。"""
-    ratio_h: float
+    ratio_h: float   # `height / median_height`
     odd: bool = False
     """宽或高偏离本册中位数超过阈值（缺省 1.3×/0.7×，见 `PageSurveyParams`）。"""
     kind: str | None = None
@@ -40,7 +40,7 @@ class PageSurvey(BaseModel):
     whitelisted: bool = False
     """命中书 yaml 白名单（`params.page_survey.whitelist`）时为真：`odd` 照记，
     但闸不拦（无论 `block` 开关开没开）。"""
-    whitelist_reason: str = ""
+    whitelist_reason: str = ""   # 白名单理由（`whitelisted` 为真时必填，空串＝没配）
 
 
 PAGE_SURVEY = register_kind(ProductKindSpec(

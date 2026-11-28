@@ -22,7 +22,8 @@ from typing import Any, Callable
 SCHEMA = 1
 STATUSES = ("ok", "regressed", "skipped", "no_gold", "failed")   # failed：跑崩了（不是结论，护栏按不过算）
 #: 资源种类（manager 按这些取，填进 ctx.res 的同名键）
-NEEDS = ("gold", "config", "code", "raw", "products", "glyph_lib", "models", "corpus", "torch", "gpu", "ocr")
+#: bench5b：5b 评测集 cache/glyph_bench、oov_bench（不进数据集仓，manager 按钉死 sha 从冻结包 train_bundle.zip 解；GM2 11-28）
+NEEDS = ("gold", "config", "code", "raw", "products", "glyph_lib", "models", "corpus", "bench5b", "torch", "gpu", "ocr")
 
 
 @dataclass(frozen=True)
@@ -131,7 +132,8 @@ def apply_guards(spec: BenchSpec, r: BenchResult) -> BenchResult:
     """按登记的护栏逐条判；任一条越线 → regressed。护栏阈值以 dataset `guards/` 为准时由调用方传进 extra。"""
     for g in spec.guards:
         v = r.metrics.get(g.metric)
-        st = g.check(v)
+        # 翻转类护栏只在带 --against 时有意义；不带就记 n/a（不是 ok，也不算没验到）
+        st = "n/a" if (v is None and g.metric.startswith("flip_") and r.against is None) else g.check(v)
         r.guards.append({"metric": g.metric, "dir": g.dir, "limit": g.limit, "value": v, "status": st})
         if st == "regressed" and r.status == "ok":
             r.status = "regressed"
@@ -139,13 +141,14 @@ def apply_guards(spec: BenchSpec, r: BenchResult) -> BenchResult:
 
 
 def compare(spec: BenchSpec, now: list[dict], before: list[dict]) -> dict:
-    """逐样本比：对→错算变坏，错→对算好转，两边都在但别的字段变了算其他。"""
+    """逐样本比：对→错算变坏，错→对算好转，两边都在但别的字段变了算其他。
+    任一边带 `cmp_skip`（如 decide 的缺格：切分变了格对不上）的样本不比，另由缺格率之类的指标管。"""
     k, ok = spec.item_key, spec.item_ok
     old = {x[k]: x for x in before}
     better, worse, other = [], [], []
     for x in now:
         y = old.get(x[k])
-        if y is None:
+        if y is None or x.get("cmp_skip") or y.get("cmp_skip"):
             continue
         if bool(y.get(ok)) and not bool(x.get(ok)):
             worse.append(x[k])

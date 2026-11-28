@@ -39,6 +39,7 @@ def main() -> int:
     ap.add_argument("--with-hog", action="store_true")
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--json", default=None, help="结果写到这个文件（对比历次用）")
+    ap.add_argument("--rows", default=None, help="逐条 emb 结果写到这个 jsonl（`guji bench` 翻转清单用）")
     ap.add_argument("--gw", action="store_true",
                     help="开 GlyphWiki 变体形模板档（cnn_candidates.GW_ENABLED，缺省关）做对照；"
                          "T4 变体形转正（2026-09-27）加，配合 --no-gw 一起跑闸线前后对比")
@@ -147,6 +148,12 @@ def main() -> int:
         print(f'  emb / {st:<12} n={len(idx):4d}  top1={t1/len(idx)*100:5.1f}%  '
               f'top10={t10/len(idx)*100:5.1f}%')
 
+    if a.rows:
+        with open(a.rows, "w", encoding="utf-8") as fh:
+            for i, it in enumerate(items[:n]):
+                fh.write(json.dumps({"id": it.get("id") or f"#{i}", "char": G[i], "ok": _hitk(emb[i], G[i], a.k),
+                                     "top1": _hit1(emb[i], G[i]), "emb": emb[i][:a.k], "strata": it.get("strata", [])},
+                                    ensure_ascii=False) + "\n")
     if a.json:
         Path(a.json).write_text(json.dumps(
             {"charset": a.charset, "ckpt": a.ckpt or str(DEFAULT_CKPT),

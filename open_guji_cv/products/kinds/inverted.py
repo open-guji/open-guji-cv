@@ -28,10 +28,10 @@ class InvertedBand(BaseModel):
 
 
 class PageInverted(BaseModel):
-    page: int
-    width: int
-    height: int
-    bands: list[InvertedBand] = Field(default_factory=list)
+    page: int   # 页号
+    width: int   # 原图宽 px
+    height: int   # 原图高 px
+    bands: list[InvertedBand] = Field(default_factory=list)   # 本页疑似反色带，无则空表；只送审，不自动修
 
 
 INVERTED = register_kind(ProductKindSpec(
