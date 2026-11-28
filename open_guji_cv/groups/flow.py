@@ -749,10 +749,13 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                     cfg: FlowConfig, ctx_fn: Callable[[list, int, int], str] | None = None,
                     patch_fn: Callable[[str], object] | None = None,
                     canon: Callable[[str], str] = lambda c: c,
-                    veto_refs: dict[str, str] | None = None) -> FlowResult:
+                    veto_refs: dict[str, str] | None = None,
+                    pre_entry: dict[str, tuple | list | None] | None = None) -> FlowResult:
     """`seq`：本页读序展平的放行记录；`amap`：{id: (整理本字, op)}；`cands_of(id)`：库候选 [(字, cov)]；
     `blocked(r)`：硬护栏（遮挡、超时、排除、非字…），True 的格不进流程。就地改 `seq` 里的记录。
-    `veto_refs`：{id: 坐标对位字}，只在现役对位缺这一格时用来拦补放（`cfg.lift_ref_guard`），不参与判字。"""
+    `veto_refs`：{id: 坐标对位字}，只在现役对位缺这一格时用来拦补放（`cfg.lift_ref_guard`），不参与判字。
+    `pre_entry`：{id: (组, 方式)|None}，4d `group_decision` 按待审口径（没放行、不是人裁）预算好的入口归属；只给**这一刻仍是待审口径**的格用
+    （没放行、非人裁、非字组通道），已放行格的复核入口读最终放行字，仍现算。不给＝全部现算（缺省，逐字节同旧）。"""
     if cfg.ref_alias:                        # 书级整理本字别名（全唐文 間→閒：本书只刻 閒，整理本 間 不算异议）
         al = cfg.ref_alias
         amap = {k: ((al.get(v[0], v[0]),) + tuple(v[1:])) if v and v[0] else v for k, v in amap.items()}
@@ -765,7 +768,11 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             continue
         cands = cands_of(r.id) or []
         ref = (amap.get(r.id) or (None, None))[0]
-        e = entry(r, cands, ref, cfg, canon, coord_ref=(veto_refs or {}).get(r.id))
+        if (pre_entry is not None and r.id in pre_entry and not r.admit
+                and r.provenance != "human" and r.channel not in ("human", CHANNEL)):
+            e = tuple(pre_entry[r.id]) if pre_entry[r.id] else None
+        else:
+            e = entry(r, cands, ref, cfg, canon, coord_ref=(veto_refs or {}).get(r.id))
         if e is not None:
             entries[i] = (cands, ref, e)
             f = GROUPS[e[0]].flow
