@@ -1158,6 +1158,8 @@ class SeedAdmitStep(Step):
                 n_auto += d_pr
                 n_review -= d_pr
             if p.fold_groups:
+                # 保留内联回退（C2 查过，不删）：group_decision 缺省关，配了 fold_groups 没开 4d 的书靠 char_index 现算宽高，
+                # 删了日曰宽高判断会悄悄失效（Sheldon：宽高判断按书决定）。要删须先定「4d 缺省开」。
                 _gd = _opt(ctx, "group_decision", page)          # 4d（P3c）：字框宽高存在产物里就读它，没有就从 char_index 现算
                 _ci = _opt(ctx, "char_index", page) if (p.fold_aspect and not (_gd is not None and "wh" in _gd.ran)) else None
                 d_fd = _fold_pass(p, out, amap, mmap,
