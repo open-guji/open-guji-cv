@@ -1580,8 +1580,8 @@ class SeedAdmitParams(BaseModel):
 
     read_3c: bool = False
     """「按图首位」读口（`rare_ref`、`symbol_review`、`group_flow_pair_shape_nm_5b`）改读 3c `glyph_candidate` 首位，不读 5-b `rare_candidates`
-    （A7，2026-11-28）。**缺省关、关时不进参数 dump**，产物逐字节同。用分数／来源／阈值的通道（`rare_ref_sparse`、`solo_5b_cov`、
-    `book_lanes`、`ref_lib_5b_veto`、shadow_veto）仍读 5-b，阈值按 5-b 标的，换余弦要重标，本开关不动它们。"""
+    （A7，2026-11-28）；`solo_5b_cov` 只用 5-b 首位字、没有分数阈值，后一并入（3c 余弦首位）。**缺省关、关时不进参数 dump**，产物逐字节同。
+    用分数／来源／阈值的通道（`rare_ref_sparse`、`ref_lib_5b_veto`、shadow_veto）仍读 5-b，阈值按 5-b 标的，换余弦要重标，本开关不动它们。"""
 
     @property
     def rare_ref_5b(self) -> bool:
@@ -1593,9 +1593,14 @@ class SeedAdmitParams(BaseModel):
         return bool(self.symbol_review) and not self.read_3c
 
     @property
+    def solo_5b_5b(self) -> bool:
+        return self.solo_5b_cov is not None and not self.read_3c
+
+    @property
     def cand_3c_on(self) -> bool:
         """给 `optional_consumes_when`：改读 3c 且有读口在用。"""
-        return self.read_3c and bool(self.rare_ref or self.symbol_review or self.group_flow_pair_shape_nm_5b)
+        return self.read_3c and bool(self.rare_ref or self.symbol_review or self.group_flow_pair_shape_nm_5b
+                                     or self.solo_5b_cov is not None)
 
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler, info):

@@ -335,7 +335,7 @@ class SeedAdmitStep(Step):
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("rare_candidates", "glyph_candidate", "seals", "glyph_analyzer", "cell_state", "glyph_near", "group_decision"),
         optional_consumes_when=(("rare_candidates", "rare_ref_5b"), ("rare_candidates", "symbol_review_5b"), ("glyph_candidate", "cand_3c_on"), ("rare_candidates", "rare_ref_sparse"),
-                                ("rare_candidates", "solo_5b_cov"), ("rare_candidates", "book_lanes"),
+                                ("rare_candidates", "solo_5b_5b"), ("rare_candidates", "book_lanes"),
                                 ("rare_candidates", "ref_lib_5b_veto"), ("glyph_analyzer", "group_flow_near_p"),
                                 ("glyph_near", "group_flow_near_from_3b"), ("glyph_analyzer", "vis3_shadow")),
         produces=(ADMIT_STEP_ACTIVE,),
@@ -1252,11 +1252,13 @@ class SeedAdmitStep(Step):
             n_review -= d_rs
         if p.solo_5b_cov is not None:
             # 5b-s solo_5b（升）：无参照格，库首位 cov／领先／刻例够，5-b 首位作证（形近字线 001/002，缺省关）
-            d_s5 = _solo_5b_pass(p, out, mmap, amap, _opt(ctx, "rare_candidates", page),
+            _r3 = getattr(p, "read_3c", False)       # read_3c：「按图首位」读 3c 余弦首位（A7）
+            d_s5 = _solo_5b_pass(p, out, mmap, amap, None if _r3 else _opt(ctx, "rare_candidates", page),
                                  _coord_refs(ctx, page, coord_cache),
                                  _trusted_keben_counts(p.db_path),
                                  mmap_raw=mmap_raw,
-                                 lacuna_only=p.solo_5b_scope == "no_ref" and not _no_ref_page(ctx.book, p, page))
+                                 lacuna_only=p.solo_5b_scope == "no_ref" and not _no_ref_page(ctx.book, p, page),
+                                 cand=_opt(ctx, "glyph_candidate", page) if _r3 else None)
             n_auto += d_s5
             n_review -= d_s5
         if p.book_lanes:
