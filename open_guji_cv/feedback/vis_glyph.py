@@ -167,7 +167,8 @@ def open_store(root: str | Path | None = None) -> VisGlyphStore:
     """按目录内文件（名、大小、mtime）记住解析结果；文件变了重读。管线每页调一次。"""
     st = VisGlyphStore(root)
     d = st.dir
-    sig = tuple(sorted((p.name, p.stat().st_size, p.stat().st_mtime_ns) for p in d.glob("*.jsonl"))) if d.exists() else ()
+    paths = [st.log.batch_path(b) for b in st.log.batches()]
+    sig = tuple(sorted((p.name, p.stat().st_size, p.stat().st_mtime_ns) for p in paths))
     k = str(d)
     hit = _STORES.get(k)
     if hit is not None and hit[0] == sig:
