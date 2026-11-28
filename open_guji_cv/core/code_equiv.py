@@ -3015,6 +3015,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='10ea5301bf4ab201bdf1d855e7146443c0752b32bdfbe59b61c793aa027b8d9b',
           old='ff1538485290289410fc7a706eb3d8b861b7fb21b9d1d172703d63650505e8e6',
           evidence='row_segment 在 053 40 页（--pages 2,4,10,12,18,28,29,44,45,49,63,74,75,76,77,81,83,87,89,90,92,94,95,97,98,99,104,105,113,114,116,118,128,129,140,146,148,154,159,160）上与 origin/dev 产物逐字节相同；053 75:3 开竖线后夹注少一格（CV2 11-28）：row_segment 加书级参数 jiazhu_edge_trim（单格夹注判据落空时去上下边再量），缺省 0＝同旧'),
+    # 结构拆分 A4（CV3 11-28）：glyph_stages._code_sha 改查等价登记（合算键 composite:…，见 glyph_stages.composite_key），
+    # 改的就是 glyph_stages 自己，开 stages 的书 stages_sha 代码段随之变；只改指纹算法、空表时取值公式不变，
+    # 不碰任何判定路径，产物逐字节不变按构造成立。登记行由 scripts/code_equiv.py composite --base origin/dev（1afa3a39）出
+    Equiv(module='composite:open_guji_cv.steps.glyph_stages+open_guji_cv.clustering.near_route+open_guji_cv.groups.shape_stage+open_guji_cv.groups.methods+open_guji_cv.groups.ids_online+open_guji_cv.groups.registry',
+          new='5bc2d9c99198363cc16f9c3a3e499c4bee07b695208f46a04685c3ddef7c9e88',
+          old='fbced2adde554dc77ac3bbbf4b481b7a79356a0d2f5a9b1eaa4a8fcdaabf2746',
+          evidence="glyph_stages._code_sha 加 canonical(composite_key) 换算、模块表提成常量 STAGES_CODE_MODS／PAIR_CODE_MODS（次序不变），"
+                   "只改 stages_sha 的算法、不碰任何判定路径，产物逐字节不变按构造成立；对 origin/dev 1afa3a39，2026-11-28（CV3，结构拆分 A4）"),
 )
 
 

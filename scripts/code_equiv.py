@@ -7,6 +7,9 @@
     python scripts/code_equiv.py check --base origin/main --step glyph_match --book vol04 \\
         --pages 5,10,15 -w $WS --products <已有上游产物的产物根> --cache <缓存根> --jobs 4
 
+    # 合算的代码哈希（glyph_match 开 stages 时的 stages_sha 代码段）：基线与工作区不同就打印登记行
+    python scripts/code_equiv.py composite --base origin/dev [--note "…"]
+
 `check` 的做法：
 1. 列出这一步的模块（Step 模块 + `code_deps`）里，`--base` 与工作区「只认代码」哈希不同的；
 2. `git worktree add` 一份 `--base` 的检出；
@@ -151,6 +154,32 @@ def cmd_check(args) -> int:
                            check=False)
 
 
+def _src_at(mod: str, rev: str | None) -> str:
+    rel = _module_path(mod)
+    if rev is None:
+        return (ROOT / rel).read_text(encoding="utf-8")
+    return subprocess.run(["git", "-C", str(ROOT), "show", f"{rev}:{rel}"], capture_output=True, check=True).stdout.decode("utf-8")
+
+
+def cmd_composite(args) -> int:
+    """`glyph_stages` 的合算代码哈希（`STAGES_CODE_MODS`、`PAIR_CODE_MODS`）基线 vs 工作区，变了就打印登记行。
+    只出登记行，不证产物：证据要另用 `check --step glyph_match --always` 在开 stages 的册上跑，或说明为何按构造成立。"""
+    from open_guji_cv.core.code_equiv import canonical
+    from open_guji_cv.steps.glyph_stages import PAIR_CODE_MODS, STAGES_CODE_MODS, composite_hash, composite_key
+    n = 0
+    for mods in (STAGES_CODE_MODS, PAIR_CODE_MODS):
+        key = composite_key(mods)
+        old = composite_hash(mods, lambda m: _src_at(m, args.base))
+        new = composite_hash(mods, lambda m: _src_at(m, None))
+        if old == new:
+            print(f"{key}：没变")
+            continue
+        n += 1
+        print(f"    Equiv(module={key!r},\n          new={new!r},\n          old={canonical(key, old)!r},\n"
+              f"          evidence={args.note!r}),")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -172,8 +201,11 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--gate", default=None, help="要证等价的是挂在 --step 出口的闸（如 column_gate 挂 column_warp）：模块取闸的，比的也是闸的产物")
     c.add_argument("--always", action="store_true",
                    help="这一步的指纹模块没变也照样跑两遍比产物（改的是 feedback/ 之类指纹外的代码时用）")
+    k = sub.add_parser("composite")
+    k.add_argument("--base", required=True)
+    k.add_argument("--note", default="", help="evidence：证据（哪册哪些页逐字节相同，或为何按构造成立）")
     args = ap.parse_args(argv)
-    return {"hash": cmd_hash, "check": cmd_check}[args.cmd](args)
+    return {"hash": cmd_hash, "check": cmd_check, "composite": cmd_composite}[args.cmd](args)
 
 
 if __name__ == "__main__":
