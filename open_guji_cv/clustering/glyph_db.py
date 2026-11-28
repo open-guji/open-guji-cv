@@ -1093,10 +1093,36 @@ def borrowed_label(st: "str | Path", scope: str = "all", tag: str = "") -> str:
     return str(p) + suffix
 
 
+def _self_ids(store: Path, db: "GlyphDB", given) -> frozenset[str]:
+    """本书在组库里可能用的来源前缀（见 ``rebuild_from_store`` 的 ``self_ids``）。"""
+    if given is not None:
+        return frozenset(x for x in given if x)
+    out = set()
+    ed = db.book_edition()
+    if ed:
+        out.add(ed)
+    st = Path(store)
+    if st.name == "glyph_store" and st.parent.name == "output" and st.parent.parent.name:
+        out.add(st.parent.parent.name)
+    return frozenset(out)
+
+
+def _own_prefixed(ident: str, sep: str, own: frozenset[str]) -> bool:
+    head, s, _ = str(ident).partition(sep)
+    return bool(s) and head in own
+
+
 def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
                        feature_backend: str = DEFAULT_FEATURE,
-                       extra_stores: "tuple | list" = (), jobs: int = 1) -> dict:
+                       extra_stores: "tuple | list" = (), jobs: int = 1,
+                       self_ids: "tuple | list | None" = None) -> dict:
     """Git 導出目錄 → SQLite 索引（派生表示按當前算法重算）。
+
+    ``self_ids``（2026-11-28，文渊阁组库）：本书在共享刻例库（``glyphlib-*``）里的来源前缀。组库实例 id 是
+    ``<来源工作区>:<原 id>``，借组库的书若本身是来源之一（汉书借 glyphlib-wyg，组库里有 ``988g89tszv:`` 开头的汉书回库例），
+    这些例本书库里已有一份，借进来就重复了：借库装载时跳过 id 以 ``<本书>:`` 开头的实例（来源 id 以 ``<本书>.`` 开头的来源行同）。
+    缺省取本书 ``meta.book_edition`` 和真源目录 ``<工作区>/output/glyph_store`` 的工作区名两个——两者不一定相同
+    （殿本工作区 siku-zongmu、edition 96mid1ogzk），组库前缀用的是工作区名。
 
     ``extra_stores``（2026-09-27，全唐文书级库）：再把别的工作区的真源**借**进来，
     只为匹配（`glyph_match` 只读一个库文件）。借来的部分：
@@ -1139,6 +1165,8 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
                     lend_ids.add(r["instance_id"])
         new_src: list[str] = []
         for r in read(st / "sources.jsonl"):
+            if borrowed and _own_prefixed(r["source_id"], ".", own_ids):
+                continue
             cols = ",".join(r)
             cur.execute(f"{verb} INTO sources ({cols}) "
                         f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
@@ -1150,6 +1178,8 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
             for r in read(meta_file):
                 if lend_ids is not None and r["instance_id"] not in lend_ids:
                     continue        # scope=human：机器入库的借不进来
+                if borrowed and _own_prefixed(r["instance_id"], ":", own_ids):
+                    continue        # 组库里本书自己的例：本书库里已有，不再借一份
                 png = st / "patches" / f"{_safe(r['instance_id'])}.png"
                 if png.exists():
                     recs.append({**r, "patch_png": png.read_bytes()})
@@ -1241,6 +1271,7 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
         return n_inst, n_der, n_ex
 
     n_inst, n_der, n_ex = load(store, borrowed=False)
+    own_ids = _self_ids(store, db, self_ids)
     n_borrowed = 0
     if extra_stores:
         cur.execute(BORROWED_TABLE)
