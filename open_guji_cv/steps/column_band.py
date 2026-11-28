@@ -28,7 +28,7 @@ class ColumnBandParams(BaseModel):
     起因：写本字贴着界行写，「以」的左竖细高、跟右半「人」之间的缝比界行与字之间的缝还白，
     判带取窗口最低点、或把它当内框，都连界行一起抹白，Step4 拿到的字就缺一笔（SJ r5，02:27:1:4b、02:112:2:2b）。
     （2026-11-25 前叫 `column_warp.tight_rule_band`，册配置里旧名仍有效，见 `core/pipeline.LEGACY_PARAM_HOMES`。）"""
-    inner_bar_span: bool = False
+    inner_bar_span: bool = True
     """贴边界行内侧的「孤立窄条」要像线才抹（全唐文开）：离边超过 0.13 列宽、本横条里有墨的行不到一半的，
     是字贴着界行的竖笔，不当第二道线（`column_text_band` inner_bar_span）。缺省关＝旧行为。
     起因：全唐文「十」的竖、「恪」的忄贴着界行，`strip_column_rules` 按 240 行横条判带，把它们当内框连界行一起抹白，
