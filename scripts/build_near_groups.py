@@ -212,7 +212,7 @@ def merge(a) -> int:
             if n >= VAR_NEAR:
                 x, y = list(k)
                 add(x, y, "variant", d["book"], n)
-    for x, y in C.NEVER_MATCH_FAMILIES:
+    for x, y in C.hand_pairs():          # 手工表真源（C.NEVER_MATCH_FAMILIES 从登记表派生，登记表又读本表，别绕回去）
         add(x, y, "hand")
     for x, y in C._flat(C.HUMAN_TABLE):
         add(x, y, "human")

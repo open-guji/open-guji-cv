@@ -308,6 +308,8 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "pack_root": ("core.corpus_pin", "pack_root"),
     "versions": ("core.corpus_pin", "versions"),
     "NEVER_MATCH_FAMILIES": ("clustering.match", "NEVER_MATCH_FAMILIES"),
+    # 形近字组登记表按来源取字对（W1 第二期 2026-11-28；manager reasons._near_pairs／N01 取 src=hand）
+    "near_registry_pairs": ("clustering.confusable", "registry_pairs"),
     "collect_vol": ("core.corpus_pin", "collect_vol"),
     "vol_manifest_path": ("core.corpus_pin", "vol_manifest_path"),
     "vol_versions": ("core.corpus_pin", "vol_versions"),
