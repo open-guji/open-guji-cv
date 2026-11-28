@@ -40,7 +40,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -87,7 +88,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -119,7 +121,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -167,7 +170,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -216,7 +220,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -268,7 +273,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -315,7 +321,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -347,7 +355,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -381,7 +390,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -412,7 +422,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -496,7 +508,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -626,7 +639,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "part_shape"
+     "part_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -676,7 +690,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -706,7 +722,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -736,7 +754,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -766,7 +786,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -796,7 +818,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -826,7 +850,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -856,7 +882,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -886,7 +914,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -931,7 +961,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -961,7 +993,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -991,7 +1025,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1021,7 +1057,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1051,7 +1089,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1081,7 +1121,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1111,7 +1153,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1141,7 +1185,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1171,7 +1217,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1201,7 +1249,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1231,7 +1281,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1261,7 +1313,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1291,7 +1345,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1321,7 +1377,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1366,7 +1424,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1397,7 +1457,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1429,7 +1491,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1459,7 +1523,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1489,7 +1555,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1519,7 +1587,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1564,7 +1634,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1611,7 +1683,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1641,7 +1715,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1671,7 +1747,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1701,7 +1779,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1732,7 +1812,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1762,7 +1844,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1808,7 +1892,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1838,7 +1924,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1868,7 +1956,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1898,7 +1988,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1928,7 +2020,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1960,7 +2054,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -1990,7 +2086,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2020,7 +2118,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2050,7 +2150,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2095,7 +2197,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2126,7 +2230,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2156,7 +2262,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2186,7 +2294,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2216,7 +2326,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2246,7 +2358,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2276,7 +2390,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2324,7 +2440,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2369,7 +2487,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2399,7 +2519,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2444,7 +2566,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2474,7 +2598,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2504,7 +2630,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2549,7 +2677,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2579,7 +2709,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2610,7 +2742,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2656,7 +2790,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2686,7 +2822,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2731,7 +2869,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2761,7 +2901,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2806,7 +2948,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2836,7 +2980,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2866,7 +3012,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2912,7 +3060,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -2943,7 +3093,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -2994,7 +3145,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -3044,7 +3196,8 @@
    "handling": {
     "methods": [
      "pair_shape",
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -3106,7 +3259,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -3136,7 +3291,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -3194,7 +3350,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -3225,7 +3382,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -3273,7 +3431,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": true,
     "aspect": false,
     "action": "evidence",
@@ -3318,7 +3478,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -3350,7 +3511,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -3397,7 +3559,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -3439,7 +3602,8 @@
    ],
    "handling": {
     "methods": [
-     "cnn_small"
+     "cnn_small",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -3521,7 +3685,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -3553,7 +3718,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -3601,7 +3767,8 @@
    ],
    "handling": {
     "methods": [
-     "hou_shape"
+     "hou_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -3683,7 +3850,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -3714,7 +3883,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -3764,7 +3934,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -3809,7 +3981,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -3840,7 +4014,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -3872,7 +4047,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -3923,7 +4099,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -3954,7 +4131,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -3984,7 +4163,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -4037,7 +4217,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -4068,7 +4250,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -4207,7 +4390,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -4253,7 +4438,9 @@
     "top1"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": true,
     "aspect": false,
     "action": "evidence",
@@ -4290,7 +4477,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -4337,7 +4525,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -4367,7 +4557,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -4413,7 +4605,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -4459,7 +4653,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -4505,7 +4700,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": true,
     "aspect": false,
     "action": "evidence",
@@ -4553,7 +4750,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -4584,7 +4783,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -4636,7 +4836,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -4687,7 +4888,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -4740,7 +4942,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": true,
     "aspect": false,
     "action": "evidence",
@@ -4813,7 +5017,8 @@
    "handling": {
     "methods": [
      "book_knn",
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -5072,7 +5277,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5119,7 +5325,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5149,7 +5356,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": true,
     "aspect": false,
     "action": "evidence",
@@ -5199,7 +5408,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -5246,7 +5457,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5278,7 +5490,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5310,7 +5523,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5357,7 +5571,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5395,7 +5610,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5428,7 +5644,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -5458,7 +5676,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -5504,7 +5724,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -5533,7 +5755,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": true,
     "aspect": false,
     "action": "evidence",
@@ -5586,7 +5810,8 @@
    "handling": {
     "methods": [
      "rr_shape",
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -5732,7 +5957,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5763,7 +5989,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -5813,7 +6040,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5864,7 +6092,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5896,7 +6125,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5932,7 +6162,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -5964,7 +6195,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -6010,7 +6242,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -6040,7 +6274,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -6090,7 +6325,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -6122,7 +6358,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -6154,7 +6391,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -6186,7 +6424,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -6248,7 +6487,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -6317,7 +6557,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -6382,7 +6623,9 @@
     "top1"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": true,
     "aspect": false,
     "action": "evidence",
@@ -6414,7 +6657,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -6444,7 +6689,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -6475,7 +6722,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -6523,7 +6771,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -6572,7 +6821,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -6631,7 +6881,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -6692,7 +6943,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "wu_shape"
+     "wu_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -6739,7 +6991,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": true,
     "aspect": false,
     "action": "evidence",
@@ -6817,7 +7071,8 @@
    "handling": {
     "methods": [
      "pair_shape",
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -6874,7 +7129,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -6906,7 +7162,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -6953,7 +7210,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -7040,7 +7298,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -7190,7 +7449,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -7241,7 +7501,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -7275,7 +7536,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -7338,7 +7600,8 @@
    ],
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -7397,7 +7660,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -7429,7 +7693,8 @@
    "handling": {
     "methods": [
      "pair_shape",
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -7483,7 +7748,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -7583,7 +7849,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -7629,7 +7896,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -7677,7 +7945,8 @@
    "combine": "agree",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -7724,7 +7993,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": true,
     "aspect": false,
     "action": "evidence",
@@ -7785,7 +8056,8 @@
    ],
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -7842,7 +8114,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -7873,7 +8146,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -7921,7 +8196,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -7958,7 +8234,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -8005,7 +8282,8 @@
    "combine": "first",
    "handling": {
     "methods": [
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -8050,7 +8328,9 @@
    ],
    "combine": "agree",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": true,
     "aspect": false,
     "action": "evidence",
@@ -8095,7 +8375,9 @@
    ],
    "combine": "first",
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8128,7 +8410,8 @@
    "handling": {
     "methods": [
      "stroke_veto",
-     "flow_shape"
+     "flow_shape",
+     "pair_clf"
     ],
     "context": true,
     "aspect": false,
@@ -8245,7 +8528,9 @@
     "刺"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8277,7 +8562,9 @@
     "𠫊"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8309,7 +8596,9 @@
     "宿"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8342,7 +8631,9 @@
     "寓"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8374,7 +8665,9 @@
     "者"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8406,7 +8699,9 @@
     "罕"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8438,7 +8733,9 @@
     "卹"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8471,7 +8768,9 @@
     "褻"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8503,7 +8802,9 @@
     "蒙"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8535,7 +8836,9 @@
     "疎"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8567,7 +8870,9 @@
     "麗"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8599,7 +8904,9 @@
     "匕"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8630,7 +8937,9 @@
     "𠤎"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8662,7 +8971,9 @@
     "土"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8694,7 +9005,9 @@
     "旦"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8731,7 +9044,9 @@
     "内"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8763,7 +9078,9 @@
     "申"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8795,7 +9112,9 @@
     "九"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8827,7 +9146,9 @@
     "舟"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8859,7 +9180,9 @@
     "王"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8891,7 +9214,9 @@
     "人"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8923,7 +9248,9 @@
     "仍"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -8956,7 +9283,8 @@
    ],
    "handling": {
     "methods": [
-     "pair_shape"
+     "pair_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -8983,7 +9311,9 @@
     "平"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9019,7 +9349,9 @@
     "乘"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9051,7 +9383,9 @@
     "于"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9083,7 +9417,9 @@
     "并"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9115,7 +9451,9 @@
     "父"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9147,7 +9485,9 @@
     "鳧"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9179,7 +9519,9 @@
     "仆"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9211,7 +9553,9 @@
     "令"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9243,7 +9587,9 @@
     "士"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9274,7 +9620,9 @@
     "山"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9306,7 +9654,9 @@
     "司"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9338,7 +9688,9 @@
     "加"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9370,7 +9722,9 @@
     "問"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9402,7 +9756,9 @@
     "間"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9434,7 +9790,9 @@
     "閭"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9466,7 +9824,9 @@
     "河"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9497,7 +9857,9 @@
     "彿"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9529,7 +9891,9 @@
     "末"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9560,7 +9924,9 @@
     "来"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9592,7 +9958,9 @@
     "列"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9624,7 +9992,9 @@
     "待"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9656,7 +10026,9 @@
     "更"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9688,7 +10060,9 @@
     "足"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9720,7 +10094,9 @@
     "爼"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9752,7 +10128,9 @@
     "孚"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9784,7 +10162,9 @@
     "奉"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9816,7 +10196,9 @@
     "稱"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9848,7 +10230,9 @@
     "徤"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9880,7 +10264,9 @@
     "效"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9913,7 +10299,9 @@
     "𫝊"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9945,7 +10333,9 @@
     "象"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -9977,7 +10367,9 @@
     "喬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10009,7 +10401,9 @@
     "憎"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10041,7 +10435,9 @@
     "義"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10073,7 +10469,9 @@
     "敬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10105,7 +10503,9 @@
     "憂"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10137,7 +10537,9 @@
     "擾"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10169,7 +10571,9 @@
     "諸"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10201,7 +10605,9 @@
     "充"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10233,7 +10639,9 @@
     "尢"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10265,7 +10673,9 @@
     "无"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10297,7 +10707,9 @@
     "見"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10329,7 +10741,9 @@
     "兗"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10361,7 +10775,9 @@
     "競"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10393,7 +10809,9 @@
     "匹"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10425,7 +10843,9 @@
     "金"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10456,7 +10876,9 @@
     "分"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10488,7 +10910,9 @@
     "大"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10523,7 +10947,9 @@
     "具"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10554,7 +10980,9 @@
     "某"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10586,7 +11014,9 @@
     "異"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10618,7 +11048,9 @@
     "冒"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10651,7 +11083,9 @@
     "宂"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10683,7 +11117,9 @@
     "冢"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10718,7 +11154,9 @@
     "寃"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10751,7 +11189,9 @@
     "氷"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10783,7 +11223,9 @@
     "沖"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10815,7 +11257,9 @@
     "決"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10849,7 +11293,9 @@
     "況"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10881,7 +11327,9 @@
     "淮"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10913,7 +11361,9 @@
     "涼"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10945,7 +11395,9 @@
     "淩"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -10977,7 +11429,9 @@
     "凡"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11011,7 +11465,9 @@
     "凢"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11043,7 +11499,9 @@
     "刁"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11076,7 +11534,9 @@
     "別"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11108,7 +11568,9 @@
     "剛"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11140,7 +11602,9 @@
     "剛"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11172,7 +11636,9 @@
     "尅"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11204,7 +11670,9 @@
     "剥"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11236,7 +11704,9 @@
     "勑"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11268,7 +11738,9 @@
     "勤"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11300,7 +11772,9 @@
     "干"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11332,7 +11806,9 @@
     "壬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11364,7 +11840,9 @@
     "畢"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11396,7 +11874,9 @@
     "𤰞"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11428,7 +11908,9 @@
     "車"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11460,7 +11942,9 @@
     "恊"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11492,7 +11976,9 @@
     "鹵"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11524,7 +12010,9 @@
     "卯"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11556,7 +12044,9 @@
     "卵"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11588,7 +12078,9 @@
     "卻"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11619,7 +12111,9 @@
     "郤"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11652,7 +12146,9 @@
     "鄕"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11684,7 +12180,9 @@
     "底"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11717,7 +12215,9 @@
     "廈"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11750,7 +12250,9 @@
     "歷"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11782,7 +12284,9 @@
     "收"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11814,7 +12318,9 @@
     "同"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11846,7 +12352,9 @@
     "告"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11878,7 +12386,9 @@
     "舍"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11912,7 +12422,9 @@
     "呉"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11945,7 +12457,9 @@
     "悟"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -11977,7 +12491,9 @@
     "里"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12009,7 +12525,9 @@
     "衷"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12041,7 +12559,9 @@
     "貢"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12073,7 +12593,9 @@
     "脣"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12105,7 +12627,9 @@
     "憚"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12137,7 +12661,9 @@
     "巖"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12169,7 +12695,9 @@
     "因"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12200,7 +12728,9 @@
     "囬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12232,7 +12762,9 @@
     "困"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12264,7 +12796,9 @@
     "圗"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12296,7 +12830,9 @@
     "埀"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12328,7 +12864,9 @@
     "理"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12360,7 +12898,9 @@
     "𡌨"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12392,7 +12932,9 @@
     "滯"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12424,7 +12966,9 @@
     "壞"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12456,7 +13000,9 @@
     "干"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12488,7 +13034,9 @@
     "王"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12521,7 +13069,9 @@
     "牡"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12553,7 +13103,9 @@
     "壼"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12585,7 +13137,9 @@
     "夣"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12617,7 +13171,9 @@
     "犬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12649,7 +13205,9 @@
     "夭"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12681,7 +13239,9 @@
     "夬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12716,7 +13276,9 @@
     "失"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12752,7 +13314,9 @@
     "秦"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12784,7 +13348,9 @@
     "弈"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12816,7 +13382,9 @@
     "奧"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12849,7 +13417,9 @@
     "好"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12881,7 +13451,9 @@
     "贏"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12912,7 +13484,9 @@
     "宇"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12949,7 +13523,9 @@
     "李"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -12981,7 +13557,9 @@
     "孽"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13013,7 +13591,9 @@
     "究"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13045,7 +13625,9 @@
     "直"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13076,7 +13658,9 @@
     "𡨥"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13108,7 +13692,9 @@
     "當"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13140,7 +13726,9 @@
     "童"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13172,7 +13760,9 @@
     "萬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13204,7 +13794,9 @@
     "寧"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13236,7 +13828,9 @@
     "寢"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13268,7 +13862,9 @@
     "寶"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13300,7 +13896,9 @@
     "專"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13333,7 +13931,9 @@
     "尤"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13365,7 +13965,9 @@
     "戸"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13397,7 +13999,9 @@
     "足"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13429,7 +14033,9 @@
     "岀"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13461,7 +14067,9 @@
     "歧"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13494,7 +14102,9 @@
     "峽"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13526,7 +14136,9 @@
     "歳"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13558,7 +14170,9 @@
     "業"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13590,7 +14204,9 @@
     "雟"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13623,7 +14239,9 @@
     "臣"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13655,7 +14273,9 @@
     "異"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13687,7 +14307,9 @@
     "師"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13719,7 +14341,9 @@
     "幷"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13756,7 +14380,9 @@
     "斡"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13788,7 +14414,9 @@
     "榦"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13820,7 +14448,9 @@
     "庾"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13852,7 +14482,9 @@
     "廷"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13884,7 +14516,9 @@
     "廐"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13917,7 +14551,9 @@
     "贋"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13948,7 +14584,9 @@
     "稟"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -13980,7 +14618,9 @@
     "盧"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14012,7 +14652,9 @@
     "廷"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14048,7 +14690,9 @@
     "迪"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14080,7 +14724,9 @@
     "迺"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14112,7 +14758,9 @@
     "甘"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14144,7 +14792,9 @@
     "强"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14175,7 +14825,9 @@
     "弼"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14207,7 +14859,9 @@
     "彦"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14240,7 +14894,9 @@
     "披"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14272,7 +14928,9 @@
     "徃"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14304,7 +14962,9 @@
     "柱"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14336,7 +14996,9 @@
     "持"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14368,7 +15030,9 @@
     "徙"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14400,7 +15064,9 @@
     "複"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14433,7 +15099,9 @@
     "撤"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14465,7 +15133,9 @@
     "澈"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14497,7 +15167,9 @@
     "忘"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14529,7 +15201,9 @@
     "忠"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14561,7 +15235,9 @@
     "恬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14593,7 +15269,9 @@
     "束"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14625,7 +15303,9 @@
     "淒"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14657,7 +15337,9 @@
     "靑"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14689,7 +15371,9 @@
     "愔"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14721,7 +15405,9 @@
     "推"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14753,7 +15439,9 @@
     "童"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14785,7 +15473,9 @@
     "概"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14817,7 +15507,9 @@
     "懷"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14849,7 +15541,9 @@
     "成"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14881,7 +15575,9 @@
     "載"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14913,7 +15609,9 @@
     "戸"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14945,7 +15643,9 @@
     "析"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -14977,7 +15677,9 @@
     "牴"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15009,7 +15711,9 @@
     "栝"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15041,7 +15745,9 @@
     "特"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15073,7 +15779,9 @@
     "梃"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15106,7 +15814,9 @@
     "換"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15137,7 +15847,9 @@
     "棌"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15169,7 +15881,9 @@
     "揆"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15201,7 +15915,9 @@
     "揭"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15234,7 +15950,9 @@
     "棟"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15265,7 +15983,9 @@
     "構"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15298,7 +16018,9 @@
     "總"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15330,7 +16052,9 @@
     "樞"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15363,7 +16087,9 @@
     "模"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15395,7 +16121,9 @@
     "標"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15428,7 +16156,9 @@
     "樽"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15460,7 +16190,9 @@
     "樸"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15492,7 +16224,9 @@
     "檢"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15524,7 +16258,9 @@
     "澤"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15555,7 +16291,9 @@
     "獲"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15588,7 +16326,8 @@
    ],
    "handling": {
     "methods": [
-     "part_shape"
+     "part_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -15623,7 +16362,9 @@
     "文"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15655,7 +16396,9 @@
     "敕"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15687,7 +16430,9 @@
     "陳"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15719,7 +16464,9 @@
     "歛"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15751,7 +16498,9 @@
     "斵"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15784,7 +16533,9 @@
     "旱"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15816,7 +16567,9 @@
     "皁"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15848,7 +16601,9 @@
     "甸"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15880,7 +16635,9 @@
     "昴"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15912,7 +16669,9 @@
     "昻"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15944,7 +16703,9 @@
     "眀"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -15976,7 +16737,9 @@
     "舂"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16011,7 +16774,9 @@
     "畫"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16046,7 +16811,9 @@
     "睎"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16078,7 +16845,9 @@
     "皓"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16110,7 +16879,9 @@
     "陳"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16142,7 +16913,9 @@
     "目"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16174,7 +16947,9 @@
     "頁"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16206,7 +16981,9 @@
     "畫"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16238,7 +17015,9 @@
     "蔓"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16270,7 +17049,9 @@
     "用"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16301,7 +17082,9 @@
     "朢"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16333,7 +17116,9 @@
     "禾"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16364,7 +17149,9 @@
     "米"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16395,7 +17182,9 @@
     "耒"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16429,7 +17218,9 @@
     "朱"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16461,7 +17252,9 @@
     "束"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16494,7 +17287,9 @@
     "東"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16526,7 +17321,9 @@
     "柬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16558,7 +17355,9 @@
     "杷"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16590,7 +17389,9 @@
     "祀"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16622,7 +17423,9 @@
     "𣏌"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16654,7 +17457,9 @@
     "東"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16686,7 +17491,9 @@
     "柬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16718,7 +17525,9 @@
     "秒"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16750,7 +17559,9 @@
     "柬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16783,7 +17594,9 @@
     "果"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16815,7 +17628,9 @@
     "栢"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16847,7 +17662,9 @@
     "栁"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16880,7 +17697,9 @@
     "粟"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16912,7 +17731,9 @@
     "桹"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16944,7 +17765,9 @@
     "稜"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -16976,7 +17799,9 @@
     "槪"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17009,7 +17834,9 @@
     "穀"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17041,7 +17868,9 @@
     "歳"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17074,7 +17903,9 @@
     "歷"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17109,7 +17940,9 @@
     "設"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17141,7 +17974,9 @@
     "母"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17173,7 +18008,9 @@
     "氷"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17205,7 +18042,9 @@
     "永"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17237,7 +18076,9 @@
     "汙"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17269,7 +18110,9 @@
     "泱"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17301,7 +18144,9 @@
     "沿"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17333,7 +18178,9 @@
     "洽"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17369,7 +18216,9 @@
     "𭽖"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17401,7 +18250,9 @@
     "注"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17432,7 +18283,9 @@
     "註"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17465,7 +18318,9 @@
     "秦"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17497,7 +18352,9 @@
     "𭰁"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17529,7 +18386,9 @@
     "滛"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17561,7 +18420,9 @@
     "溫"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17594,7 +18455,9 @@
     "穎"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17626,7 +18489,9 @@
     "頴"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17658,7 +18523,9 @@
     "蒙"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17690,7 +18557,9 @@
     "鳥"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17722,7 +18591,9 @@
     "輝"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17754,7 +18625,9 @@
     "薰"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17786,7 +18659,9 @@
     "耀"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17818,7 +18693,9 @@
     "瓜"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17851,7 +18728,9 @@
     "猗"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17883,7 +18762,9 @@
     "豨"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17915,7 +18796,9 @@
     "獨"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17946,7 +18829,9 @@
     "瓌"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -17978,7 +18863,9 @@
     "瓚"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18010,7 +18897,9 @@
     "舋"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18042,7 +18931,9 @@
     "白"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18074,7 +18965,9 @@
     "長"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18106,7 +18999,9 @@
     "疏"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18139,7 +19034,8 @@
    ],
    "handling": {
     "methods": [
-     "part_shape"
+     "part_shape",
+     "pair_clf"
     ],
     "context": false,
     "aspect": false,
@@ -18174,7 +19070,9 @@
     "臼"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18206,7 +19104,9 @@
     "皂"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18238,7 +19138,9 @@
     "皐"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18270,7 +19172,9 @@
     "臯"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18302,7 +19206,9 @@
     "臯"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18335,7 +19241,9 @@
     "𥁞"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18367,7 +19275,9 @@
     "雎"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18400,7 +19310,9 @@
     "陸"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18432,7 +19344,9 @@
     "贍"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18464,7 +19378,9 @@
     "礭"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18496,7 +19412,9 @@
     "祆"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18529,7 +19447,9 @@
     "租"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18561,7 +19481,9 @@
     "裸"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18593,7 +19515,9 @@
     "褘"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18625,7 +19549,9 @@
     "積"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18657,7 +19583,9 @@
     "縠"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18689,7 +19617,9 @@
     "頴"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18724,7 +19654,9 @@
     "顥"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18756,7 +19688,9 @@
     "韋"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18788,7 +19722,9 @@
     "重"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18820,7 +19756,9 @@
     "苻"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18852,7 +19790,9 @@
     "苐"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18884,7 +19824,9 @@
     "算"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18916,7 +19858,9 @@
     "萁"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18949,7 +19893,9 @@
     "菅"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -18981,7 +19927,9 @@
     "著"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19015,7 +19963,9 @@
     "蕭"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19047,7 +19997,9 @@
     "薄"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19080,7 +20032,9 @@
     "藉"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19112,7 +20066,9 @@
     "采"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19144,7 +20100,9 @@
     "綂"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19176,7 +20134,9 @@
     "縱"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19208,7 +20168,9 @@
     "繽"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19240,7 +20202,9 @@
     "襁"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19272,7 +20236,9 @@
     "纘"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19304,7 +20270,9 @@
     "纒"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19336,7 +20304,9 @@
     "罸"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19368,7 +20338,9 @@
     "翊"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19400,7 +20372,9 @@
     "翺"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19432,7 +20406,9 @@
     "飜"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19464,7 +20440,9 @@
     "藉"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19496,7 +20474,9 @@
     "聽"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19529,7 +20509,9 @@
     "貽"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19561,7 +20543,9 @@
     "骨"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19593,7 +20577,9 @@
     "脉"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19625,7 +20611,9 @@
     "酺"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19657,7 +20645,9 @@
     "興"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19688,7 +20678,9 @@
     "輿"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19720,7 +20712,9 @@
     "荼"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19752,7 +20746,9 @@
     "革"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19784,7 +20780,9 @@
     "莊"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19816,7 +20814,9 @@
     "萃"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19848,7 +20848,9 @@
     "蓂"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19880,7 +20882,9 @@
     "隂"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19912,7 +20916,9 @@
     "蘊"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19945,7 +20951,9 @@
     "虛"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -19977,7 +20985,9 @@
     "贍"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20009,7 +21019,9 @@
     "衡"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20041,7 +21053,9 @@
     "衷"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20073,7 +21087,9 @@
     "袞"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20105,7 +21121,9 @@
     "褒"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20137,7 +21155,9 @@
     "襃"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20169,7 +21189,9 @@
     "襃"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20202,7 +21224,9 @@
     "覽"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20234,7 +21258,9 @@
     "觀"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20266,7 +21292,9 @@
     "觀"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20298,7 +21326,9 @@
     "鮮"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20330,7 +21360,9 @@
     "詁"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20362,7 +21394,9 @@
     "講"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20394,7 +21428,9 @@
     "諫"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20426,7 +21462,9 @@
     "謂"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20458,7 +21496,9 @@
     "謚"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20491,7 +21531,9 @@
     "讚"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20524,7 +21566,9 @@
     "𬽠"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20556,7 +21600,9 @@
     "貞"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20588,7 +21634,9 @@
     "質"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20620,7 +21668,9 @@
     "貴"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20652,7 +21702,9 @@
     "賈"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20684,7 +21736,9 @@
     "贇"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20716,7 +21770,9 @@
     "頼"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20748,7 +21804,9 @@
     "贛"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20780,7 +21838,9 @@
     "隮"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20812,7 +21872,9 @@
     "輙"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20844,7 +21906,9 @@
     "轄"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20876,7 +21940,9 @@
     "辨"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20908,7 +21974,9 @@
     "辯"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20940,7 +22008,9 @@
     "迴"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -20972,7 +22042,9 @@
     "逈"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21005,7 +22077,9 @@
     "遠"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21037,7 +22111,9 @@
     "遥"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21069,7 +22145,9 @@
     "邪"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21101,7 +22179,9 @@
     "郍"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21133,7 +22213,9 @@
     "郃"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21165,7 +22247,9 @@
     "鄉"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21197,7 +22281,9 @@
     "鄕"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21229,7 +22315,9 @@
     "鈞"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21263,7 +22351,9 @@
     "鉤"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21297,7 +22387,9 @@
     "鋮"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21329,7 +22421,9 @@
     "餞"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21361,7 +22455,9 @@
     "鐘"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21395,7 +22491,9 @@
     "鐵"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21427,7 +22525,9 @@
     "閉"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21460,7 +22560,9 @@
     "閬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21492,7 +22594,9 @@
     "閼"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21524,7 +22628,9 @@
     "閤"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21556,7 +22662,9 @@
     "闐"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21588,7 +22696,9 @@
     "閲"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21622,7 +22732,9 @@
     "𨶒"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21654,7 +22766,9 @@
     "闍"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21686,7 +22800,9 @@
     "闥"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21718,7 +22834,9 @@
     "陳"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21750,7 +22868,9 @@
     "陸"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21782,7 +22902,9 @@
     "騭"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21814,7 +22936,9 @@
     "隸"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21847,7 +22971,9 @@
     "𨽾"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21879,7 +23005,9 @@
     "𨽻"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21911,7 +23039,9 @@
     "離"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21943,7 +23073,9 @@
     "雲"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -21975,7 +23107,9 @@
     "鞫"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -22007,7 +23141,9 @@
     "顏"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -22039,7 +23175,9 @@
     "顯"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -22071,7 +23209,9 @@
     "飈"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -22104,7 +23244,9 @@
     "駮"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -22136,7 +23278,9 @@
     "鳬"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -22168,7 +23312,9 @@
     "鷂"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -22200,7 +23346,9 @@
     "麵"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",
@@ -22232,7 +23380,9 @@
     "𨽾"
    ],
    "handling": {
-    "methods": [],
+    "methods": [
+     "pair_clf"
+    ],
     "context": false,
     "aspect": false,
     "action": "evidence",

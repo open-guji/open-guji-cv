@@ -233,7 +233,8 @@ class GlyphNearStep(Step):
                    "open_guji_cv.strokes", "open_guji_cv.strokes._ink", "open_guji_cv.strokes.features",
                    "open_guji_cv.strokes.register", "open_guji_cv.strokes.template",
                    "open_guji_cv.groups.shape_stage", "open_guji_cv.groups.methods", "open_guji_cv.groups.ids_online",
-                   "open_guji_cv.groups.registry"),
+                   "open_guji_cv.groups.registry", "open_guji_cv.groups.pair_clf", "open_guji_cv.clustering.sim_cnn",
+                   "open_guji_cv.clustering.normalize"),
         enabled_by="groups",
     )
 
@@ -321,7 +322,8 @@ class GlyphNearStep(Step):
     def _cell(page: int, col: int, r, c) -> dict:
         return {"id": r.id, "page": page, "col": col, "slot": r.slot, "sub": r.sub,
                 "patch_key": c.patch_key or cell_patch_key(page, col, r.slot, r.sub),
-                "char": r.char, "candidates": [(str(ch), float(v)) for ch, v in (r.candidates or [])]}
+                "char": r.char, "candidates": [(str(ch), float(v)) for ch, v in (r.candidates or [])],
+                "punct": getattr(c, "step3_kind", None) == "punct"}
 
 
 def cell_patch_key(page: int, col: int, slot: int, sub: str | None) -> str:
