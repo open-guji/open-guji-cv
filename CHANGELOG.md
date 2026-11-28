@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- PATCH（11-28，CV3，bench 统一接口 P1）：第三步识字 bench 接统一接口 `eval/benches/read.py`：`read-3a-advset`、`read-3a-damaged`、`read-3b-near`、`read-rare`、`read-rare-firstseen`（包现成 `scripts/eval_*.py`，护栏按 `bench`＋`ws` 读 dataset `guards/read.yaml`）；`eval_near.py`、`eval_oov.py` 加 `--rows`。不动 Step 代码，指纹不变。L0。
 - PATCH（L0，指纹不变：只动 eval/bench.py，不属任何 Step 的 code_deps；GM2 2026-11-28，bench 统一接口 P1）：资源种类 `NEEDS` 加 `bench5b`（5b 评测集 `cache/glyph_bench`、`oov_bench`），由 guji-manager 取资源层按钉死 sha 从冻结包解（原 manager `eval/bench_bundle`）；CV3 把 oov／degradation／zero_shot 接成原生 bench 时写 `needs=("bench5b", …)`，路径在 `ctx.res["bench5b"]`。
 - PATCH（只动 `eval/`、`scripts/`、`doc/`，不属任何 Step 的 code_deps，各书指纹逐位不变；CV3 2026-11-28）：候选字线接统一 bench 接口——新增原生 bench `read-3c-cands`（3c 甲层难格召回@1/10/30/50）与 `decide-4b-ctx`（4b 重排串联首位、融合增益、伤害率、补字），`guji bench run <id> --book <书>`；实现从 `scripts/eval_cands.py` 搬进 `eval/cands_bench.py`（脚本留作命令行壳，输出与旧版逐字节相同，`guji eval run @cands` 照用）；`doc/bench登记表.md` 3c／4b 两行填 bench id；`tests/test_cands_bench.py` 守打分口径。
 - PATCH（L0，指纹不变：只动 eval/，不属任何 Step 的 code_deps；CV2 2026-11-28，bench 统一接口 P1）：切字各小步接进 `guji bench`——`eval/benches/cut_parts.py` 登记 `cut-gate`（出口闸检出／误报）、`cut-2e-frame`、`cut-2e-ink`（2e 紧框）、`cut-2b-band`（2b 字带抹墨，护栏 erase＝0）、`cut-rulers`（R1–R4 体检）；`cut_legacy.py` 把跑不起的旧集与 column-split 登记 deprecated；cut-2d 殿本书 id 改正为 96mid1ogzk，`cut.run_env` 抽出公用；`cut_bench.gate_metrics` 加逐列 `cols`；`eval/rulers.measure` 列级闸读不到 column_gate 时读 cut_gate（三链合一后 R1–R4 全是 None）。史記上各 bench 数与 11-28 基线逐项相同。
