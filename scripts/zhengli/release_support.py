@@ -169,11 +169,14 @@ def smoke(text_id: str, chapter: str, rev: str | None = None, tries: int = 10, w
     for i in range(tries):
         bad = []
         try:
-            _, body = _http(f"{DATA}/proof/{text_id}/{chapter}.pending.json")
+            # 11-27 起整张单不再上传 COS（`/proof/<书>/<章>.pending.json` 新章号一直 404），改查网站由条目现拼的 /api/pending
+            _, body = _http(f"{SITE}/api/pending?book={text_id}&vol={chapter}&x={int(time.time())}")
             doc = json.loads(body)
+            if not isinstance(doc.get("cells"), list):
+                doc, bad = {}, ["网站 /api/pending 没给出这一章的 cells"]
         except Exception as e:  # noqa: BLE001
             doc, bad = {}, [f"取不到线上单：{e}"]
-        if doc and rev and doc.get("rev") != rev:
+        if doc and rev and doc.get("rev") and doc.get("rev") != rev:
             bad = [f"线上单还是 {doc.get('rev')}，不是 {rev}"]
         elif doc:
             for name in sorted(_sprite_refs(doc)):

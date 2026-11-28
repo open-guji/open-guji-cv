@@ -716,6 +716,8 @@ _MBJ_MARKS_1128 = ("切字：朱楓林集藏书印／墨点格旗 cell_shrink.in
                    "GUJI_CORPUS_DRIFT=warn，2026-11-28（CV2，MBJ 印章墨点骑线字）")
 
 
+_L10_TITLE_1128 = ("切字各 Step 显示名改新编号（四大步验收 L10，cv doc/验收标准.md S1）：row_segment「Step3 单列文字切分」→「2d 字间切分」、cell_shrink「Step4 字框收缩」→「2e 字框压缩」，自由版式、现代印刷链的 column_trace／line_ocr／cell_cut／column_crop／row_segment_runs 的 Step2／Step3 前缀改 2a／2d；只改 StepSpec.title 字符串，步骤 id、参数、运行逻辑一字不动；title 只进日志与 Pipeline.describe，不进产物、不进参数 dump，产物逐字节不变按构造成立（CV2 2026-11-28）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.steps.column_end",
           new="5ff011688402af99e9afecfe4bb381016b1c892805a7b93f5de3c80d59d9af33",
@@ -3044,10 +3046,64 @@ ENTRIES: tuple[Equiv, ...] = (
           new='9b02962b10247767e7bf45803f8ea9c730d4ff959e942fa922de1913ae5d38c8',
           old='714c024357d5563e31b61e39fbec59c3a8aff04bc56ddf0fa23af94de1f774fb',
           evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
+    # 收尾 glyph_analyzer 认校准表的 version／temporary（CV3 11-28，3b bench 临时校准）：表没写这两个键时 p_src 与之前逐字相同，
+    # 临时表的 p 只进 near[组].p_tmp——现役书（殿本宫官那份表没写 version）收尾产物逐字节不变
+    Equiv(module='open_guji_cv.steps.glyph_analyzer',
+          new='8b183226d9cf4e1e654a93ca870e3693b75fe7e0238a4ce34ca309e93aee4b5a',
+          old='534f3cf7b21cbd27340b99e2a9121b8ec677e9d3aa1507fb4e2f5844e1c3ef74',
+          evidence='glyph_analyzer 在殿本 vol04 8 页（--pages 1,2,7,17,22,48,162,181；上游 main 包 cv0.7.110-c23-g24-m2-ZM-colend-human-vol04-a3 '
+                   '＋本机按书配置现跑的 3b glyph_near 宫官 cnn_small，5 页有触发格、带正式校准表）上与 origin/dev 02604860 产物逐字节相同；'
+                   'scripts/code_equiv.py check，2026-11-28（CV3）'),
     Equiv(module='open_guji_cv.steps.group_decision',
           new='df9b7b767ba9a6c2de43cc3aecb7fe5b9e567f8f88dea4884b061cea0f486553',
           old='3c9bc0ebfe44f461a07190f1e6abc352c7ea15917da3ead3972cedf3efc54585',
           evidence='结构拆分 C5（CV3 2026-11-28）：groups/near_methods.py 拆成包（一方法一模块＋_base＋包根登记表），这一步只在 StepSpec.code_deps 里把 near_methods 的 12 个子模块列在 near_methods 后面，运行逻辑一字不动（code_deps 运行时只算指纹），产物逐字节不变按构造成立；near_methods 本身经 SPLITS 合回旧哈希，拆前拆后本步 code_hash 逐位相同（对 origin/dev 02a98489）'),
+    Equiv(module='open_guji_cv.steps.glyph_match',
+          new='95e97024e0f17a7cb2a5d2b4b56b1f9ee54c736f8d15be5426b79900a3ba98fb',
+          old='90028714f203801241758f220bdcf3a0910c6d348dbb2a889c1bba18976a2b79',
+          evidence='四大步验收 L10（CV3 2026-11-28）：只把 StepSpec.title 显示名从旧号改成新编号（Step5-a 库匹配→3a 字形库匹配），title 不进产物、不进参数，运行逻辑一字不动，产物逐字节不变按构造成立'),
+    Equiv(module='open_guji_cv.steps.rare_candidates',
+          new='f6aab5e7da1e89138f0284120d6cbbed4d2423a9c69bf6d347a616324f4dd49a',
+          old='d3509fcba80364ca8f152a30fc5902b9947c2949dacacbf83a35fc7a719ad20d',
+          evidence='四大步验收 L10（CV3 2026-11-28）：只把 StepSpec.title 显示名从旧号改成新编号（Step5-b 生僻字候选→（旧）生僻字候选），title 不进产物、不进参数，运行逻辑一字不动，产物逐字节不变按构造成立'),
+    # 切字各 Step 显示名改新编号（四大步验收 L10，CV2 2026-11-28）：只改 StepSpec.title 字符串，title 不进产物、不进参数 dump，
+    # 产物逐字节不变按构造成立（同 _HOU_DEP_1120 的口径）
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="27a28beaed1248526f0ef690913562287bb2b76b1ae031db3c07c0bc0622f7dc",
+          old="f235472064121bdcc7a34e6d92d10ccef4c7fbe3d60d1c1b00babd10f2bd0498",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="68a4b1e59a9e699313b45188b962c3b1c98fefc794121a08fc7974c03a2bf5a6",
+          old="b371efa2475cbb64d95bb988e7eb877550ef2703feec593c6cf50bffddfddb7b",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.column_trace",
+          new="792228d3dbcfc1a9e9fb6f174dbab832bdc5a2a35b094e8bc55dd01a0dc6bd20",
+          old="086eeda1a547f2b57354bb23cc3d97efa09441688cf70781d25c5ed7d2a5564d",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.line_ocr",
+          new="26f425ddcb621fc68e0547253b0c4bdd7aae385fe45d2148f253194e3cf10bd3",
+          old="d2e4e5d2b8200bd5a1eedbeb99f997999923933b8423cd651c43c79bb900e16f",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.cell_cut",
+          new="0cc94182a0ff9b6dbfdd44b2582380bbe6e8a569c7a35f628603cbe505609e97",
+          old="a77e55914c45a35f40800976accf9329ab049aeea6a951d6c3cafd181331687d",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.column_crop",
+          new="a55098a981126125bbeb4f973da4108d0475230566bcc9d8c501c0da5e7e1a0a",
+          old="09e6c46b9b530b3a329476dc44d8580c0080569892bcf30e3c7b803d16fdf758",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.row_segment_runs",
+          new="4d9f0e35da3dbf8a1ae1c142c86e3e241cd10586254a48b7308d995419db28f5",
+          old="47cde846ac5378eef452e9734fb179698ab7c960af78ac738dc1bbcbbca7cabd",
+          evidence=_L10_TITLE_1128),
+    Equiv(module="open_guji_cv.steps.cell_state",
+          new="160ccd881442bbf1aee77b394d26b5ee163e3f66e3e1945fd92e816ea53a0d33",
+          old="2fdc6c08c424981e11eede40e941373fb18bf3d1e00b18161766583867949a99",
+          evidence="cell_state 在殿本 vol01 3 页（--pages 1,2,3）上与 origin/dev 产物逐字节相同；只改 StepSpec.code_deps 元组（补列 seed_admit_vis3，使 SPLITS 的 params＋vis3 合回，cv #2042 补）；scripts/code_equiv.py check，2026-11-28（CV4）"),
+    Equiv(module="open_guji_cv.steps.group_decision",
+          new="a464dcf9f390834e92e65af26fb1795354f5d1a2b617b45558486168fe19bc37",
+          old="3c9bc0ebfe44f461a07190f1e6abc352c7ea15917da3ead3972cedf3efc54585",
+          evidence="group_decision 在殿本 vol01 3 页（--pages 1,2,3）上与 origin/dev 产物逐字节相同；只改 StepSpec.code_deps 元组（补列 seed_admit_vis3，使 SPLITS 的 params＋vis3 合回，cv #2042 补）；scripts/code_equiv.py check，2026-11-28（CV4）"),
 )
 
 
@@ -3255,6 +3311,15 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "guji_book.quantangwen.jiazhu_split": ("a0bdb376848116f288d3f912c64b98d6c834ded95b28d297e5fae5ca588f26a0", (
         ("open_guji_cv.impl.keben.jiazhu_split", "e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b"),
         ("open_guji_cv.feedback.seg_overrides", "81f5eb066e4d8fca8df69f95ef375ffb3196ccd30e850a35c099ee9648733fd0"))),
+}
+
+# 只用了 SPLITS 某条拆分里一块、本来就不该列全的 Step：(步骤 id, SPLITS 的旧模块名) → 理由。
+# tests/test_seg_move.py 的「几块要列全」守卫对这里登记的组合放行。只在这一步生来就没有旧模块、
+# 用不着合回旧哈希时登记（多列一块会白让各书过期）；要合回的照常把几块都列进 code_deps。
+SPLIT_PARTIAL_OK: dict[tuple[str, str], str] = {
+    ("cut_gate", "guji_book.quantangwen.jiazhu_split"):
+        "cut_gate（11-27 起）只调 impl.keben.jiazhu_split.column_frac 量夹注列比例，不读人定切分 seg_overrides；"
+        "全唐文 k8 起书仓已不 fork jiazhu_split，cut_gate 指纹从没含过旧的书仓 jiazhu_split，无可合回（2026-11-28，CV2）",
 }
 
 

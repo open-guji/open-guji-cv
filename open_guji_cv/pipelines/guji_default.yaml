@@ -1,0 +1,52 @@
+# 默认链（2026-11-28 Sheldon 定：全项目只有这一条链；刻本、写本、坊刻自由版式、现代排印都走它）。
+# 设计：https://claude.ai/artifact/99ihHT9o84MSKtB59YDWMp
+#
+# 原来按版式分的三条链（keben_body_v2、keben_free、modern_body）并成本链的三个**版式**（`layout:`）：
+#   grid   有版框界行格网的刻本、写本（殿本、史記、全唐文、脉经…）——原 keben_body_v2
+#   free   无固定格网、分栏分块的坊刻本（幼學…）——原 keben_free
+#   print  现代排印本（北行日錄、考補萃編…）——原 modern_body
+# 版式只换骨架（pipelines/_skeleton.yaml）1b–2b 三个槽位里放哪几步；步骤 id、产物、参数层都不变，
+# 所以三个旧 id 加载出来与合并前逐项相同、指纹逐位不变（tests/test_guji_default.py 守）。
+# 三个旧 id 永久当别名认（`core/seg_set.LEGACY_PIPELINES`）：`guji pipeline keben_body_v2 …`、任务库旧单照跑。
+#
+# 版式怎么定（`core/seg_set.layout_of`）：册配置 `layout:` ＞ 册里旧的 `pipeline:` ＞ 套书 `seg_set:` ＞
+# 书仓 code.yaml `base:` ＞ `edition: modern` → print ＞ grid。引用某个版式写 `guji_default@free`。
+id: guji_default
+title: 默认链
+layouts:
+  grid:
+    title: 有格网（刻本、写本）
+    slots:
+      layout: [border_detect]   # 1b 边框探测：原图 → 版框 + 界行（含折线）+ 外框 + 抬头框
+      seals: [seal_detect]      # 1c 印章定位：原图＋版框 → 每方印的类别（大印/小印）与外框
+      columns: [column_warp, column_band, column_end, column_geometry]   # 2a 拉直去噪 → 2b 定字带左右边、抹界行 → 2c 列端抹版框；出口闸挂 column_end
+      cells: [row_segment]      # 单列文字切分：→ 带类型字格 + 读序
+      # recognition 用骨架缺省
+    notes: |
+      坐标：Step1 产物存规范空间 raw_page_px@top-right；Step2–4 的列内坐标是 column_px，
+      另带回到原图的 quad_page / bbox_page。
+  free:
+    title: 自由版式（坊刻，无固定格网）
+    # 设计见 doc/design/自由版式切分-游学鳌头.md。第一本是《幼學須知鰲頭雜字》（yxat）。
+    #   block_detect   分块：版框 + 长线 → 文字块（人标 layout_hints 可整页 skip、圈块、给列数）
+    #   column_trace   块内找列：剪切校斜 + 投影 DP + 最省墨竖缝 → 每列左右弯缝
+    #   line_ocr       逐列送识别软件（PaddleOCR）读文本行，给 cell_cut 定区、定字数（要装 `.[cpu]`）
+    #   cell_cut       列内切字：大字 / 双行小注 / 单行小注分区，各自切字 → free_cells
+    #   free_to_cells  转标准字格（第二期，2026-11-28）：弯缝列逐行拉直成列图，free_cells 换成列图坐标的 cells，
+    #                  另出 column_windows（带 free_map 逆映射）、column_image；2e cell_shrink 起照骨架缺省接上
+    slots:
+      layout: [block_detect]
+      columns: [column_trace, line_ocr]
+      cells: [cell_cut, free_to_cells]
+      # recognition 用骨架缺省
+  print:
+    title: 现代排印（竖排）
+    # 与 grid 的差别只在切分线前三步：line_detect 顶替 border_detect（按墨柱找列，产同一种 borders）、
+    # column_crop 顶替 column_warp（不剥界行不削版框，出口挂 column_gate）、row_segment_runs 顶替 row_segment
+    # （墨段 + 字身盒模型 DP）。没有 seals 槽。缺省参数在套书 impl/modern/defaults.yaml。字形库按 Book.edition 分域。
+    slots:
+      layout: [line_detect]
+      columns: [column_crop]
+      cells: [row_segment_runs]
+    notes: |
+      坐标：与 grid 相同。分页（一张扫描页两栏）在 Step0 `guji split` 做，管线看到的「原图」已经是逻辑页。

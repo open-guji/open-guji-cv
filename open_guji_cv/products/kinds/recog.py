@@ -460,11 +460,11 @@ PageAlignRef.model_rebuild()
 
 
 GLYPH_MATCH = register_kind(ProductKindSpec(
-    id="glyph_match", title="Step5-a 库匹配判决", storage="numeric", unit="cell",
+    id="glyph_match", title="3a 库匹配判决", storage="numeric", unit="cell",
     schema=PageMatch, coord_space=COLUMN_PX))
 
 RARE_CANDIDATES = register_kind(ProductKindSpec(
-    id="rare_candidates", title="Step5-b 生僻字候选", storage="numeric", unit="cell",
+    id="rare_candidates", title="（旧）生僻字候选", storage="numeric", unit="cell",
     schema=PageRare, coord_space=COLUMN_PX))
 
 CONTEXT_DECISION = register_kind(ProductKindSpec(

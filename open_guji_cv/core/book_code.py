@@ -60,8 +60,10 @@ BASES: dict[str, str] = {
     "modern": "open_guji_cv.impl.modern",
     "free": "open_guji_cv.impl.free",
 }
-#: 版式 → 缺省走的管线（同 `seg_set.SEG_SET_PIPELINE` 里缺省实现那三行）。
-BASE_PIPELINE: dict[str, str] = {"keben": "keben_body_v2", "modern": "modern_body", "free": "keben_free"}
+#: 缺省实现 → 默认链里的版式（2026-11-28 三链合一，`core/seg_set.LAYOUTS`）。
+BASE_LAYOUT: dict[str, str] = {"keben": "grid", "modern": "print", "free": "free"}
+#: 兼容旧名：缺省实现 → 管线引用（`guji_default@<版式>`）。
+BASE_PIPELINE: dict[str, str] = {k: f"guji_default@{v}" for k, v in BASE_LAYOUT.items()}
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _MOD_RE = re.compile(r"^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$")
@@ -88,6 +90,10 @@ class BookCode:
 
     def module(self, rel: str) -> str:
         return f"{self.pkg}.{rel}"
+
+    @property
+    def layout(self) -> str:
+        return BASE_LAYOUT[self.base]
 
     @property
     def pipeline(self) -> str:

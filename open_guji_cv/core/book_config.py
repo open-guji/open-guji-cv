@@ -1,13 +1,26 @@
 """册配置分层与运行覆盖（设计：doc/design/册配置分层与运行覆盖.md）。
 
-生效顺序（后者覆盖前者）：工作区基础配置 `config/book_defaults.yaml` < 册 yaml `books/<册>.yaml`
-< 本次运行覆盖（环境变量 `GUJI_BOOK_OVERRIDE`，由 `guji … --override` 设；子进程自动继承）。
+生效顺序（后者覆盖前者）：组配置（基础配置 `groups: {config: <组>@<版>}` 指定，见下）< 工作区基础配置
+`config/book_defaults.yaml` < 册 yaml `books/<册>.yaml` < 本次运行覆盖（环境变量 `GUJI_BOOK_OVERRIDE`，由 `guji … --override` 设；子进程自动继承）。
 Step 默认值、管线 yaml `params:` 在更下面，由 `core/engine.py` 处理。
 
 合并规则：映射按键深合并；标量、列表整体替换；上层写 `null` 就是 null（`expected_cols: null` 等有意义）；
 唯独 `params:` 里的字段写 `null` = 去掉下层的值、回到 Step 默认。
 
 没有基础配置、没有运行覆盖时，`effective_book_dict` 返回的就是册 yaml 解析结果本身，行为与分层前逐位相同。
+
+## 组层（2026-11-28，CV0；设计 Claude Doc「配置六层与组层设计」）
+
+一套丛书或一种版刻字体共用的配置（如 wyg 文渊阁写本、wyd 武英殿刻本）。书在基础配置里声明：
+
+    groups:
+      config: wyg@1      # 配置组，恰好一个；@ 后是版本号（只增不改）
+      glyph: [wyg]       # 字形／语料／模型各系统的组：这里只登记、不参与合并（实际借库、码表、模型仍按各自的钉子）
+
+组配置是中心库只读工作区 `group-<组>` 里的 `config/group/v<版>.yaml`（形状同基础配置；顶层 `meta:` 是说明，不进合并），
+`guji db pull` 拉成 `borrowed_root('group-<组>')` 下的只读副本。钉了而副本没有 → 报错，不当成没组。
+`groups:` 只许写在基础配置；组里禁写 `FORBIDDEN_IN_GROUP` 与 `FORBIDDEN_GROUP_PARAMS`。组名、版本号不进指纹，生效值进。
+旧 cv（不认组层）读到 `groups:` 静默忽略，所以入组时书里与组同值的键要等升到认组层的 cv 再删。
 """
 from __future__ import annotations
 
@@ -26,7 +39,21 @@ VOLUME_ID_KEYS = frozenset({"book_id", "volume", "volume_width", "chapter_width"
 MEASURED_KEYS = frozenset({"bottom_gap", "period_prior", "frame_height", "col_pitch", "outer_shift",
                            "outer_gap", "preclean", "page_split", "dev_set", "layout_hints", "page_kinds"})
 FORBIDDEN_IN_DEFAULTS = IDENTITY_KEYS | MEASURED_KEYS
-FORBIDDEN_IN_OVERRIDE = IDENTITY_KEYS | VOLUME_ID_KEYS
+FORBIDDEN_IN_OVERRIDE = IDENTITY_KEYS | VOLUME_ID_KEYS | {"groups"}
+
+GROUPS_KEY = "groups"
+#: `groups:` 里认的系统：config 参与合并；其余只登记（各系统仍按自己的钉子取版本）
+GROUP_SYSTEMS = ("config", "glyph", "corpus", "model")
+#: 组配置里不许写的顶层键：身份、图源、实测先验、书的身份与钉子、绑在这部书文字上的数据，以及 manager 直接读的书级键
+FORBIDDEN_IN_GROUP = FORBIDDEN_IN_DEFAULTS | VOLUME_ID_KEYS | frozenset({
+    "book_title", "book_edition", "seg_set", "pipeline",
+    "corpus", "glyph_pin", "model", "code", "cv_version", "pua_table_pin", "pin",
+    "references", "codepoints", "groups", "src_w", "cos_iou_min"})
+#: 组配置 `params.<步>.` 下不许写的字段：逐书看图／逐书对照定的数据（字对、码位规则、页钉、卷题正则、版式槽位）
+FORBIDDEN_GROUP_PARAMS = frozenset({
+    "follow_ref", "follow_ref_seen", "pua_rules", "page_pins", "coord_title_formula",
+    "layout_prior", "roster_ref_corpus", "roster_ref_pins"})
+_GROUP_NAME = __import__("re").compile(r"^[a-z][a-z0-9_]*$")
 
 
 class BookConfigError(ValueError):
@@ -64,6 +91,110 @@ def load_defaults(book_yaml: Path) -> dict:
         raise BookConfigError(
             f"{p} 里不许写 {', '.join(bad)}：身份、图源、实测先验只能写在册 yaml（换书要重标，不能共用）")
     return d
+
+
+def parse_group_ref(v, where: str = "groups.config") -> tuple[str, int]:
+    """`"wyg@1"` → ("wyg", 1)；别的写法报错（不猜）。"""
+    s = str(v or "").strip()
+    name, sep, ver = s.partition("@")
+    if not sep or not _GROUP_NAME.match(name) or not ver.lstrip("v").isdigit() or int(ver.lstrip("v")) < 1:
+        raise BookConfigError(f"{where} 要写成 <组名>@<版本>（如 wyg@1），收到 {v!r}")
+    return name, int(ver.lstrip("v"))
+
+
+def book_groups(defaults: dict) -> dict[str, object]:
+    """基础配置里的 `groups:` 解析结果：`{"config": ("wyg", 1) 或 None, "glyph": [...], "corpus": [...], "model": [...]}`。
+    稳定的只读取法（manager、第三步脚本用）；没写 `groups:` 返回各系统为空。"""
+    g = defaults.get(GROUPS_KEY) if isinstance(defaults, dict) else None
+    out: dict[str, object] = {"config": None, "glyph": [], "corpus": [], "model": []}
+    if g is None:
+        return out
+    if not isinstance(g, dict):
+        raise BookConfigError("groups: 要是映射，如 {config: wyg@1, glyph: [wyg]}")
+    bad = sorted(set(g) - set(GROUP_SYSTEMS))
+    if bad:
+        raise BookConfigError(f"groups: 只认 {list(GROUP_SYSTEMS)}，多了 {bad}")
+    if g.get("config") is not None:
+        if isinstance(g["config"], (list, tuple)):
+            raise BookConfigError("groups.config 只能写一个组（两个配置组互压会让顺序决定结果）")
+        out["config"] = parse_group_ref(g["config"])
+    for k in ("glyph", "corpus", "model"):
+        v = g.get(k)
+        if v is None:
+            continue
+        vs = [v] if isinstance(v, str) else list(v)
+        for x in vs:
+            if not _GROUP_NAME.match(str(x).partition("@")[0]):
+                raise BookConfigError(f"groups.{k} 里的组名 {x!r} 不合规（小写字母开头，字母数字下划线）")
+        out[k] = [str(x) for x in vs]
+    return out
+
+
+def group_ws(name: str) -> str:
+    """组 `name` 在中心库的工作区名。"""
+    return f"group-{name}"
+
+
+def group_config_path(name: str, version: int, root: Path | None = None) -> Path:
+    """组配置文件：`<root>/config/group/v<版>.yaml`；`root` 缺省为借来的只读副本 `borrowed_root('group-<组>')`。"""
+    if root is None:
+        from .workspace import active_branch, borrowed_root
+        root = borrowed_root(group_ws(name), active_branch())
+    return Path(root) / "config" / "group" / f"v{version}.yaml"
+
+
+def check_group_layer(d: dict, where: str) -> None:
+    """组配置里写了禁写的键就报错。"""
+    bad = sorted(set(d) & FORBIDDEN_IN_GROUP)
+    if bad:
+        raise BookConfigError(f"{where} 里不许写 {', '.join(bad)}：身份、图源、实测先验、钉子、参校本、码位等是书或册的，不进组")
+    ps = d.get("params") or {}
+    if not isinstance(ps, dict):
+        raise BookConfigError(f"{where} 的 params: 要是 {{step_id: {{字段: 值}}}}")
+    for sid, kv in ps.items():
+        if not isinstance(kv, dict):
+            continue
+        hit = sorted(set(kv) & FORBIDDEN_GROUP_PARAMS)
+        if hit:
+            raise BookConfigError(f"{where} 的 params.{sid} 里不许写 {', '.join(hit)}：逐书核定的数据留在书里")
+        handling = kv.get("handling") if sid == "group_decision" else None
+        if isinstance(handling, dict) and any(isinstance(h, dict) and "methods" in h for h in handling.values()):
+            raise BookConfigError(f"{where} 的 params.group_decision.handling.*.methods 不许写在组里（methods 只许书里收紧）")
+
+
+def load_group(name: str, version: int, root: Path | None = None) -> dict:
+    """读组配置（去掉 `meta:`），查禁写键。副本缺了报错。"""
+    p = group_config_path(name, version, root)
+    if not p.is_file():
+        raise BookConfigError(
+            f"书配置钉了配置组 {name}@{version}，但本机没有 {p}：先 guji db pull（会把 {group_ws(name)} 拉成只读副本）")
+    from .yaml_cache import load_yaml_cached
+    d = load_yaml_cached(p) or {}
+    if not isinstance(d, dict):
+        raise BookConfigError(f"{p} 顶层应是映射")
+    d = {k: v for k, v in d.items() if k != "meta"}
+    check_group_layer(d, f"组配置 {name}@{version}（{p}）")
+    return d
+
+
+def effective_defaults(book_yaml_or_config_dir: Path) -> dict:
+    """书级生效配置（组 ∪ 基础配置，不含册与运行覆盖）：manager 那些只认书、不认册的读者用，别再直接读 book_defaults.yaml。
+    参数可以是任一册 yaml（`books/<册>.yaml`），也可以是数据目录根（含 `config/book_defaults.yaml`）。"""
+    p = Path(book_yaml_or_config_dir)
+    probe = p if p.suffix in (".yaml", ".yml") else p / "books" / "_.yaml"
+    dflt = load_defaults(probe)
+    out: dict = {}
+    for _, layer in _group_layers(dflt):
+        out = merge(out, layer)
+    return merge(out, dflt) if dflt else out
+
+
+def _group_layers(dflt: dict) -> list[tuple[str, dict]]:
+    gs = book_groups(dflt)
+    if gs["config"] is None:
+        return []
+    name, ver = gs["config"]
+    return [(f"组 {name}@{ver}", load_group(name, ver))]
 
 
 def run_override() -> dict:
@@ -107,9 +238,13 @@ def layers(book_yaml: Path, *, apply_override: bool = True) -> list[tuple[str, d
     from .yaml_cache import load_yaml_cached
     out: list[tuple[str, dict]] = []
     dflt = load_defaults(book_yaml)
+    out.extend(_group_layers(dflt))
     if dflt:
         out.append(("基础配置", dflt))
-    out.append(("册 yaml", load_yaml_cached(book_yaml) or {}))
+    vol = load_yaml_cached(book_yaml) or {}
+    if isinstance(vol, dict) and GROUPS_KEY in vol:
+        raise BookConfigError(f"{book_yaml} 里不许写 groups:：归哪个组是书的事，写在 config/book_defaults.yaml")
+    out.append(("册 yaml", vol))
     if apply_override:
         ov = run_override()
         if ov:
@@ -140,7 +275,7 @@ def effective_book_dict(book_yaml: Path, *, apply_override: bool = True) -> dict
     from .lib_pins import expand_layer
     try:      # 参校本属性：各层先把标量归一成 {default: x} 再合并（否则标量盖映射丢另一半）；基础配置不许写 segments
         # 四库版本简写 `pin: c31-g19-m2-k3` 逐层展开成分开的键（core/lib_pins.py），上层照常压下层
-        ls = [(n, _fold_admit_layer(fold_ref_profile(n, fold_layer(n, expand_layer(ly, f"{n}：")), allow_segments=(n != "基础配置"))))
+        ls = [(n, _fold_admit_layer(fold_ref_profile(n, fold_layer(n, expand_layer(ly, f"{n}：")), allow_segments=(n != "基础配置" and not n.startswith("组 ")))))
               for n, ly in raw_ls]
     except ValueError as e:
         raise BookConfigError(str(e)) from None

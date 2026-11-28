@@ -41,7 +41,7 @@ def ensure_products(bk, pages: list[int], *, store: ProductStore,
         print(f"[from-raw] {len(missing)} 页缺产物，从原图补跑 "
               f"{' → '.join(BOOTSTRAP_STEPS)}：{missing}", flush=True)
     log = (lambda s: None) if quiet else (lambda s: print(f"  {s}", flush=True))
-    eng = Engine(bk, load_pipeline("keben_body_v2"), store=store, cache=cache, log=log)
+    eng = Engine(bk, load_pipeline("guji_default@grid"), store=store, cache=cache, log=log)
     eng.run(steps=list(BOOTSTRAP_STEPS), pages=missing)
     still = [pg for pg in missing if not has_products(bk.id, pg, store=store)]
     if still and not quiet:

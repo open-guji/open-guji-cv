@@ -148,6 +148,7 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "Engine": ("core.engine", "Engine"),
     "git_rev": ("core.engine", "git_rev"),
     "load_pipeline": ("core.pipeline", "load_pipeline"),
+    "pipeline_for": ("core.pipeline", "pipeline_for"),
     "ShadowGate": ("shadow.gate", "ShadowGate"),
     "load_model": ("shadow.model", "load_model"),
     "page_evidence": ("shadow.offline", "page_evidence"),
@@ -409,6 +410,10 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "_corpus_text": ("steps.align_ref", "_corpus_text"),
     "BookSpec": ("core.book", "BookSpec"),
     "FORBIDDEN_IN_OVERRIDE": ("core.book_config", "FORBIDDEN_IN_OVERRIDE"),
+    # 配置组层（CV0 2026-11-28）：书级生效配置（组∪书）、解析 groups:、组配置禁写检查
+    "effective_defaults": ("core.book_config", "effective_defaults"),
+    "book_groups": ("core.book_config", "book_groups"),
+    "check_group_layer": ("core.book_config", "check_group_layer"),
     # guji-manager rulings-hits／collect 落 AI 裁定（2026-11-20）
     "RulingLog": ("feedback.rulings", "RulingLog"),
     "RulingStore": ("feedback.rulings", "RulingStore"),

@@ -202,7 +202,7 @@ def test_glyph_near_hou_shape_end_to_end(tmp_path, models):
     sha = hou_shape.fingerprint(str(mf))                                    # 与第四步参数指纹 hs 段同算法
     assert pn.models == {"hou_shape:hou": sha}
     assert NM.method_fingerprint("hou_shape", str(mf)) in {x.split(":", 1)[1] for x in pn.methods_sha.split(";")}
-    near = pn.by_id()
+    near = {k: v[0] for k, v in pn.by_id_all().items()}
     assert list(near) == [f"tbook:1:1:{s}" for s in (1, 2, 3, 4, 6)]
     model = hou_shape.load(str(mf))
     trail = {}

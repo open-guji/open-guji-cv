@@ -79,6 +79,41 @@ def test_merge_cell_uncalibrated_method_gives_evidence_only():
     assert {c.char for c in rec.cands} == {"官", "宫"}
 
 
+class _CalTagged(_Cal):
+    def __init__(self, **tag):
+        self.calib = {"format": "near-calib/1", "knots": {}, **tag}
+
+
+def test_merge_cell_versioned_formal_calib_tags_p_src():
+    rec = merge_cell(_match_rec(candidates=[("官", 0.9), ("宫", 0.89)]), _near_rec({"官": 0.2, "宫": 0.8}),
+                     {"cnn_small:gong": _CalTagged(version="v2")}, 5, "elastic")
+    assert rec.p_src == "near:cnn_small:gong@v2"
+    assert rec.near["gong"]["p_src"] == "near:cnn_small:gong@v2" and rec.near["gong"]["p"] == {"宫": 0.9, "官": 0.1}
+    assert {c.char: c.p for c in rec.cands}["宫"] == 0.9
+
+
+def test_merge_cell_temporary_calib_only_p_tmp():
+    """临时校准表（`temporary: true`）只给排序展示：不进 cands[].p／p_src／near.p，只写 p_tmp；候选次序不变。"""
+    rec = merge_cell(_match_rec(candidates=[("官", 0.9), ("宫", 0.89)]), _near_rec({"官": 0.2, "宫": 0.8}),
+                     {"cnn_small:gong": _CalTagged(version="tmp-1", temporary=True)}, 5, "elastic")
+    assert all(c.p is None for c in rec.cands) and rec.p_src == ""
+    assert [c.char for c in rec.cands] == ["官", "宫"]
+    g = rec.near["gong"]
+    assert "p" not in g and "p_src" not in g
+    assert g["p_tmp"] == {"宫": 0.9, "官": 0.1} and g["p_tmp_src"] == "near:cnn_small:gong@tmp-1~tmp"
+    assert all("p_tmp" not in c.evidence.get("b", {}) for c in rec.cands)      # b 只放原始分（B3 口径）
+
+
+def test_merge_cell_formal_calib_beats_temporary_in_group():
+    from open_guji_cv.products.kinds.read import NearMethodOut, NearRec
+    nr = NearRec(id="tbook:1:1:1", slot=1, group="gong", trigger="close",
+                 methods=[NearMethodOut(method="a:gong", sims={"官": 0.2, "宫": 0.8}),
+                          NearMethodOut(method="b:gong", sims={"官": 0.3, "宫": 0.7})])
+    rec = merge_cell(_match_rec(candidates=[("官", 0.9), ("宫", 0.89)]), nr,
+                     {"a:gong": _CalTagged(temporary=True, version="t"), "b:gong": _Cal()}, 5, "elastic")
+    assert rec.p_src == "near:b:gong" and "p_tmp" not in rec.near["gong"]
+
+
 # ── 管线：收尾、缺省关 ────────────────────────────────────────────────
 
 @pytest.mark.parametrize("pid", list_pipelines())
@@ -147,7 +182,7 @@ def test_glyph_near_and_analyzer_end_to_end(tmp_path, tiny_model):
         {"slot": 1, "bbox_page": (30.0, 40.0, 110.0, 130.0)}, {"slot": 2, "bbox_page": (30.0, 140.0, 110.0, 230.0)}]))
 
     out = run_steps(ctx, 1, ["glyph_near", "glyph_analyzer"])
-    near = out["glyph_near"].by_id()
+    near = {k: v[0] for k, v in out["glyph_near"].by_id_all().items()}
     assert list(near) == ["vol07:1:1:1"]                                        # 只有触发的格
     mo = near["vol07:1:1:1"].methods[0]
     assert mo.method == "cnn_small:gong" and mo.evidence == {"fold": "fold1"}  # 册号 7 % 2 折

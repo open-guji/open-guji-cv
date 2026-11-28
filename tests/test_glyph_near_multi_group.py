@@ -44,7 +44,7 @@ def _nr(cid, group, sims=None, method=None, ev=None, trigger="cands"):
 def test_page_near_by_id_keeps_first_group_by_id_all_and_get():
     pn = PageNear(page=1, columns=[ColumnNear(col=1, chars=[_nr("b:1:1:1", "gong"), _nr("b:1:1:1", "guan"),
                                                             _nr("b:1:1:2", "guan")])])
-    assert {k: v.group for k, v in pn.by_id().items()} == {"b:1:1:1": "gong", "b:1:1:2": "guan"}
+    assert not hasattr(pn, "by_id")                                   # 一格一条的旧读口已去掉（结构拆分 B5）
     assert {k: [r.group for r in v] for k, v in pn.by_id_all().items()} == {"b:1:1:1": ["gong", "guan"],
                                                                              "b:1:1:2": ["guan"]}
     assert pn.get("b:1:1:1", "guan").group == "guan" and pn.get("b:1:1:2", "gong") is None
@@ -197,7 +197,6 @@ def test_glyph_near_multi_group_end_to_end(tmp_path, model_file):
     out = run_steps(ctx, 1, ["glyph_near", "glyph_analyzer"])
     pn = out["glyph_near"]
     assert [(r.id[-1], r.group) for r in pn.columns[0].chars] == [("1", "rr"), ("1", "rx"), ("2", "rr"), ("3", "rx")]
-    assert {k: v.group for k, v in pn.by_id().items()} == {"tbook:1:1:1": "rr", "tbook:1:1:2": "rr", "tbook:1:1:3": "rx"}
     assert [r.group for r in pn.by_id_all()["tbook:1:1:1"]] == ["rr", "rx"]
     sha = rr_shape.fingerprint(str(model_file))
     assert pn.models == {"rr_shape:rr": sha, "rr_shape:rx": sha}

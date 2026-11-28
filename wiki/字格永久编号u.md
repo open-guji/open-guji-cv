@@ -18,12 +18,12 @@
 |---|---|
 | 发 u、记身份账 `feedback/uid/<册>.jsonl` | guji-manager（`guji uid …`；标 main 时自动入账） |
 | 人裁、裁定、待审条目、网站票、book-text 上写 u | guji-manager |
-| **按 u 查文意裁定** | **cv**（`seed_admit`，书级开关 `ruling_by_u`） |
+| **按 u 查文意裁定** | **cv**（定字收尾 `seed_admit`／`char_decide`，书级开关 `ruling_by_u`） |
 | 产物里带 u | 不带。cv 产物仍只写格号，u 在导出 book-text 时由 manager 按账补上 |
 
 ## cv 怎么用 u：查文意裁定
 
-第 4 步定字的 4c 放行（`seed_admit`）里，形近字组、待审格会去查大模型的**文意裁定**库（之前问过的就不再问）。以前只能按「这格前后的文字」做键去查；前后文一改（整理本改字、旁边的格重切），就查不到。打开 `ruling_by_u` 以后多了最后一档：
+第 4 步定字的收尾（`char_decide`，旧名 `seed_admit`）里，形近字组、待审格会去查大模型的**文意裁定**库（之前问过的就不再问）。以前只能按「这格前后的文字」做键去查；前后文一改（整理本改字、旁边的格重切），就查不到。打开 `ruling_by_u` 以后多了最后一档：
 
 ```mermaid
 flowchart LR

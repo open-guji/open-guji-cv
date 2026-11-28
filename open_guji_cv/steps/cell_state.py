@@ -153,7 +153,7 @@ class CellStateStep(Step):
                    "open_guji_cv.steps.seed_admit_pick", "open_guji_cv.steps.seed_admit_veto", "open_guji_cv.steps.seed_admit_altcut",
                    "open_guji_cv.steps.seed_admit_reasons", "open_guji_cv.steps.seed_admit_page_params", "open_guji_cv.steps.decide",
                    "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.seed_admit_common",
-                   "open_guji_cv.steps.seed_admit_params", "open_guji_cv.steps.align_ref_coord", "open_guji_cv.utils.gap",
+                   "open_guji_cv.steps.seed_admit_params", "open_guji_cv.steps.seed_admit_vis3", "open_guji_cv.steps.align_ref_coord", "open_guji_cv.utils.gap",
                    "open_guji_cv.products.kinds.cell_state"),
         enabled_by="enabled",
     )

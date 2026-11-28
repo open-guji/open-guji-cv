@@ -21,10 +21,10 @@ from ..seg.warp import ColumnWindow, page_column_windows, warp_column
 
 
 class ColumnWarpParams(BaseModel):
-    body_pad: float = 0.0
+    body_pad: float = 0.0             # 列窗上界在版框线之上再开的余量（px，原图尺度），见 seg.warp.page_column_windows
     bottom_pad: float = 40.0          # 下界额外开的余量，见 column_projection.BOTTOM_PAD
     head_pad: float = 30.0            # 抬头列上界在抬头框线心之上再开的余量，见 column_projection.HEAD_PAD
-    ink_threshold: int = 128
+    ink_threshold: int = 128          # 二值门槛：灰度 < 此值算墨（去噪、两侧墨量都用）
     min_blob_area: int = 6            # denoise_column
     side_floor_look: float = 0.25     # 交接闸 L2 用：两侧各看进去多少比例的宽度
     det_warp: bool = True

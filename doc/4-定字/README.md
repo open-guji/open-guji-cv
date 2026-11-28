@@ -6,12 +6,12 @@
 |---|---|---|
 | 4a 参照对位 | `align_ref` | 整理本（参校文本）与字格逐字对位，给每格整理本说的字（要语料；不读字块图，2026-11-22 起从 3 识字移来） |
 | 4b 上下文 | `context_decide`、`context_rank` | 按前后文给候选排序：`context_decide` 门槛化给首选（要语料），`context_rank` 填空重排（缺省关） |
-| 4c 格况 | （现在在 `seed_admit` 里） | 这一格有没有要定的字：有字／空白／遮挡／印章／切坏／非字 |
-| 4d 字组 | （现在在 `seed_admit` 里） | 已登记字组里的格，合几路证据判组内是哪个字 |
-| 收尾 | `seed_admit`（计划改名 `char_decide`） | 每格最后判断：自动放行（带通道）或落人审（带待审原因）；进库走裁定事件 |
-| gate | `decide_gate` | **只检测、不判断**（2026-11-28）：读第四步全部产物，每页出检测清单（`fail`／`flag` 两级）；不改任何格、不挡别的步骤、不进任何步骤的指纹。挂在 `seed_admit` 出口，永远最后跑；检测项见 [decide_gate.md](decide_gate.md) |
+| 4c 格况 | `cell_state`（缺省关；关时收尾现算，产物不变） | 这一格有没有要定的字：有字／空白／遮挡／印章／切坏／非字 |
+| 4d 字组 | `group_decision`（缺省关；只出原料、不定字） | 已登记字组里的格：入口归属、3b 看图判法快照、字框宽高比，供收尾合证据 |
+| 收尾 | `char_decide`（旧名 `seed_admit`，新旧名并认，见 [pending_reason.md](pending_reason.md)） | 每格最后判断：自动放行（带通道）或落人审（带待审原因）；进库走裁定事件 |
+| gate | `decide_gate` | **只检测、不判断**（2026-11-28）：读第四步全部产物，每页出检测清单（`fail`／`flag` 两级）；不改任何格、不挡别的步骤、不进任何步骤的指纹。挂在 `char_decide` 出口，永远最后跑；检测项见 [decide_gate.md](decide_gate.md) |
 
-- **子步、收尾与 gate 的划分（2026-11-28 用户定）**、与现有代码的对应、分期：[子步.md](子步.md)。现在是逻辑分组，步骤 id、产物、指纹不变。
+- **子步、收尾与 gate 的划分（2026-11-28 用户定）**、与现有代码的对应、分期：[子步.md](子步.md)。4c、4d、gate 已是独立 Step（缺省关）；验收按 [../验收标准.md](../验收标准.md)。
 - 各步的输入输出、参数缺省值：[步骤与产物.md](步骤与产物.md)（从代码生成）。
 - 待审原因的取值：[../design/待审原因PendingReason.md](../design/待审原因PendingReason.md)。
 - 本大步的工具命令：`guji-cv decide variants`（本书用字账）。
@@ -42,6 +42,7 @@
 - 指纹：新模块都在 `seed_admit` 的 `code_deps` 里，`code_equiv.SPLITS` 把它们合回原来的 `seed_admit`／`seed_admit_lanes` 两项，各书各步指纹不变。
 - 测试里换函数：各遍搬走后，调用方在哪个模块就查哪个模块的全局名，用 `tests/helpers.py` 的 `patch_seed_admit(monkeypatch, "名字", 值)` 在各模块里一起换。
 - **收尾步改名 `seed_admit`→`char_decide`（2026-11-28）**：分两版发，本版只是兼容读口，产物仍写 `seed_admit`；新旧名读法、迁移命令、`pending_reason` 字段与 cv 将来直写的原因集合见 [pending_reason.md](pending_reason.md)。
+- **4c、4d、收尾的产物字段**：见 [产物字段.md](产物字段.md)（2026-11-28）。
 
 ## 4d `group_decision`（2026-11-28 起，P3c，缺省关）
 

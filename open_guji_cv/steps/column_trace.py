@@ -33,10 +33,10 @@ from ..impl.free.free_rectify import rectify_gray
 
 
 class ColumnTraceParams(BaseModel):
-    bg_win: int = 51
-    ink_ratio: float = 0.72
+    bg_win: int = 51               # 局部背景中值窗口（px），见 impl/free/free_blocks.ink_mask
+    ink_ratio: float = 0.72        # 灰度／局部背景 < 此比值算墨
     pitch_min: int = 80            # 列距搜索范围（px，原图尺度）
-    pitch_max: int = 300
+    pitch_max: int = 300           # 列距搜索上限（px，原图尺度）
     seam_band: float = 0.18        # 变缝能偏离直线的幅度（× 列宽）
     sample_step: int = 4           # 缝落盘的采样行距
     min_speck: int = 15            # 面积小于此的墨点先去掉
@@ -65,7 +65,7 @@ class ColumnTraceParams(BaseModel):
 @register_step
 class ColumnTraceStep(Step):
     spec = StepSpec(
-        id="column_trace", title="Step2 块内找列（自由版式）", version="1.8", unit="page",
+        id="column_trace", title="2a 块内找列（自由版式）", version="1.8", unit="page",
         consumes=("raw_page", "layout_blocks"), produces=("free_columns",), params=ColumnTraceParams,
         code_deps=("open_guji_cv.impl.free.free_columns", "open_guji_cv.impl.free.free_blocks",
                    "open_guji_cv.impl.free.free_rectify"),

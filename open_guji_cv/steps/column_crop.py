@@ -26,15 +26,15 @@ from .column_warp import side_floor
 
 
 class ColumnCropParams(BaseModel):
-    ink_threshold: int = 128
+    ink_threshold: int = 128          # 二值门槛：灰度 < 此值算墨
     min_blob_area: int = 6            # denoise_column
-    side_floor_look: float = 0.25
+    side_floor_look: float = 0.25     # 交接闸 L2 用：两侧各看进去多少比例的宽度（同 column_warp）
 
 
 @register_step
 class ColumnCropStep(Step):
     spec = StepSpec(
-        id="column_crop", title="Step2 单列裁剪 + 去噪（现代印刷）", version="1.1", unit="column",
+        id="column_crop", title="2a 单列裁剪 + 去噪（现代印刷）", version="1.1", unit="column",
         consumes=("raw_page", "borders", "border_detect_gate_manifest", "line_index"),
         produces=("column_windows", "column_raw", "column_image"),
         params=ColumnCropParams,

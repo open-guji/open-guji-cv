@@ -64,13 +64,18 @@ class ColumnWindowRec(BaseModel):
     # 列图怎么矫正的（column_warp `ruled_warp`）：True＝竖向线性、横向逐行插值，False＝射影。下游 `ColumnMapper.of` 按它反算。
     # 只在 True 时进产物（老产物、没开的书逐字节不变）。
     ruled: bool = False
+    # 自由版式列（2d `free_to_cells` 产，2026-11-28）：列图是弯缝之间逐行平移拉直的，不是两条直线之间的射影，
+    # 逆映射照这里：{"xa": 列图左沿在拉正后的页上的 x（左上原点）, "y0": 列图顶行在页上的 y, "h": 行数,
+    # "rows": 逐行起点相对 xa 的游程 [[行, 值], …], "warp": `layout_blocks.warp`（None＝页没拉正）}。
+    # `left_line`／`right_line` 这时只是列图外接的两条竖线（给只看大致位置的下游）。只在非空时进产物（刻本链逐字节不变）。
+    free_map: dict | None = None
 
     @model_serializer(mode="wrap")
     def _drop_default_ruled(self, handler):
         d = handler(self)
         if isinstance(d, dict) and not self.ruled:
             d.pop("ruled", None)
-        for k in ("band", "trim_top", "trim_bottom"):   # 刻本链 2a 不写这三项
+        for k in ("band", "trim_top", "trim_bottom", "free_map"):   # 刻本链 2a 不写这三项
             if isinstance(d, dict) and d.get(k) is None:
                 d.pop(k, None)
         return d
@@ -88,7 +93,7 @@ class PageWindows(BaseModel):
 
 
 COLUMN_WINDOWS = register_kind(ProductKindSpec(
-    id="column_windows", title="Step2 逐列窗口 / warp 参数 / 文字带", storage="numeric",
+    id="column_windows", title="2a 逐列窗口 / warp 参数 / 文字带", storage="numeric",
     unit="column", schema=PageWindows, coord_space=RAW_TR))
 
 COLUMN_RAW = register_kind(ProductKindSpec(

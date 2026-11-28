@@ -224,7 +224,7 @@ def test_glyph_near_book_knn_end_to_end(tmp_path, models):
     out = run_steps(ctx, 1, ["glyph_near", "glyph_analyzer"])
     pn = out["glyph_near"]
     assert pn.models == {"book_knn:t": fp}
-    near = pn.by_id()
+    near = {k: v[0] for k, v in pn.by_id_all().items()}
     assert list(near) == [f"tbook:1:1:{s}" for s in (1, 2, 3, 4, 6)]
     model = book_knn.load(str(mf))
     for s in (1, 2, 3, 6):

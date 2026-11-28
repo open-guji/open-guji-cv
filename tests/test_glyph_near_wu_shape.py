@@ -160,7 +160,7 @@ def test_glyph_near_wu_shape_end_to_end(tmp_path, models):
     assert pn.models == {"wu_shape:wu": sha}
     # 4d 读口比 methods_sha 里的 `wu_shape=<指纹>`，与它按 group_flow_wu_shape 算的同一份
     assert NM.method_fingerprint("wu_shape", str(mf)) in {x.split(":", 1)[1] for x in pn.methods_sha.split(";")}
-    near = pn.by_id()
+    near = {k: v[0] for k, v in pn.by_id_all().items()}
     assert list(near) == [f"tbook:1:1:{s}" for s in (1, 2, 3, 4, 6)]
     model = wu_shape.load(str(mf))
     trail = {}

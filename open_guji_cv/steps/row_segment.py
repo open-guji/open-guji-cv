@@ -1,4 +1,4 @@
-"""Step3 单列文字切分：清理后列图 → 带类型的字格 + 读序。
+"""2d 字间切分（原 Step3 单列文字切分）：清理后列图 → 带类型的字格 + 读序。
 
 包的是 `impl/keben/row_boundaries.segment_column`。输入参数全部来自交接闸（页级 period / ref_w，
 列级 content_x / border_top / border_bottom / top_slack）；n_body_slots 来自 Book / 参数。
@@ -891,10 +891,10 @@ def _apply_straddle(pc: PageCells, pairs) -> PageCells:
 class RowSegmentParams(BaseModel):
     n_body_slots: int | None = None      # None = Book.chars_per_line
     n_raised: int = 0                    # 抬头多出的格数；版式先验，raised 不自动推
-    ink_threshold: int = 128
-    min_ink_ratio: float = 0.01
-    raise_tol: float = 2.0
-    detect_jiazhu: bool = True
+    ink_threshold: int = 128             # 二值门槛：灰度 < 此值算墨
+    min_ink_ratio: float = 0.01          # 格内墨占比（裁紧前的格框上算）低于此判空白格
+    raise_tol: float = 2.0               # 格顶高出 border_top 超过这么多像素记 Cell.raised（抬头格）
+    detect_jiazhu: bool = True           # 认雙行小注段并拆 a/b（关了整列按正文切）
     only_admitted: bool = True           # 只切过闸的列
     seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（seg/seam.py）
     cut_judge: str = "unet_f64"          # 候选池裁判：unet_f64（双精度、跨 CPU 逐位一致；2026-11-18 起缺省，A22 开关收敛 11-13 定）| unet（单精度，seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
@@ -925,8 +925,8 @@ class RowSegmentParams(BaseModel):
     #: 首格/末格/抬头格里墨的外接框竖向 ≤ `dash_h_frac`×period 且横向 ≤ `dash_w_frac`×列宽的，kind 记 `blank`
     #: 而不是没字的 `char`。阈值未经真图标定（云端没有原图），先按 S2 实测「虚线跨度 ≤29 行 ≈ 0.25 period」取。
     dash_blank: bool = False
-    dash_h_frac: float = 0.3
-    dash_w_frac: float = 0.25
+    dash_h_frac: float = 0.3             # dash_blank：墨外接框竖向 ≤ 此值×period 才算虚线残段
+    dash_w_frac: float = 0.25            # dash_blank：墨外接框横向 ≤ 此值×列宽才算虚线残段
     #: 职名页密排段**按本书字形库重切**（overview#450，2026-10-07，`impl/keben/roster_glyph`）：
     #: 压扁粘连字几何上数不准字数，拿库里刻例比相似度定切法。默认关；开了才读库、才填指纹。
     roster_glyph_refine: bool = False
@@ -943,7 +943,7 @@ class RowSegmentParams(BaseModel):
     #: （放 0243.jsonl 等，如 `daizhige`）与页钉位表（语料目录下的名字，同 align_ref.page_pins）。两个都给才开；只有实现了 `page_ref_lines` 的套书用得上，
     #: 殿本的职名页实现不认，关时产物逐字节不变。
     roster_ref_corpus: str = ""
-    roster_ref_pins: str = ""
+    roster_ref_pins: str = ""            # 职名页按整理本重切的页钉位表（语料目录下的名字），与 roster_ref_corpus 都给才开
     roster_ref_fingerprint: str = ""     # 两个文件的内容指纹，开着时自动填
     #: **大印下的卷端标题列去印点后照样按整理本字数切**（史記文淵閣本 2026-11-02）：卷首页大印压着卷题、撰者行，
     #: 原先这些列整列不改（印泥斑点按字数重切会被切成字），格网乱切、机器给不出字，01–10 册约 220 格送审。
@@ -1065,7 +1065,7 @@ class RowSegmentParams(BaseModel):
     #: 挑定格网后、终切前，只重排「上下都是正文字」的内部线（格数不变，现线判官分 < `boundary_net_p` 才许挪到隔着墨的另一条缝）。
     #: 治写本高字字内白缝当字缝（史記 42:66:4「而｜佗」等）。书级（模型按书训，名字带版本号）；空＝关（缺省，不进参数哈希）。
     boundary_net: str = ""
-    boundary_net_p: float = 0.05
+    boundary_net_p: float = 0.05         # boundary_net：现线判官分低于此才许挪到另一条缝
     #: **等距格网末线外推到末字墨外沿**（2026-11-09，殿本 vol28 列尾下溢，`row_boundaries.fit_grid_end`）：末线是列尾、不是字缝，
     #: 有的册版面两端字距被拉开、末字坐在下版框细线上（vol28 末字心偏下 0.09 格、字高 1.06 倍，r6 旧图、r8 新图都有），
     #: 等距末线切进末字下半截。开着时中选格网定下后（只在最后重切那一遍，不影响挑格网）末线下有墨就顺墨往下走到第一段白行或
@@ -1090,8 +1090,8 @@ class RowSegmentParams(BaseModel):
     #: （戈钩内侧白走廊，代/或/實）；`cut_white_row`（格高倍数，史記 0.35）仍劈字时挪到 ± 这么多格内最近的整行白，护字内白缝；
     #: `straight_seam_ink` 直线候选的 seam_ink 记真墨（原来写死 0，只是记录）。都只在最终那遍切用。书级参数；关（缺省）不进参数哈希。
     cut_gap_keep_glyph: bool = False
-    cut_white_row: float = 0.0
-    straight_seam_ink: bool = False
+    cut_white_row: float = 0.0           # 仍劈字时挪到 ± 这么多格高内最近的整行白（史記 0.35）；0＝关
+    straight_seam_ink: bool = False      # 直线候选的 seam_ink 记真墨（原来写死 0）
     #: **按连通块归属画线**（2026-11-17，史記 r79 ①类，`row_boundaries._glyph_line`）：`cut_white_row` 之后选中那条仍劈开单字大小的连通块，
     #: 被劈的块按离哪边别的墨近整块归那边，逐列取上格墨之下、下格墨之上离原线最近的 y（± 这么多格高内，不限坡度）。
     #: 上下字交错（上字捺尾伸进下格、下字点画顶进上格）。拿不准归哪边、某列上下墨重叠就不动。书级参数；0＝关（缺省，不进参数哈希）。
@@ -1135,7 +1135,7 @@ class RowSegmentParams(BaseModel):
     #: 行里带 `cells`（整列写定，`scripts/yolo_alt_cells.py`：YOLO 框字＋小注分类器，夹注分 a/b）时按格出备选（旗 `alt_cells`，
     #: 裁图走职名列逐格裁法，配 `cell_shrink.manual_ink_fit`），列图高与表的 `col_h` 差过 `LAYOUT_CUTS_H_TOL` 不套。
     alt_cuts: str = ""
-    alt_cuts_fingerprint: str = ""
+    alt_cuts_fingerprint: str = ""       # alt_cuts 表内容 sha，开着时自动填
     #: 表里带 `cells`（整列写定，格式同 manual-cells 的 `expected.cells`）的行出的备选，**顶掉** `alt_nojz` 那份（一列只有一份备选）。
     #: False（缺省，不进参数 dump）＝本列已有 alt_nojz 备选就不出。
     alt_cells_first: bool = False
@@ -1146,15 +1146,15 @@ class RowSegmentParams(BaseModel):
     #: 第四档 `pins`（2026-10-31）：书有逐页钉位表（`page_map_pins`，corpus 下相对路径），按钉位直接出本册
     #: 格位表、不做墨量配页（史記文淵閣本；见 row_segment_pagemap 模块头）。
     page_map: Literal["off", "loose", "strict", "pins"] = "off"
-    page_map_pins: str = ""
+    page_map_pins: str = ""              # 自动配页的逐页钉位表（corpus 下相对路径），pins 档必填
     #: 自动配页的**参照类型**（2026-11-06，Sheldon 定按文本类型、不按书）：`column_slots`（缺省，逐列带格位：
     #: daizhige 逐列本，表全由参照定）／`column_text`（逐列无格位：`#@ 半叶头`＋一行一列的逐列文本，corpus 下
     #: `page_map_ref_file`；配页比各列字数、格位用本页图像量，见 `row_segment_coltext.py`）。column_text 的钉位表
     #: （`page_map_pins`，一行 `{"book","page","head"}`）在 strict/loose 档当硬约束、`pins` 档只按它出表；
     #: 人核改格写 `page_map_overrides`（corpus 下 jsonl，`{"vol","page","col",字段…}`，`"drop": true` 删列）。
     page_map_ref: Literal["column_slots", "column_text"] = "column_slots"
-    page_map_ref_file: str = ""
-    page_map_overrides: str = ""
+    page_map_ref_file: str = ""          # column_text 参照的逐列文本文件（corpus 下）
+    page_map_overrides: str = ""         # 自动配页人核改格表（corpus 下 jsonl，`drop: true` 删列）
     page_map_fingerprint: str = ""       # daizhige＋本册钉页、改格＋算法版本，`RowSegmentStep.book_params` 填
 
     @model_validator(mode="after")
@@ -1340,7 +1340,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.54", unit="column",   # 1.54：列端表空格里居中（纵向居格中、横向没满宽）的粗横（「一」）不当框线记空（_blank_frame_junk，殿本 vol21 186:7 列首「一」被记空，格数少一，用户 2026-11-18 格高异常）；1.53：列中间两个有字格夹着的空白格里有居中细横（「一」，墨比 0.004–0.011 不到 min_ink_ratio）救回成字格（殿本 vol45 46:8、vol46 76:8 等 10 列格数少一，用户 2026-11-18 格高异常根因）；1.52：框线判空认叠横画数字（「二」「三」去掉长竖后剩 ≥2 道薄而不满宽的横画，不当框角，殿本 vol68 230:9、vol63 116:9，用户 2026-11-17 格高异常根因）；1.51：框线判空认闭口方框字——格内左右两侧各有长竖、夹 ≥2 道横档的（曰日口目）不再当框角记空（殿本 vol14 32 葉 7 列「曰」被判空并进邻格，用户 2026-11-16）；1.50：表说整列空的列记空认大印印边墨——格与大印框重叠不到一半、但格里 ≥70% 的墨（按连通块）落在印框里也记空（印边压着相邻空列切出碎格，史記 r53，SJ 2026-11-13）；有字的列、丢字、挑格网仍按框重叠；1.49：卷端题列（_header_columns）起格把 1.48 记空的框线格（frame_line）照旧算上，格号回到 1.47（史記 01 p119 c2 1–6 被挪成 2–7，SJ r27）；1.48：列端格只有版框线记空（seg/profile.frame_only_edge_cells，各书一律，A22 P5 2026-11-10）：物理首／末格里的墨（宽 ≥8% 列宽）全贴着上／下版框线（≤0.2 格高）、且有一行 ≥ 半列宽 → 记空、打 edge_frame_only 旗（列级）、格上打 frame_line（「不是字」的标记，manager resolve 的 new_not_char 认它），表说有字也照记，人裁整列不走（史記 04 p125/p141、殿本 vol28 p102 卷末空列末格切出框线「字」）；加软参数 manual_cells_fingerprint（本册格级钉子内容指纹，推钉子只报漂移不判过期）；1.47：殿本职名页大字雙行整段分栏（相邻左右各一字的矮带连成一段整段分栏、分栏后按两侧墨心修正归边）＋偏右小字「臣」上限 0.8→0.9em（殿本 vol01 新图 001-r6 切坏格，一律生效；只有职名页分支走，史記写本用自己的实现不变）；参校本属性 reference_profile（B 块 2026-11-08，未声明的册逐字节不变、不升号）：写了 reference_profile 的册 layout_prior 缺表不拦（缺表的页纯几何切）；自动配页不配 none／text 页、整册没有逐列页就不配页；离线格位表有行照用（表是几何先验，与有无参校本无关，全唐文 001 姓氏韵编）；1.46：layout_raise_box 缺省开（闸认出真抬头框、表记不抬头时按闸级数重编表），重编的候选四项打分不比原表差就取（同分不再让给原表）；1.45：等距格网中选时，表挪一格也只比挪一格的等距格网（DP 挪一格会压空白、字整列错一格，vol64 p211 c1 等）；挪一格的等距格网改配挪过的表（夹注、半格按表认）；1.44：等距格网优先，别的格网坏格数严格更少才换；等距格线落缝改就近（挪远要付代价，不再挪进字内空当）——格高一致强制执行（用户 2026-11-01，vol21/64/98 格高偏差 >20% 的列 2054→219，劈字 314→278）；1.43：格高不匀把空白段也算上（一段空白切出的格数多过它总高合的 period 数，多出的算不匀；列首两格空白切成三个矮格、字整列挤错一格），无先验格网格高比现有候选更不匀时不取（vol98 p100 c3 等 4 列）；1.42：职名页分支认写本（史記文淵閣本）——斜贴邻字的偏右小「臣」按全页臣行拆出、列端扁框线残段不当字、落在印里的字丢掉（读 seals）；1.41：大印下的列等距格网在印外比按打分的格网多劈 ≥2 个字时按打分挑（挤格列，vol48 p34、vol46 p106）；1.40：layout_prior 候选格网加「表整列挪一格」（格号 ±1，违表严格更少才选；大印下只在等距格网间比违表），整理本起格差一格的列（vol68 p31 c7–c9）不再丢首字、列末多空字格；1.39：自动配页 page_map（off/loose/strict，书级；开着时 Step3 开跑前按全册列窗口与 daizhige 对齐、边跑边生成本册格位表，见 row_segment_pagemap.py），缺省 off 逐字节不变；1.38：候选格网打分加格高不匀（_uneven，排在劈字后、穿字前）；选中的格网有一格挤两字时在字缝补一条格线、按打分去掉一条（_merged_cuts，殿本个别列字排得比整页格网密）；1.37：layout_prior 开着而表里没有本册就报错（不再悄悄当关）；1.36：干净格线两侧格高偏 >15% 也过 U-Net 探针；扩池候选与 U-Net 几乎一致、穿墨少就自动改选（字内空隙里的格线把字头/点切给上一格）；1.35：layout_prior 缺省开（缺省表不在当关）；1.34：大印压着列首的列（_under_stain）直接取表的等距格网，不再按坏格挑（印泥斑点让闸抬头、DP 挤格，字整列错一格而格号集合不变）；1.33：列端表空格的印改读印章定位 `seals` 产物——大印按框、小印按笔画覆盖区量（_in_seal），去掉模板窗口找印与表空段墨团（_empty_zone_seal），并纠正印框与格坐标空间不一致（印框原是左上原点）；1.32：模板没认出的印（空心印）和模板框没盖住的印边：相邻列的表空段同高都有像字的墨，就当印框（_empty_zone_seal）；1.31：列端表空格里被切成雙行小注半格的印章墨也记空；1.30：表说半格、判据认成單行小注的格按半格发（jiazhu_a/b）；1.29：列端表空格里墨只是一两道竖线的格记空（印框边、界行残段）；1.28：印框记空挪进候选格网打分之前（同框线碎墨，先记空再打分），單行小注格也记；1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（impl/keben/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="2d 字间切分", version="1.54", unit="column",   # 1.54：列端表空格里居中（纵向居格中、横向没满宽）的粗横（「一」）不当框线记空（_blank_frame_junk，殿本 vol21 186:7 列首「一」被记空，格数少一，用户 2026-11-18 格高异常）；1.53：列中间两个有字格夹着的空白格里有居中细横（「一」，墨比 0.004–0.011 不到 min_ink_ratio）救回成字格（殿本 vol45 46:8、vol46 76:8 等 10 列格数少一，用户 2026-11-18 格高异常根因）；1.52：框线判空认叠横画数字（「二」「三」去掉长竖后剩 ≥2 道薄而不满宽的横画，不当框角，殿本 vol68 230:9、vol63 116:9，用户 2026-11-17 格高异常根因）；1.51：框线判空认闭口方框字——格内左右两侧各有长竖、夹 ≥2 道横档的（曰日口目）不再当框角记空（殿本 vol14 32 葉 7 列「曰」被判空并进邻格，用户 2026-11-16）；1.50：表说整列空的列记空认大印印边墨——格与大印框重叠不到一半、但格里 ≥70% 的墨（按连通块）落在印框里也记空（印边压着相邻空列切出碎格，史記 r53，SJ 2026-11-13）；有字的列、丢字、挑格网仍按框重叠；1.49：卷端题列（_header_columns）起格把 1.48 记空的框线格（frame_line）照旧算上，格号回到 1.47（史記 01 p119 c2 1–6 被挪成 2–7，SJ r27）；1.48：列端格只有版框线记空（seg/profile.frame_only_edge_cells，各书一律，A22 P5 2026-11-10）：物理首／末格里的墨（宽 ≥8% 列宽）全贴着上／下版框线（≤0.2 格高）、且有一行 ≥ 半列宽 → 记空、打 edge_frame_only 旗（列级）、格上打 frame_line（「不是字」的标记，manager resolve 的 new_not_char 认它），表说有字也照记，人裁整列不走（史記 04 p125/p141、殿本 vol28 p102 卷末空列末格切出框线「字」）；加软参数 manual_cells_fingerprint（本册格级钉子内容指纹，推钉子只报漂移不判过期）；1.47：殿本职名页大字雙行整段分栏（相邻左右各一字的矮带连成一段整段分栏、分栏后按两侧墨心修正归边）＋偏右小字「臣」上限 0.8→0.9em（殿本 vol01 新图 001-r6 切坏格，一律生效；只有职名页分支走，史記写本用自己的实现不变）；参校本属性 reference_profile（B 块 2026-11-08，未声明的册逐字节不变、不升号）：写了 reference_profile 的册 layout_prior 缺表不拦（缺表的页纯几何切）；自动配页不配 none／text 页、整册没有逐列页就不配页；离线格位表有行照用（表是几何先验，与有无参校本无关，全唐文 001 姓氏韵编）；1.46：layout_raise_box 缺省开（闸认出真抬头框、表记不抬头时按闸级数重编表），重编的候选四项打分不比原表差就取（同分不再让给原表）；1.45：等距格网中选时，表挪一格也只比挪一格的等距格网（DP 挪一格会压空白、字整列错一格，vol64 p211 c1 等）；挪一格的等距格网改配挪过的表（夹注、半格按表认）；1.44：等距格网优先，别的格网坏格数严格更少才换；等距格线落缝改就近（挪远要付代价，不再挪进字内空当）——格高一致强制执行（用户 2026-11-01，vol21/64/98 格高偏差 >20% 的列 2054→219，劈字 314→278）；1.43：格高不匀把空白段也算上（一段空白切出的格数多过它总高合的 period 数，多出的算不匀；列首两格空白切成三个矮格、字整列挤错一格），无先验格网格高比现有候选更不匀时不取（vol98 p100 c3 等 4 列）；1.42：职名页分支认写本（史記文淵閣本）——斜贴邻字的偏右小「臣」按全页臣行拆出、列端扁框线残段不当字、落在印里的字丢掉（读 seals）；1.41：大印下的列等距格网在印外比按打分的格网多劈 ≥2 个字时按打分挑（挤格列，vol48 p34、vol46 p106）；1.40：layout_prior 候选格网加「表整列挪一格」（格号 ±1，违表严格更少才选；大印下只在等距格网间比违表），整理本起格差一格的列（vol68 p31 c7–c9）不再丢首字、列末多空字格；1.39：自动配页 page_map（off/loose/strict，书级；开着时 Step3 开跑前按全册列窗口与 daizhige 对齐、边跑边生成本册格位表，见 row_segment_pagemap.py），缺省 off 逐字节不变；1.38：候选格网打分加格高不匀（_uneven，排在劈字后、穿字前）；选中的格网有一格挤两字时在字缝补一条格线、按打分去掉一条（_merged_cuts，殿本个别列字排得比整页格网密）；1.37：layout_prior 开着而表里没有本册就报错（不再悄悄当关）；1.36：干净格线两侧格高偏 >15% 也过 U-Net 探针；扩池候选与 U-Net 几乎一致、穿墨少就自动改选（字内空隙里的格线把字头/点切给上一格）；1.35：layout_prior 缺省开（缺省表不在当关）；1.34：大印压着列首的列（_under_stain）直接取表的等距格网，不再按坏格挑（印泥斑点让闸抬头、DP 挤格，字整列错一格而格号集合不变）；1.33：列端表空格的印改读印章定位 `seals` 产物——大印按框、小印按笔画覆盖区量（_in_seal），去掉模板窗口找印与表空段墨团（_empty_zone_seal），并纠正印框与格坐标空间不一致（印框原是左上原点）；1.32：模板没认出的印（空心印）和模板框没盖住的印边：相邻列的表空段同高都有像字的墨，就当印框（_empty_zone_seal）；1.31：列端表空格里被切成雙行小注半格的印章墨也记空；1.30：表说半格、判据认成單行小注的格按半格发（jiazhu_a/b）；1.29：列端表空格里墨只是一两道竖线的格记空（印框边、界行残段）；1.28：印框记空挪进候选格网打分之前（同框线碎墨，先记空再打分），單行小注格也记；1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（impl/keben/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("column_geometry", "column_windows", "column_image"), optional_consumes=("seals",), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.impl.keben.row_boundaries", "open_guji_cv.impl.keben.row_grid", "open_guji_cv.impl.keben.jiazhu_split",

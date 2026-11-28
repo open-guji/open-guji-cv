@@ -25,6 +25,16 @@
 - `p_map` 暂空：3d `cell_traits`（2026-11-28）只出原始分，没有校准来源；3d 跑了时原始分原样放进每格 `traits`
   （{cut, border, residue, stain, merged, blank: 分}，不是概率），等人裁标注标定成 p 再写进 `p_map`。
 
+## 校准表的版本与临时表（2026-11-28，CV3；3b bench `scripts/eval_near.py --fit-calib`）
+
+校准表 `near-calib/1` 可以另写两个键：
+- `version`：表的版本号。正式表写了版本时 `p_src`（和 `near[组].p_src`）是 `near:方法:组@版本`；没写（如殿本宫官那份）与之前逐字相同。
+- `temporary: true`：**临时表**（按册留出的放行字拟合，金标出来之前先用；Sheldon 11-28 定**只给排序展示、不用于自动放行**）。
+  临时表出的 p **不进** `cands[].p`、不进 `p_src`、不进 `near[组].p`，只写 `near[组].p_tmp`（{字: p}）、
+  `near[组].p_tmp_src`（`near:方法:组@版本~tmp`）；候选次序不变。第四步读 p 的地方因此看不到它，
+  审阅页、控制台要排序展示就读 `p_tmp`。同一组里正式表的方法优先；只有临时表的组才出 `p_tmp`。
+  没有临时表的书收尾产物逐字节不变。
+
 ## 一格多组（2026-11-28，3b 一格可触发几个组）
 
 - `cands[].evidence.b`：各组各方法给这个字的分，键「方法:组」（键本身带组，不撞）。B3 定稿（11-28）起不再另记 `b.group`／`b.groups`
@@ -113,8 +123,10 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
             fc.evidence["c"] = ev
     nrs = _near_list(near_rec)
     group_p: list[tuple[str, str, object, dict]] = []      # 出了校准 p 的组：(组, 方法全名, 方法对象, {字: p})
+    group_tmp: dict[str, tuple[str, dict]] = {}            # 只有临时校准表出了 p 的组：组 → (p_tmp_src, {字: p})
     for nr in nrs:
         got = None
+        tmp = None
         for mo in nr.methods:
             for c, s in mo.sims.items():
                 fc = cands.get(c)
@@ -126,14 +138,20 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
                 m = calibrators.get(mo.method)
                 ps = m.calibrate(mo.sims) if m is not None else None
                 if ps:
-                    got = (nr.group, mo.method, m, ps)          # 一组内取第一个出 p 的方法（同之前一格一组时）
+                    ver, temporary = calib_tag(m)
+                    if not temporary:
+                        got = (nr.group, mo.method, m, ps)      # 一组内取第一个出正式 p 的方法（同之前一格一组时）
+                    elif tmp is None:
+                        tmp = (f"near:{mo.method}@{ver or '?'}~tmp", ps)    # 临时表：只当排序展示的 p_tmp，见模块头
         if got is not None:
             group_p.append(got)
+        elif tmp is not None:
+            group_tmp[nr.group] = tmp
     # 多组时 p 的合并（保守）：只有一个组出了校准 p 才把 p 落到候选上；两个以上组都出 p（各组 p 各自归一，拼不成一格的分布）
     # → 候选 p 全不给、`p_src` 空，各组的 p 只留在 `near[组].p` 里当证据，第四步按「没有 p」走（不按 p 放行也不按 p 降审）
     if len(group_p) == 1:
         _gid, meth, m, ps = group_p[0]
-        p_src = f"near:{meth}"
+        p_src = _p_src(meth, m)
         for c, pv in ps.items():
             if c in cands:
                 cands[c].p = pv
@@ -150,7 +168,7 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
     out = sorted(cands.values(), key=lambda fc: (-(fc.p if fc.p is not None else -1.0), rank[fc.char]))
     traits = dict(traits_rec.scores) if traits_rec is not None else {}
     near: dict = {}
-    gp = {g: (meth, ps) for g, meth, _m, ps in group_p}
+    gp = {g: (_p_src(meth, m), ps) for g, meth, m, ps in group_p}
     for nr in nrs:
         meth = {}
         for mo in nr.methods:
@@ -162,9 +180,27 @@ def merge_cell(match_rec, near_rec, calibrators: dict, topk: int, algo: str, can
         near[nr.group] = {"trigger": nr.trigger, "methods": meth}
         if nr.group in gp:
             near[nr.group]["p"] = dict(gp[nr.group][1])
-            near[nr.group]["p_src"] = f"near:{gp[nr.group][0]}"
+            near[nr.group]["p_src"] = gp[nr.group][0]
+        elif nr.group in group_tmp:
+            near[nr.group]["p_tmp"] = dict(group_tmp[nr.group][1])
+            near[nr.group]["p_tmp_src"] = group_tmp[nr.group][0]
     return FinalRec(id=match_rec.id, slot=match_rec.slot, sub=match_rec.sub, cands=out, p_src=p_src, traits=traits,
                     near=near, vis=vis)
+
+
+def calib_tag(m) -> tuple[str | None, bool]:
+    """方法带的校准表 → (版本号 `version`, 是不是临时表 `temporary`)；没有表或没写这两个键 → (None, False)。"""
+    cal = getattr(m, "calib", None)
+    if not isinstance(cal, dict):
+        return None, False
+    v = cal.get("version")
+    return (None if v is None else str(v)), bool(cal.get("temporary"))
+
+
+def _p_src(meth: str, m) -> str:
+    """正式 p 的来源：`near:方法:组`，校准表写了 `version` 时再接 `@版本`（没写版本的表与之前逐字相同）。"""
+    ver, _tmp = calib_tag(m)
+    return f"near:{meth}" + (f"@{ver}" if ver else "")
 
 
 def _vis_of(v, cands: dict, order: list) -> dict:

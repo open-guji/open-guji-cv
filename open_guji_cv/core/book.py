@@ -100,9 +100,12 @@ class BookSpec:
     # Step0 预清理：{页号: [规则, ...]}。默认空 = 不做任何处理。
     # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
     preclean: dict[int, list[dict]] = field(default_factory=dict)
-    #: 显式指定这册走哪条管线（yaml 的 `pipeline:`）。**旧写法**：2026-11-03 起写 `seg_set:` 就够了，管线由套书推
-    #: （`core/seg_set.SEG_SET_PIPELINE`）；都不写按 `edition` 选（`core/pipeline.default_pipeline_id`）。写了仍优先。
+    #: 显式指定这册走哪条管线（yaml 的 `pipeline:`）。**旧写法**：2026-11-28 起只有一条默认链 `guji_default`，
+    #: 写旧链 id（keben_body_v2／keben_free／modern_body）等于写对应的 `layout:`（`core/seg_set.LEGACY_PIPELINES`）。
     pipeline: str | None = None
+    #: 版式（yaml 的 `layout:`，2026-11-28 三链合一）：grid 有格网刻本写本／free 坊刻自由版式／print 现代排印。
+    #: 只决定默认链 1b–2b 放哪几步，不进指纹。不写按 seg_set、书仓 base、edition 推（`core/seg_set.layout_of`），缺省 grid。
+    layout: str | None = None
     #: 切分代码归哪一套书（yaml 的 `seg_set:`，`core/seg_set.py` 登记）。不写 = 按管线推。
     seg_set: str | None = None
     #: 人标的版面提示（yaml 的 `layout_hints:`，自由版式管线用）：哪页不切、分几块、每块几列。
@@ -540,7 +543,7 @@ class BookSpec:
             "vline_polyline": self.vline_polyline,
             "font": dict(self.font), "frame_layers": dict(self.frame_layers), "side_frame": dict(self.side_frame),
             "codepoints": dict(self.codepoints),
-            "pipeline": self.default_pipeline_id(),
+            "pipeline": self.default_pipeline_id(), "layout": self.layout_of(),
             "in_workspace": self.in_workspace(),
         }
 
@@ -563,7 +566,7 @@ class BookSpec:
 
     def default_pipeline_id(self) -> str:
         """这册书默认走哪条管线。控制台按它选后端 Step id 与状态矩阵的管线
-        （2026-09-15）：前端此前硬编码 `keben_body_v2`，现代印刷本在台上
+        （2026-09-15；2026-11-28 起返回 `guji_default@<版式>`）：前端此前硬编码 `keben_body_v2`，现代印刷本在台上
         每一步都显示「没有产物」——它的产物在 `line_detect/column_crop/
         row_segment_runs` 名下。循环导入：`core.pipeline` 反过来要 `Book`，
         所以在方法里 import。"""
@@ -571,7 +574,15 @@ class BookSpec:
             from .pipeline import default_pipeline_id
             return default_pipeline_id(self)
         except Exception:
-            return "keben_body_v2"
+            return "guji_default@grid"
+
+    def layout_of(self) -> str:
+        """这册的版式（`core/seg_set.layout_of`）。"""
+        try:
+            from .seg_set import layout_of
+            return layout_of(self)
+        except Exception:
+            return "grid"
 
 
 def _expand_pages(raw) -> list[int]:
@@ -605,6 +616,11 @@ def _expand_pages(raw) -> list[int]:
                 out.append(int(part))
     seen: set[int] = set()
     return [p for p in out if not (p in seen or seen.add(p))]
+
+
+def _load_layout(v) -> str | None:
+    from .seg_set import validate_layout
+    return validate_layout(v)
 
 
 def _load_seg_set(v):
@@ -774,6 +790,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         preclean=_load_preclean(d.get("preclean")),
         pipeline=(None if d.get("pipeline") is None else str(d["pipeline"])),
         seg_set=_load_seg_set(d.get("seg_set")),
+        layout=_load_layout(d.get("layout")),
         layout_hints=_load_layout_hints(d.get("layout_hints")),
         page_kinds=_page_kinds_of(d.get("params")),
         notes=d.get("notes", ""),
