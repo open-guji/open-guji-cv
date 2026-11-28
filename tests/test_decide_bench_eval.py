@@ -104,3 +104,36 @@ def test_decide_dianben_id_alias(tmp_path):
     (tmp_path / "bench.yaml").write_text(f"books:\n  - {{ws: {old}, vol: vol01}}\n  - {{ws: 988g3f0wsu, vol: '03'}}\n", encoding="utf-8")
     assert D._book_vols(tmp_path, "96mid1ogzk", []) == ["vol01"]
     assert D._book_vols(tmp_path, "988g3f0wsu", []) == ["03"]
+
+
+def test_rough_metrics_new_wrong_vs_frozen_baseline():
+    from open_guji_cv.eval.benches import decide as D
+    base = {"variants": {"A": {"review_rate_body": 0.0120, "wrong_cells": ["v:1:1:1", "v:1:1:2"]}}}
+    cur = {"cells_body": 1000, "review_rate_body": 0.0145, "labelled_judged": 90, "wrong_admits": 3,
+           "wrong_cells": ["v:1:1:1", "v:1:1:2", "v:2:2:2"], "label_drift": 0, "label_missing": 1}
+    m, why = D.rough_metrics({"labels": 100, "variants": {"A": cur}, "frozen_baseline": base})
+    assert m["wrong_admit"] == 1 and m["new_wrong_cells"] == ["v:2:2:2"] and m["known_wrong"] == 2     # 基线本来就错的不算这次的账
+    assert m["review_rate_diff"] == 0.0025 and len(why) == 2                                          # 新增错放＋送审率回归
+    assert m["missing_rate"] == 0.01
+
+
+def test_rough_metrics_ab_uses_variant_new_wrong():
+    from open_guji_cv.eval.benches import decide as D
+    a = {"cells_body": 10, "review_rate_body": 0.1, "labelled_judged": 5, "wrong_admits": 1, "wrong_cells": ["x"], "label_drift": 0, "label_missing": 0}
+    b = {**a, "wrong_admits": 1, "wrong_cells": ["y"], "new_wrong": ["y"], "review_rate_diff": 0.0}
+    m, why = D.rough_metrics({"labels": 5, "variants": {"A": a, "B": b}})
+    assert m["wrong_admit"] == 1 and m["known_wrong"] == 0 and why == ["新增错放 1 格"]
+    b2 = {**b, "new_wrong": [], "wrong_cells": ["x"]}
+    assert D.rough_metrics({"labels": 5, "variants": {"A": a, "B": b2}})[1] == []
+
+
+def test_rough_set_routing(tmp_path):
+    from open_guji_cv.eval import bench as B
+    from open_guji_cv.eval.benches import decide as D
+    rb = tmp_path / "rough-bench"
+    rb.mkdir()
+    (rb / "bench.yaml").write_text("books: [vol04, vol05]\n", encoding="utf-8")
+    ctx = B.BenchCtx(book="96mid1ogzk", vols=[], work=tmp_path, res={"dataset": tmp_path}, args={"set": "rough"})
+    assert D._vols(ctx) == ["vol04", "vol05"]
+    assert D._book_vols(rb, "988g3f0wsu", []) == []                       # 粗校只有殿本
+    assert set(D.plan(tmp_path / "decide-bench" / "small", "96mid1ogzk", [])) >= {"vol04", "vol05"}

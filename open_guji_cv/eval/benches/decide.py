@@ -6,7 +6,9 @@
 金标取 small＋large 两个集，`set` 不起作用）。
 
 结果里除收尾口径外按子步分节：a4（对位）、b4（上下文）、c4（格况）、d4（字组），键前缀即节名；错因位置计数在 `errloc`。
-同模块还登记 `decide-gate`（decide_gate 的检出率与误报率）。
+`--arg set=rough`：并入原 rough_bench（粗校基准，dataset rough-bench，只有殿本 vol04–10），评分口径仍是 manager `exp.rough_bench`；
+`wrong_admit` 在这个集里指**新增错放**（比冻结基线或 A/B 的 A 多出的有标签错放），送审率比基线高 0.2 个百分点以上算回归；旧入口
+`scripts/eval_rough_bench.py` 留作别名。同模块还登记 `decide-gate`（decide_gate 的检出率与误报率）。
 """
 from __future__ import annotations
 
@@ -22,6 +24,9 @@ import yaml
 from ..bench import BenchCtx, BenchResult, BenchSpec, Guard, register
 
 SETS = ("small", "large")
+ROUGH = "rough"                       # --set rough：粗校基准（dataset rough-bench，只有殿本 vol04–10），并进 decide 的第三个集
+ROUGH_BOOK = "96mid1ogzk"
+REVIEW_TOL = 0.002                    # 粗校：正文送审率比冻结基线高出这么多算回归（同旧入口）
 BOOKS = ("988g3f0wsu", "995ejelvk0", "96mid1ogzk", "99k3i35yww")
 #: 书 id → dataset 分片里 anchor／bench.yaml 用的 ws 写法（殿本在 dataset 里是旧名 siku-zongmu，真 id 是 96mid1ogzk，11-28 CV2 指出）。
 #: 分片的 ws 字段不改（历史金标、翻转清单、报告都按它），只在这里认。
@@ -40,13 +45,17 @@ def _same(x, y) -> bool:
 
 def _shard(ctx: BenchCtx) -> Path:
     s = ctx.args.get("set", "small")
+    if s == ROUGH:
+        return Path(ctx.res["dataset"]) / "rough-bench"
     if s not in SETS:
-        raise ValueError(f"decide 的 set 只有 {SETS}")
+        raise ValueError(f"decide 的 set 只有 {SETS + (ROUGH,)}")
     return Path(ctx.res["dataset"]) / "decide-bench" / s
 
 
 def _book_vols(shard: Path, book: str, vols: list) -> list[str]:
     b = yaml.safe_load((Path(shard) / "bench.yaml").read_text(encoding="utf-8"))
+    if Path(shard).name == "rough-bench":        # 册是裸字符串、没有 ws，整个分片都是殿本
+        return [str(v) for v in b["books"] if book == ROUGH_BOOK and (not vols or str(v) in vols)]
     return [str(x["vol"]) for x in b["books"] if x["ws"] == dws(book) and (not vols or str(x["vol"]) in vols)]
 
 
@@ -57,6 +66,9 @@ def plan(gold: Path, book: str, vols: list) -> dict:
         p = Path(gold).parent / s
         if (p / "bench.yaml").exists():
             out.update({v: None for v in _book_vols(p, book, vols)})
+    rp = Path(gold).parent.parent / "rough-bench"
+    if (rp / "bench.yaml").exists():
+        out.update({v: None for v in _book_vols(rp, book, vols)})
     return out
 
 
@@ -82,9 +94,11 @@ def _call(cmd: list, ctx: BenchCtx, log: str) -> None:
 
 def run(ctx: BenchCtx) -> Path:
     here = Path(__file__).resolve().parents[1] / "decide_bench"
-    if ctx.params:
-        raise NotImplementedError("decide 的 A/B 用 guji bench ab（P1）；run 只跑现行")
     layer = ctx.args.get("layer", "frozen")
+    if ctx.args.get("set") == ROUGH:
+        return _run_rough(ctx)
+    if ctx.params:
+        raise NotImplementedError("small／large 的 A/B 还没接（只有 --set rough 支持 params）；run 只跑现行")
     if layer == "dyn":
         ds = Path(ctx.res["dataset"]) / "decide-bench"
         shards = [ds / s for s in SETS if (ds / s / "bench.yaml").exists()]
@@ -105,6 +119,68 @@ def run(ctx: BenchCtx) -> Path:
            "--work", str(ctx.work), "--name", "bench", "--books", ",".join(vols), "--no-warm-check", "--guji", _guji()]
     _call(cmd, ctx, "run.log")
     return ctx.work / "bench-A.jsonl"
+
+
+def _run_rough(ctx: BenchCtx) -> Path:
+    """粗校基准：借 manager 的 `exp.rough_bench.run`（`guji bench` 在 manager 环境里跑，必能 import）。
+
+    有 `ctx.params`（A/B）时基线 A＋变体 B 都跑，B 的新增错放是回归；没有就只跑现行，和冻结基线 report.json 比。"""
+    if ctx.book != ROUGH_BOOK:
+        raise LookupError("no_gold")
+    if ctx.args.get("layer", "frozen") != "frozen":
+        raise ValueError("粗校基准只有 frozen 层")
+    from guji_manager.exp import rough_bench as RB     # noqa: PLC0415 —— 评分口径在 manager 里，不复制
+    shard = _shard(ctx)
+    variants = {"B": {"params": ctx.params}} if ctx.params else None
+    res = RB.run(shard, ctx.work / "snap", ws=str(ctx.res["ws"]), variants=variants, root=ctx.work / "exp",
+                 jobs=int(ctx.args.get("jobs", 2)), name="rough", log=print)
+    base = shard / "report.json"
+    res["frozen_baseline"] = json.loads(base.read_text(encoding="utf-8")) if base.exists() else None
+    out = ctx.work / "rough.json"
+    out.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+    return out
+
+
+def rough_metrics(res: dict) -> tuple[dict, list[str]]:
+    """粗校结果 → decide 口径的指标。`wrong_admit`＝**新增**错放（现行比冻结基线／变体比 A 多出来的有标签错放，必须 0）；
+    基线本来就错的格另报 `known_wrong`。返回（指标，回归原因）。"""
+    vs = res["variants"]
+    names = list(vs)
+    cur = vs[names[-1]]
+    if len(names) > 1:                                    # A/B：B 对 A
+        ref = vs[names[0]]
+        new = list(cur.get("new_wrong") or [])
+        diff = cur.get("review_rate_diff")
+    else:                                                 # 现行对冻结基线
+        fb = (res.get("frozen_baseline") or {}).get("variants", {}).get("A") or {}
+        ref = fb
+        new = sorted(set(cur["wrong_cells"]) - set(fb.get("wrong_cells") or []))
+        diff = None if not fb or fb.get("review_rate_body") is None or cur["review_rate_body"] is None \
+            else round(cur["review_rate_body"] - fb["review_rate_body"], 6)
+    labels = res.get("labels") or 0
+    m = {"wrong_admit": len(new), "new_wrong_cells": new, "known_wrong": cur["wrong_admits"] - len(new),
+         "review_rate_body": cur["review_rate_body"], "review_rate_diff": diff, "cells_body": cur["cells_body"],
+         "labelled_judged": cur["labelled_judged"], "label_drift": cur["label_drift"], "label_missing": cur["label_missing"],
+         "missing": cur["label_missing"], "missing_rate": round(cur["label_missing"] / labels, 4) if labels else 1.0,
+         "baseline_found": bool(ref)}
+    why = []
+    if new:
+        why.append(f"新增错放 {len(new)} 格")
+    if diff is not None and diff > REVIEW_TOL:
+        why.append(f"正文送审率 +{diff:.4%}（上限 {REVIEW_TOL:.2%}）")
+    return m, why
+
+
+def _score_rough(ctx: BenchCtx, pred: Path) -> BenchResult:
+    res = json.loads(pred.read_text(encoding="utf-8"))
+    m, why = rough_metrics(res)
+    items = [{"id": k, "ok": False, "outcome": "放错字", "known": k not in m["new_wrong_cells"]} for k in
+             res["variants"][list(res["variants"])[-1]]["wrong_cells"]]
+    r = BenchResult("decide", ctx.book, _vols(ctx), m, "wrong_admit", items=items, n=res.get("labels", 0),
+                    reason="；".join(why))
+    if why:
+        r.status = "regressed"      # 送审率回归不在 guards 里（对别的集没有这个键，会判 unverified），这里直接定
+    return r
 
 
 def _sections(rows: list[dict]) -> dict:
@@ -130,6 +206,8 @@ def _sections(rows: list[dict]) -> dict:
 
 
 def score(ctx: BenchCtx, pred: Path) -> BenchResult:
+    if ctx.args.get("set") == ROUGH:
+        return _score_rough(ctx, pred)
     rows = [json.loads(l) for l in pred.read_text(encoding="utf-8").splitlines() if l.strip()]
     c = collections.Counter(r["outcome"] for r in rows)
     n = len(rows) or 1
@@ -153,4 +231,4 @@ register(BenchSpec(
     guards=(Guard("wrong_admit", "max", 0), Guard("missing_rate", "max", 0.01), Guard("flip_worse", "max", 0)),
     suites=("decide",),
     item_key="id", item_ok="ok", plan=plan,
-    args={"set": "small｜large（缺省 small）", "layer": "frozen｜dyn（缺省 frozen；dyn 取现行 main 包，金标 small＋large）"}))
+    args={"set": "small｜large｜rough（缺省 small；rough＝粗校基准，只有殿本，wrong_admit＝新增错放）", "layer": "frozen｜dyn（缺省 frozen；dyn 取现行 main 包，金标 small＋large）"}))
