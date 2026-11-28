@@ -86,3 +86,63 @@ def test_seal_iou_match_and_draft_excluded(tmp_path):
     assert s["matched"] == 1 and s["gold_seals"] == 2 and s["missed_seals"] == ["mj01:3#1"]
     assert s["kind_acc"] == 1.0 and s["precision@iou0.5"] == 1.0
     assert rep["pending_draft"] == ["mj01:9"]
+
+
+# ── 统一接口（eval/benches/layout.py）──────────────────────────────
+
+def test_layout_benches_registered_and_alias_mapping():
+    from open_guji_cv.eval import bench as B
+    from open_guji_cv.eval.benches import layout as L
+    ids = {s.id for s in B.all_specs()}
+    assert {"layout", "page-survey", "seal-box"} <= ids
+    assert [L.vol_of(a) for a in ("vol01", "sj05", "qtw005", "mj01", "mj03")] == ["vol01", "05", "005", "1", "03"]
+    assert B.get("layout").gold_rel("siku-zongmu") == "layout/items.jsonl"
+
+
+def _gold_file(tmp_path, rows):
+    p = tmp_path / "items.jsonl"
+    p.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
+    return p
+
+
+def test_layout_plan_and_score(tmp_path, monkeypatch):
+    from open_guji_cv.eval import bench as B
+    from open_guji_cv.eval.benches import layout as L
+    g = _doc([900, 700, 500, 300, 100])
+    rows = [{"id": "sj05:3", "anchor": {"book": "sj05", "page": 3}, "status": "active", "expected": g},
+            {"id": "sj20:4", "anchor": {"book": "sj20", "page": 4}, "status": "active", "expected": g},
+            {"id": "vol01:9", "anchor": {"book": "vol01", "page": 9}, "status": "active", "expected": g}]
+    gold = _gold_file(tmp_path, rows)
+    assert L.plan_layout(gold, "988g3f0wsu", []) == {"05": [3], "20": [4]}
+    assert L.plan_layout(gold, "988g3f0wsu", ["20"]) == {"20": [4]}
+    assert L.plan_layout(gold, "siku-zongmu", []) == {"vol01": [9]}
+    # 预测：第一页一条线偏 12px，第二页全对
+    docs = {("05", 3): _doc([912, 700, 500, 300, 100]), ("20", 4): g}
+    monkeypatch.setattr(lb, "pred_doc", lambda products, v, p, ec=None: docs.get((v, p)))
+    ctx = B.BenchCtx("988g3f0wsu", [], tmp_path, {"gold": str(gold)})
+    r = L.score_layout(ctx, tmp_path)
+    assert r.metrics["lines_gold"] == 10 and r.metrics["lines_gt5px"] == 1 and r.metrics["lines_gt10px"] == 1
+    assert r.metrics["line_ok_rate"] == 0.9 and r.metrics["lines_missed"] == 0
+    assert {i["id"]: i["ok"] for i in r.items} == {"sj05:3": False, "sj20:4": True}
+
+
+def test_survey_and_seal_benches_report_no_gold_properly(tmp_path):
+    from open_guji_cv.eval import bench as B
+    from open_guji_cv.eval.benches import layout as L
+    rows = [{"id": "mj01:3", "anchor": {"book": "mj01", "page": 3}, "label_origin": "draft", "status": "active",
+             "expected": {"seals": []}}]
+    gold = _gold_file(tmp_path, rows)
+    assert L.plan_seal(gold, "99k3i35yww", []) == {}                     # 只有待核底稿＝没金标
+    base = lambda pg, w=1800: {"id": f"mj01:{pg}", "anchor": {"book": "mj01", "page": pg}, "status": "active",
+                               "input": {"width": w, "height": 2600}, "label_origin": "rule",
+                               "expected": {"odd": False, "kind": None}}
+    sg = _gold_file(tmp_path, [base(i) for i in range(1, 6)])
+    ctx = B.BenchCtx("99k3i35yww", [], tmp_path, {"gold": str(sg)})
+    r = L.score_survey(ctx, L.run_survey(ctx))
+    assert r.metrics["agree"] == 1.0 and r.metrics["false_alarm"] == 0 and "rule" in r.reason
+    # 经 execute 跑一遍并对自己：翻转为 0
+    spec = B.get("page-survey")
+    r1 = B.execute(spec, ctx)
+    out = B.write_result(tmp_path / "r1", r1)
+    r2 = B.execute(spec, ctx, against=out)
+    assert r2.metrics["flip_worse"] == 0 and r2.status == "ok"

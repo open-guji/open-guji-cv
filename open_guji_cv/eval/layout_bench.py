@@ -148,14 +148,19 @@ def run_series(products: Path, gold_items: list[dict]) -> dict:
             recs.setdefault(ser, []).append((f"{b}:{a['page']}", lm.page_metrics(g, d)))
     out: dict = {"series": {}, "missing": pages_missing}
     for ser, per in recs.items():
-        rs = [r for _, r in per]
-        agg = lm.aggregate(rs)["all"]
-        p95 = [x for r in rs if r.get("vlines") for x in r["vlines"]["line_p95"]]
-        agg["line_gt_px"] = {f">{t}": sum(1 for x in p95 if x > t) for t in PX_BUCKETS}
-        agg["worst"] = lm.worst_pages(per, 5)
-        agg["books"] = sorted({r["book"] for r in rs})
-        out["series"][ser] = agg
+        out["series"][ser] = summarize_recs(per)
     return out
+
+
+def summarize_recs(per: list[tuple[str, dict]]) -> dict:
+    """一组页的 `(页键, page_metrics)` 汇成一行：`aggregate` 的汇总＋界行偏差分档＋最差页＋册清单。"""
+    rs = [r for _, r in per]
+    agg = lm.aggregate(rs)["all"]
+    p95 = [x for r in rs if r.get("vlines") for x in r["vlines"]["line_p95"]]
+    agg["line_gt_px"] = {f">{t}": sum(1 for x in p95 if x > t) for t in PX_BUCKETS}
+    agg["worst"] = lm.worst_pages(per, 5)
+    agg["books"] = sorted({r["book"] for r in rs})
+    return agg
 
 
 def series_markdown(rep: dict, meta: dict | None = None) -> str:
