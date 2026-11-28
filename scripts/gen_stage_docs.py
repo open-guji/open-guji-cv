@@ -62,7 +62,8 @@ def _first_sentence(s: str, limit: int = 80) -> str:
 
 
 def _field_docs(cls) -> dict[str, str]:
-    """字段说明：`Field(description=)`，否则字段后紧跟的字符串（属性 docstring），否则同一行的 `#` 注释；取第一句。
+    """字段说明：`Field(description=)`，否则字段后紧跟的字符串（属性 docstring），否则同一行的 `#` 注释，
+    否则字段上方紧贴的 `#:` 注释块；取第一句。
     取不到源码（动态类）就空着。"""
     out: dict[str, str] = {}
     for c in reversed([k for k in getattr(cls, "__mro__", (cls,)) if k.__module__ != "pydantic.main" and k is not object]):
@@ -87,6 +88,12 @@ def _field_docs(cls) -> dict[str, str]:
                 m = re.search(r"#:?\s*(.+)$", lines[node.end_lineno - 1])
                 if m and "noqa" not in m.group(1):
                     doc = m.group(1)
+            if not doc:                      # 字段上方紧贴的 `#:` 注释块（属性注释，切字、识字各步大量这么写）
+                j, block = node.lineno - 2, []
+                while j >= 0 and lines[j].strip().startswith("#:"):
+                    block.insert(0, lines[j].strip()[2:].strip())
+                    j -= 1
+                doc = " ".join(block).replace("**", "")
             if doc:
                 out[node.target.id] = _first_sentence(doc)
     for name, f in getattr(cls, "model_fields", {}).items():

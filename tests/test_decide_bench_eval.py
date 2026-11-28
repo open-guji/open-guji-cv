@@ -33,7 +33,8 @@ def test_build_cell_state_synthetic(tmp_path):
     a = (ds / "decide-bench/cell-state/w1/items.jsonl").read_bytes()
     rows = [json.loads(x) for x in a.decode().splitlines()]
     assert [r["expected"]["state"] for r in rows] == ["char"]          # 空字的格不收
-    b = (ds / "decide-bench/cell-state/siku-zongmu/items.jsonl").read_text()
-    assert json.loads(b)["expected"]["state"] == "non_char"
+    other = [d for d in (ds / "decide-bench/cell-state").iterdir() if d.is_dir() and d.name != "w1"]   # instances 的 non_char 归到殿本子目录
+    assert len(other) == 1
+    assert json.loads((other[0] / "items.jsonl").read_text())["expected"]["state"] == "non_char"
     subprocess.run(cmd, check=True, capture_output=True)
     assert (ds / "decide-bench/cell-state/w1/items.jsonl").read_bytes() == a   # 重跑逐字节相同

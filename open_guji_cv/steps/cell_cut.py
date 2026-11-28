@@ -31,8 +31,8 @@ from ..impl.free.free_rectify import rectify_gray
 
 
 class CellCutParams(BaseModel):
-    bg_win: int = 51
-    ink_ratio: float = 0.72
+    bg_win: int = 51               # 局部背景中值窗口（px），见 impl/free/free_blocks.ink_mask
+    ink_ratio: float = 0.72        # 灰度／局部背景 < 此比值算墨
     min_speck: int = 15            # 面积小于此的墨点先去掉
     big_ratio: float = 1.45        # 单行区墨宽 > 此 × 页上小字字身 算大字，否则单行小注
     break_pad: int = 6             # 横界栏上下各让这么多（界栏本身的墨不进字框）
