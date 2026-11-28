@@ -28,6 +28,10 @@
 | 定字收尾 | `char_decide` | CV4 | `python -m open_guji_cv.eval.decide_bench.run`（冻结层）、`python -m open_guji_cv.eval.decide_bench.dyn`（动态层）、`python -m open_guji_cv.eval.decide_bench.score`（打分＋`--against` 翻转清单）；rough-bench | cv `eval/decide_bench/` | 放行率、拦住·首选对率 | 放错字为 0；翻转清单变坏格为 0 | decide-bench small（9,422）／large（11,355）；动态层沿用二者 | 殿本 vol01／vol02／vol04、史記 01–03、全唐文 004／005／008、脉经 01；按书报分 | ai-team `A24/decide-bench/子步指标-基线报告-2026-11-28.md`（B4 待转进本仓 doc/） |
 | 定字 gate | `decide_gate` | CV4 | `python -m open_guji_cv.eval.decide_bench.gate_bench` | cv `eval/decide_bench/` | 检出率、误报率 | fail 数不增 | 事故回归例；decide-bench 产物盖回 | 殿本 | ai-team `A24/decide-bench/gate-bench-2026-11-28.md` |
 
+## 统一接口（CV0，2026-11-28 起）
+
+各 bench 收进一个登记表 `open_guji_cv/eval/bench.py`（`BenchSpec`／`BenchCtx`／`BenchResult`），实现放 `eval/benches/<名>.py`；命令走 guji-manager `guji bench list|fetch|run|ab|guard|show`，资源由 manager 按书备齐。结果目录 `bench-results/<bench>/<书>/<时间>/`（`result.json` schema 1、`items.jsonl`、`report.md`），status 只有 ok／regressed／skipped／no_gold。已接：`cut-2d`（2d 行、CV2）、`decide`（定字收尾行、CV4）；其余各行由负责线 P1 接，接完把 bench id 写进本表「bench」列。分派与接入验收见 ai-team `domain/CV/规范/bench统一接口-2026-11-28.md`。
+
 ## 第四步脚本说明（CV4，2026-11-28）
 
 `open_guji_cv/eval/decide_bench/` 的四个脚本都是命令行入口，`python -m open_guji_cv.eval.decide_bench.<名> --help` 看参数；金标在 open-guji-dataset `decide-bench/`。
