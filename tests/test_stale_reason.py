@@ -273,3 +273,41 @@ def test_status_rename_only_still_flags_param_change(world):
     st = _eng(book, pl, store, cache, params={"t_sr_down": {"gain": 2.0}}).status(code_ok=True)
     assert st["steps"]["t_sr_down"]["counts"][STALE] == 2
     assert "rename_only" not in st["steps"]["t_sr_down"]
+
+
+def test_seal_rename_accepts_fingerprint_param_changed_by_rename(world):
+    """改名改写了参数指纹读的文件（脉经 crop_exclusions 的格号 01:→1:）：封存后 status 认作改名，之后再变照常过期。"""
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    _fake_rename(store)
+    fp = {"t_sr_down": {"corpus_fingerprint": "after-rename"}}
+    st = _eng(book, pl, store, cache, params=fp).status()
+    assert st["steps"]["t_sr_down"]["counts"][STALE] == 2          # 没封存：参数变了
+    sealed = _eng(book, pl, store, cache, params=fp).seal_rename(pages=[1, 2])
+    assert list(sealed) == ["t_sr_down"] and list(sealed["t_sr_down"]) == ["corpus_fingerprint"]
+    st = _eng(book, pl, store, cache, params=fp).status()
+    assert st["steps"]["t_sr_down"]["counts"][FRESH] == 2
+    assert st["steps"]["t_sr_down"]["rename_only"] == 2
+    # 封存之后文件又变（新人裁）：对不上封存的新值，照常过期
+    st = _eng(book, pl, store, cache, params={"t_sr_down": {"corpus_fingerprint": "later"}}).status()
+    assert st["steps"]["t_sr_down"]["counts"][STALE] == 2
+    # 手写参数（不是 *_fingerprint）不封存
+    eng = _eng(book, pl, store, cache, params={"t_sr_down": {"gain": 3.0}})
+    assert "t_sr_down" not in eng.seal_rename(pages=[1, 2])
+    assert eng.status()["steps"]["t_sr_down"]["counts"][STALE] == 2
+
+
+def test_seal_rename_needs_marker(world):
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    with pytest.raises(FileNotFoundError):
+        _eng(book, pl, store, cache).seal_rename(pages=[1, 2])
+
+
+def test_seal_rename_keys_filter(world):
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    _fake_rename(store)
+    eng = _eng(book, pl, store, cache, params={"t_sr_down": {"corpus_fingerprint": "x"}})
+    assert eng.seal_rename(pages=[1, 2], keys={"exclusions_fingerprint"}) == {}
+    assert eng.status()["steps"]["t_sr_down"]["counts"][STALE] == 2
