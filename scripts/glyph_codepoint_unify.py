@@ -143,7 +143,7 @@ def _merge_glyph_head(cur: sqlite3.Cursor, edition_tag: str, old: str, new: str)
 def apply(book: str, mapping: dict[str, str], db_path: Path) -> dict:
     """真落地：改库＋改事件日志。走人裁写锁，与体检/控制台裁决互斥。"""
     from open_guji_cv.core.workspace import feedback_root
-    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
+    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event, provenance
     from guji_manager.feedback.harvest import parse_card_id
     from open_guji_cv.feedback.lock import feedback_write_lock
 
@@ -177,6 +177,9 @@ def apply(book: str, mapping: dict[str, str], db_path: Path) -> dict:
                                          **parse_card_id(key))
                     payload = {"v": "confirm", "shape": new, "conversion": 0,
                               "no_glyph_lib": False,
+                              # 来源三字段按现行口径写（actor=model、批次不在 HUMAN_MODEL_BATCHES → ai）：显式写 human 会改变
+                              # 「算不算人裁」，待各书线确认后再改（盘点 #14）
+                              **provenance("ai", "glyph_codepoint_unify", "script"),
                               "note": f"书级码位统一（字形库11 §〇 用户裁定）：{old}→{new}"}
                     events.append(make_event(batch, base + i, "confirm", target, payload,
                                              actor="model"))

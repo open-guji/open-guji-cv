@@ -1,4 +1,5 @@
 """题列套语放行 seed_admit.lane_header_formula + row_segment.header_ref_flag（史記目錄页题列）。"""
+from helpers import patch_seed_admit
 from types import SimpleNamespace
 
 from open_guji_cv.steps import seed_admit as sa
@@ -22,7 +23,7 @@ def _rec(i, char=None, admit=False, channel=None):
 
 def _run(monkeypatch, line, recs, col=3):
     cells = SimpleNamespace(columns=[SimpleNamespace(col=col, flags=[f"header_ref:{line}"])])
-    monkeypatch.setattr(sa, "_opt", lambda ctx, kind, page: cells)
+    patch_seed_admit(monkeypatch, "_opt", lambda ctx, kind, page: cells)
     out = [SimpleNamespace(col=col, chars=recs)]
     return sa._header_formula_pass(None, 87, SeedAdmitParams(lane_header_formula=True), out), recs
 
@@ -62,7 +63,7 @@ def test_overrides_few_admitted_conflicts_but_skips_shifted_column(monkeypatch):
 def test_skips_column_with_frame_junk(monkeypatch):
     cells = SimpleNamespace(columns=[SimpleNamespace(col=3, flags=["header_ref:本紀第十一",
                                                                    "layout_frame_junk：列端 1 格的墨不像字"])])
-    monkeypatch.setattr(sa, "_opt", lambda ctx, kind, page: cells)
+    patch_seed_admit(monkeypatch, "_opt", lambda ctx, kind, page: cells)
     recs = [_rec(i, "x") for i in range(2, 7)]
     out = [SimpleNamespace(col=3, chars=recs)]
     assert sa._header_formula_pass(None, 87, SeedAdmitParams(lane_header_formula=True), out) == 0

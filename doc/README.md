@@ -38,7 +38,7 @@ guji-cv version --json                                                          
 | [参考/受控重跑.md](参考/受控重跑.md)、[参考/性能统计.md](参考/性能统计.md)、[参考/longrun.md](参考/longrun.md) | 重跑分级、耗时、断点续跑 |
 | [参考/exp_framework.md](参考/exp_framework.md)、[参考/cloud_eval.md](参考/cloud_eval.md) | A/B 实验与评测 |
 | [参考/modern_print_pipeline.md](参考/modern_print_pipeline.md) | 现代排印链 |
-| [formats/](formats/README.md) | guji-page、pages.json、人裁事件等格式 |
+| [formats/](formats/README.md) | guji-page、pages.json、裁定事件等格式 |
 
 ## 其他
 

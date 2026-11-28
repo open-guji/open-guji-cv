@@ -56,3 +56,28 @@ def test_removed_events_dropped_from_human_chars_and_bindings(tmp_path, monkeypa
                       _pl("pin-x-char-2", "removed", ["e3"], "2026-11-26T01:00:00Z")])
     assert lookup.human_chars(BOOK, log=log, stale={}, bind=False) == {f"{BOOK}:1:1:2": "土"}
     assert [e.id for e in _verdict_events(BOOK, log, evs)[1]] == ["e2"]
+
+
+def _ev_lv(i, slot, ch, ts, level, **extra):
+    e = _ev(i, slot, ch, ts=ts)
+    e.payload = {**e.payload, "level": level, **extra}
+    return e
+
+
+def test_levels_human_over_later_ai(tmp_path, monkeypatch):
+    """GUJI_PIN_LEVELS=1：后写的 AI 不压人裁（除非 override_human）；默认关＝后到覆盖。"""
+    log = EventLog(tmp_path)
+    evs = [_ev_lv(1, 1, "道", "2026-10-01T00:00:00Z", "human"),
+           _ev_lv(2, 1, "導", "2026-10-02T00:00:00Z", "ai"),
+           _ev_lv(3, 2, "火", "2026-10-01T00:00:00Z", "ai"),
+           _ev_lv(4, 2, "炎", "2026-10-02T00:00:00Z", "human"),
+           _ev_lv(5, 3, "甲", "2026-10-01T00:00:00Z", "human"),
+           _ev_lv(6, 3, "乙", "2026-10-02T00:00:00Z", "ai", override_human=True),
+           _ev_lv(7, 4, "子", "2026-10-01T00:00:00Z", "ai"),
+           _ev_lv(8, 4, "丑", "2026-10-02T00:00:00Z", "ai")]
+    monkeypatch.setattr(events, "iter_events_readonly", lambda _log: evs)
+    k = lambda n: f"{BOOK}:1:1:{n}"
+    monkeypatch.delenv("GUJI_PIN_LEVELS", raising=False)
+    assert lookup.human_chars(BOOK, log=log, stale={}, bind=False) == {k(1): "導", k(2): "炎", k(3): "乙", k(4): "丑"}
+    monkeypatch.setenv("GUJI_PIN_LEVELS", "1")
+    assert lookup.human_chars(BOOK, log=log, stale={}, bind=False) == {k(1): "道", k(2): "炎", k(3): "乙", k(4): "丑"}

@@ -693,7 +693,7 @@ def cmd_apply(a) -> None:
     out.mkdir(parents=True, exist_ok=True)
     if a.workspace:
         os.environ["GUJI_WORKSPACE"] = str(Path(a.workspace).resolve())
-    from open_guji_cv.feedback.events import EventTarget, make_event
+    from open_guji_cv.feedback.events import EventTarget, make_event, provenance
 
     events, lists = [], collections.defaultdict(list)
     for cid in sorted(verdicts, key=_cell_sort):
@@ -707,7 +707,7 @@ def cmd_apply(a) -> None:
             # approx=True：走既有「近似字」侧表（approx_labels），库里查得出来；ids 只在近似字是多字 IDS 时填
             pl = {"v": "confirm", "shape": ch[0] if len(ch) == 1 else ch, "approx": True, "via": "newchar_review",
                   "note": f"近似异体字（Unicode 未收字，整理本码位 {card['grp']}），非精确字形；意思相同的最近似字",
-                  "source": a.source}
+                  "source": a.source, **provenance("human", a.reviewer, "console")}
             if len(ch) > 1:
                 pl["ids"] = ch
             events.append(make_event(batch, len(events) + 1, "confirm", tgt, pl, reviewer=a.reviewer))
@@ -718,7 +718,8 @@ def cmd_apply(a) -> None:
             note = ("新字确认：整理本字对" if v == "ref" else f"新字确认：改为 {ch}（整理本字 {card['ref']}）")
             events.append(make_event(batch, len(events) + 1, "confirm", tgt,
                                      {"v": "confirm", "shape": ch, "via": "newchar_review", "note": note,
-                                      "source": a.source}, reviewer=a.reviewer))
+                                      "source": a.source, **provenance("human", a.reviewer, "console")},
+                                     reviewer=a.reviewer))
         elif v in ("seg", "unclear", "other"):
             lists[v].append(card)
         else:

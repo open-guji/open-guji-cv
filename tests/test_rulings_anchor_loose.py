@@ -2,6 +2,8 @@
 """格锚点宽松档（`ruling_anchor_loose`／`RulingStore._anchor_loose`，GM4 合并方案 11-24）。数据自造，临时目录。"""
 from __future__ import annotations
 
+from helpers import set_seed_admit
+
 from types import SimpleNamespace as NS
 
 from open_guji_cv.feedback import rulings as R
@@ -105,7 +107,7 @@ def test_vis_pass_loose_conflict(tmp_path):
 
 def test_fold_loose_high_only(tmp_path):
     from open_guji_cv.steps import seed_admit as sa
-    orig, sa._l3_online = sa._l3_online, (lambda p_: {"ry": {"system": "s", "ver": "ry-l2-2"}})
+    orig = sa._l3_online; set_seed_admit("_l3_online", (lambda p_: {"ry": {"system": "s", "ver": "ry-l2-2"}}))
     try:
         for conf, want in (("mid", 0), ("high", 1)):
             st = _put(tmp_path / conf, group="ry", ver="ry-l2-2", char="曰", ref="日", conf=conf, left="", right="某")   # 单格列现窗口两侧都空：窗口键不中、左侧同
@@ -116,9 +118,7 @@ def test_fold_loose_high_only(tmp_path):
             if want:
                 assert r.evidence["fold"]["ruling_key"] == "anchor" and r.evidence["fold"]["win_sides"]
     finally:
-        sa._l3_online = orig
-
-
+        set_seed_admit("_l3_online", orig)
 def test_param_not_in_dump_when_off():
     assert "ruling_anchor_loose" not in SeedAdmitParams(db_path="x").model_dump(mode="json")
     assert SeedAdmitParams(db_path="x", ruling_anchor_loose=True).model_dump(mode="json")["ruling_anchor_loose"] is True

@@ -65,6 +65,7 @@ X2 实测切分重算后同一块像素上的格已经改成完整字，裁决�
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import datetime
 from pathlib import Path
@@ -97,7 +98,7 @@ def strict_enabled() -> bool:
     return os.environ.get("GUJI_BINDINGS_STRICT", "").strip().lower() in ("1", "true", "yes", "on")
 _MEMO: dict = {}
 _PAGE_MEMO: dict = {}    # (书, 产物库根, 页) → (cells_sha, 本页事件签名, rows)；提交一条裁决只让它那一页失效（GUJI-525）
-_VERSION = 8          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点；6：图像指纹优先、行加 fp_diff；7：缓存键加字块那一步的 sha、字块图验戳；8：缓存缺字块图现切、行加 why=no_patch）
+_VERSION = 9          # 判定规则/行格式改了就加 1，缓存自动作废（9：无框旧人裁的库图须早于当时那版切分被换掉；4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点；6：图像指纹优先、行加 fp_diff；7：缓存键加字块那一步的 sha、字块图验戳；8：缓存缺字块图现切、行加 why=no_patch）
 
 
 def _algo_hash() -> str:
@@ -156,6 +157,9 @@ def page_state(book: str, page: int, store, cells_from: str | None = None) -> tu
     return cells, store.sha(book, PATCH_STEP, key)
 
 
+_NO_TS_WARNED: set[tuple[str, int]] = set()
+
+
 def _cells_versions(book: str, page: int, store) -> list[tuple[str, float, float, object]]:
     """[(标签, 起, 止, PageCells)]，按「止」升序。现行版 起=manifest 时间、止=∞；上一版、备份版 起=-∞。"""
     from ..core.spec import page_key
@@ -165,7 +169,19 @@ def _cells_versions(book: str, page: int, store) -> list[tuple[str, float, float
     out = []
     cur = store.read(book, step, key, CELLS_KIND)
     ent = store.manifest(book, step).get(key)
-    cur_ts = float(ent.ts) if ent is not None else 0.0
+    # manifest 里查不到这一页（底包只带产物、manifest 缺行或被截）：不知道现行切分何时生成。
+    # 以前当 0（「一直就是这版」）——无框旧人裁就被当成裁于现行切分之后，原格号照用、
+    # 补锚也取现行格（史記 03 册 #17918 落错 16 格，CV0 2026-11-27）。改为当作「刚切」：
+    # 现行版不给旧裁决补锚，无框旧人裁回待审（宁可重看不可错用）。
+    if ent is not None:
+        cur_ts = float(ent.ts)
+    else:
+        cur_ts = float("inf")
+        if cur is not None and (book, page) not in _NO_TS_WARNED:
+            _NO_TS_WARNED.add((book, page))
+            logging.getLogger(__name__).warning(
+                "bindings(%s:%d)：%s manifest 没有这一页，现行切分起始时间未知，无框旧人裁按待审处理",
+                book, page, step)
     prev = store.read_prev(book, step, key, CELLS_KIND)
     if prev is not None:
         born = _first_written(store.manifest(book, step).path, key, store.prev_sha(book, step, key))
@@ -241,7 +257,60 @@ def _inside(inner, outer) -> float:
     return ix * iy / area if area > 0 else 0.0
 
 
-def _legacy_anchor(ev, book, page, col, slot, sub, versions, glyph_db) -> dict | None:
+_HIST_MEMO: dict = {}
+
+
+def _cut_history(manifest_path: Path | None, key: str) -> list[tuple[float, str]]:
+    """manifest 历史里这一页的 [(ts, sha)]，按时间升序；读不到 → []。"""
+    if manifest_path is None:
+        return []
+    try:
+        st = manifest_path.stat()
+    except OSError:
+        return []
+    mk = (str(manifest_path), key)
+    hit = _HIST_MEMO.get(mk)
+    if hit and hit[0] == (st.st_mtime_ns, st.st_size):
+        return hit[1]
+    out = []
+    try:
+        with open(manifest_path, encoding="utf-8") as f:
+            for line in f:
+                if f'"{key}"' not in line:
+                    continue
+                d = json.loads(line)
+                if d.get("key") == key and d.get("ts") is not None and d.get("sha256"):
+                    out.append((float(d["ts"]), str(d["sha256"])))
+    except (OSError, ValueError):
+        out = []
+    out.sort()
+    _HIST_MEMO[mk] = ((st.st_mtime_ns, st.st_size), out)
+    return out
+
+
+def _cut_ends_after(hist: list[tuple[float, str]], t: float) -> float:
+    """裁决时刻 `t` 那一版切分（manifest 里 t 之前最后一次写出的 sha）被换掉的时刻；
+    t 之前没有记录（不知道当时是哪版）→ 头一条记录的时刻；一直没换 → ∞；没有历史 → -∞（一律不认）。"""
+    if not hist:
+        return float("-inf")
+    cur = None
+    for ts, sha in hist:
+        if ts <= t:
+            cur = sha
+            continue
+        if cur is None or sha != cur:
+            return ts
+    return float("inf")
+
+
+def _ts_iso(s) -> float | None:
+    try:
+        return _ts(str(s))
+    except Exception:
+        return None
+
+
+def _legacy_anchor(ev, book, page, col, slot, sub, versions, glyph_db, hist=None) -> dict | None:
     t = _ts(ev.ts)
     pick = None
     for label, start, end, cells in versions:
@@ -256,10 +325,16 @@ def _legacy_anchor(ev, book, page, col, slot, sub, versions, glyph_db) -> dict |
             a["source"] = f"backfill:{pick[0]}"
     if glyph_db is not None:
         row = glyph_db.execute(
-            "SELECT patch_png FROM instances WHERE instance_id IN (?, ?) AND label_status='human'",
+            "SELECT patch_png, updated_at FROM instances WHERE instance_id IN (?, ?) AND label_status='human'",
             (f"v2:{ev.target.key}", ev.target.key)).fetchone()
-        if row:
-            a["content_png"] = row[0]            # 只在内存里用，不落盘
+        # 库图只有是「裁决当时那版切分」切出来的才是独立旁证：库里这份图若是之后换了切分才写进去的
+        # （回库、补放人裁、重切刷新图块），它就是按原格号从后来的切分切的，拿来跟现格比等于自己比自己，
+        # 必然像——史記 03 册 11-26 回库的 ~u 实例让 10-29 的无框旧人裁照原格号全判 valid
+        # （#17918 16 格、#17967 360 格，CV0 2026-11-27）。图写入时刻须早于当时那版切分被换掉的时刻。
+        if row and row[0] is not None:
+            up = _ts_iso(row[1]) if len(row) > 1 else None
+            if up is not None and up < _cut_ends_after(hist or [], t):
+                a["content_png"] = row[0]        # 只在内存里用，不落盘
     return a if ("bbox" in a or "content_png" in a) else None
 
 
@@ -485,6 +560,18 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
         if p is None and render is not None:
             p = render(k)                     # 缓存没有就现切（见 `_patch_renderer`）
         return p
+    _hist_box: list = []
+
+    def _hist():
+        if not _hist_box:
+            try:
+                from ..core.spec import page_key
+                from ..report.slots import cells_step
+                st_ = cells_step(book)
+                _hist_box.append(_cut_history(store.manifest(book, st_).path, page_key(page)))
+            except Exception:
+                _hist_box.append([])
+        return _hist_box[0]
     current = versions[-1] if versions and versions[-1][0] == "current" else None
     cur_idx = _cell_index(current[3]) if current else {}
     cur_start = current[1] if current else 0.0
@@ -498,7 +585,7 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
         if anchor is None:
             anchor = backfill.get(ev.id)
         if anchor is None:
-            anchor = _legacy_anchor(ev, book, page, col, slot, sub, versions, glyph_db)
+            anchor = _legacy_anchor(ev, book, page, col, slot, sub, versions, glyph_db, hist=_hist())
         row = {"event": ev.id, "key": ev.target.key, "ts": ev.ts, "bound": None,
                "shape": (ev.payload or {}).get("shape") or None,
                "status": "void", "iou": 0.0, "sim": None,

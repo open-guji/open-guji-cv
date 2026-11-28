@@ -2,6 +2,8 @@
 """裁定按字格永久编号 u 查（`ruling_by_u`／`RulingStore.get_by_u`／`UidLedger`，CV0 T3 11-24）。数据自造，临时目录。"""
 from __future__ import annotations
 
+from helpers import patch_seed_admit, set_seed_admit
+
 import json
 from types import SimpleNamespace as NS
 
@@ -123,7 +125,7 @@ def test_vis_pass_by_u_conflict(tmp_path):
 
 def test_fold_by_u(tmp_path):
     from open_guji_cv.steps import seed_admit as sa
-    orig, sa._l3_online = sa._l3_online, (lambda p_: {"ry": {"system": "s", "ver": "ry-l2-2"}})
+    orig = sa._l3_online; set_seed_admit("_l3_online", (lambda p_: {"ry": {"system": "s", "ver": "ry-l2-2"}}))
     try:
         for conf, cand, want in (("mid", "曰", 0), ("high", "目", 0), ("high", "曰", 1)):
             st = _put(tmp_path / f"{conf}{cand}", group="ry", ver="ry-l2-2", char="曰", ref="日", conf=conf, left="", right="某")
@@ -134,12 +136,10 @@ def test_fold_by_u(tmp_path):
             if want:
                 assert r.evidence["fold"]["ruling_key"] == "u" and r.evidence["fold"]["u"] == 7
     finally:
-        sa._l3_online = orig
-
-
+        set_seed_admit("_l3_online", orig)
 def test_uid_map_off_reads_nothing(monkeypatch):
     from open_guji_cv.steps import seed_admit as sa
-    monkeypatch.setattr(sa, "_vis_cache", lambda: (_ for _ in ()).throw(AssertionError("关着不该碰裁定库")))
+    patch_seed_admit(monkeypatch, "_vis_cache", lambda: (_ for _ in ()).throw(AssertionError("关着不该碰裁定库")))
     assert sa._uid_map(SeedAdmitParams(db_path="x"), NS(), 1) is None
 
 

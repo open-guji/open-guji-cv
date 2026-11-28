@@ -13,7 +13,7 @@
 | 文意裁定（`_vis_ruling_pass`、fold 遍） | 窗口键、版本等价、格锚点都没中后，按本格 u 查同组同册同 u 的裁定 | 书级 `seed_admit.ruling_by_u` | `RulingStore.get_by_u` |
 | 字组文意在线问前查缓存 | 窗口精确键没中，按 u 查**版本完全相同**的那条 | 同上（开着时本页设 `UMAP_SCOPE`） | `RulingCache.lookup` → `RulingStore.get_by_u_ver` |
 | 身份账 | `<feedback>/uid/<册>.jsonl` 里本页当前 `cells_sha` 那一行的 `map`（格号→u） | 同上 | `feedback.rulings.UidLedger`（只读） |
-| 人裁绑定 | **不按 u 绑**：仍按锚框／指纹／补锚档（见 [人裁事件规范 §7](../formats/人裁事件规范.md)） | — | `feedback/bindings.py` |
+| 人裁绑定 | **不按 u 绑**：仍按锚框／指纹／补锚档（见 [裁定事件规范 §7](../formats/裁定事件规范.md)） | — | `feedback/bindings.py` |
 | 字形库刻例 | **不读 u、不改键** | — | 见第五节 |
 
 查裁定的顺序（每档没中才往下）：
@@ -41,20 +41,20 @@ params:
 
 ## 四、各版本线
 
-| 线 | 带 `ruling_by_u` 的最早版本 | 换单导出带 u 的版本 | 配 manager |
+| 线 | 带 `ruling_by_u` 的最早版本 | 整理脚本导出带 u 的版本 | 配 manager |
 |---|---|---|---|
 | dev／v0.9.x（脈經、北行等跟 0.9 的书） | dev #1848＋#1856；0.9 线 v0.9.1 | dev 本就走 manager 导出 | — |
-| 殿本 patch 线 | v0.7.102（现行 v0.7.105／106） | v0.7.108（republish）、v0.7.110（proof_cycle、zl） | ≥0.6.20／≥0.6.21 |
-| 史記 patch 线 | v0.7.103 | v0.7.107（republish）、v0.7.112（proof_cycle、zl） | ≥0.6.20／≥0.6.21 |
-| 全唐文 patch 线 | v0.7.104 | v0.7.109（republish）、v0.7.111（proof_cycle、zl） | ≥0.6.20／≥0.6.21 |
+| 殿本 patch 线 | v0.7.102（现行 v0.7.105／106） | v0.7.108 起（`zl` 自 v0.7.110） | ≥0.6.20／≥0.6.21 |
+| 史記 patch 线 | v0.7.103 | v0.7.107 起（`zl` 自 v0.7.112） | ≥0.6.20／≥0.6.21 |
+| 全唐文 patch 线 | v0.7.104 | v0.7.109 起（`zl` 自 v0.7.111） | ≥0.6.20／≥0.6.21 |
 
-**换单导出**：patch 线的 `scripts/zhengli/republish.py`、`proof_cycle.py`、`zl.py` 出 char 导出改走 guji-manager 的 `guji_manager.output.guji_format_export`；册有身份账时 char 每格带 `u`（book-text char v0.6，顶层 `u_max`、`u_retired`）。没装 manager 才退回 cv 自带的 `scripts/export_guji_format.py`（**不写 u**）。用旧版导出推 book-text，`local_check` 会报「旧版已有 u，新版把 u 全丢了」，`guji feedback swap book-text` 推标点也会报 u 对不上：遇到先查 cv 版本够不够上表、`_cycle/*/export` 是不是旧版出的（要重出）。这几处改动只动脚本，23 步指纹不变，钉旧版的册不用改钉。
+**整理脚本导出**：patch 线出 char 导出的整理脚本（`scripts/zhengli/zl.py` 等；`republish.py`、`proof_cycle.py` 已于 2026-11-27 随整张换单退役删除）改走 guji-manager 的 `guji_manager.output.guji_format_export`；册有身份账时 char 每格带 `u`（book-text char v0.6，顶层 `u_max`、`u_retired`）。没装 manager 才退回 cv 自带的 `scripts/export_guji_format.py`（**不写 u**）。用旧版导出推 book-text，`local_check` 会报「旧版已有 u，新版把 u 全丢了」，`guji feedback swap book-text` 推标点也会报 u 对不上：遇到先查 cv 版本够不够上表、`_cycle/*/export` 是不是旧版出的（要重出）。这几处改动只动脚本，23 步指纹不变，钉旧版的册不用改钉。
 
 ## 五、字形库刻例键为什么不按 u 改
 
 刻例 id 是入库那一刻的格号（`v2:册:页:列:格`），**重切后不改键**：
 
-- cv 读库时 `bindings.rebind_library_shapes` 拿刻例的原格号去找**同一格号**的人裁事件（事件也不改键），按那条事件的绑定状态（`valid`／`rebound`／…）落到现在该落的格。库键与事件键同步，顺移才对得上。
+- cv 读库时 `bindings.rebind_library_shapes` 拿刻例的原格号去找**同一格号**的裁定事件（事件也不改键），按那条事件的绑定状态（`valid`／`rebound`／…）落到现在该落的格。库键与事件键同步，顺移才对得上。
 - 只改库键、不改事件键，库里那条就会对上新格号上**别的字**的事件，绑错。
 - `guji feedback rekey-cells` 只在换图源时用（那时事件也一起迁）；平常重切、格号平移不要 rekey。
 

@@ -5,6 +5,8 @@
 另验：没放行过的格不加键；已有 evidence 键不丢；降级结果（admit／channel／char）与不加键时一致。"""
 from __future__ import annotations
 
+from helpers import patch_seed_admit
+
 from types import SimpleNamespace as NS
 
 import open_guji_cv.steps  # noqa: F401
@@ -42,9 +44,9 @@ def test_demote_helper_only_when_admitted():
 def test_shadow_veto(monkeypatch):
     v = NS(veto=True, pick=None, evidence=lambda *a: {"v": 1})
     gate = NS(judge=lambda ev: v, model="m", conf=0.9, low_conf=0.5)
-    monkeypatch.setattr(sa, "_shadow_gate", lambda p: gate)
-    monkeypatch.setattr(sa, "_doubts", lambda m, d: [])
-    monkeypatch.setattr(sa, "_opt", lambda c, k, pg: None)
+    patch_seed_admit(monkeypatch, "_shadow_gate", lambda p: gate)
+    patch_seed_admit(monkeypatch, "_doubts", lambda m, d: [])
+    patch_seed_admit(monkeypatch, "_opt", lambda c, k, pg: None)
     r = _rec(channel="iron")
     m = NS(candidates=[("山", 1.0)], char="山")
     p = NS(shadow_veto_variant_abstain=False)
@@ -101,7 +103,7 @@ def test_diff_script(tmp_path):
 
 def _sym_setup(monkeypatch, rare_top=None):
     import open_guji_cv.steps.align_ref as ar
-    monkeypatch.setattr(sa, "_opt", lambda c, k, pg: None)
+    patch_seed_admit(monkeypatch, "_opt", lambda c, k, pg: None)
     monkeypatch.setattr(ar, "rare_topk_map", lambda r, k: {"r1": [rare_top]} if rare_top else {})
     return NS(symbol_min_human=3)
 

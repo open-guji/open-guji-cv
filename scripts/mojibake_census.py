@@ -96,7 +96,7 @@ def write_fixes(root: Path, rows: list[dict], batch: str, dry_run: bool) -> list
     但仍旧检查一遍，不假设普查到的就是最终态（普查只看单条记录合不合法）。
     """
     sys.path.insert(0, str(REPO_ROOT))
-    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
+    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event, provenance
 
     log = EventLog(root=root)
     evs_by_key: dict[str, list] = {}
@@ -142,6 +142,8 @@ def write_fixes(root: Path, rows: list[dict], batch: str, dry_run: bool) -> list
                         col=final.target.col, slot=final.target.slot),
             {"v": "confirm", "shape": r["fixed"], "no_glyph_lib": False,
              "reason": "mojibake_fix_20260916",
+             # 按现行口径（批 H-mojibake-fix-20260927 在 HUMAN_MODEL_BATCHES → human）；改 machine 会让这批不再算钉，待查影响后再定（盘点 #16）
+             **provenance("human", "mojibake_census", "script"),
              "note": f"UTF-8 被按 cp1252/latin-1 误解码再存盘的乱码机械还原："
                      f"{r['raw']!r} -> {r['fixed']!r}（原事件 {final.id}，"
                      f"P cross 1717／H 任务书-人裁事件乱码修复）"},

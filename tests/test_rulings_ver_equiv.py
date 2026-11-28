@@ -2,6 +2,8 @@
 """裁定版本等价登记表（`<feedback>/rulings/ver_equiv.yaml`，`RulingStore.get_equiv`；GM4／CV4 2026-11-24）。数据自造，临时目录。"""
 from __future__ import annotations
 
+from helpers import set_seed_admit
+
 import pytest
 
 from open_guji_cv.feedback.rulings import EQUIV_FILE, RulingStore, base_ver
@@ -102,11 +104,11 @@ def test_fold_pass_equiv_hit(tmp_path):
     st = RulingStore(tmp_path)
     st.put("ry", "v0", "", "", char="曰", conf="high", why="x", model="m", cell=f"{B}:1:1")
     r = AdmitRec(id=f"{B}:1:1", slot=1, admit=False, char="乙", doubts=[], channel=None, provenance="", evidence={"group": {"id": "ry"}})
-    orig, sa._l3_online = sa._l3_online, (lambda p_: {"ry": {"system": "s", "ver": "v1"}})
+    orig = sa._l3_online; set_seed_admit("_l3_online", (lambda p_: {"ry": {"system": "s", "ver": "v1"}}))
     try:
         n = sa._fold_pass(p, [ColumnAdmit(col=1, chars=[r])], {r.id: ("日", None)}, None, store=st, wh={r.id: (92, 100)})
     finally:
-        sa._l3_online = orig
+        set_seed_admit("_l3_online", orig)
     assert n == 1 and r.char == "曰"
     f = r.evidence["fold"]
     assert (f["via"], f["ruling_key"], f["ruling_ver"]) == ("ruling", "ver_equiv", "v0"), f

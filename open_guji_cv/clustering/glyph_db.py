@@ -377,6 +377,11 @@ class GlyphDB:
         if cur.execute("SELECT 1 FROM admissions WHERE instance_id=?",
                        (instance_id,)).fetchone():
             return False
+        # 借库撞号（2026-11-28，汉书借史記：两书都有 01 册，`v2:01:页:列:格` 同号指两书各一格）：
+        # 本库里这个 id 是借来的刻例时，本书的格优先——先把借来那份（图、派生、刻例、字头计数）从本库摘掉，
+        # 再按本书新例写入。否则下面 ON CONFLICT 只改 label，图仍是别的书那一格。借来的库本身不动（真源在别处）。
+        if instance_id in _borrowed(self)[0]:
+            _drop_borrowed_instance(cur, instance_id)
         source_id = instance_id.split(":")[0]
         edition = edition_tag or source_id
         # 一本书一个 edition（2026-09-25，用户：「v2 应该是整个四库目录，是整一个新的
@@ -478,10 +483,13 @@ class GlyphDB:
         if edition.startswith(("font:", "modern:")):
             raise ValueError("书的 edition 不能以 font: / modern: 开头")
         cur = self.conn.cursor()
-        rows = cur.execute(
+        # 借来的库（`rebuild_from_store(extra_stores=...)`）的 edition 与来源不并：它们是别的书（2026-11-28 汉书借史記，
+        # 原先会把借来的 6,473 行字头改归本书）。
+        _b_ids, b_eds, b_srcs = _borrowed(self)
+        rows = [r for r in cur.execute(
             "SELECT glyph_id, edition_tag, char, semantic, unicode_cp, ids, n_confirmed "
             "FROM glyphs WHERE edition_tag NOT LIKE 'font:%' AND edition_tag NOT LIKE 'modern:%' "
-            "AND edition_tag != ?", (edition,)).fetchall()
+            "AND edition_tag != ?", (edition,)).fetchall() if r[1] not in b_eds]
         merged = moved = 0
         seen: set[str] = set()        # 试算时记「已挪过去的字」，第二行同字才算合并
         for gid, ed, ch, sem, cp, ids, n in rows:
@@ -510,16 +518,18 @@ class GlyphDB:
             cur.execute("UPDATE OR IGNORE exemplars SET glyph_id=? WHERE glyph_id=?", (tid, gid))
             cur.execute("DELETE FROM exemplars WHERE glyph_id=?", (gid,))
             cur.execute("DELETE FROM glyphs WHERE glyph_id=?", (gid,))
+        skip = sorted(b_srcs)
+        not_b = (f" AND source_id NOT IN ({','.join('?' * len(skip))})" if skip else "")
         n_src = cur.execute(
             "SELECT COUNT(*) FROM sources WHERE COALESCE(kind,'woodblock') != 'font' "
-            "AND edition_tag NOT LIKE 'font:%'").fetchone()[0]
+            "AND edition_tag NOT LIKE 'font:%'" + not_b, skip).fetchone()[0]
         if not dry_run:
-            # 刻本来源一律改过来——含 bxgb 那条历史上记成 modern:bxgb、而字形早已是 bxgb 的
+            # 刻本来源一律改过来——含 bxgb 那条历史上记成 modern:bxgb、而字形早已是 bxgb 的（借来的来源除外）
             cur.execute("UPDATE sources SET edition_tag=? WHERE COALESCE(kind,'woodblock') != 'font' "
-                        "AND edition_tag NOT LIKE 'font:%'", (edition,))
+                        "AND edition_tag NOT LIKE 'font:%'" + not_b, [edition, *skip])
             if title:
-                cur.execute("UPDATE sources SET title=? WHERE COALESCE(kind,'woodblock') != 'font'",
-                            (title,))
+                cur.execute("UPDATE sources SET title=? WHERE COALESCE(kind,'woodblock') != 'font'" + not_b,
+                            [title, *skip])
             cur.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('book_edition', ?)",
                         (edition,))
             self.conn.commit()
@@ -943,6 +953,18 @@ def _borrowed(db: "GlyphDB") -> tuple[set[str], set[str], set[str]]:
     eds = set(json.loads(meta.get("borrowed_editions") or "[]"))
     srcs = set(json.loads(meta.get("borrowed_sources") or "[]"))
     return ids, eds, srcs
+
+
+def _drop_borrowed_instance(cur, instance_id: str) -> None:
+    """从合并库里摘掉一条借来的刻例（只动本机合并库，借来的真源不动）：刻例、字头计数、派生、侧表、实例、`borrowed` 行。"""
+    for (gid,) in cur.execute("SELECT glyph_id FROM exemplars WHERE instance_id=?", (instance_id,)).fetchall():
+        cur.execute("DELETE FROM exemplars WHERE glyph_id=? AND instance_id=?", (gid, instance_id))
+        cur.execute("UPDATE glyphs SET n_confirmed = MAX(n_confirmed - 1, 0) WHERE glyph_id=?", (gid,))
+        if not cur.execute("SELECT 1 FROM exemplars WHERE glyph_id=?", (gid,)).fetchone():
+            cur.execute("DELETE FROM glyphs WHERE glyph_id=?", (gid,))
+    for t in ("derived", "cluster_members", "approx_labels", "instances", "borrowed"):
+        if cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (t,)).fetchone():
+            cur.execute(f"DELETE FROM {t} WHERE instance_id=?", (instance_id,))
 
 
 #: 例数少于这个就不开进程池（起进程的开销比省下的多）

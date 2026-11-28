@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
-"""换图源后旧格号数据的三处读口（GUJI-748，v0.5.29）：数据全部自己造，不读工作区。
-
-1. 换单门（`republish.votes_gate`）：旧单出在换源前时，旧格号的票经 ~q 迁移事件（`anchor.migrated_from`）
-   或格级对照表对到新格再看落没落；无法对位的列清单、写文件，不笼统拦。
-2. 看图结论（`feedback/vision/`）：换源前的（锚里没有 source_rev）不进请审单、不让导出标 pending；
-   换源后导入的带上产物的 source_rev。
-3. `gold rebuild`：换源前的事件不重放；同 id 的旧条目已标 stale 时，新页表的事件另立新条目，不拿旧条目打底。
+"""换图源后待审单带 source_rev（GUJI-748）：数据全部自己造。
+（2026-11-27 整张换单脚本退役，原「换单门／图源门」测试随 republish.py 删除。）
 """
 from __future__ import annotations
 
@@ -29,9 +24,6 @@ def _load(name: str):
     return mod
 
 
-rp = _load("republish")
-
-
 def _yaml(books: Path, book: str, rev: int | None) -> None:
     books.mkdir(parents=True, exist_ok=True)
     (books / f"{book}.yaml").write_text(f"id: {book}\n" + (f"source_rev: {rev}\n" if rev is not None else ""),
@@ -53,105 +45,6 @@ def _cell_ev(key: str, seq: int, *, rev=None, migrated_from: str | None = None, 
     return e.model_copy(update={"ts": ts})
 
 
-# ── 1. 换单门 ────────────────────────────────────────────────────────
-
-def _ws_switched(tmp_path: Path) -> Path:
-    """没迁中心库的工作区（数据根就是工作区）：vol06 已换源（source_rev 3）。"""
-    ws = tmp_path / "abc123-书"
-    _yaml(ws / "books", "vol06", 3)
-    log = EventLog(ws / "feedback")
-    log.append([
-        _cell_ev("vol06:1:1:2", 1, rev="3", migrated_from="vol06:3:1:2", batch="old~q"),   # 换源前已落、迁过来的
-        _cell_ev("vol06:1:1:5", 2, rev="3", batch="new"),                                  # 换源后在新格上落的
-    ])
-    e = _cell_ev("vol06:1:1:6", 9, rev="3", batch="page~q")             # 早先整页迁移脚本：migrated_from 只记旧页号
-    e.target.anchor["migrated_from"] = {"book": "vol06", "page": 3, "source": "siku-qiefen-v2"}
-    log.append([e])
-    return ws
-
-
-def _table(path: Path) -> Path:
-    rows = ["旧格\t新格\t旧字\t新字\t类别\tIoU\t说明",
-            "vol06:3:1:2\tvol06:1:1:2\t甲\t甲\t同格\t0.9\t",
-            "vol06:3:1:5\tvol06:1:1:5\t乙\t乙\t同格\t0.9\t",
-            "vol06:3:1:7\tvol06:1:1:7\t丙\t丙\t改号\t0.8\t",
-            "vol06:3:1:8\tvol06:1:1:8\t丁\t丁\t同格\t0.3\t",
-            "vol06:3:1:9\t\t戊\t\t删\t0\t新图无此格"]
-    with gzip.open(path, "wt", encoding="utf-8") as f:
-        f.write("\n".join(rows) + "\n")
-    return path
-
-
-def _votes():
-    v = lambda a, choice="char", ch="甲": {"book": "abc123", "rev": "006-r5", "a": a, "choice": choice,
-                                          "char": ch, "voter": "u1", "ts": 1792000000000}
-    return [v("3:1:2"), v("3:1:5"), v("3:1:6"), v("3:1:7"), v("3:1:8"), v("3:1:9"), v("4:1:1"), v("5:1:1", "unsure")]
-
-
-OLD_SHEET = {"rev": "006-r5", "routed_as_of": "2026-10-24T03:29:13Z"}       # 换源前出的单，还没记 source_rev
-
-
-def test_sheet_predates_source(tmp_path):
-    ws = _ws_switched(tmp_path)
-    assert rp.sheet_predates_source(ws, "vol06", OLD_SHEET)
-    assert rp.sheet_predates_source(ws, "vol06", {"rev": "006-r5"})                     # 更老的单连时刻都没记
-    assert rp.sheet_predates_source(ws, "vol06", {"rev": "006-r7", "routed_as_of": "2026-10-27T00:35:07Z"}) is None
-    assert rp.sheet_predates_source(ws, "vol06", {"rev": "006-r8", "source_rev": 3}) is None
-    assert rp.sheet_predates_source(ws, "vol06", {"rev": "006-r8", "source_rev": 2})
-    assert rp.sheet_predates_source(ws, "vol06", {"rev": "006-r7", "routed_as_of": "2026-10-27T00:35:07Z"},
-                                    override=2)                                          # 命令行指明旧单的页表 rev
-    _yaml(ws / "books", "vol07", None)
-    assert rp.sheet_predates_source(ws, "vol07", OLD_SHEET) is None                      # 没换源的册不设判据
-
-
-def test_ledger_maps_old_votes_through_migration_and_table(tmp_path):
-    ws = _ws_switched(tmp_path)
-    tab = _table(tmp_path / "vol06.tsv.gz")
-    pre = rp.sheet_predates_source(ws, "vol06", OLD_SHEET)
-    led = rp.ticket_ledger(ws, "vol06", "abc123", "006-r5", _votes(), predates=pre, cells=tab)
-    c = led["counts"]
-    assert c["看不出"] == 1
-    assert c["写入"] + c["与已有人裁一致"] == 3      # 3:1:2、3:1:6 经 ~q 迁移事件，3:1:5 经对照表落在新格
-    assert [v["a"] for v in led["rows"]["未落"]] == ["3:1:7"] and led["rows"]["未落"][0]["new"] == "1:1:7"
-    why = {v["a"]: v["why"] for v in led["rows"]["无法对位"]}
-    assert why == {"3:1:8": "IoU低", "3:1:9": "删", "4:1:1": "表里没有"}
-    assert sum(c.values()) == led["votes"] == 8 and "账平" in rp.ledger_md(led)
-    # 没给对照表：除了 ~q 迁移事件对得上的，旧格号的票一律算未落（判不出能不能对位，不放）
-    led2 = rp.ticket_ledger(ws, "vol06", "abc123", "006-r5", _votes(), predates=pre)
-    assert led2["counts"]["写入"] + led2["counts"]["与已有人裁一致"] == 2
-    assert len(led2["rows"]["未落"]) == 5 and led2["counts"].get("无法对位", 0) == 0
-
-
-def test_old_votes_not_mapped_by_number_on_same_source_sheet(tmp_path):
-    """换源后出的单（格号就是新格号）：照旧按格号比，不拿 ~q 的旧格号去对。"""
-    ws = _ws_switched(tmp_path)
-    v = {"book": "abc123", "rev": "006-r7", "a": "3:1:2", "choice": "char", "char": "甲", "voter": "u1", "ts": 1}
-    led = rp.ticket_ledger(ws, "vol06", "abc123", "006-r7", [v], predates=None)
-    assert [x["a"] for x in led["rows"]["未落"]] == ["3:1:2"] and "无法对位" not in led["counts"]
-
-
-def test_votes_gate_on_pre_switch_sheet(tmp_path, monkeypatch, capsys):
-    ws = _ws_switched(tmp_path)
-    monkeypatch.delenv("CELLREVIEW_TOKEN", raising=False)
-    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
-    web = ws / "feedback" / "lists" / "web" / "abc123" / "006-r5.jsonl"
-    web.parent.mkdir(parents=True)
-    web.write_text("\n".join(json.dumps(v, ensure_ascii=False) for v in _votes()) + "\n", encoding="utf-8")
-    tab = _table(tmp_path / "vol06.tsv.gz")
-    out = tmp_path / "pub"
-    a = lambda **kw: type("A", (), {"held_file": None, "ack_unlanded_votes": None, "cells": str(tab),
-                                    "old_source_rev": None, **kw})()
-    with pytest.raises(SystemExit, match="1:1:7"):                  # 对得上新格、新格上还没人裁：照旧拦，报新格号
-        rp.votes_gate(ws, "vol06", "abc123", "006-r5", "006-r6", a(), old_doc=OLD_SHEET, out=out)
-    EventLog(ws / "feedback").append([_cell_ev("vol06:1:1:7", 3, rev="3", batch="new2")])
-    rp.votes_gate(ws, "vol06", "abc123", "006-r5", "006-r6", a(), old_doc=OLD_SHEET, out=out)
-    msg = capsys.readouterr().out
-    assert "无法对位 3" in msg and "4:1:1" in msg
-    rows = (out / "旧单票无法对位.tsv").read_text(encoding="utf-8").splitlines()
-    assert rows[0].startswith("旧格") and len(rows) == 4
-    # 对照表放目录也行（<目录>/<册>.tsv.gz）
-    rp.votes_gate(ws, "vol06", "abc123", "006-r5", "006-r6", a(cells=str(tmp_path)), old_doc=OLD_SHEET, out=out)
-
 
 def test_pending_list_stamps_source_rev(tmp_path):
     pl = _load("pending_list")
@@ -167,28 +60,3 @@ def test_pending_list_stamps_source_rev(tmp_path):
     pl.main(args + ["--out", str(tmp_path / "b")])
     assert json.loads((tmp_path / "b" / "006.pending.json").read_text(encoding="utf-8"))["source_rev"] == 3
 
-
-# ── 2. 看图结论 ──────────────────────────────────────────────────────
-
-
-# ── 3. gold rebuild ─────────────────────────────────────────────────
-
-
-def test_source_gate(tmp_path, capsys):
-    """图源门（A32 精校前移 A3）：册 yaml 钉了 source_rev 的，单子要出自那一版；没钉的只提示。"""
-    from types import SimpleNamespace
-    ws = tmp_path / "abc123-书"
-    a = lambda why=None: SimpleNamespace(source_why=why)
-    _yaml(ws / "books", "vol06", 3)
-    rp.source_gate(ws, "vol06", {"source_rev": 3}, a())                  # 对得上：过
-    rp.source_gate(ws, "vol06", {}, a())                                 # 单子没记：只提示
-    assert "没记 source_rev" in capsys.readouterr().err
-    with pytest.raises(SystemExit, match="r2"):
-        rp.source_gate(ws, "vol06", {"source_rev": 2}, a())
-    rp.source_gate(ws, "vol06", {"source_rev": 2}, a("知情"))
-    assert "已按 --source-why 越过" in capsys.readouterr().err
-    _yaml(ws / "books", "vol07", None)
-    rp.source_gate(ws, "vol07", {"source_rev": 1}, a())                  # 没钉：只提示（钉了会丢旧事件，先补锚）
-    assert "没钉 source_rev" in capsys.readouterr().err
-    rp.source_gate(ws, "vol07", {}, a())                                 # 两边都没有（原图不是从页表取的）：只提示
-    assert "没法核图源" in capsys.readouterr().err

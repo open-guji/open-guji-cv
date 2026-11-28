@@ -91,7 +91,7 @@ STEP_MAP.md 记载一致，不需要改动。
 顺手核实了一个容易看错的地方：`feedback/routes.py` 里有两条命中
 `target.step: column_warp` 的路由（`kind: band` 与 `kind: border_class`），
 乍看像是"Step2 的路由规则"，但**这条路由表本身不是 guardrail**——它不拦截
-任何决策，只是把人裁事件转发给 `gold_add` 消费者写入
+任何决策，只是把裁定事件转发给 `gold_add` 消费者写入
 `char-segmentation/column-warp` 分片，本质是"喂 benchmark 的管线代码"，
 不满足 guardrail"运行时真的会拦"这条定义，判断时不要被"路由表"这个名字
 和"写着 Step2 名字"这两点误导进 guardrail 类。
@@ -105,7 +105,7 @@ STEP_MAP.md 记载一致，不需要改动。
 | `output/frame_geometry.json` / `gutter_straightness.json` | open-guji-cv | 几何判据的一次性量测结果 |
 | `output/llm_context_evalset/report_*.{json,md}` | open-guji-cv | 大模型接入实验的多引擎对照报告 |
 | `output/crop_exclusion_receipt.jsonl` | open-guji-cv | 排除名单变更的操作留痕（介于 guardrail 变更记录与 statistics 之间，归 statistics：它记录的是"发生了什么"不是"规则本身"） |
-| `open-guji-dataset/feedback/events/*.jsonl` | open-guji-dataset | 人裁事件流（只追加） |
+| `open-guji-dataset/feedback/events/*.jsonl` | open-guji-dataset | 裁定事件流（只追加） |
 | `open-guji-dataset/feedback/consumed/*.jsonl` | open-guji-dataset | 事件消费记账（幂等） |
 
 **现状问题**：`output/` 目录名太泛（"输出"可以是任何产物），完全没有标出

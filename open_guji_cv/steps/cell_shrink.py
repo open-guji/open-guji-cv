@@ -274,6 +274,11 @@ class CellShrinkParams(BaseModel):
     """一整团实心墨（墨点、污渍）的格记空，旗 `ink_blob`（extractor `is_ink_blob`，见 `INK_BLOB_*`）。缺省关＝旧行为。
     开（全唐文 S6）：011:68:1:14 是夹在空格里的一团墨，列端渣格闸够不着，被当字（2026-11-05）。"""
 
+    end_dash_row: bool = False
+    """列首／列尾格端区里成排的虚线短划（写本内框细线印成一串短划、整页拟不出内线的页）整排抹白
+    （extractor `strip_dash_row`）。缺省关＝旧行为。开（史記）：短划两三段连成一截过不了框渣剥离的面积闸、或字的勾
+    越过虚线往下伸，短划整排留下，紧框横着拉宽去圈它（cut-frame 42:43:5「宗」、42:27:5「事」；CV2 11-27）。"""
+
     manual_ink_fit: bool = False
     """人工定框列（Step3 `manual_cells`，格级钉子）每格先在框内收到墨迹、再外扩 padding，框外的像素抹白
     （`_manual_fit_crop`）。缺省关＝旧行为（按框外扩 padding 直接裁）。开（史記）：正文定框多是满宽、上下相接的
@@ -323,6 +328,8 @@ class CellShrinkParams(BaseModel):
             d.pop("inner_frame_keep_cross", None)
         if isinstance(d, dict) and not self.manual_ink_fit:
             d.pop("manual_ink_fit", None)
+        if isinstance(d, dict) and not self.end_dash_row:
+            d.pop("end_dash_row", None)
         if isinstance(d, dict) and self.manual_ink_fit:
             # 开了的书改裁法要重切：算法修订号进 dump，只让开了的书判过期（关着的书 dump 不变，代码改动登 code_equiv）。
             # 2：跨框笔画大半在框内的整块留下（_manual_fit_crop，SJ cv #1410）
@@ -765,7 +772,8 @@ class CellShrinkStep(Step):
                      **({"frame_line_grow": True} if p.frame_line_grow else {}),
                      **({"long_rule_outer": True} if p.long_rule_outer_only else {}),
                      **({"tail_one_abs": True} if p.tail_one_abs else {}),
-                     **({"ink_blob_empty": True} if p.ink_blob_empty else {})},
+                     **({"ink_blob_empty": True} if p.ink_blob_empty else {}),
+                     **({"end_dash_row": True} if p.end_dash_row else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }

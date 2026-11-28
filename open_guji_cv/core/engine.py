@@ -11,7 +11,9 @@ import importlib
 import inspect
 import json
 import multiprocessing
+import os
 import re
+import sys
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -465,8 +467,12 @@ class Engine:
           （`real_proto`），每次导出字形库都会让它整册过期重算。审字卡上的「查候选」走
           `/api/rare` 现算，不读这一步的产物。
 
+        - 声明了 `StepSpec.enabled_by` 的步骤：那个参数字段为假就跳过（2026-11-27，3b glyph_near／收尾 glyph_analyzer 缺省关）。
+
         只跳过执行，不改 pipeline 拓扑，下游本来就处理得了「这一路证据没有」。"""
-        out = list(steps)
+        out = [s for s in steps
+               if not STEPS[s].spec.enabled_by
+               or getattr(self.ctx.params_for(STEPS[s]), STEPS[s].spec.enabled_by, None)]
         if "rare_candidates" in out and not rare_candidates_consumed(
                 self.pipeline.steps, lambda sid: self.ctx.params_for(STEPS[sid]), self.book):
             out = [s for s in out if s != "rare_candidates"]
@@ -743,6 +749,10 @@ class Engine:
                 now_parts = param_parts(self._params(step), step.spec.soft_params, step.spec.path_params)
                 diff = sorted(k for k in {*now_parts, *entry.param_parts}
                               if now_parts.get(k) != entry.param_parts.get(k))
+                # 改名时封存过的字段（`seal_rename`）旧→新对得上，不是这一页过期的原因，不列（MJ 11-28：列出来易误读）
+                sealed = (self._rename_marker().get("sealed") or {}).get(step.spec.id) or {}
+                diff = [k for k in diff
+                        if list(sealed.get(k) or ()) != [entry.param_parts.get(k), now_parts.get(k)]] or diff
                 if diff:
                     return "参数变了：" + "、".join(diff)
             return "参数变了"
@@ -1049,6 +1059,7 @@ class Engine:
                 report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
             except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整轮
                 elapsed = time.time() - t0
+                _trace_page_error(step, pg)
                 err = f"{type(e).__name__}: {e}"
                 if sp is not None:
                     sp.page(pg, "failed", elapsed, rec.to_dict(), ov)
@@ -1200,6 +1211,7 @@ class Engine:
                 with _perf.page_scope(rec):
                     prods, err = step.run_page(self.ctx, first), None
             except Exception as e:  # noqa: BLE001
+                _trace_page_error(step, first)
                 prods, err = None, f"{type(e).__name__}: {e}"
             detail = rec.to_dict()
             detail["warm_first"] = True
@@ -1370,6 +1382,14 @@ def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
     _worker_ctx._params_memo = {}         # worker 只跑这一步：参数每进程构造一次（同 `Engine._run_one_step`）
 
 
+def _trace_page_error(step, page) -> None:
+    """设了环境变量 GUJI_TRACE_PAGE_ERRORS=1 时，把一页失败的完整 traceback 打到 stderr（缺省不打，日志里只有一行错因）。"""
+    if os.environ.get("GUJI_TRACE_PAGE_ERRORS"):
+        import traceback
+        print(f"--- {getattr(step, 'id', step)} p{page} traceback ---", file=sys.stderr)
+        traceback.print_exc()
+
+
 def _parallel_worker(page: int) -> tuple[int, dict | None, str | None, float, dict]:
     """`_run_one_step_parallel` 的子进程体：用 `_parallel_worker_init` 建好的
     进程级 ctx/step，只算不写盘。模块级函数（不是方法）——`ProcessPoolExecutor`
@@ -1381,4 +1401,5 @@ def _parallel_worker(page: int) -> tuple[int, dict | None, str | None, float, di
             products = _worker_step.run_page(_worker_ctx, page)
         return page, products, None, time.time() - t0, rec.to_dict()
     except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整批
+        _trace_page_error(_worker_step, page)
         return page, None, f"{type(e).__name__}: {e}", time.time() - t0, rec.to_dict()
