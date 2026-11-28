@@ -130,6 +130,8 @@ class NearRegistry:
             return groups
         out = {}
         for name, spec in groups.items():
+            if name.startswith("_") and isinstance(spec, dict) and "ref" in spec:
+                raise ValueError(f"glyph_near 组 {name!r} 是保留伪组（如 `_guard`），不引用登记表，不写 ref")
             if isinstance(spec, dict) and "ref" in spec:
                 out[name] = self.glyph_near_spec(str(spec["ref"]), book, **{k: v for k, v in spec.items() if k != "ref"})
             else:
