@@ -156,8 +156,8 @@ def test_book_corpus_ignores_quality_and_takes_first_reference(tmp_path, monkeyp
     monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
 
     class FakeBook:
-        references = [{"file": "low.txt", "quality": "low"},
-                      {"file": "best.txt", "quality": "best"}]
+        references = [{"file": "low.txt", "accuracy": "low"},
+                      {"file": "best.txt", "accuracy": "high"}]
 
     monkeypatch.setattr(book_mod, "load_book", lambda book_id, books_dir=None: FakeBook())
     got = book_corpus(BOOK)
@@ -180,8 +180,8 @@ def test_normalize_strategy_picks_best_quality_witness_not_list_position(tmp_pat
     _write_corpus(ws, "best.txt", (col + "欽定四庫全書總目卷一經部易類一") * 20)
 
     book = make_book(BOOK, references=[
-        {"file": "low.txt", "quality": "low", "label": "低质量证人"},
-        {"file": "best.txt", "quality": "best", "label": "最佳证人"},
+        {"file": "low.txt", "accuracy": "low", "label": "低质量证人"},
+        {"file": "best.txt", "accuracy": "high", "label": "最佳证人"},
     ])
     ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
     ctx.params["align_ref"] = P(witness_strategy="normalize")
@@ -212,7 +212,7 @@ def test_normalize_strategy_absorbs_known_variant_pair_legacy_would_flag_as_repl
     _write_corpus(ws, "ref.txt", true_col * 20)
 
     def run(strategy: str):
-        book = make_book(BOOK, references=[{"file": "ref.txt", "quality": "best"}])
+        book = make_book(BOOK, references=[{"file": "ref.txt", "accuracy": "high"}])
         ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
         ctx.params["align_ref"] = P(witness_strategy=strategy,
                                     corpus=str(Path(ws) / "corpus" / "ref.txt"))
@@ -245,8 +245,8 @@ def test_majority_vote_strategy_tie_break_by_quality(tmp_path, monkeypatch, ws):
     _write_corpus(ws, "low.txt", low_col * 20)
 
     book = make_book(BOOK, references=[
-        {"file": "low.txt", "quality": "low", "label": "低质量证人"},
-        {"file": "best.txt", "quality": "best", "label": "最佳证人"},
+        {"file": "low.txt", "accuracy": "low", "label": "低质量证人"},
+        {"file": "best.txt", "accuracy": "high", "label": "最佳证人"},
     ])
     ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
     ctx.params["align_ref"] = P(witness_strategy="majority_vote")
@@ -278,9 +278,9 @@ def test_majority_vote_strategy_true_majority_overrides_single_higher_quality_wi
     _write_corpus(ws, "best.txt", best_col * 20)
 
     book = make_book(BOOK, references=[
-        {"file": "low1.txt", "quality": "low", "label": "低质量证人一"},
-        {"file": "low2.txt", "quality": "low", "label": "低质量证人二"},
-        {"file": "best.txt", "quality": "best", "label": "最佳证人"},
+        {"file": "low1.txt", "accuracy": "low", "label": "低质量证人一"},
+        {"file": "low2.txt", "accuracy": "low", "label": "低质量证人二"},
+        {"file": "best.txt", "accuracy": "high", "label": "最佳证人"},
     ])
     ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
     ctx.params["align_ref"] = P(witness_strategy="majority_vote")
@@ -304,8 +304,8 @@ def test_witness_fingerprint_filled_from_book_references_when_not_legacy(tmp_pat
     from open_guji_cv.steps.align_ref import AlignRefParams as P
     _write_corpus(ws, "a.txt", "甲乙丙丁" * 10)
     _write_corpus(ws, "b.txt", "戊己庚辛" * 10)
-    book = make_book(BOOK, references=[{"file": "a.txt", "quality": "best"},
-                                        {"file": "b.txt", "quality": "mid"}])
+    book = make_book(BOOK, references=[{"file": "a.txt", "accuracy": "high"},
+                                        {"file": "b.txt", "accuracy": "mid"}])
     ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
 
     from open_guji_cv.core.step import STEPS

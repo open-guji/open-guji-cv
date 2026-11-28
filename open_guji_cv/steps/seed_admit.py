@@ -315,10 +315,10 @@ from .seed_admit_reasons import (  # noqa: F401  CV4 整理 P1a（2026-11-28）�
     _rare_cp,
 )
 from .seed_admit_page_params import (  # noqa: F401  CV4 整理 P1a（2026-11-28）搬出去的，这里 re-export
-    _ACC_TRUST,
-    _TRUST_RANK,
     _no_ref_page,
     accuracy_page_params,
+    book_trust_params,
+    derive_trust,
     no_ref_page_params,
     ref_accuracy_summary,
 )
@@ -409,11 +409,8 @@ class SeedAdmitStep(Step):
     )
 
     def book_params(self, p: "SeedAdmitParams", ctx: RunContext) -> "SeedAdmitParams":
-        """`trust_from_accuracy` 开时把本册参校本准确度摘要填进 `ref_accuracy`（进指纹）；关时原样返回。"""
-        if not p.trust_from_accuracy or p.ref_accuracy:
-            return p
-        return type(p).model_validate({**{k: getattr(p, k) for k in type(p).model_fields},
-                                       "ref_accuracy": ref_accuracy_summary(ctx.book)})
+        """参校本四维 → 信任字段（`reference_trust` 等，册里写的旧键不采用）；段上压低准确度的摘要进 `ref_accuracy`。"""
+        return book_trust_params(p, ctx.book)
 
     def parallel_warm(self, ctx: RunContext) -> None:
         """页级并行 fork 前在主进程预建两份大缓存（`core/parallel.warm`）：三份证人的 8-gram 索引

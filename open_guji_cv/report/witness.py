@@ -47,7 +47,8 @@ from ..clustering.align_label import is_han
 from ..core.workspace import corpus_path
 
 #: 质量分级（05 §一）。证人不一致时按这个加权，**不是简单多数**。
-QUALITY_ORDER = {"best": 3, "mid": 2, "low": 1}
+#: 证人排序与加权：参校本准确度档（`references[].accuracy`，未标＝low；2026-11-28 取代旧 `quality` best/mid/low）
+ACCURACY_ORDER = {"very_high": 4, "high": 3, "mid": 2, "low": 1}
 
 #: 没有 `references:` 配置时的默认证人——与 `align_ref`/`context_decide` 同一份语料
 #: （`steps/align_ref.py` 的 DEFAULT_CORPUS），即光盘版。
@@ -59,13 +60,13 @@ class Witness:
     """一份装载好的整理本。`text` 是**只留汉字**的流，所有 offset 都在它的坐标系里。"""
     name: str
     label: str
-    quality: str                       # best | mid | low
+    accuracy: str                      # very_high | high | mid | low（`references[].accuracy`）
     text: str                          # 只留汉字
     line_starts: frozenset[int] = field(default_factory=frozenset)
     """每一原文行首字在 `text`（汉字流）里的 offset。光盘版靠它做列结构比对；
     段落式整理本（杳冥本）这个集合就是段首，密度低，`line_is_column` 为假时
     调用方不该拿它判列。"""
-    line_is_column: bool = False       # 这份证人的「行」是否对应我们的「列」
+    line_is_column: bool = False       # 这份证人的「行」是否对应我们的「列」（`references[].form == "column"`）
     index: dict = field(default_factory=dict, repr=False)   # 8-gram 索引，建一次复用
     text_norm: str = field(default="", repr=False)
     """`text` 的异体归一版，建一次复用（`report/absent.py` 要按归一层查段）。
@@ -74,10 +75,10 @@ class Witness:
 
     @property
     def rank(self) -> int:
-        return QUALITY_ORDER.get(self.quality, 0)
+        return ACCURACY_ORDER.get(self.accuracy, 1)
 
 
-def load_witness(name: str, label: str = "", quality: str = "mid",
+def load_witness(name: str, label: str = "", accuracy: str = "low",
                  line_is_column: bool = False, build_index: bool = True) -> Witness:
     """读一份整理本 → `Witness`。路径走 `core.workspace.corpus_path`。
 
@@ -111,23 +112,23 @@ def load_witness(name: str, label: str = "", quality: str = "mid",
 
     text = "".join(han)
     from ..clustering.variants import VariantMap
-    return Witness(name=name, label=label or name, quality=quality, text=text,
+    return Witness(name=name, label=label or name, accuracy=accuracy, text=text,
                    line_starts=frozenset(starts), line_is_column=line_is_column,
                    index=build_ngram_index(text) if build_index else {},
                    text_norm=VariantMap.load().normalize_text(text))
 
 
 def load_witnesses(specs: list[dict] | None, build_index: bool = True) -> list[Witness]:
-    """书配置 `references:` → 证人列表，按质量降序（最好的在前）。
+    """书配置 `references:` → 证人列表，按准确度降序（最好的在前；同档保持列表顺序）。
 
-    `specs` 为空时退回默认单证人（光盘版）。每项：
-    `{file, quality, label, line_is_column}`。
+    `specs` 为空时退回默认单证人（光盘版）。每项读 `{file, label, accuracy, form}`。
     """
+    from ..core.ref_profile import ref_accuracy, ref_is_column
     if not specs:
-        specs = [{"file": DEFAULT_WITNESS, "quality": "best",
-                  "label": "四库光盘版", "line_is_column": True}]
-    out = [load_witness(s["file"], s.get("label", ""), s.get("quality", "mid"),
-                        bool(s.get("line_is_column")), build_index)
+        specs = [{"file": DEFAULT_WITNESS, "accuracy": "high",
+                  "label": "四库光盘版", "form": "column"}]
+    out = [load_witness(s["file"], s.get("label", ""), ref_accuracy(s),
+                        ref_is_column(s), build_index)
            for s in specs]
     return sorted(out, key=lambda w: -w.rank)
 
