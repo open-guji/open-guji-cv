@@ -88,6 +88,24 @@ def best_char(match_rec, dec_rec) -> str:
     return ctx_fill.MISSING
 
 
+def page_seq(match, dec_by: dict) -> list[tuple[int, object, str]]:
+    """本页读序：[(列号, 3a 记录, 邻格字)]。列序 col 升序，列内 `sort_by_reading`。"""
+    seq: list = []
+    for cm in sorted((c for c in match.columns if c.ok), key=lambda c: c.col):
+        for r in sort_by_reading(cm.chars):
+            seq.append((cm.col, r, best_char(r, dec_by.get(r.id))))
+    return seq
+
+
+def neighbor_texts(match, dec=None) -> dict[str, tuple[str, str]]:
+    """本页每格的 {格 id: (左文, 右文)}，本格不在里面；窗口截取交给填空模型（`ctx_fill.WINDOW`）。
+    manager 给已发册的待审卡现算候选时用（`guji audit cands`），与本步同一份读序和邻格取字规则。"""
+    dec_by = {r.id: r for c in dec.columns for r in c.chars} if dec is not None else {}
+    seq = page_seq(match, dec_by)
+    text = [t for _, _, t in seq]
+    return {r.id: ("".join(text[:i]), "".join(text[i + 1:])) for i, (_c, r, _t) in enumerate(seq)}
+
+
 def rank_cell(pool: list[tuple[str, float]], sem: dict[str, float] | None, w: float, topk: int) -> list[list]:
     fused = ctx_fill.fuse(pool, sem or {}, w)[:topk]
     return [[c, round(f, 4), round(dict(pool)[c], 4), None if lp is None else round(lp, 3)] for c, f, lp in fused]
@@ -114,11 +132,7 @@ class ContextRankStep(Step):
         dec_by = ({r.id: r for c in dec.columns for r in c.chars} if dec is not None else {})
         lm = ctx_fill.shared()
 
-        # 本页读序：(记录, 邻格字)
-        seq: list = []
-        for cm in sorted((c for c in match.columns if c.ok), key=lambda c: c.col):
-            for r in sort_by_reading(cm.chars):
-                seq.append((cm.col, r, best_char(r, dec_by.get(r.id))))
+        seq = page_seq(match, dec_by)
         text = [t for _, _, t in seq]
         recs: dict[int, list[CtxRec]] = {}
         for i, (col, r, _t) in enumerate(seq):
