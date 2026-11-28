@@ -1165,6 +1165,7 @@ class SeedAdmitStep(Step):
                                   wh=(_gd.wh_map() if (p.fold_aspect and _gd is not None and "wh" in _gd.ran) else
                                       {c.id: (c.width, c.height) for col in (_ci.columns if _ci else []) for c in col.chars}
                                       if _ci else None),
+                                  aspect=({c.id: c.aspect for c in _gd.cells} if (p.fold_aspect and _gd is not None and "wh" in _gd.ran) else None),
                                   dmap=dmap if p.fold_aspect_ctx_veto is not None else None,
                                   cells_sha=_anchor_cells_sha(ctx, page) if (p.fold_ruling_first or not p.fold_ref_char) else None,
                                   umap=_uid_map(p, ctx, page) if (p.fold_ruling_first or not p.fold_ref_char) else None)

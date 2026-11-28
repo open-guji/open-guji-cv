@@ -197,6 +197,7 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "normalize_patch": ("clustering.normalize", "normalize_patch"),
     # 候选字线（CV3 2026-11-28）：manager `guji audit cands` 给已发册待审卡现算 cands/1
     "glyph_candidate_mod": ("steps.glyph_candidate", None),
+    "bench_mod": ("eval.bench", None),   # benchmark 统一接口（CV0 11-28，manager `guji bench`）
     "context_rank_mod": ("steps.context_rank", None),
     "ctx_fill_mod": ("clustering.ctx_fill", None),
     "_SHAPE_PAIR_OF": ("clustering.match", "_SHAPE_PAIR_OF"),
