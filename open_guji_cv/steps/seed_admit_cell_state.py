@@ -20,24 +20,34 @@ import re
 _JIAZHU_UNEVEN_RE = re.compile(r"jiazhu_uneven:(\d+)-(\d+)")
 
 
-def _jiazhu_uneven_pass(ctx: RunContext, page: int, out: list, mmap: dict | None = None,
-                        amap: dict | None = None, coord: dict | None = None) -> int:
-    """雙行小注分法不均闸（只降级）。→ 降级格数。
-
-    Step3 雙行小注逐步切（书级钩子 `impl/keben/jiazhu_step`，史記书仓覆盖）按整理本分法切、两行分法不是 ⌈N/2⌉／⌊N/2⌋ 的段，
-    列旗记 `jiazhu_uneven:<首格>-<末格>`；段内的夹注格（sub a／b）送审，doubt 码 `jiazhu_uneven`、
-    `evidence.seg_kind=jiazhu_uneven`（待审归 seg_defect，细分 jiazhu_uneven，review/reasons.py，A31 11-04 定）。
-    已放行、且放行字＝字形库首选＝整理本字（三者一致，图上有字形证据）的格不降（第 10 轮整列送审 8 列 276 格、其中 210 格三者一致，11-04 收窄）。
-    没有这面列旗（开关关、别的书）时什么都不做。备选格网（alt_columns）的列旗一并认：换了列的格也送审。人裁不动。"""
+def jiazhu_uneven_spans(ctx: RunContext, page: int) -> dict[int, list[tuple[int, int]]]:
+    """列旗 `jiazhu_uneven:<首格>-<末格>` → {列: [(首格, 末格)…]}（只读 Step3 字格的列旗，不看放行状态；4c `cell_state` 的证据）。
+    备选格网（alt_columns）的列旗一并认。读不到字格或没有这面列旗就是空表。"""
     cells = _opt(ctx, "cells", page)
     if cells is None:
-        return 0
+        return {}
     spans: dict[int, list[tuple[int, int]]] = {}
     for cc in list(cells.columns) + list(getattr(cells, "alt_columns", None) or []):
         for fl in cc.flags or []:
             m = _JIAZHU_UNEVEN_RE.match(fl)
             if m:
                 spans.setdefault(cc.col, []).append((int(m.group(1)), int(m.group(2))))
+    return spans
+
+
+def _jiazhu_uneven_pass(ctx: RunContext, page: int, out: list, mmap: dict | None = None,
+                        amap: dict | None = None, coord: dict | None = None,
+                        spans: dict[int, list[tuple[int, int]]] | None = None) -> int:
+    """雙行小注分法不均闸（只降级）。→ 降级格数。
+
+    Step3 雙行小注逐步切（书级钩子 `impl/keben/jiazhu_step`，史記书仓覆盖）按整理本分法切、两行分法不是 ⌈N/2⌉／⌊N/2⌋ 的段，
+    列旗记 `jiazhu_uneven:<首格>-<末格>`；段内的夹注格（sub a／b）送审，doubt 码 `jiazhu_uneven`、
+    `evidence.seg_kind=jiazhu_uneven`（待审归 seg_defect，细分 jiazhu_uneven，review/reasons.py，A31 11-04 定）。
+    已放行、且放行字＝字形库首选＝整理本字（三者一致，图上有字形证据）的格不降（第 10 轮整列送审 8 列 276 格、其中 210 格三者一致，11-04 收窄）。
+    没有这面列旗（开关关、别的书）时什么都不做。备选格网（alt_columns）的列旗一并认：换了列的格也送审。人裁不动。
+    `spans`：4c `cell_state` 产物里存的列旗（`jiazhu_uneven_spans` 的结果）；不给就现算。"""
+    if spans is None:
+        spans = jiazhu_uneven_spans(ctx, page)
     if not spans:
         return 0
     n = 0
@@ -151,11 +161,11 @@ def _seal_blank_flip(out: list, seal: dict, coord: dict) -> int:
 
 
 
-def _header_formula_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list) -> int:
-    """`lane_header_formula`：题列（列旗 `header_ref:<整理本行>`）整行是套语、字格数＝字数 → 未放行的格按整理本行逐字放行。→ 放行格数。"""
+def header_formula_lines(ctx: RunContext, page: int, p: "SeedAdmitParams") -> dict[int, str]:
+    """题列（列旗 `header_ref:<整理本行>`）整行是套语的列 → {列: 整理本行}（读 Step3 列旗，不看放行状态；4c `cell_state` 的证据）。"""
     cells = _opt(ctx, "cells", page)
     if cells is None:
-        return 0
+        return {}
     formula = re.compile(p.lane_header_formula_re)
     lines: dict[int, str] = {}
     for cc in cells.columns:
@@ -165,6 +175,15 @@ def _header_formula_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: 
         for fl in cc.flags or []:
             if fl.startswith("header_ref:") and formula.fullmatch(fl[len("header_ref:"):]):
                 lines[cc.col] = fl[len("header_ref:"):]
+    return lines
+
+
+def _header_formula_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list,
+                         lines: dict[int, str] | None = None) -> int:
+    """`lane_header_formula`：题列（列旗 `header_ref:<整理本行>`）整行是套语、字格数＝字数 → 未放行的格按整理本行逐字放行。→ 放行格数。
+    `lines`：4c `cell_state` 产物里存的题列（`header_formula_lines` 的结果）；不给就现算。"""
+    if lines is None:
+        lines = header_formula_lines(ctx, page, p)
     n = 0
     for col in out:
         line = lines.get(col.col)
@@ -453,13 +472,12 @@ def seg_box_defects(char_cols, period: float | None, ref_w: float | None,
     return out
 
 
-def _seg_box_pass(ctx: RunContext, page: int, out: list, kinds=SEG_BOX_CRITERIA) -> int:
-    """字框几何闸（只降级，`SeedAdmitParams.seg_box_check`）。→ 降级格数。碎格、框线扁条、墨点、一字劈两框、过高框一律送审：
-    doubt 码 `seg_defect`（待审原因归 seg_defect），`evidence.seg_box` 记判据、能对上 SEG_KINDS 的写 `evidence.seg_kind`。人裁不动。"""
+def seg_box_bad(ctx: RunContext, page: int, kinds=SEG_BOX_CRITERIA) -> dict[str, list[str]]:
+    """字框几何不合理的格 {格 id: [判据…]}（只读 char_index、gate_manifest、cells，不看放行状态；4c `cell_state` 的证据）。"""
     try:
         ci = ctx.product("char_index", page)
     except Exception:                     # noqa: BLE001
-        return 0
+        return {}
     gate = cells = None
     for kind in ("gate_manifest", "cells"):
         try:
@@ -482,6 +500,16 @@ def _seg_box_pass(ctx: RunContext, page: int, out: list, kinds=SEG_BOX_CRITERIA)
     bad = {k: w for k, why in seg_box_defects(_g(ci, "columns"), period, ref_w,
                                               _g(cells, "columns") if "sliver" in on else None).items()
            if (w := [x for x in why if x in on])}
+    return bad
+
+
+def _seg_box_pass(ctx: RunContext, page: int, out: list, kinds=SEG_BOX_CRITERIA,
+                  bad: dict[str, list[str]] | None = None) -> int:
+    """字框几何闸（只降级，`SeedAdmitParams.seg_box_check`）。→ 降级格数。碎格、框线扁条、墨点、一字劈两框、过高框一律送审：
+    doubt 码 `seg_defect`（待审原因归 seg_defect），`evidence.seg_box` 记判据、能对上 SEG_KINDS 的写 `evidence.seg_kind`。人裁不动。
+    `bad`：4c `cell_state` 产物里存的判据（`seg_box_bad` 的结果）；不给就现算。"""
+    if bad is None:
+        bad = seg_box_bad(ctx, page, kinds)
     if not bad:
         return 0
     n = 0
@@ -537,18 +565,29 @@ def _speck_halves(char_cols) -> set[str]:
 
 
 # ── 格级墨迹记号 `ink_marks`（CV2，2026-11-28，朱楓林集 MBJ 报）────────────────────────────────────
-def _ink_mark_pass(ctx: RunContext, page: int, out: list, amap: dict) -> int:
+def ink_mark_facts(ctx: RunContext, page: int) -> tuple[dict[str, set[str]], set[str]] | None:
+    """格旗 → ({格 id: 旗集}, 贴着同列别字的墨点格集合 `speck_half`)；读不到 `char_index` 返回 None。不看放行状态；4c `cell_state` 的证据。"""
+    try:
+        ci = ctx.product("char_index", page)
+    except Exception:                     # noqa: BLE001
+        return None
+    flags = {str(_g(x, "id")): set(_g(x, "flags") or []) for c in (_g(ci, "columns") or []) for x in (_g(c, "chars") or [])}
+    return flags, _speck_halves(_g(ci, "columns") or [])
+
+
+def _ink_mark_pass(ctx: RunContext, page: int, out: list, amap: dict,
+                   facts: tuple[dict[str, set[str]], set[str]] | None = None) -> int:
     """`SeedAdmitParams.ink_marks`：读 Step4 格旗 `ink_seal`／`ink_speck`（`cell_shrink.ink_marks`）。→ 放行格数净增（可负）。
 
     「对位无字」＝逐字对位（`amap`，align_ref）里这格没有参校本字。印（旗 `ink_seal` 或已判 `occluded`）：对位无字 → 非字放行
     （通道 seal，同 `_review_lanes_pass` coord_blank 那支的写法）；有字 → 送审 occluded。墨点（旗 `ink_speck`）：对位无字 → 非字放行
-    （通道 blank_ink，同 `_blank_ink_pass`）；有字 → 送审 seg_defect。人裁、排除名单上的格不动。"""
-    try:
-        ci = ctx.product("char_index", page)
-    except Exception:                     # noqa: BLE001
+    （通道 blank_ink，同 `_blank_ink_pass`）；有字 → 送审 seg_defect。人裁、排除名单上的格不动。
+    `facts`：4c `cell_state` 产物里存的格旗（`ink_mark_facts` 的结果）；不给就现算。"""
+    if facts is None:
+        facts = ink_mark_facts(ctx, page)
+    if facts is None:
         return 0
-    flags = {str(_g(x, "id")): set(_g(x, "flags") or []) for c in (_g(ci, "columns") or []) for x in (_g(c, "chars") or [])}
-    half = _speck_halves(_g(ci, "columns") or [])
+    flags, half = facts
     n = 0
     for col in out:
         for rec in col.chars or []:
