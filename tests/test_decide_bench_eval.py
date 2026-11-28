@@ -145,3 +145,27 @@ def test_group_check_metrics(tmp_path):
     (tmp_path / "g.json").write_text(json.dumps({"checked": 10, "mismatch": 3, "drift": 2, "mismatch_cells": []}), encoding="utf-8")
     m = D.group_check_metrics(tmp_path / "g.json")
     assert (m["d4_human_checked"], m["d4_human_mismatch"], m["d4_human_mismatch_real"]) == (10, 3, 1)
+
+
+def test_rough_snapshot_fetch_skips_present_and_fails_loudly(tmp_path, monkeypatch):
+    from open_guji_cv.eval.benches import decide as D
+    snap = tmp_path / "snap"
+    (snap / "vol05" / "char_decide").mkdir(parents=True)               # vol05 已有，不取
+    calls = []
+
+    class R:
+        returncode, stdout, stderr = 0, "", ""
+
+    def fake(cmd, **kw):
+        calls.append(cmd)
+        return R()
+    monkeypatch.setattr(D.subprocess, "run", fake)
+    D._fetch_rough_snapshots({"snapshot_packs": {"vol04": "L4", "vol05": "L5"}}, snap, str(tmp_path))
+    assert len(calls) == 1 and calls[0][calls[0].index("fetch") + 1] == "vol04" and "L4" in calls[0]
+    R.returncode, R.stderr = 1, "boom"
+    try:
+        D._fetch_rough_snapshots({"snapshot_packs": {"vol09": "L9"}}, snap, str(tmp_path))
+    except RuntimeError as e:
+        assert "vol09" in str(e)
+    else:
+        raise AssertionError
