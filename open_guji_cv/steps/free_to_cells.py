@@ -105,7 +105,8 @@ def column_cells(col: int, cells: list[FreeCellRec], boxes: dict[int, tuple], ma
     groups.sort(key=lambda g: min(boxes[id(c)][1] for c in g))
     flags = ["free"] + ([f"block:{label}"] if label else [])
     if not groups:
-        return ColumnCells(col=col, ok=True, n_body_slots=0, content_x=(0.0, float(wc)), flags=flags + ["empty"])
+        # 空列不给 content_x：cell_shrink 整页量格高、框线位只看有 content_x 的列（period 为空会把中位数算坏）
+        return ColumnCells(col=col, ok=True, n_body_slots=0, flags=flags + ["empty"])
     spans = [(min(boxes[id(c)][1] for c in g), max(boxes[id(c)][3] for c in g)) for g in groups]
     bounds = [spans[0][0]] + [(spans[k][1] + spans[k + 1][0]) / 2 for k in range(len(spans) - 1)] + [spans[-1][1]]
     out: list[CellRec] = []

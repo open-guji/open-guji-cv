@@ -145,3 +145,11 @@ def test_free_mapper_and_grid_rec_unchanged():
     assert m.to_page_tl(1, 0) == (21.0, 5.0)
     assert m.to_page_tl(1, 3) == (24.0, 8.0)
     assert m.to_page_tr(1, 3) == (75.0, 8.0)
+
+
+def test_empty_column_has_no_content_x():
+    """空列不给 content_x、period：cell_shrink 整页量格高只看有 content_x 的列（幼學 11 页曾因此整页失败）。"""
+    from open_guji_cv.steps.free_to_cells import column_cells
+    cc = column_cells(3, [], {}, None, 40, "1a")
+    assert cc.ok and cc.n_body_slots == 0 and cc.content_x is None and cc.period is None
+    assert cc.flags == ["free", "block:1a", "empty"]
