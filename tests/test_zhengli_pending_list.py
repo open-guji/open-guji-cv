@@ -14,6 +14,9 @@ pl = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pl)
 
 
+#: 待审格行自带的送审原因字段（cv #2008 P3a-1：本版一律 None，manager 读到 None 走反推）
+_NO_REASON = {"pending_reason": None, "pending_reason_detail": None, "form_src": None}
+
 def make_products(tmp_path: Path, n_review: int = 2) -> Path:
     """一页 seed_admit：放行 1 格、待审 2 格（含带 sub 的）、排除名单 1 格。"""
     seed = tmp_path / "products" / "vol01" / "seed_admit"
@@ -41,8 +44,8 @@ def test_plain_pending_lists_unadmitted_non_excluded_cells(tmp_path):
     pl.main(base_args(make_products(tmp_path), out))
     doc = json.loads((out / "001.pending.json").read_text(encoding="utf-8"))
     assert doc == {"rev": "vol01-r0", "cv_version": None, "cv_commit": "abc1234",
-                   "cells": [{"cell": "1:1:2", "review": "pending"},
-                             {"cell": "1:2:1a", "review": "pending"}]}
+                   "cells": [{"cell": "1:1:2", "review": "pending", **_NO_REASON},
+                             {"cell": "1:2:1a", "review": "pending", **_NO_REASON}]}
 
 
 def test_chapter_style_rev_is_accepted(tmp_path):
