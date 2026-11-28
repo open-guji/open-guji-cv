@@ -169,6 +169,8 @@ def main() -> None:
     ap.add_argument("--no-mlm", action="store_true")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--w", type=float, default=0.005)
+    ap.add_argument("--sim-mode", choices=["max", "c"], default="max",
+                    help="4b 融合用的图像分：max＝3a 库分与 r5 余弦取大者（产线 context_rank 的口径，缺省），c＝只用 r5 余弦（两路尺度不同，对照用）")
     ap.add_argument("--ctx-noise", type=float, default=0.0,
                     help="给前后文的字按这个概率随机换成别的常用字（模拟产线里邻格是机器猜的）；缺省 0＝测试集冻结的前后文")
     ap.add_argument("--extra-min-sim", type=float, default=0.70)
@@ -213,7 +215,8 @@ def main() -> None:
         def sim(c, s=s, libs=libs):
             """图像分＝max(3a 库匹配分, r5 字体模板余弦)（规格第四节）。"""
             j = img.pack.index.get(c)
-            return max(libs.get(c, -1.0), float(s[j]) if j is not None else -1.0)
+            r5 = float(s[j]) if j is not None else -1.0
+            return r5 if a.sim_mode == "c" else max(libs.get(c, -1.0), r5)
         x["fixed_n"] = len(fixed)
         x["r_fixed"] = rank(fixed, g)
         x["r_ctxd"] = rank([c for c, _ in (pool_in.get("ctx_ranked") or [])], g)

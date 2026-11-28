@@ -7,7 +7,7 @@ A22（切分）。开关登记表里归切分的三个 seed_admit 开关从没�
 - 代码 dev `176eb14`（v0.5.8 之后；到 v0.5.9 为止 seed_admit、cell_shrink 没再改）。
 - 上游：两册各自的 main 产物包（v0.5.7：`vol05 cv0.5.7-c14-g-eda521-full`、`vol09 cv0.5.7-c14-g-a55aa1-full`），只重跑 `seed_admit`。
 - 基线 A＝册 yaml 现行参数（三闸全关）；B 开 `runt_cell_review`；C 开 `oversplit_gate: hint`；D 开 `nonchar_gate`。各变体只差这一个键。
-- 标签：中心库人裁事件 734 格（都是 picked，random 0），所以错率「无检验力」，只能看逐格翻转。
+- 标签：中心库裁定事件 734 格（都是 picked，random 0），所以错率「无检验力」，只能看逐格翻转。
 
 ## 结果：三个闸在现行切分上都是 0 格
 

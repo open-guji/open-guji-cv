@@ -97,3 +97,13 @@ def test_default_off_and_in_decide_stage_before_seed_admit():
     assert cr.ContextRankParams().enabled is False
     d = load_pipeline("keben_body_v2").stages["decide"]
     assert d.index("context_decide") < d.index("context_rank") < d.index("seed_admit")
+
+
+def test_neighbor_texts_reading_order_and_decision_overrides():
+    m = page_match(recs=[{"slot": 1, "verdict": "same", "char": "天"},
+                         {"slot": 2, "verdict": "unsure", "candidates": [("甲", 0.8), ("乙", 0.7)]},
+                         {"slot": 3, "verdict": "same", "char": "地"}])
+    d = page_decision(recs=[{"slot": 2, "char": "丙", "source": "context"}])
+    nt = cr.neighbor_texts(m, d)
+    assert nt["tbook:1:1:2"] == ("天", "地") and nt["tbook:1:1:1"] == ("", "丙地")
+    assert cr.neighbor_texts(m)["tbook:1:1:1"] == ("", "甲地")      # 没有 context_decision：取 3a 第一候选
