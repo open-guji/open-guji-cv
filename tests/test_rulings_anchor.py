@@ -2,6 +2,8 @@
 """裁定格锚点后备键（`RulingStore.get_anchor`，GM4／CV4 2026-11-24 裁定键长期方案③）。数据自造，临时目录。"""
 from __future__ import annotations
 
+from helpers import set_seed_admit
+
 from types import SimpleNamespace as NS
 
 from open_guji_cv.feedback import rulings as R
@@ -91,13 +93,13 @@ def test_fold_pass_anchor(tmp_path):
     p = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_aspect=(0.85, 1.0))
     st = _store_with_anchor(tmp_path, group="ry", ver="ry-l2-2", char="曰", ref="日")
     r = AdmitRec(id=CELL, slot=2, admit=False, char="乙", doubts=[], channel=None, provenance="", evidence={"group": {"id": "ry"}})
-    orig, sa._l3_online = sa._l3_online, (lambda p_: {"ry": {"system": "s", "ver": "ry-l2-2"}})
+    orig = sa._l3_online; set_seed_admit("_l3_online", (lambda p_: {"ry": {"system": "s", "ver": "ry-l2-2"}}))
     try:
         args = ([ColumnAdmit(col=1, chars=[r])], {r.id: ("日", None)}, {r.id: NS(candidates=[("曰", 0.9)])})
         assert sa._fold_pass(p, *args, store=st, wh={r.id: (92, 100)}) == 0
         n = sa._fold_pass(p, *args, store=st, wh={r.id: (92, 100)}, cells_sha=SHA)
     finally:
-        sa._l3_online = orig
+        set_seed_admit("_l3_online", orig)
     assert n == 1 and r.char == "曰" and r.evidence["fold"]["ruling_key"] == "anchor"
 
 
