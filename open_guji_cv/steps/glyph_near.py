@@ -19,6 +19,24 @@
             delta: 0.03
             topk: 3                               # close 看 3a 前几名（缺省 3）；cands 看前几名（缺省 5，＝glyph_match.max_candidates 缺省）
 
+### 护栏触发：保留伪组 `_guard`（`trigger: guard`，near_knn 用，2026-11-28）
+
+    params:
+      glyph_near:
+        groups:
+          _guard: {trigger: guard, gap: true, methods: {near_knn: config/groups/near_knn.json}}
+
+near_knn 判的不是某个字组，而是第四步的**形近护栏格**，所以挂在保留伪组 `_guard` 上（不写 `chars`／`ref`；`trigger: guard`
+只给它用，它也只能用这个，写错报错；登记表 `expand_refs` 遇到带 `ref` 的 `_` 开头组报错）。按 3a `MatchRec` 照现役
+`_near_knn_pass` 挑格，`NearRec.trigger` 记是哪一路：
+
+- `guard`：3a 护栏 `guard` 是 `conflict`／`never_match`（第四步 `evidence.guard` 就是它）；
+- `near_form`：3a 首位字＋候选前三名里有手工形近表（`NEVER_MATCH_FAMILIES`）的字（第四步 `near_form` 疑问同一口径）；
+- `gap`（`gap: true` 才有）：3a 没判 same（库没把握）。现役 `near_knn_gap` 收「库首位≠整理本」的待审格，3b 看不到整理本，按「库没把握」罩。
+
+第四步另两种疑问（`solo_confusable`、`iron_confusable_ref`）和「字组流程归了组」的格 3b 看不到，4d 本地现算并计数。
+`methods_sha` 里是 `_guard:near_knn=<库钉版指纹>`。
+
 `groups` 空（缺省）＝这一步不跑（`StepSpec.enabled_by`），各书产物不受影响。
 
 ### 引用形近字组登记表（`ref`，2026-11-28 接上）
@@ -62,6 +80,8 @@
   wu_shape／hou_shape：`{char, why, p|v}`＝`judge()` 整个返回值），外加 `method`，收尾把它抄进每格 `near.methods[方法名]`；
 - book_knn 只出前段（A 档结论与原始量，外加 `b_ok`），B 档（要整理本对位字）由 4d 调 `near_methods.book_knn_settle` 定；
   库钉版指纹 `near_methods.lib_fingerprint` 进 `methods_sha`，4d 调同一个函数比；
+- near_knn 出与候选无关的全库量（`full`／`full_votes`／`nn`／`out_of_book`）和 3a 首位＋候选每个字各自的前 k 个近邻距离（`dists`），
+  4d 拿自己的候选调 `near_methods.near_knn_settle` 重判；候选比票、ref_gate、skip_chars／skip_groups、异体边、gap 出口闸都留在 4d；
 - 本页跑过的方法用的模型版本记在 `PageNear.models`（`{"方法:组": 方法.model_sha}`），收尾也抄进 `near.methods[方法名].model`。
 
 ## 指纹
@@ -94,6 +114,13 @@ class GlyphNearParams(BaseModel):
     """自动填：各组各方法的模型目录指纹（`near_methods.method_fingerprint`），yaml 里不用写。"""
 
     def model_post_init(self, _ctx) -> None:
+        for gid, spec in (self.groups or {}).items():
+            how = str((spec or {}).get("trigger") or "close")
+            if (gid == GUARD_GROUP) != (how == "guard"):
+                raise ValueError(f"glyph_near：`trigger: guard` 只给保留伪组 {GUARD_GROUP!r} 用，{GUARD_GROUP!r} 也只能用它"
+                                 f"（组 {gid!r} 写的是 trigger: {how}）")
+            if gid == GUARD_GROUP and ((spec or {}).get("chars") or (spec or {}).get("ref")):
+                raise ValueError(f"glyph_near：伪组 {GUARD_GROUP!r} 不按组字触发，不写 chars／ref")
         if self.groups and not self.methods_sha:
             from ..groups.near_methods import method_fingerprint
             parts = [f"{g}:{method_fingerprint(n, d)}"
@@ -102,19 +129,43 @@ class GlyphNearParams(BaseModel):
             object.__setattr__(self, "methods_sha", ";".join(parts))
 
 
+GUARD_GROUP = "_guard"
+"""保留伪组 id：`trigger: guard` 的方法（near_knn）挂在它上面，不对应登记表里的组（`expand_refs` 遇到带 `ref` 的报错）。"""
+GUARD_KINDS = ("conflict", "never_match")
+
+
+def _near_form_chars() -> frozenset:
+    """第四步 `near_form` 疑问的字表（`seed_admit` 里 `NEAR_FORM_CHARS`＝手工形近表 `NEVER_MATCH_FAMILIES` 的字）。"""
+    from ..clustering.match import NEVER_MATCH_FAMILIES
+    return frozenset(c for pair in NEVER_MATCH_FAMILIES for c in pair)
+
+
+def _guard_how(ranked: list, top_char: str | None, g: dict, rec) -> str | None:
+    """`trigger: guard`（见模块头）：3a 护栏 conflict／never_match → `guard`；首位＋前三名里有手工形近表的字 → `near_form`；
+    `gap: true` 时 3a 没判 same → `gap`；都不是 → None。"""
+    if rec is not None and getattr(rec, "guard", None) in GUARD_KINDS:
+        return "guard"
+    if ({c for c, _ in ranked[:3]} | ({top_char} if top_char else set())) & _near_form_chars():
+        return "near_form"
+    if g.get("gap") and rec is not None and getattr(rec, "verdict", None) != "same":
+        return "gap"
+    return None
+
+
 def _canon(c: str, fold: dict) -> str:
     return fold.get(c, c)
 
 
-def trigger_group(cands: list, top_char: str | None, groups: dict) -> tuple[str, str] | None:
+def trigger_group(cands: list, top_char: str | None, groups: dict, rec=None) -> tuple[str, str] | None:
     """3a 的候选 [(字, 分)…]（按分降序）→ (组 id, 触发方式)；哪个组都不触发返回 None。按组 id 排序取第一个触发的
     （一格多组之前 3b 只认这一个；现在 3b 用 `trigger_groups`，这个留给只要一个组的读者）。"""
-    got = trigger_groups(cands, top_char, groups)
+    got = trigger_groups(cands, top_char, groups, rec)
     return got[0] if got else None
 
 
-def trigger_groups(cands: list, top_char: str | None, groups: dict) -> list[tuple[str, str]]:
-    """3a 的候选 [(字, 分)…]（按分降序）→ 触发的每个组 [(组 id, 触发方式)…]，按组 id 排序；哪个组都不触发返回 []。"""
+def trigger_groups(cands: list, top_char: str | None, groups: dict, rec=None) -> list[tuple[str, str]]:
+    """3a 的候选 [(字, 分)…]（按分降序）→ 触发的每个组 [(组 id, 触发方式)…]，按组 id 排序；哪个组都不触发返回 []。
+    `rec`：这格的 3a `MatchRec`，`trigger: guard` 要看它的护栏与判档（不给时只按形近表字判）。"""
     ranked = [(str(c), float(s)) for c, s in (cands or [])]
     top = ranked[0][0] if ranked else top_char
     if not top:
@@ -126,6 +177,11 @@ def trigger_groups(cands: list, top_char: str | None, groups: dict) -> list[tupl
         fold = dict(g.get("fold") or {})
         members = {_canon(c, fold) for c in (g.get("chars") or [])}
         mode = str(g.get("trigger") or "close")
+        if mode == "guard":
+            how = _guard_how(ranked, top_char, g, rec)
+            if how:
+                out.append((gid, how))
+            continue
         if mode == "cands":
             pool = {_canon(c, fold) for c, _ in ranked[:int(g.get("topk", 5))]}
             pool |= {_canon(c, fold) for c in (top, top_char) if c}
@@ -154,7 +210,8 @@ class GlyphNearStep(Step):
         params=GlyphNearParams,
         needs=("model",),
         code_deps=("open_guji_cv.groups.near_methods", "open_guji_cv.groups.near_registry",
-                   "open_guji_cv.groups.book_knn", "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.part_shape",
+                   "open_guji_cv.groups.book_knn", "open_guji_cv.groups.near_knn", "open_guji_cv.clustering.match",
+                   "open_guji_cv.groups.hou_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.part_shape",
                    "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.wu_shape"),
         enabled_by="groups",
     )
@@ -179,7 +236,7 @@ class GlyphNearStep(Step):
             for r in cm.chars:
                 if crec.get(r.id) is None or crec[r.id].bbox_page is None:
                     continue
-                for t in trigger_groups(r.candidates, r.char, p.groups):
+                for t in trigger_groups(r.candidates, r.char, p.groups, r):
                     hits.append((cm.col, r, *t))
 
         recs: dict[tuple[str, str], NearRec] = {}               # (格 id, 组) → NearRec
